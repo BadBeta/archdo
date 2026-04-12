@@ -1,0 +1,111 @@
+defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
+  @moduledoc false
+  @behaviour Archdo.Rule
+
+  alias Archdo.{AST, Diagnostic, Fix}
+
+  @impl true
+  def id, do: "4.16"
+
+  @impl true
+  def description, do: "Multiple *Adapter modules should share a behaviour contract"
+
+  @impl true
+  def analyze(_file, _ast, _opts), do: []
+
+  @doc """
+  Project-level: find modules named `*Adapter` and group them by parent namespace.
+  Flag groups where 2+ siblings exist but none implement a common @behaviour.
+  """
+  def analyze_project(file_asts) do
+    # Collect adapter modules with their behaviour usage
+    adapters =
+      file_asts
+      |> Enum.flat_map(fn {file, ast} ->
+        name = AST.extract_module_name(ast)
+
+        if adapter_module?(name) do
+          [{name, file, implements_behaviour?(ast)}]
+        else
+          []
+        end
+      end)
+
+    # Group by parent namespace
+    groups =
+      adapters
+      |> Enum.group_by(fn {name, _, _} -> parent_namespace(name) end)
+      |> Enum.filter(fn {_, members} -> length(members) >= 2 end)
+
+    groups
+    |> Enum.flat_map(fn {parent, members} ->
+      without_behaviour = Enum.reject(members, fn {_, _, has_bhv?} -> has_bhv? end)
+
+      if length(without_behaviour) == length(members) do
+        # None of the adapters implement a behaviour
+        names = Enum.map(members, fn {n, _, _} -> n end) |> Enum.join(", ")
+        {_, first_file, _} = hd(members)
+
+        [
+          Diagnostic.info("4.16",
+            title: "Adapter siblings without shared behaviour",
+            message:
+              "#{length(members)} adapter modules under #{parent} share no @behaviour: #{names}",
+            why:
+              "When two or more `*Adapter` modules live side-by-side without a shared behaviour, the " <>
+                "implicit contract between them only exists in your head. Adding a method to one and forgetting " <>
+                "to add it to the other compiles fine but breaks at runtime, and Mox can't generate a verifying " <>
+                "mock for an undocumented contract.",
+            alternatives: [
+              Fix.new(
+                summary: "Define `#{parent}.Adapter` with `@callback`s and have each adapter implement it",
+                detail:
+                  "Extract the common operations into a behaviour module. Add `@behaviour #{parent}.Adapter` " <>
+                    "to each existing adapter and `@impl true` on the callback functions. The compiler now " <>
+                    "checks that every adapter implements every callback.",
+                applies_when: "The adapters are interchangeable variants of the same contract."
+              ),
+              Fix.new(
+                summary: "Promote one adapter as canonical and inline the others",
+                detail:
+                  "If only one of the adapters is actively used and the others are vestigial, delete them and " <>
+                    "skip the behaviour ceremony entirely.",
+                applies_when: "Most adapters aren't actually used."
+              )
+            ],
+            references: ["ARCHITECTURE_RULES.md#4.16"],
+            context: %{namespace: parent, adapters: Enum.map(members, fn {n, _, _} -> n end)},
+            file: first_file,
+            line: 1
+          )
+        ]
+      else
+        []
+      end
+    end)
+  end
+
+  defp adapter_module?(name) when is_binary(name) do
+    last = name |> String.split(".") |> List.last() || ""
+    String.ends_with?(last, "Adapter") or String.ends_with?(last, "Client")
+  end
+
+  defp adapter_module?(_), do: false
+
+  defp parent_namespace(name) do
+    parts = String.split(name, ".")
+
+    case parts do
+      [] -> "(root)"
+      [_] -> "(root)"
+      _ -> parts |> Enum.drop(-1) |> Enum.join(".")
+    end
+  end
+
+  defp implements_behaviour?(ast) do
+    AST.contains?(ast, fn
+      {:@, _, [{:behaviour, _, _}]} -> true
+      _ -> false
+    end)
+  end
+end

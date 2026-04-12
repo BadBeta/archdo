@@ -1,0 +1,385 @@
+defmodule Archdo do
+  @moduledoc """
+  Architectural quality checker for Elixir.
+
+  Checks OTP patterns, module boundaries, and test architecture —
+  the gap that Credo, Dialyzer, and Sobelow don't cover.
+  """
+
+  alias Archdo.{AST, Runner, Formatter, FunctionGraph, Config, Freeze, Graph, Metrics}
+  alias Archdo.Rules.Testing.{TestMirrorsSource, CoverageGap}
+  alias Archdo.Rules.Module.MainSequenceDistance
+
+  alias Archdo.Rules.Boundary.{
+    GodContext,
+    Mockability,
+    FunctionBoundary,
+    ShotgunSurgery,
+    ParallelHierarchies,
+    SchemaOwnership,
+    ChattyBoundary,
+    AnemicContext
+  }
+
+  alias Archdo.Rules.Module.{
+    DuplicatedCode,
+    SimilarCode,
+    FunctionFanOut,
+    FeatureEnvy,
+    SpeculativeGenerality,
+    AdaptersWithoutBehaviour
+  }
+
+  @doc """
+  Analyze all .ex files under the given paths and return diagnostics.
+  Per-file rules only (Phase 1) unless `:boundaries` is set.
+  """
+  def run(paths \\ ["lib"], opts \\ []) do
+    files = collect_files(paths)
+
+    per_file_diagnostics =
+      if Keyword.get(opts, :boundaries, false) do
+        Runner.analyze_with_graph(files, opts)
+      else
+        Runner.analyze(files, opts)
+      end
+
+    test_diagnostics =
+      if Keyword.get(opts, :tests, false) do
+        run_test_project_rules(paths, opts)
+      else
+        []
+      end
+
+    project_diagnostics = run_project_arch_rules(paths, opts)
+
+    (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics)
+    |> Enum.sort_by(fn d -> {severity_order(d.severity), d.file, d.line} end)
+  end
+
+  defp run_project_arch_rules(paths, opts) do
+    source_files = collect_files(paths)
+
+    file_asts =
+      source_files
+      |> Enum.map(fn file ->
+        case AST.parse_file(file) do
+          {:ok, ast} -> {file, ast}
+          {:error, _} -> nil
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    god_context_diagnostics = GodContext.analyze_project(source_files)
+    mockability_diagnostics = Mockability.analyze_project(file_asts)
+    duplicated_code_diagnostics = DuplicatedCode.analyze_project(file_asts)
+    similar_code_diagnostics = SimilarCode.analyze_project(file_asts)
+    speculative_diagnostics = SpeculativeGenerality.analyze_project(file_asts)
+    parallel_diagnostics = ParallelHierarchies.analyze_project(file_asts)
+    schema_ownership_diagnostics = SchemaOwnership.analyze_project(file_asts)
+    anemic_context_diagnostics = AnemicContext.analyze_project(source_files)
+    adapters_diagnostics = AdaptersWithoutBehaviour.analyze_project(file_asts)
+    metrics_diagnostics = run_metrics_rules(file_asts)
+
+    function_graph_diagnostics =
+      if Keyword.get(opts, :functions, false) do
+        run_function_graph_rules(file_asts, opts)
+      else
+        []
+      end
+
+    (god_context_diagnostics ++
+       mockability_diagnostics ++
+       duplicated_code_diagnostics ++
+       similar_code_diagnostics ++
+       speculative_diagnostics ++
+       parallel_diagnostics ++
+       schema_ownership_diagnostics ++
+       anemic_context_diagnostics ++
+       adapters_diagnostics ++
+       metrics_diagnostics ++
+       function_graph_diagnostics)
+    |> filter_diagnostics(opts)
+  end
+
+  defp run_metrics_rules(file_asts) do
+    # Build a module-level dep graph from the ASTs
+    graph = Graph.build(file_asts)
+    metrics = Metrics.compute(graph, file_asts)
+    file_map = build_module_file_map(file_asts)
+
+    MainSequenceDistance.analyze_project(metrics, file_map)
+  end
+
+  defp build_module_file_map(file_asts) do
+    Enum.reduce(file_asts, %{}, fn {file, ast}, acc ->
+      Map.put(acc, AST.extract_module_name(ast), file)
+    end)
+  end
+
+  defp run_function_graph_rules(file_asts, _opts) do
+    config = Config.load()
+    fn_graph = FunctionGraph.build(file_asts)
+
+    contexts = config.contexts
+
+    boundary_diagnostics =
+      if contexts != [] do
+        FunctionBoundary.analyze_project(fn_graph, contexts)
+      else
+        []
+      end
+
+    fan_out_diagnostics = FunctionFanOut.analyze_project(fn_graph)
+    fan_in_diagnostics = ShotgunSurgery.analyze_project(fn_graph)
+    feature_envy_diagnostics = FeatureEnvy.analyze_project(fn_graph)
+
+    chatty_diagnostics =
+      if contexts != [] do
+        ChattyBoundary.analyze_project(fn_graph, contexts)
+      else
+        []
+      end
+
+    boundary_diagnostics ++
+      fan_out_diagnostics ++
+      fan_in_diagnostics ++
+      feature_envy_diagnostics ++
+      chatty_diagnostics
+  end
+
+  @doc """
+  Analyze and print formatted results. Returns the exit status.
+
+  Applies freeze filtering unless `:show_all` is set. The freeze baseline
+  is loaded from `.archdo_baseline.exs` in the current working directory.
+  """
+  def run_and_format(paths \\ ["lib"], opts \\ []) do
+    diagnostics = run(paths, opts)
+
+    final_diagnostics =
+      if Keyword.get(opts, :show_all, false) do
+        diagnostics
+      else
+        baseline = Freeze.load()
+        {new, _baselined} = Freeze.partition(diagnostics, baseline)
+        new
+      end
+
+    Formatter.format(final_diagnostics, opts)
+  end
+
+  @doc """
+  Run analysis and save the current violations as a baseline.
+  Returns 0 on success.
+  """
+  def freeze_baseline(paths \\ ["lib"], opts \\ []) do
+    diagnostics = run(paths, opts)
+    Freeze.save(diagnostics)
+
+    IO.puts(
+      "\nArchdo — baseline saved (#{length(diagnostics)} diagnostics frozen at .archdo_baseline.exs)\n"
+    )
+
+    IO.puts("Subsequent `mix archdo` runs will only show NEW violations.")
+    IO.puts("To see everything, use `mix archdo --show-all`.")
+    0
+  end
+
+  @doc """
+  Print baseline stats: how many baselined violations are still present,
+  how many were resolved, how many new violations exist.
+  """
+  def freeze_stats(paths \\ ["lib"], opts \\ []) do
+    diagnostics = run(paths, opts)
+    baseline = Freeze.load()
+    stats = Freeze.stats(diagnostics, baseline)
+
+    IO.puts("""
+
+    Archdo — Baseline Status
+
+      Baseline fingerprints:  #{stats.baseline_size}
+      Still present:          #{stats.still_present}
+      Resolved (fixed):       #{stats.resolved}  #{medal(stats.resolved)}
+      New since baseline:     #{stats.new}  #{warning(stats.new)}
+      Current total:          #{stats.current}
+    """)
+
+    if stats.new > 0, do: 1, else: 0
+  end
+
+  defp medal(0), do: ""
+  defp medal(n) when n < 5, do: "✓"
+  defp medal(n) when n < 20, do: "✓✓"
+  defp medal(_), do: "✓✓✓"
+
+  defp warning(0), do: ""
+  defp warning(n) when n < 5, do: "(small)"
+  defp warning(n) when n < 20, do: "(moderate)"
+  defp warning(_), do: "(large)"
+
+  defp run_test_project_rules(paths, opts) do
+    source_files = collect_files(paths)
+    test_files = Path.wildcard("test/**/*_test.exs")
+
+    mirror_diagnostics = TestMirrorsSource.analyze_project(source_files, test_files)
+
+    # Coverage gap needs source + test ASTs
+    source_asts = parse_many(source_files)
+    test_asts = parse_many(test_files)
+    coverage_diagnostics = CoverageGap.analyze_project(source_asts ++ test_asts)
+
+    (mirror_diagnostics ++ coverage_diagnostics)
+    |> filter_diagnostics(opts)
+  end
+
+  @doc """
+  Print a test coverage gap matrix for the project.
+  Returns 0 (this command never fails; it just reports).
+  """
+  def print_coverage_matrix(paths \\ ["lib"]) do
+    source_files = collect_files(paths)
+    test_files = collect_tests_for(paths)
+
+    source_asts = parse_many(source_files)
+    test_asts = parse_many(test_files)
+
+    CoverageGap.matrix_report(source_asts ++ test_asts)
+    |> IO.write()
+
+    0
+  end
+
+  @doc """
+  Print a Martin metrics matrix (Ca/Ce/I/A/D) for the project.
+  Modules sorted by distance from main sequence (worst first).
+  """
+  def print_metrics_matrix(paths \\ ["lib"]) do
+    source_files = collect_files(paths)
+    file_asts = parse_many(source_files)
+
+    graph = Graph.build(file_asts)
+    metrics = Metrics.compute(graph, file_asts)
+
+    metrics
+    |> Enum.sort_by(& &1.distance, :desc)
+    |> format_metrics_table()
+    |> IO.write()
+
+    0
+  end
+
+  defp format_metrics_table([]), do: "\nArchdo — no modules analyzed.\n"
+
+  defp format_metrics_table(metrics) do
+    header = [
+      "\nArchdo — Martin Package Metrics\n\n",
+      "Ca = afferent coupling (how many depend on you)\n",
+      "Ce = efferent coupling (how many you depend on)\n",
+      "I  = instability (Ce / (Ca + Ce))\n",
+      "A  = abstractness (behaviour/protocol = 1.0, concrete = 0.0)\n",
+      "D  = distance from main sequence — 0 good, 1 problematic\n\n",
+      :io_lib.format("~-55ts ~4ts ~4ts ~6ts ~6ts ~6ts~n", ["Module", "Ca", "Ce", "I", "A", "D"]),
+      String.duplicate("-", 88),
+      "\n"
+    ]
+
+    rows =
+      metrics
+      |> Enum.map(fn m ->
+        :io_lib.format("~-55ts ~4w ~4w ~6.2f ~6.2f ~6.2f~n", [
+          truncate(m.module, 55),
+          m.ca,
+          m.ce,
+          m.instability,
+          m.abstractness,
+          m.distance
+        ])
+      end)
+
+    avg_distance =
+      if metrics == [] do
+        0.0
+      else
+        Enum.sum(Enum.map(metrics, & &1.distance)) / length(metrics)
+      end
+
+    footer = [
+      String.duplicate("-", 88),
+      "\n",
+      :io_lib.format("Average distance from main sequence: ~.2f~n~n", [avg_distance])
+    ]
+
+    [header, rows, footer]
+  end
+
+  defp truncate(str, max) do
+    if String.length(str) > max do
+      String.slice(str, 0, max - 3) <> "..."
+    else
+      str
+    end
+  end
+
+  # Find test files near each source path. For /foo/bar/lib → /foo/bar/test.
+  defp collect_tests_for(paths) do
+    paths
+    |> Enum.flat_map(fn path ->
+      project_root =
+        cond do
+          String.ends_with?(path, "/lib") -> Path.dirname(path)
+          String.ends_with?(path, "lib") and File.dir?(Path.join(path, "..")) -> Path.dirname(path)
+          true -> "."
+        end
+
+      Path.wildcard(Path.join(project_root, "test/**/*_test.exs"))
+    end)
+    |> Enum.uniq()
+  end
+
+  defp parse_many(files) do
+    files
+    |> Enum.map(fn file ->
+      case AST.parse_file(file) do
+        {:ok, ast} -> {file, ast}
+        {:error, _} -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp filter_diagnostics(diagnostics, opts) do
+    ignore = Keyword.get(opts, :ignore, [])
+    only = Keyword.get(opts, :only)
+
+    Enum.filter(diagnostics, fn d ->
+      cond do
+        only && d.rule_id not in only -> false
+        d.rule_id in ignore -> false
+        true -> true
+      end
+    end)
+  end
+
+  defp collect_files(paths) do
+    paths
+    |> Enum.flat_map(fn path ->
+      cond do
+        File.regular?(path) -> [path]
+        File.dir?(path) ->
+          Path.wildcard(Path.join(path, "**/*.ex")) ++
+            Path.wildcard(Path.join(path, "**/*.exs"))
+
+        true ->
+          []
+      end
+    end)
+    |> Enum.sort()
+    |> Enum.uniq()
+  end
+
+  defp severity_order(:error), do: 0
+  defp severity_order(:warning), do: 1
+  defp severity_order(:info), do: 2
+end

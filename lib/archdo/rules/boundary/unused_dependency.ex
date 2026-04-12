@@ -1,0 +1,88 @@
+defmodule Archdo.Rules.Boundary.UnusedDependency do
+  @moduledoc false
+  @behaviour Archdo.Rule
+
+  alias Archdo.{AST, Diagnostic, Fix}
+
+  @impl true
+  def id, do: "4.6"
+
+  @impl true
+  def description, do: "No unnecessary module dependencies"
+
+  @impl true
+  def analyze(file, ast, _opts) do
+    if AST.test_file?(file) do
+      []
+    else
+      find_unused_aliases(file, ast)
+    end
+  end
+
+  defp find_unused_aliases(file, ast) do
+    # Collect all alias declarations
+    aliases = collect_aliases(ast)
+    # Get the full source as string to check usage
+    source = File.read!(file)
+
+    aliases
+    |> Enum.filter(fn {short_name, _full, _line} ->
+      # Count how many times the short name appears (excluding the alias line itself)
+      # A simple heuristic: if it appears only once, it's just the alias declaration
+      occurrences =
+        source
+        |> String.split(short_name)
+        |> length()
+        |> Kernel.-(1)
+
+      occurrences <= 1
+    end)
+    |> Enum.map(fn {short_name, full, line} ->
+      Diagnostic.info("4.6",
+        title: "Unused alias",
+        message: "alias #{full} is declared but #{short_name} is never referenced",
+        why:
+          "Unused aliases create phantom dependencies: the file declares it depends on the module but never " <>
+            "actually calls it. They survive across refactors, accumulate over time, and make the dependency " <>
+            "graph misleading. Removing them is free maintenance.",
+        alternatives: [
+          Fix.new(
+            summary: "Delete the alias declaration",
+            detail:
+              "Remove the `alias #{full}` line. The compiler will warn (and Credo flags) if a real reference " <>
+                "needed it; this rule has already determined it's unreferenced.",
+            applies_when: "The alias is genuinely unused (the rule already verified)."
+          ),
+          Fix.new(
+            summary: "Verify the alias isn't used in a sigil or string",
+            detail:
+              "The detection counts string occurrences. If the short name is used inside a sigil, heredoc, or " <>
+                "template, the rule may flag it as unused. Double-check before deleting.",
+            applies_when: "The module name appears in non-code contexts."
+          )
+        ],
+        references: ["ARCHITECTURE_RULES.md#4.6"],
+        context: %{alias: full, short: short_name},
+        file: file,
+        line: line
+      )
+    end)
+  end
+
+  defp collect_aliases(ast) do
+    {_, aliases} =
+      Macro.prewalk(ast, [], fn
+        {:alias, meta, [{:__aliases__, _, parts} | _opts]} = node, acc ->
+          full = Module.concat(parts) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+          short = List.last(parts) |> Atom.to_string()
+          line = AST.line(meta)
+          {node, [{short, full, line} | acc]}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    Enum.reverse(aliases)
+  end
+
+end
