@@ -26,7 +26,7 @@ Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (
 ```elixir
 # mix.exs
 def deps do
-  [{:archdo, "~> 0.1.0", only: [:dev, :test], runtime: false}]
+  [{:archdo, github: "BadBeta/archdo", only: [:dev, :test], runtime: false}]
 end
 ```
 
