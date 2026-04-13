@@ -49,11 +49,39 @@ defmodule Archdo.Rules.NIF.NifPanic do
   defp check_rust_content(file, content) do
     lines = String.split(content, "\n")
 
-    lines
-    |> Enum.with_index(1)
-    |> Enum.flat_map(fn {line, line_num} ->
-      check_line(file, line, line_num)
-    end)
+    {diagnostics, _} =
+      lines
+      |> Enum.with_index(1)
+      |> Enum.reduce({[], 0}, fn {line, line_num}, {diags, test_brace_depth} ->
+        trimmed = String.trim(line)
+
+        # Track #[cfg(test)] blocks by counting braces after the attribute.
+        # When test_brace_depth > 0, we're inside a test module — skip checks.
+        cond do
+          trimmed == "#[cfg(test)]" ->
+            {diags, -1}
+
+          test_brace_depth == -1 ->
+            # Line after #[cfg(test)] — look for opening brace
+            opens = count_char(line, ?{)
+            closes = count_char(line, ?})
+            {diags, max(0, opens - closes)}
+
+          test_brace_depth > 0 ->
+            opens = count_char(line, ?{)
+            closes = count_char(line, ?})
+            {diags, max(0, test_brace_depth + opens - closes)}
+
+          true ->
+            {check_line(file, line, line_num) ++ diags, 0}
+        end
+      end)
+
+    Enum.reverse(diagnostics)
+  end
+
+  defp count_char(string, char) do
+    string |> to_charlist() |> Enum.count(&(&1 == char))
   end
 
   defp check_line(file, line, line_num) do
@@ -121,7 +149,8 @@ defmodule Archdo.Rules.NIF.NifPanic do
   end
 
   defp uses_rustler?(ast) do
-    Archdo.AST.uses_module?(ast, Rustler)
+    Archdo.AST.uses_module?(ast, Rustler) or
+      Archdo.AST.uses_module?(ast, RustlerPrecompiled)
   end
 
   defp find_project_root(file) do
