@@ -140,12 +140,13 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
 
   defp find_bypasses(file, ast, caller, protected, registry) do
     AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, _}, _func]}, _, _} -> true
+      {{:., _, [{:__aliases__, _, parts}, _func]}, _, _} when is_atom(hd(parts)) ->
+        Enum.all?(parts, &is_atom/1)
       _ -> false
     end)
     |> Enum.flat_map(fn
       {{:., _, [{:__aliases__, _, parts}, func]}, meta, _args} ->
-        target = parts |> Enum.map_join(".", &to_string/1)
+        target = parts |> Enum.map_join(".", &Atom.to_string/1)
 
         if MapSet.member?(protected, target) and
              not legitimate?(caller, target, registry) do
