@@ -140,7 +140,9 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
 
   defp find_bypasses(file, ast, caller, protected, registry) do
     AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, parts}, _func]}, _, _} when is_atom(hd(parts)) ->
+      # Skip multi-alias syntax: alias Foo.{Bar, Baz} produces func = :{}
+      {{:., _, [{:__aliases__, _, parts}, func]}, _, _}
+      when is_atom(hd(parts)) and func != :{} ->
         Enum.all?(parts, &is_atom/1)
       _ -> false
     end)
