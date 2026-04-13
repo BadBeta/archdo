@@ -51,4 +51,43 @@ defmodule Archdo.Rules.Module.TypeDispatchTest do
 
     assert_clean(TypeDispatch, code)
   end
+
+  test "flags multi-clause function dispatching on 4+ atom types" do
+    code = ~S"""
+    defmodule MyApp.Processor do
+      def process(:csv, data), do: parse_csv(data)
+      def process(:json, data), do: parse_json(data)
+      def process(:xml, data), do: parse_xml(data)
+      def process(:yaml, data), do: parse_yaml(data)
+      def process(:toml, data), do: parse_toml(data)
+    end
+    """
+
+    diags = assert_flagged(TypeDispatch, code)
+    assert hd(diags).title =~ "Multi-clause"
+    assert hd(diags).message =~ "5 clauses"
+  end
+
+  test "allows multi-clause function with fewer than 4 atom types" do
+    code = ~S"""
+    defmodule MyApp.Formatter do
+      def format(:json, data), do: Jason.encode!(data)
+      def format(:text, data), do: to_string(data)
+    end
+    """
+
+    assert_clean(TypeDispatch, code)
+  end
+
+  test "ignores ok/error in multi-clause dispatch" do
+    code = ~S"""
+    defmodule MyApp.Handler do
+      def handle(:ok, data), do: success(data)
+      def handle(:error, reason), do: failure(reason)
+      def handle(nil, _), do: :noop
+    end
+    """
+
+    assert_clean(TypeDispatch, code)
+  end
 end

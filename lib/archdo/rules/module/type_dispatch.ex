@@ -10,6 +10,8 @@ defmodule Archdo.Rules.Module.TypeDispatch do
   @impl true
   def description, do: "Type-dispatching case statements suggest missing polymorphism"
 
+  @ignored_atoms [:ok, :error, true, false, nil]
+
   @impl true
   def analyze(file, ast, _opts) do
     find_type_dispatch_patterns(file, ast)
@@ -18,10 +20,15 @@ defmodule Archdo.Rules.Module.TypeDispatch do
   defp find_type_dispatch_patterns(file, ast) do
     fns = AST.extract_functions(ast, :all)
 
-    fns
-    |> Enum.flat_map(fn {name, arity, _meta, _args, body} ->
-      find_atom_dispatch_cases(file, body, name, arity)
-    end)
+    case_dispatch =
+      fns
+      |> Enum.flat_map(fn {name, arity, _meta, _args, body} ->
+        find_atom_dispatch_cases(file, body, name, arity)
+      end)
+
+    clause_dispatch = find_multi_clause_dispatch(file, ast)
+
+    case_dispatch ++ clause_dispatch
   end
 
   defp find_atom_dispatch_cases(_file, nil, _name, _arity), do: []
@@ -49,14 +56,6 @@ defmodule Archdo.Rules.Module.TypeDispatch do
             "violates Open/Closed: adding a type shouldn't require modifying existing functions.",
         alternatives: [
           Fix.new(
-            summary: "Use multi-clause functions and dispatch on the first arg",
-            detail:
-              "Replace `case type do` with multiple `def fun(:foo, ...), def fun(:bar, ...)` clauses. Each " <>
-                "type's behaviour lives next to its dispatch tag and adding a type means adding a clause, " <>
-                "not editing existing logic.",
-            applies_when: "The dispatch is on a small, fixed-ish set of types in one module."
-          ),
-          Fix.new(
             summary: "Define a behaviour and one impl module per type",
             detail:
               "If the dispatch hides genuinely different logic per type, define a behaviour with the relevant " <>
@@ -80,6 +79,97 @@ defmodule Archdo.Rules.Module.TypeDispatch do
       )
     end)
   end
+
+  # --- Multi-clause function dispatch ---
+  # Detects: def handle(:foo, data), def handle(:bar, data), ...
+  # where 4+ clauses each match a distinct atom as the first argument.
+
+  defp find_multi_clause_dispatch(file, ast) do
+    # Collect all def/defp clauses grouped by {name, arity}
+    {_, clauses_by_fn} =
+      Macro.prewalk(ast, %{}, fn
+        {:def, meta, [{name, _, args} | _]} = node, acc when is_atom(name) and is_list(args) ->
+          key = {name, length(args)}
+          atom = first_arg_atom(args)
+          entry = %{atom: atom, line: AST.line(meta)}
+          {node, Map.update(acc, key, [entry], &[entry | &1])}
+
+        {:defp, meta, [{name, _, args} | _]} = node, acc when is_atom(name) and is_list(args) ->
+          key = {name, length(args)}
+          atom = first_arg_atom(args)
+          entry = %{atom: atom, line: AST.line(meta)}
+          {node, Map.update(acc, key, [entry], &[entry | &1])}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    clauses_by_fn
+    |> Enum.flat_map(fn {{name, arity}, entries} ->
+      entries = Enum.reverse(entries)
+      type_atoms = entries |> Enum.map(& &1.atom) |> Enum.reject(&is_nil/1)
+      distinct = type_atoms |> Enum.reject(&(&1 in @ignored_atoms)) |> Enum.uniq()
+
+      if length(distinct) >= 4 and not genserver_callback?(name) do
+        first_line = entries |> Enum.map(& &1.line) |> Enum.min()
+
+        [
+          Diagnostic.info("4.3",
+            title: "Multi-clause type dispatch function",
+            message:
+              "#{name}/#{arity} has #{length(distinct)} clauses dispatching on atom types: " <>
+                "#{Enum.map_join(Enum.take(distinct, 5), ", ", &inspect/1)}" <>
+                if(length(distinct) > 5, do: ", ...", else: ""),
+            why:
+              "When a function has many clauses each matching a different atom as the first argument, " <>
+                "adding a new type requires editing this module. This violates Open/Closed — the module " <>
+                "is open to modification when it should be closed. Each atom branch is effectively a " <>
+                "manual vtable that should be a behaviour or protocol dispatch.",
+            alternatives: [
+              Fix.new(
+                summary: "Define a behaviour and one module per type",
+                detail:
+                  "Extract the callback contract, create one module per type atom that implements it, " <>
+                    "and dispatch via a map lookup or `Application.compile_env`. Adding a new type means " <>
+                    "adding a new module, not editing existing clauses.",
+                applies_when: "Each clause has substantial logic and the type set may grow."
+              ),
+              Fix.new(
+                summary: "Use a map of atoms to functions",
+                detail:
+                  "Replace the multi-clause dispatch with `@handlers %{foo: &handle_foo/1, ...}` " <>
+                    "and call `Map.fetch!(@handlers, type).(data)`. New types register in the map " <>
+                    "without touching existing handler code.",
+                applies_when: "The handlers are small and a full behaviour is overkill."
+              ),
+              Fix.new(
+                summary: "Keep if the type set is genuinely fixed",
+                detail:
+                  "If the atoms represent a closed, stable set (e.g., HTTP methods, weekdays), " <>
+                    "multi-clause dispatch is idiomatic and the OCP concern doesn't apply.",
+                applies_when: "The set of types is fixed by an external standard."
+              )
+            ],
+            references: ["ARCHITECTURE_RULES.md#4.3"],
+            context: %{function: "#{name}/#{arity}", branch_count: length(distinct)},
+            file: file,
+            line: first_line
+          )
+        ]
+      else
+        []
+      end
+    end)
+  end
+
+  # GenServer callbacks naturally dispatch on message atoms — not an OCP violation.
+  @genserver_callbacks ~w(handle_call handle_cast handle_info handle_continue)a
+  defp genserver_callback?(name), do: name in @genserver_callbacks
+
+  # Extract the atom from the first argument of a function clause, if it's a literal atom.
+  defp first_arg_atom([atom | _]) when is_atom(atom), do: atom
+  defp first_arg_atom([{:__block__, _, [atom]} | _]) when is_atom(atom), do: atom
+  defp first_arg_atom(_), do: nil
 
   defp count_atom_dispatch_clauses(clauses) do
     Enum.count(clauses, fn
