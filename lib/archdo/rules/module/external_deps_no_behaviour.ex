@@ -33,9 +33,11 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviour do
   end
 
   defp find_direct_external_calls(file, ast) do
+    caller_module = AST.extract_module_name(ast)
+
     AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
-        mod_parts in @external_services
+        mod_parts in @external_services and not self_call?(caller_module, mod_parts)
 
       _ ->
         false
@@ -104,5 +106,12 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviour do
 
   defp infrastructure_file?(file) do
     String.contains?(file, "/mailer") or String.ends_with?(file, "_client.ex")
+  end
+
+  # A library calling itself is not an "external" dependency.
+  # E.g., Finch's internal code calling Finch.request() should not be flagged.
+  defp self_call?(caller_module, service_parts) do
+    service_root = hd(service_parts) |> to_string()
+    String.starts_with?(caller_module, service_root)
   end
 end

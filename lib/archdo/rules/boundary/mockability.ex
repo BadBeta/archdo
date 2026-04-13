@@ -45,7 +45,8 @@ defmodule Archdo.Rules.Boundary.Mockability do
     file_io =
       file_asts
       |> Enum.map(fn {file, ast} ->
-        {file, find_external_io_calls(ast), count_behaviours_used(ast)}
+        caller = AST.extract_module_name(ast)
+        {file, find_external_io_calls(ast, caller), count_behaviours_used(ast)}
       end)
 
     # Direct IO surfaces: files that call external IO directly
@@ -195,10 +196,11 @@ defmodule Archdo.Rules.Boundary.Mockability do
     end
   end
 
-  defp find_external_io_calls(ast) do
+  defp find_external_io_calls(ast, caller_module) do
     AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
-        mod_parts in @external_io_libraries
+        mod_parts in @external_io_libraries and
+          not self_call?(caller_module, mod_parts)
 
       _ ->
         false
@@ -226,6 +228,12 @@ defmodule Archdo.Rules.Boundary.Mockability do
       0 -> 0
       _ -> 1
     end
+  end
+
+  # A library calling itself is not an "external" dependency.
+  defp self_call?(caller_module, service_parts) do
+    service_root = hd(service_parts) |> to_string()
+    String.starts_with?(caller_module, service_root)
   end
 
   defp adapter_or_test?(file) do
