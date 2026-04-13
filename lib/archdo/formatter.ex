@@ -17,6 +17,14 @@ defmodule Archdo.Formatter do
 
   # ───────────────────────────────────────────── :text ─────────────────────────────────────────────
 
+  @llm_instruction """
+  [Archdo] To evaluate these findings, load the Elixir skill (/elixir) and consult:
+    OTP rules (5.x) → otp-reference.md | Architecture (1.x, 4.x) → architecture-reference.md
+    Testing (7.x) → elixir-testing skill | NIF (11.x) → rust-nif skill
+    Error handling (6.9-6.11) → language-patterns.md | Event sourcing (8.x) → event-sourcing skill
+  Not every finding needs fixing — use the skill's domain knowledge to distinguish real issues from intentional trade-offs.
+  """
+
   defp format_text([]) do
     IO.puts("\nArchdo — no issues found.\n")
     0
@@ -73,6 +81,7 @@ defmodule Archdo.Formatter do
 
     {errors, warnings, infos} = counts(diagnostics)
     IO.puts("Found #{errors} errors, #{warnings} warnings, #{infos} info.\n")
+    IO.puts(@llm_instruction)
     exit_code(errors, warnings)
   end
 
@@ -84,6 +93,10 @@ defmodule Archdo.Formatter do
         "#{relative_path(d.file)}:#{d.line}: #{d.severity} [#{d.rule_id}] #{d.title} — #{d.message}"
       )
     end)
+
+    if diagnostics != [] do
+      IO.puts(@llm_instruction)
+    end
 
     {errors, warnings, _} = counts(diagnostics)
     exit_code(errors, warnings)
@@ -107,6 +120,9 @@ defmodule Archdo.Formatter do
   # NDJSON: one diagnostic per line, each augmented with a pre-rendered markdown block.
   # First line is a `{"type":"summary",...}` envelope so consumers can short-circuit.
   defp format_llm(diagnostics) do
+    instruction = %{type: "instruction", message: String.trim(@llm_instruction)}
+    IO.puts(Jason.encode!(instruction))
+
     summary = Map.put(summary_map(diagnostics), :type, "summary")
     IO.puts(Jason.encode!(summary))
 
