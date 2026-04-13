@@ -75,7 +75,12 @@ cd ~/Projects/Archdo && mix deps.get
 
 > "Check the architecture of /path/to/my_project using Archdo"
 
-Claude will run `mix archdo --paths /path/to/my_project/lib`, analyze the findings with Elixir domain knowledge, and present both the issues and whether they matter.
+Claude will:
+1. Run `mix archdo --paths /path/to/my_project/lib` for structural analysis
+2. Load the Elixir skill and relevant subskills (OTP, architecture, testing, error handling) to evaluate each finding with deep domain knowledge
+3. Present the issues alongside judgment on which matter and how to fix them idiomatically
+
+The Elixir skill's subskills contain the specialized knowledge that makes Layer 2 work — OTP process patterns, architecture decision frameworks, Ecto conventions, error handling idioms, and more. Always use `/elixir` to ensure the skill is loaded before reviewing findings.
 
 ### MCP server (optional, for deeper integration)
 
