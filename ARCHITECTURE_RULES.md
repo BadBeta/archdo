@@ -319,17 +319,17 @@ Direct calls to external service clients (HTTP, email, SMS, payment, file storag
 
 Connections between modules must share only what they need — nothing more.
 
-- **Why:** Every unnecessary dependency is entanglement that makes both modules harder to change, test, and reason about independently. When module A passes an entire struct to module B but B only reads two fields, A and B are coupled to the struct's full shape. When a context returns `%Ecto.Changeset{}`, every caller is coupled to Ecto. When `import` pulls in 40 functions but you use 2, you've created 38 invisible dependencies. This is the most fundamental coupling rule: **the narrowest possible interface between any two modules.** (Interface Segregation, Law of Demeter, Minimal Coupling)
+- **Why:** Every unnecessary dependency is entanglement that makes both modules harder to change, test, and reason about independently. When a context returns `%Ecto.Changeset{}`, every caller is coupled to Ecto. When `import` pulls in 40 functions but you use 2, you've created 38 invisible dependencies. This is the most fundamental coupling rule: **the narrowest possible interface between any two modules.** (Interface Segregation, Law of Demeter, Minimal Coupling)
+- **Structs and coupling:** Passing a struct to a function that pattern matches specific fields in its head (`def greet(%User{name: name}), do: ...`) is idiomatic Elixir and is the *low-coupling* approach — the function declares exactly which fields it needs, and adding/removing other fields doesn't break it. The coupling concern arises when a function *deeply traverses* nested struct fields (`user.address.street.zip`) or accesses many unrelated fields across the struct body, creating hidden dependencies on the full shape.
 - **Check:**
   - **Import breadth:** Flag `import Module` without `:only` — pulls in entire module surface. Flag `import Module, only: [...]` where the list has 5+ functions (consider aliasing instead).
-  - **Struct pass-through across boundaries:** Heuristic — flag functions that receive a struct parameter *from another context* but only access 1-2 fields. When crossing context boundaries, prefer passing individual values. Within a context or pipeline, passing the full struct is idiomatic.
   - **Leaking internal types:** Flag public context functions (modules matching `MyApp.*` top-level contexts) whose `@spec` return types reference `Ecto.Changeset`, `Ecto.Multi`, `Ecto.Query`, or other infrastructure types. Context APIs should return domain types (`{:ok, %User{}}`, `{:error, :not_found}`), not framework types.
   - **Coupling fan-out:** Flag modules that `alias` more than **10** other modules (high coupling — the module knows too much about the system).
-  - **Cross-context struct dependency:** Flag modules in one context that pattern-match on or construct structs defined in another context. Contexts should communicate via data (maps, simple tuples) or shared types, not by reaching into each other's struct definitions.
+  - **Cross-context struct dependency:** Flag modules in one context that construct structs defined in another context. Contexts should communicate via domain types or shared types, not by reaching into each other's struct definitions. Pattern matching on a struct from another context is acceptable when the struct is part of the public API.
 - **Suggest:**
   - Replace `import Module` with `alias Module` and explicit `Module.function()` calls
   - For `import` with `:only`, if using > 3 functions, consider whether the calling module should depend on the imported module at all
-  - At context boundaries, accept individual values: `def notify(email, name)` not `def notify(user)`
+  - At context boundaries, prefer specific parameters when a function only needs 1-2 values: `def notify(email, name)` not `def notify(user)` — but passing the struct is fine if the function pattern matches specific fields
   - Return `{:ok, result}` / `{:error, reason}` from context APIs, not Ecto types
   - For cross-context data, define a shared protocol or use plain maps at the boundary
 - **Tolerate:**
