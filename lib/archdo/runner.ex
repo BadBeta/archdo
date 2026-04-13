@@ -57,6 +57,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.PretentiousName,
     Archdo.Rules.Module.MixedConcerns,
     Archdo.Rules.Module.NaturalSeams,
+    Archdo.Rules.Module.ResponsibilityClustering,
     Archdo.Rules.Module.ReinventedPubSub,
     Archdo.Rules.Module.ReinventedEnumerable,
     Archdo.Rules.Module.RescueSwallowsError,
