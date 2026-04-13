@@ -78,7 +78,19 @@ defmodule Archdo.Rules.Module.BehaviourSize do
           {node, {MapSet.put(cbs, {name, arity}), opt}}
 
         {:@, _, [{:optional_callbacks, _, [opts]}]} = node, {cbs, opt} when is_list(opts) ->
-          new_opt = Enum.reduce(opts, opt, fn {name, arity}, acc -> MapSet.put(acc, {name, arity}) end)
+          new_opt =
+            Enum.reduce(opts, opt, fn
+              {name, arity}, acc when is_atom(name) and is_integer(arity) ->
+                MapSet.put(acc, {name, arity})
+
+              {{:__block__, _, [name]}, {:__block__, _, [arity]}}, acc
+              when is_atom(name) and is_integer(arity) ->
+                MapSet.put(acc, {name, arity})
+
+              _, acc ->
+                acc
+            end)
+
           {node, {cbs, new_opt}}
 
         node, acc ->
