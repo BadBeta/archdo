@@ -130,39 +130,67 @@ defmodule Archdo.Graph do
     {_, {_current_module, edges}} =
       Macro.prewalk(ast, {nil, []}, fn
         # Track current module
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, {_mod, edges} ->
-          mod = Module.concat(aliases) |> to_string() |> String.replace_leading("Elixir.", "")
-          {node, {mod, edges}}
+        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, {_mod, edges}
+        when is_atom(hd(aliases)) ->
+          mod = safe_concat(aliases)
+          if mod do
+            {node, {mod, edges}}
+          else
+            {node, {nil, edges}}
+          end
 
         # alias MyApp.Foo
         {:alias, meta, [{:__aliases__, _, aliases} | _]} = node, {mod, edges} when mod != nil ->
-          target = Module.concat(aliases) |> to_string() |> String.replace_leading("Elixir.", "")
-          edge = %{source: mod, target: target, type: :alias, file: file, line: line(meta)}
-          {node, {mod, [edge | edges]}}
+          case safe_concat(aliases) do
+            nil -> {node, {mod, edges}}
+            target ->
+              edge = %{source: mod, target: target, type: :alias, file: file, line: line(meta)}
+              {node, {mod, [edge | edges]}}
+          end
 
         # import MyApp.Foo
         {:import, meta, [{:__aliases__, _, aliases} | _]} = node, {mod, edges} when mod != nil ->
-          target = Module.concat(aliases) |> to_string() |> String.replace_leading("Elixir.", "")
-          edge = %{source: mod, target: target, type: :import, file: file, line: line(meta)}
-          {node, {mod, [edge | edges]}}
+          case safe_concat(aliases) do
+            nil -> {node, {mod, edges}}
+            target ->
+              edge = %{source: mod, target: target, type: :import, file: file, line: line(meta)}
+              {node, {mod, [edge | edges]}}
+          end
 
         # use MyApp.Foo
         {:use, meta, [{:__aliases__, _, aliases} | _]} = node, {mod, edges} when mod != nil ->
-          target = Module.concat(aliases) |> to_string() |> String.replace_leading("Elixir.", "")
-          edge = %{source: mod, target: target, type: :use, file: file, line: line(meta)}
-          {node, {mod, [edge | edges]}}
+          case safe_concat(aliases) do
+            nil -> {node, {mod, edges}}
+            target ->
+              edge = %{source: mod, target: target, type: :use, file: file, line: line(meta)}
+              {node, {mod, [edge | edges]}}
+          end
 
         # Remote call: MyApp.Foo.bar(...)
-        {{:., meta, [{:__aliases__, _, aliases}, _func]}, _, _args} = node, {mod, edges} when mod != nil ->
-          target = Module.concat(aliases) |> to_string() |> String.replace_leading("Elixir.", "")
-          edge = %{source: mod, target: target, type: :call, file: file, line: line(meta)}
-          {node, {mod, [edge | edges]}}
+        {{:., meta, [{:__aliases__, _, aliases}, _func]}, _, _args} = node, {mod, edges}
+        when mod != nil ->
+          case safe_concat(aliases) do
+            nil -> {node, {mod, edges}}
+            target ->
+              edge = %{source: mod, target: target, type: :call, file: file, line: line(meta)}
+              {node, {mod, [edge | edges]}}
+          end
 
         node, acc ->
           {node, acc}
       end)
 
     Enum.reverse(edges)
+  end
+
+  # Safely concat module aliases, returning nil for dynamic references
+  # (e.g. __MODULE__.Foo contains a non-atom element).
+  defp safe_concat(aliases) do
+    if Enum.all?(aliases, &is_atom/1) do
+      Module.concat(aliases) |> to_string() |> String.replace_leading("Elixir.", "")
+    else
+      nil
+    end
   end
 
   defp line(meta) when is_list(meta), do: Keyword.get(meta, :line, 0)

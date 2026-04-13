@@ -19,7 +19,8 @@ defmodule Archdo do
     SchemaOwnership,
     ChattyBoundary,
     AnemicContext,
-    SeamIntegrity
+    SeamIntegrity,
+    SyncContextCoupling
   }
 
   alias Archdo.Rules.Module.{
@@ -28,7 +29,8 @@ defmodule Archdo do
     FunctionFanOut,
     FeatureEnvy,
     SpeculativeGenerality,
-    AdaptersWithoutBehaviour
+    AdaptersWithoutBehaviour,
+    MissingTelemetry
   }
 
   @doc """
@@ -81,6 +83,7 @@ defmodule Archdo do
     anemic_context_diagnostics = AnemicContext.analyze_project(source_files)
     adapters_diagnostics = AdaptersWithoutBehaviour.analyze_project(file_asts)
     seam_diagnostics = SeamIntegrity.analyze_project(file_asts)
+    telemetry_diagnostics = MissingTelemetry.analyze_project(file_asts)
     metrics_diagnostics = run_metrics_rules(file_asts)
 
     function_graph_diagnostics =
@@ -100,6 +103,7 @@ defmodule Archdo do
        anemic_context_diagnostics ++
        adapters_diagnostics ++
        seam_diagnostics ++
+       telemetry_diagnostics ++
        metrics_diagnostics ++
        function_graph_diagnostics)
     |> filter_diagnostics(opts)
@@ -144,11 +148,19 @@ defmodule Archdo do
         []
       end
 
+    sync_coupling_diagnostics =
+      if contexts != [] do
+        SyncContextCoupling.analyze_project(fn_graph, contexts)
+      else
+        []
+      end
+
     boundary_diagnostics ++
       fan_out_diagnostics ++
       fan_in_diagnostics ++
       feature_envy_diagnostics ++
-      chatty_diagnostics
+      chatty_diagnostics ++
+      sync_coupling_diagnostics
   end
 
   @doc """

@@ -99,7 +99,10 @@ defmodule Archdo.Runner do
     Archdo.Rules.Composition.NamespaceDepth,
     # Per-file boundary rules
     Archdo.Rules.Boundary.ImportBreadth,
-    Archdo.Rules.Boundary.UnusedDependency
+    Archdo.Rules.Boundary.UnusedDependency,
+    # Resilience rules
+    Archdo.Rules.Module.UnprotectedExternalCall,
+    Archdo.Rules.Module.UnboundedExternalCall
   ]
 
   @graph_rules [
