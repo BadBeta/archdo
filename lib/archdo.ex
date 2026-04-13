@@ -18,7 +18,8 @@ defmodule Archdo do
     ParallelHierarchies,
     SchemaOwnership,
     ChattyBoundary,
-    AnemicContext
+    AnemicContext,
+    SeamIntegrity
   }
 
   alias Archdo.Rules.Module.{
@@ -79,6 +80,7 @@ defmodule Archdo do
     schema_ownership_diagnostics = SchemaOwnership.analyze_project(file_asts)
     anemic_context_diagnostics = AnemicContext.analyze_project(source_files)
     adapters_diagnostics = AdaptersWithoutBehaviour.analyze_project(file_asts)
+    seam_diagnostics = SeamIntegrity.analyze_project(file_asts)
     metrics_diagnostics = run_metrics_rules(file_asts)
 
     function_graph_diagnostics =
@@ -97,6 +99,7 @@ defmodule Archdo do
        schema_ownership_diagnostics ++
        anemic_context_diagnostics ++
        adapters_diagnostics ++
+       seam_diagnostics ++
        metrics_diagnostics ++
        function_graph_diagnostics)
     |> filter_diagnostics(opts)
