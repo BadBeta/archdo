@@ -30,7 +30,8 @@ defmodule Archdo do
     FeatureEnvy,
     SpeculativeGenerality,
     AdaptersWithoutBehaviour,
-    MissingTelemetry
+    MissingTelemetry,
+    FatInterface
   }
 
   @doc """
@@ -84,6 +85,7 @@ defmodule Archdo do
     adapters_diagnostics = AdaptersWithoutBehaviour.analyze_project(file_asts)
     seam_diagnostics = SeamIntegrity.analyze_project(file_asts)
     telemetry_diagnostics = MissingTelemetry.analyze_project(file_asts)
+    fat_interface_diagnostics = FatInterface.analyze_project(file_asts)
     metrics_diagnostics = run_metrics_rules(file_asts)
 
     function_graph_diagnostics =
@@ -104,6 +106,7 @@ defmodule Archdo do
        adapters_diagnostics ++
        seam_diagnostics ++
        telemetry_diagnostics ++
+       fat_interface_diagnostics ++
        metrics_diagnostics ++
        function_graph_diagnostics)
     |> filter_diagnostics(opts)
