@@ -29,14 +29,13 @@ defmodule Archdo.Rules.Module.UnprotectedExternalCall do
   end
 
   defp find_bang_calls(file, ast) do
-    AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _} ->
-        bang_call?(mod_parts, func)
+    calls =
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _} -> bang_call?(mod_parts, func)
+        _ -> false
+      end)
 
-      _ ->
-        false
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+    for {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} <- calls do
       service = Enum.map_join(mod_parts, ".", &to_string/1)
       non_bang = func |> to_string() |> String.trim_trailing("!") |> String.to_atom()
 
@@ -70,7 +69,7 @@ defmodule Archdo.Rules.Module.UnprotectedExternalCall do
         file: file,
         line: AST.line(meta)
       )
-    end)
+    end
   end
 
   defp bang_call?(mod_parts, func) do

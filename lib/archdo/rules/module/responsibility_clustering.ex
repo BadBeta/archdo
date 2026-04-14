@@ -11,6 +11,9 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
   # Minimum total public functions before we bother checking
   @min_public_fns 4
 
+  @ast_keywords ~w(def defp defmodule do end if unless case cond with for fn receive try
+                    quote unquote raise throw import alias use require)a ++ [:@, :__MODULE__]
+
   @impl true
   def id, do: "6.12"
 
@@ -92,9 +95,7 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
       Macro.prewalk(body, MapSet.new(), fn
         # Local call: foo(args...)
         {name, _meta, args} = node, acc
-        when is_atom(name) and is_list(args) and name not in [:def, :defp, :defmodule, :do, :end,
-             :if, :unless, :case, :cond, :with, :for, :fn, :receive, :try, :quote, :unquote,
-             :raise, :throw, :import, :alias, :use, :require, :@, :__MODULE__] ->
+        when is_atom(name) and is_list(args) and name not in @ast_keywords ->
           key = {name, length(args)}
 
           case MapSet.member?(known, key) do
@@ -119,7 +120,7 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
       end)
 
     # Two public functions are in the same cluster if their reachable sets overlap
-    pub_keys = Enum.map(public_fns, & &1.key)
+    pub_keys = for f <- public_fns, do: f.key
 
     # Union-find via adjacency
     adjacency =
@@ -231,9 +232,9 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
         module: module_name,
         cluster_count: length(clusters),
         clusters:
-          Enum.map(clusters, fn fns ->
-            Enum.map(fns, fn {name, arity} -> "#{name}/#{arity}" end)
-          end)
+          for fns <- clusters do
+            for {name, arity} <- fns, do: "#{name}/#{arity}"
+          end
       },
       file: file,
       line: 1

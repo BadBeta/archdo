@@ -28,49 +28,43 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
   end
 
   defp find_unbounded_http(file, ast) do
-    AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _} ->
-        Map.has_key?(@http_clients, mod_parts) and base_func(func) in @http_methods
+    calls =
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _} ->
+          Map.has_key?(@http_clients, mod_parts) and base_func(func) in @http_methods
 
-      _ ->
-        false
-    end)
-    |> Enum.flat_map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, args} ->
-      timeout_keys = Map.get(@http_clients, mod_parts, [])
+        _ ->
+          false
+      end)
 
-      case has_timeout_option?(args, timeout_keys) do
-        true ->
-          []
+    for {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, args} <- calls,
+        timeout_keys = Map.get(@http_clients, mod_parts, []),
+        not has_timeout_option?(args, timeout_keys) do
+      service = Enum.map_join(mod_parts, ".", &to_string/1)
+      keys_str = Enum.map_join(timeout_keys, " or ", &":#{&1}")
 
-        false ->
-        service = Enum.map_join(mod_parts, ".", &to_string/1)
-        keys_str = Enum.map_join(timeout_keys, " or ", &":#{&1}")
-
-        [
-          Diagnostic.warning("4.18",
-            title: "External call without explicit timeout",
-            message: "#{service}.#{func}() called without #{keys_str} option",
-            why:
-              "HTTP clients default to generous timeouts (often 30s). Under load or when " <>
-                "the remote service is degraded, callers stack up waiting. Explicit timeouts " <>
-                "let you fail fast, shed load, and give callers a chance to retry or degrade.",
-            alternatives: [
-              Fix.new(
-                summary: "Add an explicit timeout option",
-                detail:
-                  "Add `#{hd(timeout_keys)}: 5_000` (or appropriate value) to the options. " <>
-                    "Example: `#{service}.#{func}(url, [], #{hd(timeout_keys)}: 5_000)`.",
-                applies_when: "Always — explicit timeouts are a production best practice."
-              )
-            ],
-            references: ["ARCHITECTURE_RULES.md#4.18"],
-            context: %{service: service, function: func},
-            file: file,
-            line: AST.line(meta)
+      Diagnostic.warning("4.18",
+        title: "External call without explicit timeout",
+        message: "#{service}.#{func}() called without #{keys_str} option",
+        why:
+          "HTTP clients default to generous timeouts (often 30s). Under load or when " <>
+            "the remote service is degraded, callers stack up waiting. Explicit timeouts " <>
+            "let you fail fast, shed load, and give callers a chance to retry or degrade.",
+        alternatives: [
+          Fix.new(
+            summary: "Add an explicit timeout option",
+            detail:
+              "Add `#{hd(timeout_keys)}: 5_000` (or appropriate value) to the options. " <>
+                "Example: `#{service}.#{func}(url, [], #{hd(timeout_keys)}: 5_000)`.",
+            applies_when: "Always — explicit timeouts are a production best practice."
           )
-        ]
-      end
-    end)
+        ],
+        references: ["ARCHITECTURE_RULES.md#4.18"],
+        context: %{service: service, function: func},
+        file: file,
+        line: AST.line(meta)
+      )
+    end
   end
 
   defp find_unbounded_genserver_call(file, ast) do

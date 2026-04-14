@@ -80,7 +80,7 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
     new_itb =
       Enum.reduce(behaviour_refs, itb, fn
         {:@, _, [{:behaviour, _, [{:__aliases__, _, parts}]}]}, acc ->
-          bhv_name = parts |> Enum.map_join(".", &to_string/1)
+          bhv_name = join_module(parts)
           Map.update(acc, module_name, [bhv_name], &[bhv_name | &1])
 
         {:@, _, [{:behaviour, _, [atom_bhv]}]}, acc when is_atom(atom_bhv) ->
@@ -116,8 +116,8 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
       Enum.reduce(impls, itp, fn
         {:defimpl, _, [{:__aliases__, _, proto_parts}, [for: {:__aliases__, _, for_parts}] | _]},
         acc ->
-          proto_name = proto_parts |> Enum.map_join(".", &to_string/1)
-          for_name = for_parts |> Enum.map_join(".", &to_string/1)
+          proto_name = join_module(proto_parts)
+          for_name = join_module(for_parts)
           # defimpl Proto, for: Type creates module Proto.Type
           impl_module = "#{proto_name}.#{for_name}"
           Map.update(acc, impl_module, [proto_name], &[proto_name | &1])
@@ -132,34 +132,29 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
   # --- Phase 2: Detect bypasses ---
 
   defp find_bypasses(file, ast, caller, protected, registry) do
-    AST.find_all(ast, fn
-      # Skip multi-alias syntax: alias Foo.{Bar, Baz} produces func = :{}
-      {{:., _, [{:__aliases__, _, parts}, func]}, _, _}
-      when is_atom(hd(parts)) and func != :{} ->
-        Enum.all?(parts, &is_atom/1)
-      _ -> false
-    end)
-    |> Enum.flat_map(fn
-      {{:., _, [{:__aliases__, _, parts}, func]}, meta, _args} ->
-        target = parts |> Enum.map_join(".", &Atom.to_string/1)
+    calls =
+      AST.find_all(ast, fn
+        # Skip multi-alias syntax: alias Foo.{Bar, Baz} produces func = :{}
+        {{:., _, [{:__aliases__, _, parts}, func]}, _, _}
+        when is_atom(hd(parts)) and func != :{} ->
+          Enum.all?(parts, &is_atom/1)
 
-        case {MapSet.member?(protected, target), legitimate?(caller, target, registry)} do
-          {true, false} ->
-            seams =
-              Map.get(registry.impl_to_behaviour, target, []) ++
-                Map.get(registry.impl_to_protocol, target, [])
+        _ ->
+          false
+      end)
 
-            seam = List.first(seams, "unknown")
-            is_behaviour = Map.has_key?(registry.impl_to_behaviour, target)
-            [bypass_diagnostic(file, AST.line(meta), caller, target, func, seam, is_behaviour)]
+    for {{:., _, [{:__aliases__, _, parts}, func]}, meta, _} <- calls,
+        target = join_module(parts),
+        MapSet.member?(protected, target),
+        not legitimate?(caller, target, registry) do
+      seams =
+        Map.get(registry.impl_to_behaviour, target, []) ++
+          Map.get(registry.impl_to_protocol, target, [])
 
-          _ ->
-            []
-        end
-
-      _ ->
-        []
-    end)
+      seam = List.first(seams, "unknown")
+      is_behaviour = Map.has_key?(registry.impl_to_behaviour, target)
+      bypass_diagnostic(file, AST.line(meta), caller, target, func, seam, is_behaviour)
+    end
   end
 
   # --- Phase 3: Filter legitimate calls ---
@@ -248,6 +243,8 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
       line: line
     )
   end
+
+  defp join_module(parts), do: Enum.map_join(parts, ".", &Atom.to_string/1)
 
   defp key_name(seam) do
     seam

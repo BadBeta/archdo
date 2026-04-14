@@ -88,16 +88,10 @@ defmodule Archdo.Rules.Module.TypeDispatch do
     # Collect all def/defp clauses grouped by {name, arity}
     {_, clauses_by_fn} =
       Macro.prewalk(ast, %{}, fn
-        {:def, meta, [{name, _, args} | _]} = node, acc when is_atom(name) and is_list(args) ->
+        {kind, meta, [{name, _, args} | _]} = node, acc
+        when kind in [:def, :defp] and is_atom(name) and is_list(args) ->
           key = {name, length(args)}
-          atom = first_arg_atom(args)
-          entry = %{atom: atom, line: AST.line(meta)}
-          {node, Map.update(acc, key, [entry], &[entry | &1])}
-
-        {:defp, meta, [{name, _, args} | _]} = node, acc when is_atom(name) and is_list(args) ->
-          key = {name, length(args)}
-          atom = first_arg_atom(args)
-          entry = %{atom: atom, line: AST.line(meta)}
+          entry = %{atom: first_arg_atom(args), line: AST.line(meta)}
           {node, Map.update(acc, key, [entry], &[entry | &1])}
 
         node, acc ->
@@ -107,11 +101,16 @@ defmodule Archdo.Rules.Module.TypeDispatch do
     clauses_by_fn
     |> Enum.flat_map(fn {{name, arity}, entries} ->
       entries = Enum.reverse(entries)
-      type_atoms = entries |> Enum.map(& &1.atom) |> Enum.reject(&is_nil/1)
-      distinct = type_atoms |> Enum.reject(&(&1 in @ignored_atoms)) |> Enum.uniq()
+
+      distinct =
+        for %{atom: atom} <- entries,
+            atom != nil,
+            atom not in @ignored_atoms,
+            uniq: true,
+            do: atom
 
       if match?([_, _, _, _ | _], distinct) and not genserver_callback?(name) do
-        first_line = entries |> Enum.map(& &1.line) |> Enum.min()
+        first_line = Enum.min_by(entries, & &1.line).line
 
         [
           Diagnostic.info("4.3",

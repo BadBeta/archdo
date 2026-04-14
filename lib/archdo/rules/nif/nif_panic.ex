@@ -34,14 +34,16 @@ defmodule Archdo.Rules.NIF.NifPanic do
   end
 
   defp check_rustler_module(file, ast) do
-    if uses_rustler?(ast) do
-      # Check if there's a corresponding native/ directory with .rs files
-      project_root = find_project_root(file)
-      rs_files = Path.wildcard(Path.join(project_root, "native/**/*.rs"))
+    case uses_rustler?(ast) do
+      false ->
+        []
 
-      Enum.flat_map(rs_files, &check_rust_content(&1, File.read!(&1)))
-    else
-      []
+      true ->
+        project_root = find_project_root(file)
+
+        for rs_file <- Path.wildcard(Path.join(project_root, "native/**/*.rs")),
+            diag <- check_rust_content(rs_file, File.read!(rs_file)),
+            do: diag
     end
   end
 
