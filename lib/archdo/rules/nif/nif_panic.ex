@@ -80,7 +80,9 @@ defmodule Archdo.Rules.NIF.NifPanic do
   end
 
   defp count_char(string, char) do
-    string |> to_charlist() |> Enum.count(&(&1 == char))
+    for <<byte <- string>>, byte == char, reduce: 0 do
+      count -> count + 1
+    end
   end
 
   defp check_line(file, line, line_num) do

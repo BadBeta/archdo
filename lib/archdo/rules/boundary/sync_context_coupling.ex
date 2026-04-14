@@ -27,26 +27,29 @@ defmodule Archdo.Rules.Boundary.SyncContextCoupling do
 
   defp do_analyze(graph, contexts) do
     context_strs =
-      contexts
-      |> Enum.map(fn ctx -> to_string(ctx) |> String.replace_leading("Elixir.", "") end)
+      for ctx <- contexts,
+          do: ctx |> to_string() |> String.replace_leading("Elixir.", "")
 
     graph.calls
-    |> Enum.filter(fn call ->
+    |> Enum.flat_map(fn call ->
       caller_ctx = owning_context(call.caller_module, context_strs)
       target_ctx = owning_context(call.target_module, context_strs)
 
-      caller_ctx != nil and
-        target_ctx != nil and
-        caller_ctx != target_ctx and
-        not interface_module?(call.caller_module) and
-        write_function?(call.target_fn)
+      case {caller_ctx, target_ctx} do
+        {c, t} when c != nil and t != nil and c != t ->
+          case {interface_module?(call.caller_module), write_function?(call.target_fn)} do
+            {false, true} -> [{call, c, t}]
+            _ -> []
+          end
+
+        _ ->
+          []
+      end
     end)
-    |> Enum.uniq_by(fn call ->
+    |> Enum.uniq_by(fn {call, _, _} ->
       {call.caller_module, call.target_module, call.target_fn}
     end)
-    |> Enum.map(fn call ->
-      caller_ctx = owning_context(call.caller_module, context_strs)
-      target_ctx = owning_context(call.target_module, context_strs)
+    |> Enum.map(fn {call, caller_ctx, target_ctx} ->
       build_diagnostic(call, caller_ctx, target_ctx)
     end)
   end

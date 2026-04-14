@@ -164,56 +164,47 @@ defmodule Archdo.Formatter do
   end
 
   defp render_markdown(%Diagnostic{} = d) do
-    parts = [
+    [
       "### [#{d.rule_id}] #{d.title}",
       "**Severity:** #{d.severity}  \n**Location:** `#{relative_path(d.file)}:#{d.line}`",
-      "**Finding:** #{d.message}"
+      "**Finding:** #{d.message}",
+      maybe_why(d.why),
+      maybe_fixes(d.alternatives),
+      maybe_refs(d.references)
     ]
-
-    parts =
-      if is_binary(d.why) and d.why != "" do
-        parts ++ ["**Why it matters:** #{d.why}"]
-      else
-        parts
-      end
-
-    parts =
-      case d.alternatives do
-        [] ->
-          parts
-
-        alts ->
-          fix_block =
-            alts
-            |> Enum.with_index(1)
-            |> Enum.map_join("\n\n", fn {%Fix{} = fix, idx} ->
-              header = "#{idx}. **#{fix.summary}**"
-              detail = if fix.detail not in [nil, ""], do: "\n   #{fix.detail}", else: ""
-
-              applies =
-                if is_binary(fix.applies_when) and fix.applies_when != "",
-                  do: "\n   _Use when: #{fix.applies_when}_",
-                  else: ""
-
-              example =
-                if is_binary(fix.example) and fix.example != "",
-                  do: "\n\n#{indent(fix.example, "   ")}",
-                  else: ""
-
-              header <> detail <> applies <> example
-            end)
-
-          parts ++ ["**Fix options:**\n\n" <> fix_block]
-      end
-
-    parts =
-      case d.references do
-        [] -> parts
-        refs -> parts ++ ["**References:** " <> Enum.join(refs, ", ")]
-      end
-
-    Enum.join(parts, "\n\n")
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n\n")
   end
+
+  defp maybe_why(why) when is_binary(why) and why != "", do: "**Why it matters:** #{why}"
+  defp maybe_why(_), do: nil
+
+  defp maybe_fixes([]), do: nil
+
+  defp maybe_fixes(alts) do
+    fix_block =
+      alts
+      |> Enum.with_index(1)
+      |> Enum.map_join("\n\n", fn {%Fix{} = fix, idx} ->
+        [
+          "#{idx}. **#{fix.summary}**",
+          if(fix.detail not in [nil, ""], do: "\n   #{fix.detail}"),
+          if(is_binary(fix.applies_when) and fix.applies_when != "",
+            do: "\n   _Use when: #{fix.applies_when}_"
+          ),
+          if(is_binary(fix.example) and fix.example != "",
+            do: "\n\n#{indent(fix.example, "   ")}"
+          )
+        ]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join()
+      end)
+
+    "**Fix options:**\n\n" <> fix_block
+  end
+
+  defp maybe_refs([]), do: nil
+  defp maybe_refs(refs), do: "**References:** " <> Enum.join(refs, ", ")
 
   defp summary_map(diagnostics) do
     {errors, warnings, infos} = counts(diagnostics)

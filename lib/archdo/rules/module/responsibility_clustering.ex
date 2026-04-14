@@ -81,10 +81,7 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
 
   # Build map: function_key -> set of local functions it calls (directly)
   defp build_call_graph(all_fns, all_fn_names) do
-    Enum.reduce(all_fns, %{}, fn f, graph ->
-      called = find_local_calls(f.body, all_fn_names)
-      Map.put(graph, f.key, called)
-    end)
+    Map.new(all_fns, fn f -> {f.key, find_local_calls(f.body, all_fn_names)} end)
   end
 
   # Find all local function calls within a body that match known functions
