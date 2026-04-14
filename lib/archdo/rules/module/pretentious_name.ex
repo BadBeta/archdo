@@ -33,7 +33,7 @@ defmodule Archdo.Rules.Module.PretentiousName do
       Macro.prewalk(ast, [], fn
         {:defmodule, meta, [{:__aliases__, _, aliases} | _]} = node, acc ->
           last_part = aliases |> List.last() |> Atom.to_string()
-          full = Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+          full = AST.module_name(Module.concat(aliases))
 
           if pretentious?(last_part) do
             diag =

@@ -84,7 +84,7 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
           Map.update(acc, module_name, [bhv_name], &[bhv_name | &1])
 
         {:@, _, [{:behaviour, _, [atom_bhv]}]}, acc when is_atom(atom_bhv) ->
-          bhv_name = atom_bhv |> to_string() |> String.replace_leading("Elixir.", "")
+          bhv_name = AST.module_name(atom_bhv)
           Map.update(acc, module_name, [bhv_name], &[bhv_name | &1])
 
         _, acc ->

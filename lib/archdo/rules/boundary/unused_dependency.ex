@@ -73,7 +73,7 @@ defmodule Archdo.Rules.Boundary.UnusedDependency do
     {_, aliases} =
       Macro.prewalk(ast, [], fn
         {:alias, meta, [{:__aliases__, _, parts} | _opts]} = node, acc ->
-          full = Module.concat(parts) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+          full = AST.module_name(Module.concat(parts))
           short = List.last(parts) |> Atom.to_string()
           line = AST.line(meta)
           {node, [{short, full, line} | acc]}

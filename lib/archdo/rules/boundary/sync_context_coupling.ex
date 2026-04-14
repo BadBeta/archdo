@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Boundary.SyncContextCoupling do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix, FunctionGraph}
+  alias Archdo.{AST, Diagnostic, Fix, FunctionGraph}
 
   @impl true
   def id, do: "1.13"
@@ -28,7 +28,7 @@ defmodule Archdo.Rules.Boundary.SyncContextCoupling do
   defp do_analyze(graph, contexts) do
     context_strs =
       for ctx <- contexts,
-          do: ctx |> to_string() |> String.replace_leading("Elixir.", "")
+          do: AST.module_name(ctx)
 
     graph.calls
     |> Enum.flat_map(fn call ->
@@ -109,13 +109,8 @@ defmodule Archdo.Rules.Boundary.SyncContextCoupling do
     Enum.any?(@write_prefixes, &String.starts_with?(name, &1))
   end
 
-  defp owning_context(module_name, contexts) do
-    contexts
-    |> Enum.filter(fn ctx ->
-      module_name == ctx or String.starts_with?(module_name, ctx <> ".")
-    end)
-    |> Enum.max_by(&String.length/1, fn -> nil end)
-  end
+  defp owning_context(module_name, contexts),
+    do: Archdo.Config.owning_context(module_name, contexts)
 
   defp interface_module?(module_name) do
     String.contains?(module_name, "Web") or

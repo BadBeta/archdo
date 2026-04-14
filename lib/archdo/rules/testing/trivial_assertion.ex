@@ -12,10 +12,9 @@ defmodule Archdo.Rules.Testing.TrivialAssertion do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.test_file?(file) do
-      []
-    else
-      find_trivial_assertions(file, ast)
+    case AST.test_file?(file) do
+      false -> []
+      true -> find_trivial_assertions(file, ast)
     end
   end
 

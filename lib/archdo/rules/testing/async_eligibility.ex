@@ -12,10 +12,9 @@ defmodule Archdo.Rules.Testing.AsyncEligibility do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.test_file?(file) do
-      []
-    else
-      check_async_eligibility(file, ast)
+    case AST.test_file?(file) do
+      false -> []
+      true -> check_async_eligibility(file, ast)
     end
   end
 

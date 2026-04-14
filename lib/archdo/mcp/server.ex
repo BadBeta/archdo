@@ -22,6 +22,7 @@ defmodule Archdo.Mcp.Server do
   Run the server loop forever, reading JSON-RPC messages from stdin
   and writing responses to stdout. Returns when stdin is closed.
   """
+  @spec run() :: :ok
   def run do
     log("archdo MCP server starting (#{@server_version})")
     loop()

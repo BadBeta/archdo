@@ -12,10 +12,9 @@ defmodule Archdo.Rules.EventSourcing.ProjectorReadsExternal do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not projector_module?(ast) do
-      []
-    else
-      find_external_reads(file, ast)
+    case projector_module?(ast) do
+      false -> []
+      true -> find_external_reads(file, ast)
     end
   end
 

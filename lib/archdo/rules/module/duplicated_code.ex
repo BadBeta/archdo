@@ -57,8 +57,7 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   defp build_diagnostics(first, rest) do
     other_locations =
       rest
-      |> Enum.map(fn info -> "#{Path.basename(info.file)}:#{info.line}" end)
-      |> Enum.join(", ")
+      |> Enum.map_join(", ", fn info -> "#{Path.basename(info.file)}:#{info.line}" end)
 
     count = length(rest) + 1
 
@@ -216,13 +215,6 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
     {Enum.reverse(acc), new_state}
   end
 
-  # Count AST nodes for size threshold — manual recursion since Macro.prewalk
-  # rejects our custom normalized form (integer in 3rd position).
-  defp ast_size(nil), do: 0
-
-  defp ast_size({a, b, c}), do: 1 + ast_size(a) + ast_size(b) + ast_size(c)
-  defp ast_size({a, b}), do: 1 + ast_size(a) + ast_size(b)
-  defp ast_size(list) when is_list(list), do: Enum.sum(Enum.map(list, &ast_size/1))
-  defp ast_size(_), do: 1
+  defp ast_size(node), do: AST.ast_size(node)
 
 end

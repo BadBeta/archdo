@@ -1,7 +1,7 @@
 defmodule Archdo.Mcp.Tools.AnalyzeFile do
   @moduledoc false
 
-  alias Archdo.Mcp.Encoder
+  alias Archdo.Mcp.{Encoder, Helpers}
 
   def name, do: "archdo_analyze_file"
 
@@ -45,7 +45,7 @@ defmodule Archdo.Mcp.Tools.AnalyzeFile do
          {:ok, content} <- fetch(args, "content"),
          {:ok, ast} <- parse(content, file) do
       opts =
-        [only: list_or_nil(args["only"]), ignore: args["ignore"] || []]
+        [only: Helpers.list_or_nil(args["only"]), ignore: args["ignore"] || []]
         |> Enum.reject(fn {_k, v} -> is_nil(v) end)
 
       enabled_rules = filter_rules(opts)
@@ -78,10 +78,6 @@ defmodule Archdo.Mcp.Tools.AnalyzeFile do
       {:error, reason} -> {:error, "could not parse content: #{inspect(reason)}"}
     end
   end
-
-  defp list_or_nil(nil), do: nil
-  defp list_or_nil([]), do: nil
-  defp list_or_nil(list) when is_list(list), do: list
 
   defp filter_rules(opts) do
     rules = Archdo.Runner.phase1_rules()

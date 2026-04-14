@@ -29,7 +29,7 @@ defmodule Archdo.Rules.StateMachine.ImplicitBooleanState do
             boolean_fields = find_state_booleans(body)
 
             if length(boolean_fields) >= @threshold do
-              module_name = Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+              module_name = AST.module_name(Module.concat(aliases))
               field_names = Enum.map_join(boolean_fields, ", ", fn {name, _} -> ":#{name}" end)
 
               diag =

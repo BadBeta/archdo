@@ -6,38 +6,39 @@ defmodule Archdo do
   the gap that Credo, Dialyzer, and Sobelow don't cover.
   """
 
-  alias Archdo.{AST, Runner, Formatter, FunctionGraph, Config, Freeze, Graph, Metrics}
-  alias Archdo.Rules.Testing.{TestMirrorsSource, CoverageGap}
+  alias Archdo.{AST, Config, Formatter, Freeze, FunctionGraph, Graph, Metrics, Runner}
   alias Archdo.Rules.Module.MainSequenceDistance
+  alias Archdo.Rules.Testing.{CoverageGap, TestMirrorsSource}
 
   alias Archdo.Rules.Boundary.{
+    AnemicContext,
+    ChattyBoundary,
+    FunctionBoundary,
     GodContext,
     Mockability,
-    FunctionBoundary,
-    ShotgunSurgery,
     ParallelHierarchies,
     SchemaOwnership,
-    ChattyBoundary,
-    AnemicContext,
     SeamIntegrity,
+    ShotgunSurgery,
     SyncContextCoupling
   }
 
   alias Archdo.Rules.Module.{
-    DuplicatedCode,
-    SimilarCode,
-    FunctionFanOut,
-    FeatureEnvy,
-    SpeculativeGenerality,
     AdaptersWithoutBehaviour,
+    DuplicatedCode,
+    FatInterface,
+    FeatureEnvy,
+    FunctionFanOut,
     MissingTelemetry,
-    FatInterface
+    SimilarCode,
+    SpeculativeGenerality
   }
 
   @doc """
   Analyze all .ex files under the given paths and return diagnostics.
   Per-file rules only (Phase 1) unless `:boundaries` is set.
   """
+  @spec run([String.t()], keyword()) :: [Archdo.Diagnostic.t()]
   def run(paths \\ ["lib"], opts \\ []) do
     files = collect_files(paths)
 
@@ -172,6 +173,7 @@ defmodule Archdo do
   Applies freeze filtering unless `:show_all` is set. The freeze baseline
   is loaded from `.archdo_baseline.exs` in the current working directory.
   """
+  @spec run_and_format([String.t()], keyword()) :: non_neg_integer()
   def run_and_format(paths \\ ["lib"], opts \\ []) do
     diagnostics = run(paths, opts)
 
@@ -191,6 +193,7 @@ defmodule Archdo do
   Run analysis and save the current violations as a baseline.
   Returns 0 on success.
   """
+  @spec freeze_baseline([String.t()], keyword()) :: non_neg_integer()
   def freeze_baseline(paths \\ ["lib"], opts \\ []) do
     diagnostics = run(paths, opts)
     Freeze.save(diagnostics)
@@ -208,6 +211,7 @@ defmodule Archdo do
   Print baseline stats: how many baselined violations are still present,
   how many were resolved, how many new violations exist.
   """
+  @spec freeze_stats([String.t()], keyword()) :: non_neg_integer()
   def freeze_stats(paths \\ ["lib"], opts \\ []) do
     diagnostics = run(paths, opts)
     baseline = Freeze.load()
@@ -256,6 +260,7 @@ defmodule Archdo do
   Print a test coverage gap matrix for the project.
   Returns 0 (this command never fails; it just reports).
   """
+  @spec print_coverage_matrix([String.t()]) :: non_neg_integer()
   def print_coverage_matrix(paths \\ ["lib"]) do
     source_files = collect_files(paths)
     test_files = collect_tests_for(paths)
@@ -273,6 +278,7 @@ defmodule Archdo do
   Print a Martin metrics matrix (Ca/Ce/I/A/D) for the project.
   Modules sorted by distance from main sequence (worst first).
   """
+  @spec print_metrics_matrix([String.t()]) :: non_neg_integer()
   def print_metrics_matrix(paths \\ ["lib"]) do
     source_files = collect_files(paths)
     file_asts = parse_many(source_files)
@@ -375,7 +381,11 @@ defmodule Archdo do
     end)
   end
 
-  defp collect_files(paths) do
+  @doc """
+  Collect all .ex and .exs files under the given paths.
+  """
+  @spec collect_files([String.t()]) :: [String.t()]
+  def collect_files(paths) do
     paths
     |> Enum.flat_map(fn path ->
       cond do

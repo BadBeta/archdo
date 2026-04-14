@@ -51,8 +51,7 @@ defmodule Archdo.Rules.Module.SimilarCode do
     |> Enum.flat_map(fn {fn_a, i} ->
       functions
       |> Enum.drop(i + 1)
-      |> Enum.filter(fn fn_b -> size_compatible?(fn_a.size, fn_b.size) end)
-      |> Enum.filter(fn fn_b -> not_same_pair?(fn_a, fn_b) end)
+      |> Enum.filter(fn fn_b -> size_compatible?(fn_a.size, fn_b.size) and not_same_pair?(fn_a, fn_b) end)
       |> Enum.map(fn fn_b ->
         sim = jaccard(fn_a.fingerprint, fn_b.fingerprint)
         {fn_a, fn_b, sim}
@@ -206,10 +205,5 @@ defmodule Archdo.Rules.Module.SimilarCode do
     )
   end
 
-  # Manual size counter (Macro.prewalk doesn't like our normalized form)
-  defp ast_size(nil), do: 0
-  defp ast_size({a, b, c}), do: 1 + ast_size(a) + ast_size(b) + ast_size(c)
-  defp ast_size({a, b}), do: 1 + ast_size(a) + ast_size(b)
-  defp ast_size(list) when is_list(list), do: Enum.sum(Enum.map(list, &ast_size/1))
-  defp ast_size(_), do: 1
+  defp ast_size(node), do: AST.ast_size(node)
 end

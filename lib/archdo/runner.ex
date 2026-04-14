@@ -119,16 +119,19 @@ defmodule Archdo.Runner do
   Returns the list of per-file rule modules.
   Useful for tooling that wants to enumerate rules without invoking the runner.
   """
+  @spec phase1_rules() :: [module()]
   def phase1_rules, do: @phase1_rules
 
   @doc """
   Returns the list of cross-file (graph) rule modules.
   """
+  @spec graph_rules() :: [module()]
   def graph_rules, do: @graph_rules
 
   @doc """
   Analyze files with per-file rules (Phase 1).
   """
+  @spec analyze([String.t()], keyword()) :: [Archdo.Diagnostic.t()]
   def analyze(files, opts \\ []) do
     enabled_rules = filter_rules(@phase1_rules, opts)
 
@@ -148,6 +151,7 @@ defmodule Archdo.Runner do
   @doc """
   Analyze files with both per-file rules AND graph-based boundary rules (Phase 2).
   """
+  @spec analyze_with_graph([String.t()], keyword()) :: [Archdo.Diagnostic.t()]
   def analyze_with_graph(files, opts \\ []) do
     # Phase 1: per-file analysis
     per_file_diagnostics = analyze(files, opts)

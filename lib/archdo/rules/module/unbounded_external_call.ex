@@ -128,10 +128,8 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
 
   # Strip bang suffix to get base method name
   defp base_func(func) do
-    func |> to_string() |> String.trim_trailing("!") |> String.to_atom()
+    func |> to_string() |> String.trim_trailing("!") |> String.to_existing_atom()
   end
 
-  defp test_file?(file) do
-    String.contains?(file, "/test/") or String.starts_with?(file, "test/")
-  end
+  defp test_file?(file), do: AST.test_file?(file)
 end

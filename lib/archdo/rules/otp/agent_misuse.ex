@@ -12,10 +12,9 @@ defmodule Archdo.Rules.OTP.AgentMisuse do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.uses_agent?(ast) do
-      []
-    else
-      check_agent_usage(file, ast)
+    case AST.uses_agent?(ast) do
+      false -> []
+      true -> check_agent_usage(file, ast)
     end
   end
 
@@ -125,7 +124,7 @@ defmodule Archdo.Rules.OTP.AgentMisuse do
   end
 
   defp has_complex_agent_fns?(ast) do
-    AST.find_all(ast, fn
+    AST.contains?(ast, fn
       {{:., _, [{:__aliases__, _, [:Agent]}, func]}, _, args}
       when func in [:get, :update, :get_and_update] ->
         Enum.any?(args, &complex_fn?/1)
@@ -133,7 +132,6 @@ defmodule Archdo.Rules.OTP.AgentMisuse do
       _ ->
         false
     end)
-    |> length() > 0
   end
 
   defp complex_fn?({:fn, _, [{:->, _, [_, body]}]}) do

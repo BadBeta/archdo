@@ -99,18 +99,8 @@ defmodule Archdo.Rules.Boundary.FunctionBoundary do
     end
   end
 
-  defp owning_context(module_name, contexts) do
-    contexts
-    |> Enum.filter(fn ctx ->
-      ctx_str = ctx |> to_string() |> String.replace_leading("Elixir.", "")
-      module_name == ctx_str or String.starts_with?(module_name, ctx_str <> ".")
-    end)
-    |> Enum.max_by(fn ctx -> ctx |> to_string() |> String.length() end, fn -> nil end)
-    |> case do
-      nil -> nil
-      mod -> mod |> to_string() |> String.replace_leading("Elixir.", "")
-    end
-  end
+  defp owning_context(module_name, contexts),
+    do: Archdo.Config.owning_context(module_name, contexts)
 
   defp function_exists_in_module?(graph, module, name, arity) do
     Map.has_key?(graph.definitions, {module, name, arity})

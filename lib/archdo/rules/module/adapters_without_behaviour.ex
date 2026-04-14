@@ -43,7 +43,7 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
 
       if length(without_behaviour) == length(members) do
         # None of the adapters implement a behaviour
-        names = Enum.map(members, fn {n, _, _} -> n end) |> Enum.join(", ")
+        names = Enum.map_join(members, ", ", fn {n, _, _} -> n end)
         {_, first_file, _} = hd(members)
 
         [
@@ -90,8 +90,6 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
     String.ends_with?(last, "Adapter") or String.ends_with?(last, "Client")
   end
 
-  defp adapter_module?(_), do: false
-
   defp parent_namespace(name) do
     parts = String.split(name, ".")
 
@@ -102,10 +100,5 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
     end
   end
 
-  defp implements_behaviour?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:behaviour, _, _}]} -> true
-      _ -> false
-    end)
-  end
+  defp implements_behaviour?(ast), do: AST.implements_behaviour?(ast)
 end

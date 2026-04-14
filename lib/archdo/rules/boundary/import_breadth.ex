@@ -37,7 +37,7 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
       _ -> false
     end)
     |> Enum.filter(fn {:import, _meta, [{:__aliases__, _, aliases} | opts]} ->
-      target = Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+      target = AST.module_name(Module.concat(aliases))
       no_only_clause?(opts) and not tolerated_import?(target)
     end)
     |> Enum.map(fn {:import, meta, [{:__aliases__, _, aliases} | _]} ->
@@ -80,7 +80,7 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
     {_, aliases} =
       Macro.prewalk(ast, [], fn
         {:alias, _meta, [{:__aliases__, _, aliases} | _]} = node, acc ->
-          target = Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+          target = AST.module_name(Module.concat(aliases))
           {node, [target | acc]}
 
         node, acc ->
@@ -151,17 +151,6 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
     String.ends_with?(file, "_web.ex") or String.ends_with?(file, "_web/components.ex")
   end
 
-  defp extract_module_name(ast) do
-    {_, name} =
-      Macro.prewalk(ast, "Unknown", fn
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, _acc ->
-          {node, Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    name
-  end
+  defp extract_module_name(ast), do: Archdo.AST.extract_module_name(ast)
 
 end

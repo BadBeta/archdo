@@ -58,7 +58,7 @@ defmodule Archdo.Mcp.Tools.ListRules do
     }
   end
 
-  defp module_name(mod), do: mod |> to_string() |> String.replace_leading("Elixir.", "")
+  defp module_name(mod), do: Archdo.AST.module_name(mod)
 
   defp rule_sort_key(mod) do
     id = mod.id()

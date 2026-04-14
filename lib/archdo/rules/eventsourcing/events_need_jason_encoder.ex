@@ -12,10 +12,9 @@ defmodule Archdo.Rules.EventSourcing.EventsNeedJasonEncoder do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not event_module?(ast) or upcaster_module?(ast) do
-      []
-    else
-      check_jason_encoder(file, ast)
+    case event_module?(ast) and not upcaster_module?(ast) do
+      false -> []
+      true -> check_jason_encoder(file, ast)
     end
   end
 
@@ -107,18 +106,6 @@ defmodule Archdo.Rules.EventSourcing.EventsNeedJasonEncoder do
     found?
   end
 
-  defp upcaster_module?(ast) do
-    {_, found?} =
-      Macro.prewalk(ast, false, fn
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, _acc ->
-          parts = Enum.map(aliases, &Atom.to_string/1)
-          is_upcaster = Enum.any?(parts, fn p -> String.contains?(String.downcase(p), "upcast") end)
-          {node, is_upcaster}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    found?
-  end
+  defp upcaster_module?(ast),
+    do: Archdo.Rules.EventSourcing.Helpers.upcaster_module?(ast)
 end

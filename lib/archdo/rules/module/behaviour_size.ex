@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Module.BehaviourSize do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
 
   @max_required_callbacks 5
 
@@ -100,16 +100,5 @@ defmodule Archdo.Rules.Module.BehaviourSize do
     {callbacks, optional}
   end
 
-  defp extract_module_name(ast) do
-    {_, name} =
-      Macro.prewalk(ast, "Unknown", fn
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, _acc ->
-          {node, Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    name
-  end
+  defp extract_module_name(ast), do: AST.extract_module_name(ast)
 end

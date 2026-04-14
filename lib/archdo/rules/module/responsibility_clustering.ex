@@ -41,14 +41,14 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
         all_fn_names = MapSet.new(all_fns, & &1.key)
         call_graph = build_call_graph(all_fns, all_fn_names)
         clusters = find_clusters(public_fns, call_graph, all_fn_names)
-        significant = Enum.filter(clusters, &match?([_, _ | _], &1))
+        significant = Enum.filter(clusters, fn c -> length(c) >= @min_cluster_size end)
 
-        case significant do
-          [_, _ | _] ->
+        case length(significant) >= @min_clusters do
+          true ->
             module_name = AST.extract_module_name(ast)
             [build_diagnostic(file, module_name, significant)]
 
-          _ ->
+          false ->
             []
         end
     end

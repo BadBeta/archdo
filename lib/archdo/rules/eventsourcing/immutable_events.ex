@@ -12,10 +12,9 @@ defmodule Archdo.Rules.EventSourcing.ImmutableEvents do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not event_module?(ast) do
-      []
-    else
-      check_has_struct(file, ast) ++ check_no_mutation(file, ast)
+    case event_module?(ast) do
+      false -> []
+      true -> check_has_struct(file, ast) ++ check_no_mutation(file, ast)
     end
   end
 

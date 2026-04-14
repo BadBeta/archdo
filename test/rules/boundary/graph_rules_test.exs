@@ -57,10 +57,10 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
       ])
 
       diags = DependencyDirection.analyze_graph(graph, test_config())
-      assert length(diags) > 0
-      assert hd(diags).severity == :error
-      assert hd(diags).message =~ "domain"
-      assert hd(diags).message =~ "interface"
+      assert [first | _] = diags
+      assert first.severity == :error
+      assert first.message =~ "domain"
+      assert first.message =~ "interface"
     end
 
     test "allows interface depending on domain" do
@@ -104,9 +104,9 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
       ])
 
       diags = FrameworkInDomain.analyze_graph(graph, test_config())
-      assert length(diags) > 0
-      assert hd(diags).severity == :warning
-      assert hd(diags).message =~ "framework"
+      assert [first | _] = diags
+      assert first.severity == :warning
+      assert first.message =~ "framework"
     end
 
     test "allows interface using Phoenix.LiveView" do
@@ -137,9 +137,9 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
       ])
 
       diags = ContextEncapsulation.analyze_graph(graph, test_config())
-      assert length(diags) > 0
-      assert hd(diags).message =~ "internal to"
-      assert hd(diags).message =~ "Accounts"
+      assert [first | _] = diags
+      assert first.message =~ "internal to"
+      assert first.message =~ "Accounts"
     end
 
     test "allows calling context root module" do
@@ -189,9 +189,9 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
       ])
 
       diags = CircularDependencies.analyze_graph(graph, test_config())
-      assert length(diags) > 0
-      assert hd(diags).severity == :error
-      assert hd(diags).message =~ "Circular"
+      assert [first | _] = diags
+      assert first.severity == :error
+      assert first.message =~ "Circular"
     end
 
     test "allows one-way dependency" do
@@ -226,9 +226,9 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
       ])
 
       diags = RepoInInterface.analyze_graph(graph, test_config())
-      assert length(diags) > 0
-      assert hd(diags).severity == :warning
-      assert hd(diags).message =~ "Repo"
+      assert [first | _] = diags
+      assert first.severity == :warning
+      assert first.message =~ "Repo"
     end
 
     test "allows domain calling Repo" do

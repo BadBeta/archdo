@@ -47,11 +47,11 @@ defmodule Archdo.Rules.Module.MissingSpec do
     |> Enum.reject(fn {name, arity, _meta} ->
       # Skip if it has a spec, is a callback impl, or is a defdelegate
       MapSet.member?(specs, {name, arity}) or
-        is_impl?(body, name) or
-        is_defdelegate?(body, name)
+        impl?(body, name) or
+        defdelegate?(body, name)
     end)
     |> Enum.map(fn {name, arity, meta} ->
-      module_str = to_string(module_name) |> String.replace_leading("Elixir.", "")
+      module_str = AST.module_name(module_name)
 
       Diagnostic.warning("2.2",
         title: "Public function without @spec",
@@ -130,7 +130,7 @@ defmodule Archdo.Rules.Module.MissingSpec do
     |> Enum.uniq_by(fn {name, arity, _} -> {name, arity} end)
   end
 
-  defp is_impl?(body, _name) do
+  defp impl?(body, _name) do
     # Check if @impl true appears (covers all callback implementations)
     AST.contains?(body, fn
       {:@, _, [{:impl, _, [true]}]} -> true
@@ -139,7 +139,7 @@ defmodule Archdo.Rules.Module.MissingSpec do
     end)
   end
 
-  defp is_defdelegate?(body, name) do
+  defp defdelegate?(body, name) do
     AST.contains?(body, fn
       {:defdelegate, _, [{^name, _, _} | _]} -> true
       _ -> false

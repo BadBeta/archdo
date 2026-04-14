@@ -85,7 +85,7 @@ defmodule Archdo.Rules.Module.FatInterface do
         [Enum.map_join(parts, ".", &to_string/1)]
 
       {:@, _, [{:behaviour, _, [atom_bhv]}]} when is_atom(atom_bhv) ->
-        [atom_bhv |> to_string() |> String.replace_leading("Elixir.", "")]
+        [AST.module_name(atom_bhv)]
 
       _ ->
         []
@@ -102,11 +102,8 @@ defmodule Archdo.Rules.Module.FatInterface do
     impl_fns = find_impl_functions(ast)
 
     fns
-    |> Enum.filter(fn {name, arity, _, _, _} ->
-      MapSet.member?(impl_fns, {name, arity})
-    end)
-    |> Enum.filter(fn {_name, _arity, _meta, _args, body} ->
-      noop_body?(body)
+    |> Enum.filter(fn {name, arity, _meta, _args, body} ->
+      MapSet.member?(impl_fns, {name, arity}) and noop_body?(body)
     end)
     |> Enum.map(fn {name, arity, meta, _args, _body} ->
       %{name: name, arity: arity, line: AST.line(meta), likely_from: nil}

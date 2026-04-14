@@ -1,7 +1,7 @@
 defmodule Archdo.Mcp.Tools.AnalyzePaths do
   @moduledoc false
 
-  alias Archdo.Mcp.Encoder
+  alias Archdo.Mcp.{Encoder, Helpers}
   alias Archdo.Runner
 
   def name, do: "archdo_analyze_paths"
@@ -63,7 +63,7 @@ defmodule Archdo.Mcp.Tools.AnalyzePaths do
           Runner.analyze(files, opts)
         end
 
-      filtered = filter_severity(diagnostics, args["min_severity"])
+      filtered = Helpers.filter_severity(diagnostics, args["min_severity"])
       {:ok, Encoder.encode_diagnostics(filtered)}
     end
   end
@@ -73,46 +73,12 @@ defmodule Archdo.Mcp.Tools.AnalyzePaths do
 
   defp build_opts(args) do
     [
-      only: list_or_nil(args["only"]),
+      only: Helpers.list_or_nil(args["only"]),
       ignore: args["ignore"] || [],
       boundaries: Map.get(args, "boundaries", true)
     ]
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
   end
 
-  defp list_or_nil(nil), do: nil
-  defp list_or_nil([]), do: nil
-  defp list_or_nil(list) when is_list(list), do: list
-
-  defp collect_files(paths) do
-    paths
-    |> Enum.flat_map(fn path ->
-      cond do
-        File.regular?(path) ->
-          [path]
-
-        File.dir?(path) ->
-          Path.wildcard(Path.join(path, "**/*.ex")) ++
-            Path.wildcard(Path.join(path, "**/*.exs"))
-
-        true ->
-          []
-      end
-    end)
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
-
-  defp filter_severity(diagnostics, nil), do: diagnostics
-  defp filter_severity(diagnostics, "info"), do: diagnostics
-
-  defp filter_severity(diagnostics, "warning") do
-    Enum.filter(diagnostics, &(&1.severity in [:warning, :error]))
-  end
-
-  defp filter_severity(diagnostics, "error") do
-    Enum.filter(diagnostics, &(&1.severity == :error))
-  end
-
-  defp filter_severity(diagnostics, _), do: diagnostics
+  defp collect_files(paths), do: Archdo.collect_files(paths)
 end

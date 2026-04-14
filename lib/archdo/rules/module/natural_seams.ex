@@ -104,8 +104,7 @@ defmodule Archdo.Rules.Module.NaturalSeams do
 
   defp format_clusters(groups) do
     groups
-    |> Enum.map(fn {prefix, names} -> "#{prefix}_* (#{length(names)})" end)
-    |> Enum.join(", ")
+    |> Enum.map_join(", ", fn {prefix, names} -> "#{prefix}_* (#{length(names)})" end)
   end
 
 end

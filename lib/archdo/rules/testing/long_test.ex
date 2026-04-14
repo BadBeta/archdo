@@ -14,10 +14,9 @@ defmodule Archdo.Rules.Testing.LongTest do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.test_file?(file) do
-      []
-    else
-      find_long_tests(file, ast)
+    case AST.test_file?(file) do
+      false -> []
+      true -> find_long_tests(file, ast)
     end
   end
 
@@ -69,12 +68,7 @@ defmodule Archdo.Rules.Testing.LongTest do
     |> Enum.reject(&is_nil/1)
   end
 
-  defp ast_size(nil), do: 0
-
-  defp ast_size(ast) do
-    {_, count} = Macro.prewalk(ast, 0, fn node, acc -> {node, acc + 1} end)
-    count
-  end
+  defp ast_size(node), do: Archdo.AST.ast_size(node)
 
   defp extract_test_name([name | _]) when is_binary(name), do: name
   defp extract_test_name([{:__block__, _, [name]} | _]) when is_binary(name), do: name

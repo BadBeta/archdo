@@ -12,10 +12,9 @@ defmodule Archdo.Rules.Testing.MockingOwnModules do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.test_file?(file) and not support_file?(file) do
-      []
-    else
-      find_own_module_mocks(file, ast)
+    case AST.test_file?(file) or support_file?(file) do
+      false -> []
+      true -> find_own_module_mocks(file, ast)
     end
   end
 
@@ -79,7 +78,7 @@ defmodule Archdo.Rules.Testing.MockingOwnModules do
   defp extract_from_args(_, _), do: []
 
   defp format_module(parts) do
-    parts |> Module.concat() |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+    AST.module_name(Module.concat(parts))
   end
 
   # Heuristic: a module is "own" if its top namespace is the app prefix and

@@ -24,9 +24,10 @@ defmodule Archdo.Rules.OTP.UnboundedState do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.genserver_module?(ast) do
-      []
-    else
+    case AST.genserver_module?(ast) do
+      false ->
+        []
+      true ->
       check_unbounded_growth(file, ast)
     end
   end
@@ -35,8 +36,11 @@ defmodule Archdo.Rules.OTP.UnboundedState do
     callbacks = AST.extract_callbacks(ast)
     module_name = AST.extract_module_name(ast)
 
-    has_accumulation? = any_callback_matches?(callbacks, [:handle_cast, :handle_info, :handle_call], &has_accumulation?/1)
-    has_cleanup? = any_callback_matches?(callbacks, [:handle_cast, :handle_info, :handle_call, :handle_continue], &has_cleanup?/1)
+    accumulation_cbs = [:handle_cast, :handle_info, :handle_call]
+    cleanup_cbs = [:handle_cast, :handle_info, :handle_call, :handle_continue]
+
+    has_accumulation? = any_callback_matches?(callbacks, accumulation_cbs, &has_accumulation?/1)
+    has_cleanup? = any_callback_matches?(callbacks, cleanup_cbs, &has_cleanup?/1)
     has_list_prepend? = any_callback_matches?(callbacks, [:handle_cast, :handle_info], &has_list_prepend?/1)
 
     build_diagnostics(file, module_name, has_accumulation?, has_cleanup?, has_list_prepend?)

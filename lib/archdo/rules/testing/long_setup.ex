@@ -14,10 +14,9 @@ defmodule Archdo.Rules.Testing.LongSetup do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.test_file?(file) do
-      []
-    else
-      find_long_setups(file, ast)
+    case AST.test_file?(file) do
+      false -> []
+      true -> find_long_setups(file, ast)
     end
   end
 
@@ -71,10 +70,5 @@ defmodule Archdo.Rules.Testing.LongSetup do
     end)
   end
 
-  defp ast_size(nil), do: 0
-
-  defp ast_size(ast) do
-    {_, count} = Macro.prewalk(ast, 0, fn node, acc -> {node, acc + 1} end)
-    count
-  end
+  defp ast_size(node), do: Archdo.AST.ast_size(node)
 end

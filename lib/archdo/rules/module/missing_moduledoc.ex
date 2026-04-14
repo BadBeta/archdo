@@ -64,7 +64,7 @@ defmodule Archdo.Rules.Module.MissingModuledoc do
           )
         ],
         references: ["ARCHITECTURE_RULES.md#2.1"],
-        context: %{module: to_string(module_name) |> String.replace_leading("Elixir.", "")},
+        context: %{module: AST.module_name(module_name)},
         file: file,
         line: line
       )

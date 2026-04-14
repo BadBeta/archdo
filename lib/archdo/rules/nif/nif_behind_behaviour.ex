@@ -66,11 +66,6 @@ defmodule Archdo.Rules.NIF.NifBehindBehaviour do
     end)
   end
 
-  defp implements_behaviour?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:behaviour, _, _}]} -> true
-      _ -> false
-    end)
-  end
+  defp implements_behaviour?(ast), do: AST.implements_behaviour?(ast)
 
 end

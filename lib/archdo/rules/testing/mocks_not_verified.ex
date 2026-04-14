@@ -12,10 +12,9 @@ defmodule Archdo.Rules.Testing.MocksNotVerified do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.test_file?(file) do
-      []
-    else
-      check_mox_verification(file, ast)
+    case AST.test_file?(file) do
+      false -> []
+      true -> check_mox_verification(file, ast)
     end
   end
 

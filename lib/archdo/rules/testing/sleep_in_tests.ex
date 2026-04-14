@@ -12,10 +12,9 @@ defmodule Archdo.Rules.Testing.SleepInTests do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.test_file?(file) do
-      []
-    else
-      find_sleeps(file, ast)
+    case AST.test_file?(file) do
+      false -> []
+      true -> find_sleeps(file, ast)
     end
   end
 

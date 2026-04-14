@@ -54,7 +54,7 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
       end)
       |> Enum.flat_map(fn
         {:@, _, [{:behaviour, _, [{:__aliases__, _, parts}]}]} ->
-          bhv_name = parts |> Module.concat() |> to_string() |> String.replace_leading("Elixir.", "")
+          bhv_name = AST.module_name(Module.concat(parts))
           [{bhv_name, file}]
 
         # @behaviour :erlang_atom (Erlang behaviours like :gen_server, :ranch_protocol)

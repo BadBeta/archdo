@@ -35,7 +35,7 @@ defmodule Archdo.Rules.Composition.ShallowUse do
     {_, results} =
       Macro.prewalk(ast, [], fn
         {:defmodule, meta, [{:__aliases__, _, aliases}, [do: body]]} = node, acc ->
-          module_name = Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+          module_name = AST.module_name(Module.concat(aliases))
           non_standard = count_non_standard_uses(body)
 
           if non_standard > @max_use_statements do
@@ -87,7 +87,7 @@ defmodule Archdo.Rules.Composition.ShallowUse do
     {_, uses} =
       Macro.prewalk(body, [], fn
         {:use, _, [{:__aliases__, _, aliases} | _]} = node, acc ->
-          mod = Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+          mod = AST.module_name(Module.concat(aliases))
 
           if mod in @standard_uses do
             {node, acc}

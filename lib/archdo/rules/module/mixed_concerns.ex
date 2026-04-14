@@ -43,7 +43,7 @@ defmodule Archdo.Rules.Module.MixedConcerns do
 
     if length(touched) > @max_concerns do
       module_name = AST.extract_module_name(ast)
-      concern_list = touched |> Enum.map(&to_string/1) |> Enum.join(", ")
+      concern_list = Enum.map_join(touched, ", ", &to_string/1)
 
       [
         Diagnostic.info("4.13",

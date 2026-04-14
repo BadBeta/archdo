@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Boundary.ChattyBoundary do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix, FunctionGraph}
+  alias Archdo.{AST, Diagnostic, Fix, FunctionGraph}
 
   # Two contexts that talk more than this are suspiciously chatty
   @warn_chatter 15
@@ -32,7 +32,7 @@ defmodule Archdo.Rules.Boundary.ChattyBoundary do
   defp do_analyze(graph, contexts) do
     context_strs =
       contexts
-      |> Enum.map(fn ctx -> to_string(ctx) |> String.replace_leading("Elixir.", "") end)
+      |> Enum.map(&AST.module_name/1)
 
     # Count distinct call pairs between contexts
     cross_calls =
@@ -101,11 +101,8 @@ defmodule Archdo.Rules.Boundary.ChattyBoundary do
     )
   end
 
-  defp owning_context(module_name, contexts) do
-    contexts
-    |> Enum.filter(fn ctx -> module_name == ctx or String.starts_with?(module_name, ctx <> ".") end)
-    |> Enum.max_by(&String.length/1, fn -> nil end)
-  end
+  defp owning_context(module_name, contexts),
+    do: Archdo.Config.owning_context(module_name, contexts)
 
   # Stable pair key (alphabetical) so (A, B) and (B, A) group together
   defp pair_key(a, b) when a <= b, do: {a, b}

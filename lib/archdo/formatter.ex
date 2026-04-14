@@ -6,6 +6,7 @@ defmodule Archdo.Formatter do
   @doc """
   Format diagnostics to stdout. Returns exit status (0 = clean, 1 = warnings, 2 = errors).
   """
+  @spec format([Archdo.Diagnostic.t()], keyword()) :: non_neg_integer()
   def format(diagnostics, opts \\ []) do
     case Keyword.get(opts, :format, :text) do
       :text -> format_text(diagnostics)

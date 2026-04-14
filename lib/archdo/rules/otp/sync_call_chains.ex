@@ -12,9 +12,10 @@ defmodule Archdo.Rules.OTP.SyncCallChains do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.genserver_module?(ast) do
-      []
-    else
+    case AST.genserver_module?(ast) do
+      false ->
+        []
+      true ->
       callbacks = AST.extract_callbacks(ast)
 
       [:handle_call, :handle_cast, :handle_info]

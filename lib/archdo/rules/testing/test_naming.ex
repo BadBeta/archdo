@@ -12,10 +12,9 @@ defmodule Archdo.Rules.Testing.TestNaming do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.test_file?(file) do
-      []
-    else
-      check_naming(file, ast)
+    case AST.test_file?(file) do
+      false -> []
+      true -> check_naming(file, ast)
     end
   end
 
@@ -76,7 +75,7 @@ defmodule Archdo.Rules.Testing.TestNaming do
     {_, names} =
       Macro.prewalk(ast, [], fn
         {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, acc ->
-          name = Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+          name = AST.module_name(Module.concat(aliases))
           {node, [name | acc]}
 
         node, acc ->
@@ -85,7 +84,6 @@ defmodule Archdo.Rules.Testing.TestNaming do
 
     Enum.reverse(names)
   end
-
 
   defp support_file?(file) do
     String.contains?(file, "/support/") or

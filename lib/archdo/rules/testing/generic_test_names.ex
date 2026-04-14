@@ -18,10 +18,9 @@ defmodule Archdo.Rules.Testing.GenericTestNames do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.test_file?(file) do
-      []
-    else
-      find_generic_names(file, ast)
+    case AST.test_file?(file) do
+      false -> []
+      true -> find_generic_names(file, ast)
     end
   end
 

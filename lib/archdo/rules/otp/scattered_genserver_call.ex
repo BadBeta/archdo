@@ -12,11 +12,11 @@ defmodule Archdo.Rules.OTP.ScatteredGenserverCall do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if AST.test_file?(file) do
-      []
-    else
-      defining_module = extract_module_name(ast)
-      find_scattered_calls(file, ast, defining_module)
+    case AST.test_file?(file) do
+      true -> []
+      false ->
+        defining_module = AST.extract_module_name(ast)
+        find_scattered_calls(file, ast, defining_module)
     end
   end
 
@@ -37,10 +37,10 @@ defmodule Archdo.Rules.OTP.ScatteredGenserverCall do
     end)
     |> Enum.filter(fn
       {{:., _, [{:__aliases__, _, [:GenServer]}, _]}, _, [{:__aliases__, _, target} | _]} ->
-        Module.concat(target) != defining_module
+        Enum.map_join(target, ".", &to_string/1) != defining_module
 
       {{:., _, [{:__aliases__, _, [:Agent]}, _]}, _, [{:__aliases__, _, target} | _]} ->
-        Module.concat(target) != defining_module
+        Enum.map_join(target, ".", &to_string/1) != defining_module
     end)
     |> Enum.map(fn
       {{:., _, [{:__aliases__, _, [caller_mod]}, func]}, meta, [{:__aliases__, _, target} | _]} ->
@@ -82,18 +82,4 @@ defmodule Archdo.Rules.OTP.ScatteredGenserverCall do
         )
     end)
   end
-
-  defp extract_module_name(ast) do
-    {_, name} =
-      Macro.prewalk(ast, nil, fn
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, nil ->
-          {node, Module.concat(aliases)}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    name
-  end
-
 end

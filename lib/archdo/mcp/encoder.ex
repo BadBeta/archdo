@@ -11,6 +11,7 @@ defmodule Archdo.Mcp.Encoder do
         diagnostics: [...]
       }
   """
+  @spec encode_diagnostics([Archdo.Diagnostic.t()]) :: map()
   def encode_diagnostics(diagnostics) when is_list(diagnostics) do
     %{
       summary: summary(diagnostics),
@@ -19,6 +20,7 @@ defmodule Archdo.Mcp.Encoder do
   end
 
   @doc "Convert a single Diagnostic struct into a JSON-friendly map."
+  @spec diagnostic_to_map(Archdo.Diagnostic.t()) :: map()
   def diagnostic_to_map(%Diagnostic{} = d) do
     %{
       rule_id: d.rule_id,

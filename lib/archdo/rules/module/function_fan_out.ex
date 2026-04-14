@@ -24,10 +24,8 @@ defmodule Archdo.Rules.Module.FunctionFanOut do
     fan_out = FunctionGraph.function_fan_out(graph)
 
     fan_out
-    |> Enum.filter(fn {_key, count} -> count > @warn_threshold end)
-    # Drop entries with no real function definition (operators, module-level expressions)
-    |> Enum.filter(fn {{module, name, arity}, _} ->
-      Map.has_key?(graph.definitions, {module, name, arity})
+    |> Enum.filter(fn {{module, name, arity}, count} ->
+      count > @warn_threshold and Map.has_key?(graph.definitions, {module, name, arity})
     end)
     |> Enum.map(fn {{module, name, arity}, count} ->
       def_meta = Map.get(graph.definitions, {module, name, arity})

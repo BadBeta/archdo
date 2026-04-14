@@ -26,6 +26,7 @@ defmodule Archdo.Config do
   Load config from `.archdo.exs` in the project root, falling back to
   convention-based defaults derived from `mix.exs`.
   """
+  @spec load(String.t()) :: t()
   def load(project_root \\ File.cwd!()) do
     config_path = Path.join(project_root, ".archdo.exs")
 
@@ -40,6 +41,7 @@ defmodule Archdo.Config do
   @doc """
   Build config from an explicit keyword list (from .archdo.exs).
   """
+  @spec from_keyword(keyword(), String.t()) :: t()
   def from_keyword(kw, project_root \\ File.cwd!()) do
     {app, web} = detect_app_modules(project_root)
 
@@ -58,6 +60,7 @@ defmodule Archdo.Config do
   @doc """
   Build config purely from Phoenix conventions (zero config).
   """
+  @spec from_conventions(String.t()) :: t()
   def from_conventions(project_root \\ File.cwd!()) do
     {app, web} = detect_app_modules(project_root)
 
@@ -76,8 +79,9 @@ defmodule Archdo.Config do
   @doc """
   Classify a module into its architectural layer.
   """
+  @spec classify_module(t(), atom() | String.t()) :: layer()
   def classify_module(%__MODULE__{} = config, module_name) when is_atom(module_name) do
-    classify_module(config, Atom.to_string(module_name) |> String.replace_leading("Elixir.", ""))
+    classify_module(config, Archdo.AST.module_name(module_name))
   end
 
   def classify_module(%__MODULE__{layers: layers}, module_name) when is_binary(module_name) do
@@ -92,6 +96,7 @@ defmodule Archdo.Config do
   @doc """
   Check if a dependency from source_layer to target_layer is allowed.
   """
+  @spec allowed_dep?(t(), layer(), layer()) :: boolean()
   def allowed_dep?(%__MODULE__{allowed_deps: deps}, source_layer, target_layer) do
     source_layer == target_layer or target_layer in Map.get(deps, source_layer, [])
   end
@@ -99,17 +104,19 @@ defmodule Archdo.Config do
   @doc """
   Check if a module is a framework/web-specific module that domain should not reference.
   """
+  @spec framework_module?(t(), String.t() | atom()) :: boolean()
   def framework_module?(%__MODULE__{framework_modules: patterns}, module_name) when is_binary(module_name) do
     Enum.any?(patterns, &Regex.match?(&1, module_name))
   end
 
   def framework_module?(config, module_name) when is_atom(module_name) do
-    framework_module?(config, Atom.to_string(module_name) |> String.replace_leading("Elixir.", ""))
+    framework_module?(config, Archdo.AST.module_name(module_name))
   end
 
   @doc """
   Check if a module is an adapter/infrastructure module.
   """
+  @spec adapter_module?(t(), String.t() | atom()) :: boolean()
   def adapter_module?(%__MODULE__{adapters: nil}, _module_name), do: false
 
   def adapter_module?(%__MODULE__{adapters: regex}, module_name) when is_binary(module_name) do
@@ -117,18 +124,30 @@ defmodule Archdo.Config do
   end
 
   def adapter_module?(config, module_name) when is_atom(module_name) do
-    adapter_module?(config, Atom.to_string(module_name) |> String.replace_leading("Elixir.", ""))
+    adapter_module?(config, Archdo.AST.module_name(module_name))
   end
 
   @doc """
-  Get the context that a module belongs to, if any.
-  Returns the context module name or nil.
+  Find the most specific context that owns a module name.
+  Accepts either a `%Config{}` struct or an explicit context list.
+  Returns the context string or nil.
   """
+  @spec owning_context(t() | String.t(), String.t() | list()) :: String.t() | nil
   def owning_context(%__MODULE__{contexts: contexts}, module_name) when is_binary(module_name) do
-    Enum.find(contexts, fn ctx ->
-      ctx_str = to_string(ctx) |> String.replace_leading("Elixir.", "")
+    owning_context(module_name, contexts)
+  end
+
+  def owning_context(module_name, contexts) when is_binary(module_name) and is_list(contexts) do
+    contexts
+    |> Enum.filter(fn ctx ->
+      ctx_str = Archdo.AST.module_name(ctx)
       module_name == ctx_str or String.starts_with?(module_name, ctx_str <> ".")
     end)
+    |> Enum.max_by(fn ctx -> ctx |> to_string() |> String.length() end, fn -> nil end)
+    |> case do
+      nil -> nil
+      ctx -> Archdo.AST.module_name(ctx)
+    end
   end
 
   # --- Private ---
@@ -230,4 +249,5 @@ defmodule Archdo.Config do
       []
     end
   end
+
 end

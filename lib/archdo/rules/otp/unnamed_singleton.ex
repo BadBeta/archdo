@@ -12,9 +12,10 @@ defmodule Archdo.Rules.OTP.UnnamedSingleton do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.genserver_module?(ast) do
-      []
-    else
+    case AST.genserver_module?(ast) do
+      false ->
+        []
+      true ->
       check_singleton_pattern(file, ast)
     end
   end

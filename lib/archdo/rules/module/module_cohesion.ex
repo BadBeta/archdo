@@ -26,7 +26,7 @@ defmodule Archdo.Rules.Module.ModuleCohesion do
     {_, results} =
       Macro.prewalk(ast, [], fn
         {:defmodule, meta, [{:__aliases__, _, aliases}, [do: body]]} = node, acc ->
-          module_name = Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+          module_name = AST.module_name(Module.concat(aliases))
           count = count_public_functions(body)
           delegate_count = count_delegates(body)
 

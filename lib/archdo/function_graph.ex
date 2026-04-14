@@ -56,6 +56,7 @@ defmodule Archdo.FunctionGraph do
   @doc """
   Build a function graph from a list of {file, ast} tuples.
   """
+  @spec build([{String.t(), Macro.t()}]) :: t()
   def build(file_asts) do
     {definitions, calls} =
       Enum.reduce(file_asts, {%{}, []}, fn {file, ast}, {defs, calls} ->
@@ -81,6 +82,7 @@ defmodule Archdo.FunctionGraph do
   @doc """
   Get all calls originating from a specific function (forward edges).
   """
+  @spec calls_from(t(), String.t(), atom(), non_neg_integer()) :: [call()]
   def calls_from(%__MODULE__{calls: calls}, module, name, arity) do
     Enum.filter(calls, fn call ->
       call.caller_module == module and call.caller_fn == name and call.caller_arity == arity
@@ -90,6 +92,7 @@ defmodule Archdo.FunctionGraph do
   @doc """
   Get all calls TO a specific function (reverse edges).
   """
+  @spec calls_to(t(), String.t(), atom(), non_neg_integer() | nil) :: [call()]
   def calls_to(%__MODULE__{calls_by_target: by_target}, module, name, arity) do
     Map.get(by_target, {module, name, arity}, [])
   end
@@ -99,6 +102,7 @@ defmodule Archdo.FunctionGraph do
   Public API = function defined directly in the context root module (not in sub-modules),
                with public visibility, and not @doc false.
   """
+  @spec public_api?(t(), String.t(), atom(), non_neg_integer()) :: boolean()
   def public_api?(%__MODULE__{public_api_by_module: api}, context, name, arity) do
     case Map.get(api, context) do
       nil -> false
@@ -110,6 +114,7 @@ defmodule Archdo.FunctionGraph do
   Compute fan-out for each function: how many distinct external modules it calls.
   Returns a map: {module, name, arity} => fan_out_count
   """
+  @spec function_fan_out(t()) :: %{mfa_key() => non_neg_integer()}
   def function_fan_out(%__MODULE__{calls: calls}) do
     calls
     |> Enum.group_by(fn call -> {call.caller_module, call.caller_fn, call.caller_arity} end)
@@ -256,9 +261,7 @@ defmodule Archdo.FunctionGraph do
   defp line(meta) when is_list(meta), do: AST.line(meta)
   defp line(_), do: 0
 
-  defp normalize_module(mod) when is_atom(mod) do
-    mod |> Atom.to_string() |> String.replace_leading("Elixir.", "")
-  end
+  defp normalize_module(mod) when is_atom(mod), do: AST.module_name(mod)
 
   # The public API of a context module = public functions defined directly
   # in the root module (e.g., MyApp.Accounts.list_users/0).

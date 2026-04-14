@@ -41,7 +41,7 @@ defmodule Archdo.Rules.Module.DuplicatedCodeTest do
       """, "lib/invoices.ex")
 
       diags = DuplicatedCode.analyze_project([file1, file2])
-      assert length(diags) >= 1
+      assert [_ | _] = diags
 
       main = Enum.find(diags, &(&1.message =~ "compute_amount" or &1.message =~ "calculate_total"))
       assert main

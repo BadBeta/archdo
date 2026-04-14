@@ -14,10 +14,10 @@ defmodule Archdo.Rules.OTP.UnnecessaryProcess do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.genserver_module?(ast) or liveview_module?(ast) or supervisor_module?(ast) do
-      []
-    else
+    if AST.genserver_module?(ast) and not liveview_module?(ast) and not supervisor_module?(ast) do
       check_for_unnecessary_genserver(file, ast)
+    else
+      []
     end
   end
 
@@ -81,9 +81,14 @@ defmodule Archdo.Rules.OTP.UnnecessaryProcess do
   defp trivial_init?(init_clauses) do
     Enum.all?(init_clauses, fn {_meta, _args, body} ->
       AST.contains?(body, fn
+        # 3+ element tuples use {:{}, _, [...]} in AST
         {:{}, _, [:ok, {:%{}, _, []}]} -> true
         {:{}, _, [:ok, []]} -> true
         {:{}, _, [:ok, nil]} -> true
+        # 2-element tuples are represented as-is in AST
+        {:ok, {:%{}, _, []}} -> true
+        {:ok, []} -> true
+        {:ok, nil} -> true
         _ -> false
       end)
     end)

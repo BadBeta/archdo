@@ -37,7 +37,7 @@ defmodule Archdo.Rules.Module.UnprotectedExternalCall do
 
     for {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} <- calls do
       service = Enum.map_join(mod_parts, ".", &to_string/1)
-      non_bang = func |> to_string() |> String.trim_trailing("!") |> String.to_atom()
+      non_bang = func |> to_string() |> String.trim_trailing("!")
 
       Diagnostic.warning("4.20",
         title: "External service call uses bang function",

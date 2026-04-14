@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Config, Diagnostic, Fix, Graph}
+  alias Archdo.{AST, Config, Diagnostic, Fix, Graph}
 
   @impl true
   def id, do: "1.3"
@@ -79,9 +79,6 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
     end
   end
 
-  defp normalize(mod) when is_atom(mod) do
-    mod |> to_string() |> String.replace_leading("Elixir.", "")
-  end
-
+  defp normalize(mod) when is_atom(mod), do: AST.module_name(mod)
   defp normalize(mod) when is_binary(mod), do: mod
 end

@@ -66,7 +66,6 @@ defmodule Archdo.Rules.Testing.RepoInTests do
     end)
   end
 
-
   defp support_file?(file) do
     String.contains?(file, "/support/") or String.contains?(file, "/factory") or
       String.contains?(file, "data_case") or String.contains?(file, "conn_case") or

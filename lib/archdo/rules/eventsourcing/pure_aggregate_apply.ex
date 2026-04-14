@@ -21,10 +21,9 @@ defmodule Archdo.Rules.EventSourcing.PureAggregateApply do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not aggregate_module?(ast) do
-      []
-    else
-      find_impure_apply(file, ast)
+    case aggregate_module?(ast) do
+      false -> []
+      true -> find_impure_apply(file, ast)
     end
   end
 
@@ -134,10 +133,6 @@ defmodule Archdo.Rules.EventSourcing.PureAggregateApply do
     end) or has_execute_and_apply?(ast)
   end
 
-  defp has_execute_and_apply?(ast) do
-    fns = AST.extract_functions(ast, :public)
-    has_execute = Enum.any?(fns, fn {name, arity, _, _, _} -> name == :execute and arity == 2 end)
-    has_apply = Enum.any?(fns, fn {name, arity, _, _, _} -> name == :apply and arity == 2 end)
-    has_execute and has_apply
-  end
+  defp has_execute_and_apply?(ast),
+    do: Archdo.Rules.EventSourcing.Helpers.aggregate_shape?(ast)
 end

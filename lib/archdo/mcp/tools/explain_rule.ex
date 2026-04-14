@@ -51,5 +51,5 @@ defmodule Archdo.Mcp.Tools.ExplainRule do
     Enum.find(all, fn mod -> mod.id() == id end)
   end
 
-  defp module_name(mod), do: mod |> to_string() |> String.replace_leading("Elixir.", "")
+  defp module_name(mod), do: Archdo.AST.module_name(mod)
 end

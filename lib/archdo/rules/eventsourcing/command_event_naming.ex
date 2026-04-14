@@ -21,10 +21,9 @@ defmodule Archdo.Rules.EventSourcing.CommandEventNaming do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not commanded_project?(ast) do
-      []
-    else
-      check_naming(file, ast)
+    case commanded_project?(ast) do
+      false -> []
+      true -> check_naming(file, ast)
     end
   end
 
@@ -32,7 +31,7 @@ defmodule Archdo.Rules.EventSourcing.CommandEventNaming do
     {_, results} =
       Macro.prewalk(ast, [], fn
         {:defmodule, meta, [{:__aliases__, _, aliases} | _]} = node, acc ->
-          module_name = Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+          module_name = AST.module_name(Module.concat(aliases))
           parts = String.split(module_name, ".")
           name = List.last(parts)
 

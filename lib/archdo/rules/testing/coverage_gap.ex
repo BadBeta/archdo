@@ -287,8 +287,7 @@ defmodule Archdo.Rules.Testing.CoverageGap do
   defp format_fn_list(fns) do
     fns
     |> Enum.take(5)
-    |> Enum.map(fn {name, arity} -> "#{name}/#{arity}" end)
-    |> Enum.join(", ")
+    |> Enum.map_join(", ", fn {name, arity} -> "#{name}/#{arity}" end)
   end
 
   # --- Extraction helpers ---

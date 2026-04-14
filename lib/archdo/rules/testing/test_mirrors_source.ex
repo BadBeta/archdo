@@ -20,10 +20,8 @@ defmodule Archdo.Rules.Testing.TestMirrorsSource do
     test_set = MapSet.new(test_files, &normalize_test_path/1)
 
     source_files
-    |> Enum.reject(&skip?/1)
     |> Enum.reject(fn file ->
-      expected = expected_test_path(file)
-      MapSet.member?(test_set, expected)
+      skip?(file) or MapSet.member?(test_set, expected_test_path(file))
     end)
     |> Enum.map(fn file ->
       expected = "test/#{expected_test_path(file)}_test.exs"

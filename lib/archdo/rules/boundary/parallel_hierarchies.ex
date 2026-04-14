@@ -105,10 +105,5 @@ defmodule Archdo.Rules.Boundary.ParallelHierarchies do
     Enum.count(dirs, fn d -> d in parallel_keywords end) >= 2
   end
 
-  defp ast_size(nil), do: 0
-
-  defp ast_size(ast) do
-    {_, count} = Macro.prewalk(ast, 0, fn node, acc -> {node, acc + 1} end)
-    count
-  end
+  defp ast_size(node), do: Archdo.AST.ast_size(node)
 end

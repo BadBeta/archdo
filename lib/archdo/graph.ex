@@ -1,6 +1,8 @@
 defmodule Archdo.Graph do
   @moduledoc false
 
+  alias Archdo.AST
+
   @type dep_type :: :alias | :import | :use | :call
   @type edge :: %{
           source: String.t(),
@@ -25,6 +27,7 @@ defmodule Archdo.Graph do
   @doc """
   Build a module dependency graph from a list of {file, ast} tuples.
   """
+  @spec build([{String.t(), Macro.t()}]) :: t()
   def build(file_asts) do
     Enum.reduce(file_asts, %__MODULE__{}, fn {file, ast}, graph ->
       analyze_file(graph, file, ast)
@@ -34,6 +37,7 @@ defmodule Archdo.Graph do
   @doc """
   Get all direct dependencies of a module.
   """
+  @spec dependencies(t(), String.t()) :: [edge()]
   def dependencies(%__MODULE__{edges_by_source: by_source}, module_name) do
     Map.get(by_source, module_name, [])
   end
@@ -41,6 +45,7 @@ defmodule Archdo.Graph do
   @doc """
   Get all edges that point TO a given module (reverse lookup).
   """
+  @spec dependencies_of(t(), String.t()) :: [edge()]
   def dependencies_of(%__MODULE__{edges: edges}, module_name) do
     Enum.filter(edges, &(&1.target == module_name))
   end
@@ -49,11 +54,12 @@ defmodule Archdo.Graph do
   Find all cycles in the graph between the given set of top-level modules (contexts).
   Returns a list of cycles, where each cycle is a list of module names.
   """
+  @spec find_cycles(t(), [module()]) :: [[String.t()]]
   def find_cycles(%__MODULE__{} = graph, root_modules) do
     # Build adjacency map between root modules only
     adjacency =
       Enum.reduce(root_modules, %{}, fn mod, acc ->
-        mod_str = normalize_module(mod)
+        mod_str = AST.module_name(mod)
 
         targets =
           graph
@@ -61,16 +67,16 @@ defmodule Archdo.Graph do
           |> Enum.map(& &1.target)
           |> Enum.filter(fn target ->
             Enum.any?(root_modules, fn rm ->
-              rm_str = normalize_module(rm)
+              rm_str = AST.module_name(rm)
               rm_str != mod_str and (target == rm_str or String.starts_with?(target, rm_str <> "."))
             end)
           end)
           |> Enum.map(fn target ->
             Enum.find(root_modules, fn rm ->
-              rm_str = normalize_module(rm)
+              rm_str = AST.module_name(rm)
               target == rm_str or String.starts_with?(target, rm_str <> ".")
             end)
-            |> normalize_module()
+            |> AST.module_name()
           end)
           |> Enum.uniq()
 
@@ -78,14 +84,15 @@ defmodule Archdo.Graph do
       end)
 
     # DFS cycle detection
-    detect_cycles_dfs(adjacency, Enum.map(root_modules, &normalize_module/1))
+    detect_cycles_dfs(adjacency, Enum.map(root_modules, &AST.module_name/1))
   end
 
   @doc """
   Get all modules in a given namespace (prefix).
   """
+  @spec modules_in_namespace(t(), String.t() | atom()) :: [String.t()]
   def modules_in_namespace(%__MODULE__{modules: modules}, prefix) do
-    prefix_str = normalize_module(prefix)
+    prefix_str = AST.module_name(prefix)
 
     modules
     |> MapSet.to_list()
@@ -117,7 +124,7 @@ defmodule Archdo.Graph do
     {_, names} =
       Macro.prewalk(ast, [], fn
         {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, acc ->
-          {node, [Module.concat(aliases) |> to_string() |> String.replace_leading("Elixir.", "") | acc]}
+          {node, [AST.module_name(Module.concat(aliases)) | acc]}
 
         node, acc ->
           {node, acc}
@@ -187,7 +194,7 @@ defmodule Archdo.Graph do
   # (e.g. __MODULE__.Foo contains a non-atom element).
   defp safe_concat(aliases) do
     if Enum.all?(aliases, &is_atom/1) do
-      Module.concat(aliases) |> to_string() |> String.replace_leading("Elixir.", "")
+      AST.module_name(Module.concat(aliases))
     else
       nil
     end
@@ -195,12 +202,6 @@ defmodule Archdo.Graph do
 
   defp line(meta) when is_list(meta), do: Keyword.get(meta, :line, 0)
   defp line(_), do: 0
-
-  defp normalize_module(mod) when is_atom(mod) do
-    mod |> to_string() |> String.replace_leading("Elixir.", "")
-  end
-
-  defp normalize_module(mod) when is_binary(mod), do: mod
 
   # --- Cycle detection ---
 
@@ -228,17 +229,18 @@ defmodule Archdo.Graph do
       Enum.reduce(Map.get(adjacency, node, []), state, fn neighbor, acc ->
         cond do
           MapSet.member?(acc.in_stack, neighbor) ->
-            cycle_start = Enum.find_index(path, &(&1 == neighbor))
+            ordered = Enum.reverse(path)
+            cycle_start = Enum.find_index(ordered, &(&1 == neighbor))
 
-            if cycle_start do
-              cycle = Enum.slice(path, cycle_start..-1//1) ++ [neighbor]
-              %{acc | cycles: [cycle | acc.cycles]}
-            else
-              acc
+            case cycle_start do
+              nil -> acc
+              idx ->
+                cycle = Enum.slice(ordered, idx..-1//1) ++ [neighbor]
+                %{acc | cycles: [cycle | acc.cycles]}
             end
 
           not MapSet.member?(acc.visited, neighbor) ->
-            dfs_visit(neighbor, adjacency, acc, path ++ [neighbor])
+            dfs_visit(neighbor, adjacency, acc, [neighbor | path])
 
           true ->
             acc

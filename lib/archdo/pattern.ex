@@ -100,8 +100,7 @@ defmodule Archdo.Pattern do
     regex_source =
       pattern
       |> tokenize()
-      |> Enum.map(&token_to_regex/1)
-      |> Enum.join()
+      |> Enum.map_join(&token_to_regex/1)
 
     Regex.compile!("^" <> regex_source <> "$")
   end

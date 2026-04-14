@@ -78,18 +78,7 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
     |> length()
   end
 
-  defp extract_module_name(ast) do
-    {_, name} =
-      Macro.prewalk(ast, "Unknown", fn
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, _acc ->
-          {node, Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    name
-  end
+  defp extract_module_name(ast), do: AST.extract_module_name(ast)
 
   defp web_file?(file), do: String.contains?(file, "_web/") or String.contains?(file, "web/")
 

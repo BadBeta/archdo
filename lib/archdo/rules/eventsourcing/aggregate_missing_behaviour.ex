@@ -12,9 +12,7 @@ defmodule Archdo.Rules.EventSourcing.AggregateMissingBehaviour do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not aggregate_shape?(ast) or uses_aggregate_behaviour?(ast) or upcaster_module?(ast) do
-      []
-    else
+    if aggregate_shape?(ast) and not uses_aggregate_behaviour?(ast) and not upcaster_module?(ast) do
       module_name = AST.extract_module_name(ast)
 
       [
@@ -56,36 +54,14 @@ defmodule Archdo.Rules.EventSourcing.AggregateMissingBehaviour do
           line: 1
         )
       ]
+    else
+      []
     end
   end
 
-  # An "aggregate shape" is a module that defines both execute/2 and apply/2.
-  defp aggregate_shape?(ast) do
-    fns = AST.extract_functions(ast, :public)
-    has_execute = Enum.any?(fns, fn {n, a, _, _, _} -> n == :execute and a == 2 end)
-    has_apply = Enum.any?(fns, fn {n, a, _, _, _} -> n == :apply and a == 2 end)
-    has_execute and has_apply
-  end
+  alias Archdo.Rules.EventSourcing.Helpers, as: ESHelpers
 
-  defp uses_aggregate_behaviour?(ast) do
-    AST.contains?(ast, fn
-      {:use, _, [{:__aliases__, _, [:Commanded, :Aggregates, :Aggregate]} | _]} -> true
-      _ -> false
-    end)
-  end
-
-  defp upcaster_module?(ast) do
-    {_, found?} =
-      Macro.prewalk(ast, false, fn
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, _acc ->
-          parts = Enum.map(aliases, &Atom.to_string/1)
-          is_upcaster = Enum.any?(parts, fn p -> String.contains?(String.downcase(p), "upcast") end)
-          {node, is_upcaster}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    found?
-  end
+  defp aggregate_shape?(ast), do: ESHelpers.aggregate_shape?(ast)
+  defp uses_aggregate_behaviour?(ast), do: ESHelpers.uses_aggregate_behaviour?(ast)
+  defp upcaster_module?(ast), do: ESHelpers.upcaster_module?(ast)
 end

@@ -134,19 +134,18 @@ defmodule Archdo.Freeze do
   # 2. `Module.Name` — module reference
   # 3. Fall back to first "capitalized word" in the message
   defp extract_identifier(message) when is_binary(message) do
-    cond do
-      match = Regex.run(~r/([A-Z][A-Za-z0-9_.]*\.\w+\/\d+)/, message) ->
-        Enum.at(match, 1)
+    patterns = [
+      ~r/([A-Z][A-Za-z0-9_.]*\.\w+\/\d+)/,
+      ~r/([A-Z][A-Za-z0-9_]+(?:\.[A-Z][A-Za-z0-9_]+)+)/,
+      ~r/([a-z_]+\/\d+)/
+    ]
 
-      match = Regex.run(~r/([A-Z][A-Za-z0-9_]+(?:\.[A-Z][A-Za-z0-9_]+)+)/, message) ->
-        Enum.at(match, 1)
-
-      match = Regex.run(~r/([a-z_]+\/\d+)/, message) ->
-        Enum.at(match, 1)
-
-      true ->
-        nil
-    end
+    Enum.find_value(patterns, fn pattern ->
+      case Regex.run(pattern, message) do
+        [_, capture] -> capture
+        _ -> nil
+      end
+    end)
   end
 
   defp extract_identifier(_), do: nil

@@ -16,7 +16,7 @@ defmodule Archdo.Rules.EventSourcing.EventSourcingTest do
       assert diag.rule_id == "8.1"
       assert diag.title == "Command named in past tense"
       assert diag.context.kind == :command
-      assert length(diag.alternatives) >= 1
+      assert [_ | _] = diag.alternatives
     end
 
     test "allows properly named command" do
@@ -85,8 +85,8 @@ defmodule Archdo.Rules.EventSourcing.EventSourcingTest do
       assert diag.message =~ "apply/2"
       assert diag.message =~ "Logger"
       assert diag.why =~ "rehydration"
-      assert length(diag.alternatives) >= 1
-      assert hd(diag.alternatives).summary =~ "execute/2"
+      assert [first_alt | _] = diag.alternatives
+      assert first_alt.summary =~ "execute/2"
       assert "ARCHITECTURE_RULES.md#8.2" in diag.references
       assert diag.context.function == "apply/2"
     end

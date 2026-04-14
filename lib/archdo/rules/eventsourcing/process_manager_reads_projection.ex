@@ -12,10 +12,9 @@ defmodule Archdo.Rules.EventSourcing.ProcessManagerReadsProjection do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not process_manager_module?(ast) do
-      []
-    else
-      find_repo_reads(file, ast)
+    case process_manager_module?(ast) do
+      false -> []
+      true -> find_repo_reads(file, ast)
     end
   end
 

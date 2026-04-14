@@ -206,7 +206,7 @@ defmodule Archdo.Rules.Boundary.Mockability do
         false
     end)
     |> Enum.map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
-      {Module.concat(mod_parts) |> to_string() |> String.replace_leading("Elixir.", ""), func, AST.line(meta)}
+      {AST.module_name(Module.concat(mod_parts)), func, AST.line(meta)}
     end)
   end
 
@@ -230,11 +230,7 @@ defmodule Archdo.Rules.Boundary.Mockability do
     end
   end
 
-  # A library calling itself is not an "external" dependency.
-  defp self_call?(caller_module, service_parts) do
-    service_root = hd(service_parts) |> to_string()
-    String.starts_with?(caller_module, service_root)
-  end
+  defp self_call?(caller_module, service_parts), do: AST.self_call?(caller_module, service_parts)
 
   defp adapter_or_test?(file) do
     String.contains?(file, "/test/") or

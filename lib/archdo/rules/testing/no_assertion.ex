@@ -16,10 +16,9 @@ defmodule Archdo.Rules.Testing.NoAssertion do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if not AST.test_file?(file) do
-      []
-    else
-      find_tests_without_assertions(file, ast)
+    case AST.test_file?(file) do
+      false -> []
+      true -> find_tests_without_assertions(file, ast)
     end
   end
 
@@ -98,7 +97,7 @@ defmodule Archdo.Rules.Testing.NoAssertion do
   defp non_trivial_pattern?({_, _}), do: true
   defp non_trivial_pattern?({:%, _, _}), do: true
   defp non_trivial_pattern?({:%{}, _, _}), do: true
-  defp non_trivial_pattern?(list) when is_list(list) and length(list) > 0, do: true
+  defp non_trivial_pattern?([_ | _]), do: true
   defp non_trivial_pattern?(_), do: false
 
   defp extract_test_name([name | _]) when is_binary(name), do: name

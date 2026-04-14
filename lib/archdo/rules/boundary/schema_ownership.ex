@@ -56,7 +56,7 @@ defmodule Archdo.Rules.Boundary.SchemaOwnership do
       {:%, _, [{:__aliases__, _, parts}, _]} when is_list(parts) ->
         if Enum.all?(parts, &is_atom/1) do
           target_name =
-            parts |> Module.concat() |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+            AST.module_name(Module.concat(parts))
 
           MapSet.member?(schemas, target_name) and not in_same_context?(caller_module, target_name)
         else

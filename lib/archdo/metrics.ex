@@ -68,6 +68,7 @@ defmodule Archdo.Metrics do
   Efferent coupling: count of distinct modules this module depends on
   (excluding stdlib and self).
   """
+  @spec efferent_coupling(Archdo.Graph.t(), String.t()) :: non_neg_integer()
   def efferent_coupling(%Graph{} = graph, module) do
     graph
     |> Graph.dependencies(module)
@@ -81,6 +82,7 @@ defmodule Archdo.Metrics do
   Afferent coupling: count of distinct modules that depend on this module
   (excluding stdlib and self).
   """
+  @spec afferent_coupling(Archdo.Graph.t(), String.t()) :: non_neg_integer()
   def afferent_coupling(%Graph{edges: edges}, module) do
     edges
     |> Enum.filter(fn edge -> edge.target == module end)
