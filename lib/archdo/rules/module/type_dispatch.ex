@@ -110,7 +110,7 @@ defmodule Archdo.Rules.Module.TypeDispatch do
       type_atoms = entries |> Enum.map(& &1.atom) |> Enum.reject(&is_nil/1)
       distinct = type_atoms |> Enum.reject(&(&1 in @ignored_atoms)) |> Enum.uniq()
 
-      if length(distinct) >= 4 and not genserver_callback?(name) do
+      if match?([_, _, _, _ | _], distinct) and not genserver_callback?(name) do
         first_line = entries |> Enum.map(& &1.line) |> Enum.min()
 
         [
@@ -119,7 +119,7 @@ defmodule Archdo.Rules.Module.TypeDispatch do
             message:
               "#{name}/#{arity} has #{length(distinct)} clauses dispatching on atom types: " <>
                 "#{Enum.map_join(Enum.take(distinct, 5), ", ", &inspect/1)}" <>
-                if(length(distinct) > 5, do: ", ...", else: ""),
+                if(match?([_, _, _, _, _, _ | _], distinct), do: ", ...", else: ""),
             why:
               "When a function has many clauses each matching a different atom as the first argument, " <>
                 "adding a new type requires editing this module. This violates Open/Closed — the module " <>

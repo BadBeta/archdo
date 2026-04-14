@@ -94,9 +94,7 @@ defmodule Archdo.Formatter do
       )
     end)
 
-    if diagnostics != [] do
-      IO.puts(@llm_instruction)
-    end
+    if match?([_ | _], diagnostics), do: IO.puts(@llm_instruction)
 
     {errors, warnings, _} = counts(diagnostics)
     exit_code(errors, warnings)

@@ -22,10 +22,9 @@ defmodule Archdo.Rules.Module.UnprotectedExternalCall do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if test_or_adapter?(file) do
-      []
-    else
-      find_bang_calls(file, ast)
+    case test_or_adapter?(file) do
+      true -> []
+      false -> find_bang_calls(file, ast)
     end
   end
 

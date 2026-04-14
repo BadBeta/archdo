@@ -41,23 +41,19 @@ defmodule Archdo.Rules.Module.MissingTelemetry do
 
   defp check_telemetry(file, ast) do
     public_fns = AST.extract_functions(ast, :public)
+    fn_count = length(public_fns)
 
-    # Skip tiny modules
-    if length(public_fns) < 2 do
-      []
-    else
-      has_telemetry = has_telemetry_call?(ast)
-
-      if has_telemetry do
-        []
-      else
+    cond do
+      fn_count < 2 -> []
+      has_telemetry_call?(ast) -> []
+      true ->
         module_name = AST.extract_module_name(ast)
 
         [
           Diagnostic.info("4.19",
             title: "Context facade missing telemetry instrumentation",
             message:
-              "#{module_name} has #{length(public_fns)} public functions but no " <>
+              "#{module_name} has #{fn_count} public functions but no " <>
                 ":telemetry.execute or :telemetry.span calls",
             why:
               "Context facades are the primary entry points for business operations. " <>
@@ -82,12 +78,11 @@ defmodule Archdo.Rules.Module.MissingTelemetry do
               )
             ],
             references: ["ARCHITECTURE_RULES.md#4.19"],
-            context: %{module: module_name, public_fn_count: length(public_fns)},
+            context: %{module: module_name, public_fn_count: fn_count},
             file: file,
             line: 1
           )
         ]
-      end
     end
   end
 

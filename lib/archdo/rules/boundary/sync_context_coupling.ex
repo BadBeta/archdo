@@ -19,12 +19,10 @@ defmodule Archdo.Rules.Boundary.SyncContextCoupling do
   @doc """
   Function-graph-based: detect cross-context calls to write operations.
   """
+  def analyze_project(%FunctionGraph{}, []), do: []
+
   def analyze_project(%FunctionGraph{} = graph, contexts) when is_list(contexts) do
-    if contexts == [] do
-      []
-    else
-      do_analyze(graph, contexts)
-    end
+    do_analyze(graph, contexts)
   end
 
   defp do_analyze(graph, contexts) do

@@ -35,26 +35,17 @@ defmodule Archdo.Rules.Module.FatInterface do
 
     # Phase 2: for each implementation, find no-op stubs
     impl_stubs =
-      implementations
-      |> Enum.map(fn impl ->
-        stubs = find_noop_stubs(impl.ast, impl.behaviours)
-        Map.put(impl, :stubs, stubs)
-      end)
-      |> Enum.filter(fn impl -> impl.stubs != [] end)
+      for impl <- implementations,
+          stubs = find_noop_stubs(impl.ast, impl.behaviours),
+          match?([_ | _], stubs),
+          do: Map.put(impl, :stubs, stubs)
 
     # Phase 3: group by behaviour and check if different impls stub different callbacks
-    impl_stubs
-    |> Enum.flat_map(fn impl ->
-      Enum.flat_map(impl.behaviours, fn bhv ->
-        bhv_stubs = Enum.filter(impl.stubs, fn s -> s.likely_from == bhv or s.likely_from == nil end)
-
-        if bhv_stubs != [] do
-          [build_diagnostic(impl, bhv, bhv_stubs, behaviour_defs)]
-        else
-          []
-        end
-      end)
-    end)
+    for impl <- impl_stubs,
+        bhv <- impl.behaviours,
+        bhv_stubs = Enum.filter(impl.stubs, &(&1.likely_from == bhv or &1.likely_from == nil)),
+        match?([_ | _], bhv_stubs),
+        do: build_diagnostic(impl, bhv, bhv_stubs, behaviour_defs)
   end
 
   # --- Phase 1: Index ---
@@ -64,27 +55,20 @@ defmodule Archdo.Rules.Module.FatInterface do
       module_name = AST.extract_module_name(ast)
 
       # Check if this module defines a behaviour (has @callback)
-      has_callbacks =
-        AST.contains?(ast, fn
-          {:@, _, [{:callback, _, _}]} -> true
-          _ -> false
-        end)
-
       defs =
-        if has_callbacks do
-          Map.put(defs, module_name, %{file: file})
-        else
-          defs
+        case AST.contains?(ast, fn {:@, _, [{:callback, _, _}]} -> true; _ -> false end) do
+          true -> Map.put(defs, module_name, %{file: file})
+          false -> defs
         end
 
       # Check if this module implements a behaviour
-      behaviours = extract_behaviour_names(ast)
-
       impls =
-        if behaviours != [] do
-          [%{module: module_name, file: file, ast: ast, behaviours: behaviours} | impls]
-        else
-          impls
+        case extract_behaviour_names(ast) do
+          [_ | _] = behaviours ->
+            [%{module: module_name, file: file, ast: ast, behaviours: behaviours} | impls]
+
+          [] ->
+            impls
         end
 
       {defs, impls}

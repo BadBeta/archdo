@@ -16,10 +16,9 @@ defmodule Archdo.Rules.NIF.NifPanic do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if String.ends_with?(file, ".ex") do
-      check_rustler_module(file, ast)
-    else
-      []
+    case Path.extname(file) do
+      ".ex" -> check_rustler_module(file, ast)
+      _ -> []
     end
   end
 

@@ -42,7 +42,7 @@ defmodule Archdo.Graph do
   Get all edges that point TO a given module (reverse lookup).
   """
   def dependencies_of(%__MODULE__{edges: edges}, module_name) do
-    Enum.filter(edges, fn edge -> edge.target == module_name end)
+    Enum.filter(edges, &(&1.target == module_name))
   end
 
   @doc """

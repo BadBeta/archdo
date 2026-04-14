@@ -21,10 +21,9 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if test_file?(file) do
-      []
-    else
-      find_unbounded_http(file, ast) ++ find_unbounded_genserver_call(file, ast)
+    case test_file?(file) do
+      true -> []
+      false -> find_unbounded_http(file, ast) ++ find_unbounded_genserver_call(file, ast)
     end
   end
 
@@ -39,9 +38,11 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
     |> Enum.flat_map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, args} ->
       timeout_keys = Map.get(@http_clients, mod_parts, [])
 
-      if has_timeout_option?(args, timeout_keys) do
-        []
-      else
+      case has_timeout_option?(args, timeout_keys) do
+        true ->
+          []
+
+        false ->
         service = Enum.map_join(mod_parts, ".", &to_string/1)
         keys_str = Enum.map_join(timeout_keys, " or ", &":#{&1}")
 
@@ -74,7 +75,7 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
 
   defp find_unbounded_genserver_call(file, ast) do
     AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, [:GenServer]}, :call]}, _, args} when length(args) == 2 ->
+      {{:., _, [{:__aliases__, _, [:GenServer]}, :call]}, _, [_, _]} ->
         true
 
       _ ->

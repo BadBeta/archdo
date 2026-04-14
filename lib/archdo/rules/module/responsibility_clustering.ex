@@ -20,34 +20,34 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if AST.test_file?(file) do
-      []
-    else
-      check_responsibility_clusters(file, ast)
+    case AST.test_file?(file) do
+      true -> []
+      false -> check_responsibility_clusters(file, ast)
     end
   end
 
   defp check_responsibility_clusters(file, ast) do
     all_fns = extract_all_functions(ast)
-    public_fns = Enum.filter(all_fns, fn f -> f.visibility == :public end)
+    public_fns = for %{visibility: :public} = f <- all_fns, do: f
 
-    if length(public_fns) < @min_public_fns do
-      []
-    else
-      # Build intra-module call graph
-      all_fn_names = MapSet.new(all_fns, & &1.key)
-      call_graph = build_call_graph(all_fns, all_fn_names)
-
-      # Find connected components among public functions via shared helpers
-      clusters = find_clusters(public_fns, call_graph, all_fn_names)
-      significant = Enum.filter(clusters, fn c -> length(c) >= @min_cluster_size end)
-
-      if length(significant) >= @min_clusters do
-        module_name = AST.extract_module_name(ast)
-        [build_diagnostic(file, module_name, significant)]
-      else
+    case Enum.count_until(public_fns, @min_public_fns) < @min_public_fns do
+      true ->
         []
-      end
+
+      false ->
+        all_fn_names = MapSet.new(all_fns, & &1.key)
+        call_graph = build_call_graph(all_fns, all_fn_names)
+        clusters = find_clusters(public_fns, call_graph, all_fn_names)
+        significant = Enum.filter(clusters, &match?([_, _ | _], &1))
+
+        case significant do
+          [_, _ | _] ->
+            module_name = AST.extract_module_name(ast)
+            [build_diagnostic(file, module_name, significant)]
+
+          _ ->
+            []
+        end
     end
   end
 
@@ -99,10 +99,10 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
              :if, :unless, :case, :cond, :with, :for, :fn, :receive, :try, :quote, :unquote,
              :raise, :throw, :import, :alias, :use, :require, :@, :__MODULE__] ->
           key = {name, length(args)}
-          if MapSet.member?(known, key) do
-            {node, MapSet.put(acc, key)}
-          else
-            {node, acc}
+
+          case MapSet.member?(known, key) do
+            true -> {node, MapSet.put(acc, key)}
+            false -> {node, acc}
           end
 
         node, acc ->
@@ -126,15 +126,13 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
 
     # Union-find via adjacency
     adjacency =
-      for a <- pub_keys, b <- pub_keys, a < b, reduce: %{} do
+      for a <- pub_keys, b <- pub_keys, a < b,
+          not MapSet.disjoint?(reachable_map[a], reachable_map[b]),
+          reduce: %{} do
         adj ->
-          if MapSet.size(MapSet.intersection(reachable_map[a], reachable_map[b])) > 0 do
-            adj
-            |> Map.update(a, [b], &[b | &1])
-            |> Map.update(b, [a], &[a | &1])
-          else
-            adj
-          end
+          adj
+          |> Map.update(a, [b], &[b | &1])
+          |> Map.update(b, [a], &[a | &1])
       end
 
     # BFS to find connected components
@@ -148,24 +146,28 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
   defp do_closure([], visited, _graph, _known), do: visited
 
   defp do_closure([current | rest], visited, graph, known) do
-    if MapSet.member?(visited, current) do
-      do_closure(rest, visited, graph, known)
-    else
-      visited = MapSet.put(visited, current)
-      neighbors = Map.get(graph, current, MapSet.new())
-      new_to_visit = MapSet.to_list(MapSet.difference(neighbors, visited))
-      do_closure(new_to_visit ++ rest, visited, graph, known)
+    case MapSet.member?(visited, current) do
+      true ->
+        do_closure(rest, visited, graph, known)
+
+      false ->
+        visited = MapSet.put(visited, current)
+        neighbors = Map.get(graph, current, MapSet.new())
+        new_to_visit = MapSet.to_list(MapSet.difference(neighbors, visited))
+        do_closure(new_to_visit ++ rest, visited, graph, known)
     end
   end
 
   defp find_components(nodes, adjacency) do
     {components, _} =
       Enum.reduce(nodes, {[], MapSet.new()}, fn node, {comps, visited} ->
-        if MapSet.member?(visited, node) do
-          {comps, visited}
-        else
-          component = bfs(node, adjacency, MapSet.new())
-          {[MapSet.to_list(component) | comps], MapSet.union(visited, component)}
+        case MapSet.member?(visited, node) do
+          true ->
+            {comps, visited}
+
+          false ->
+            component = bfs(node, adjacency, MapSet.new())
+            {[MapSet.to_list(component) | comps], MapSet.union(visited, component)}
         end
       end)
 
@@ -180,12 +182,14 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
   defp do_bfs([], visited, _adj), do: visited
 
   defp do_bfs([node | rest], visited, adj) do
-    if MapSet.member?(visited, node) do
-      do_bfs(rest, visited, adj)
-    else
-      visited = MapSet.put(visited, node)
-      neighbors = Map.get(adj, node, [])
-      do_bfs(neighbors ++ rest, visited, adj)
+    case MapSet.member?(visited, node) do
+      true ->
+        do_bfs(rest, visited, adj)
+
+      false ->
+        visited = MapSet.put(visited, node)
+        neighbors = Map.get(adj, node, [])
+        do_bfs(neighbors ++ rest, visited, adj)
     end
   end
 

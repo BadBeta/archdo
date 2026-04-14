@@ -24,15 +24,16 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
     protected =
       MapSet.new(Map.keys(registry.impl_to_behaviour) ++ Map.keys(registry.impl_to_protocol))
 
-    if MapSet.size(protected) == 0 do
-      []
-    else
-      file_asts
-      |> Enum.reject(fn {file, _} -> excluded_file?(file) end)
-      |> Enum.flat_map(fn {file, ast} ->
-        caller = AST.extract_module_name(ast)
-        find_bypasses(file, ast, caller, protected, registry)
-      end)
+    case MapSet.size(protected) do
+      0 ->
+        []
+
+      _ ->
+        for {file, ast} <- file_asts,
+            not excluded_file?(file),
+            caller = AST.extract_module_name(ast),
+            diag <- find_bypasses(file, ast, caller, protected, registry),
+            do: diag
     end
   end
 
@@ -57,17 +58,13 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
   end
 
   defp index_behaviour_def({behaviours, itb, protocols, itp}, file, ast) do
-    has_callbacks =
-      AST.contains?(ast, fn
-        {:@, _, [{:callback, _, _}]} -> true
-        _ -> false
-      end)
+    case AST.contains?(ast, fn {:@, _, [{:callback, _, _}]} -> true; _ -> false end) do
+      true ->
+        name = AST.extract_module_name(ast)
+        {Map.put(behaviours, name, %{file: file}), itb, protocols, itp}
 
-    if has_callbacks do
-      name = AST.extract_module_name(ast)
-      {Map.put(behaviours, name, %{file: file}), itb, protocols, itp}
-    else
-      {behaviours, itb, protocols, itp}
+      false ->
+        {behaviours, itb, protocols, itp}
     end
   end
 
@@ -98,17 +95,13 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
   end
 
   defp index_protocol_def({behaviours, itb, protocols, itp}, file, ast) do
-    has_protocol =
-      AST.contains?(ast, fn
-        {:defprotocol, _, _} -> true
-        _ -> false
-      end)
+    case AST.contains?(ast, fn {:defprotocol, _, _} -> true; _ -> false end) do
+      true ->
+        name = AST.extract_module_name(ast)
+        {behaviours, itb, Map.put(protocols, name, %{file: file}), itp}
 
-    if has_protocol do
-      name = AST.extract_module_name(ast)
-      {behaviours, itb, Map.put(protocols, name, %{file: file}), itp}
-    else
-      {behaviours, itb, protocols, itp}
+      false ->
+        {behaviours, itb, protocols, itp}
     end
   end
 
@@ -150,18 +143,18 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
       {{:., _, [{:__aliases__, _, parts}, func]}, meta, _args} ->
         target = parts |> Enum.map_join(".", &Atom.to_string/1)
 
-        if MapSet.member?(protected, target) and
-             not legitimate?(caller, target, registry) do
-          seams =
-            Map.get(registry.impl_to_behaviour, target, []) ++
-              Map.get(registry.impl_to_protocol, target, [])
+        case {MapSet.member?(protected, target), legitimate?(caller, target, registry)} do
+          {true, false} ->
+            seams =
+              Map.get(registry.impl_to_behaviour, target, []) ++
+                Map.get(registry.impl_to_protocol, target, [])
 
-          seam = List.first(seams, "unknown")
-          is_behaviour = Map.has_key?(registry.impl_to_behaviour, target)
+            seam = List.first(seams, "unknown")
+            is_behaviour = Map.has_key?(registry.impl_to_behaviour, target)
+            [bypass_diagnostic(file, AST.line(meta), caller, target, func, seam, is_behaviour)]
 
-          [bypass_diagnostic(file, AST.line(meta), caller, target, func, seam, is_behaviour)]
-        else
-          []
+          _ ->
+            []
         end
 
       _ ->
