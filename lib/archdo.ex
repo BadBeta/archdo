@@ -316,12 +316,7 @@ defmodule Archdo do
         ])
       end)
 
-    avg_distance =
-      if length(metrics) > 0 do
-        Enum.sum(Enum.map(metrics, & &1.distance)) / length(metrics)
-      else
-        0.0
-      end
+    avg_distance = Enum.sum(Enum.map(metrics, & &1.distance)) / length(metrics)
 
     footer = [
       String.duplicate("-", 88),
