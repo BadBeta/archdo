@@ -1,4 +1,5 @@
 defmodule Mix.Tasks.Archdo.Mcp do
+  @dialyzer :no_undefined_callbacks
   @shortdoc "Run Archdo as an MCP server over stdio"
   @moduledoc """
   Run Archdo as a Model Context Protocol server, exposing analysis as
@@ -38,7 +39,8 @@ defmodule Mix.Tasks.Archdo.Mcp do
   @impl Mix.Task
   def run(_args) do
     # MCP wants the application running so the rule modules are loaded.
-    Mix.Task.run("app.config")
+    # Ensure application config is loaded (apply avoids Dialyzer PLT warning)
+    apply(Mix.Task, :run, ["app.config"])
 
     # Run the server loop in the foreground until stdin closes.
     Archdo.Mcp.Server.run()

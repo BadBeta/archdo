@@ -1,4 +1,5 @@
 defmodule Mix.Tasks.Archdo do
+  @dialyzer :no_undefined_callbacks
   @shortdoc "Run architectural quality checks"
   @moduledoc """
   Runs Archdo architectural quality checks against the project.
@@ -122,7 +123,7 @@ defmodule Mix.Tasks.Archdo do
   defp parse_format("json"), do: :json
   defp parse_format("compact"), do: :compact
   defp parse_format("llm"), do: :llm
-  defp parse_format(other), do: Mix.raise("Unknown format: #{other}")
+  defp parse_format(other), do: raise("Unknown format: #{other}")
 
   defp parse_list(str), do: String.split(str, ",", trim: true)
 

@@ -173,7 +173,6 @@ defmodule Archdo.Rules.Module.FatInterface do
   defp normalize_body([]), do: []
   defp normalize_body(_), do: :_other
 
-  defp empty_collection?(%{}), do: true
   defp empty_collection?([]), do: true
   defp empty_collection?(_), do: false
 

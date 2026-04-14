@@ -317,10 +317,10 @@ defmodule Archdo do
       end)
 
     avg_distance =
-      if metrics == [] do
-        0.0
-      else
+      if length(metrics) > 0 do
         Enum.sum(Enum.map(metrics, & &1.distance)) / length(metrics)
+      else
+        0.0
       end
 
     footer = [

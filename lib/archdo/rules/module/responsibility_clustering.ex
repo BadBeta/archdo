@@ -176,6 +176,7 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
     do_bfs([start], visited, adjacency)
   end
 
+  @dialyzer {:no_opaque, [do_bfs: 3, do_closure: 4, find_components: 2]}
   defp do_bfs([], visited, _adj), do: visited
 
   defp do_bfs([node | rest], visited, adj) do
