@@ -3,6 +3,8 @@ defmodule Archdo.Formatter do
 
   alias Archdo.{Diagnostic, Fix}
 
+  defguardp is_non_empty_string(s) when is_binary(s) and s != ""
+
   @doc """
   Format diagnostics to stdout. Returns exit status (0 = clean, 1 = warnings, 2 = errors).
   """
@@ -46,7 +48,7 @@ defmodule Archdo.Formatter do
         IO.puts("         #{d.message}")
         IO.puts("         in #{relative_path(d.file)}:#{d.line}")
 
-        if is_binary(d.why) and d.why != "" do
+        if is_non_empty_string(d.why) do
           d.why
           |> wrap(80)
           |> Enum.each(fn line -> IO.puts("         why: #{line}") end)
@@ -64,13 +66,13 @@ defmodule Archdo.Formatter do
             |> Enum.each(fn {%Fix{} = fix, idx} ->
               IO.puts("           #{idx}. #{fix.summary}")
 
-              if is_binary(fix.detail) and fix.detail != "" do
+              if is_non_empty_string(fix.detail) do
                 fix.detail
                 |> wrap(76)
                 |> Enum.each(fn line -> IO.puts("              #{line}") end)
               end
 
-              if is_binary(fix.applies_when) and fix.applies_when != "" do
+              if is_non_empty_string(fix.applies_when) do
                 IO.puts("              when: #{fix.applies_when}")
               end
             end)
@@ -177,7 +179,7 @@ defmodule Archdo.Formatter do
     |> Enum.join("\n\n")
   end
 
-  defp maybe_why(why) when is_binary(why) and why != "", do: "**Why it matters:** #{why}"
+  defp maybe_why(why) when is_non_empty_string(why), do: "**Why it matters:** #{why}"
   defp maybe_why(_), do: nil
 
   defp maybe_fixes([]), do: nil
@@ -189,11 +191,11 @@ defmodule Archdo.Formatter do
       |> Enum.map_join("\n\n", fn {%Fix{} = fix, idx} ->
         [
           "#{idx}. **#{fix.summary}**",
-          if(fix.detail not in [nil, ""], do: "\n   #{fix.detail}"),
-          if(is_binary(fix.applies_when) and fix.applies_when != "",
+          if(is_non_empty_string(fix.detail), do: "\n   #{fix.detail}"),
+          if(is_non_empty_string(fix.applies_when),
             do: "\n   _Use when: #{fix.applies_when}_"
           ),
-          if(is_binary(fix.example) and fix.example != "",
+          if(is_non_empty_string(fix.example),
             do: "\n\n#{indent(fix.example, "   ")}"
           )
         ]

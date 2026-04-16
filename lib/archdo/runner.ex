@@ -172,14 +172,7 @@ defmodule Archdo.Runner do
     else
       # Parse all files and build the graph
       file_asts =
-        files
-        |> Enum.map(fn file ->
-          case AST.parse_file(file) do
-            {:ok, ast} -> {file, ast}
-            {:error, _} -> nil
-          end
-        end)
-        |> Enum.reject(&is_nil/1)
+        for file <- files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
 
       graph = Graph.build(file_asts)
 

@@ -139,12 +139,7 @@ defmodule Archdo.Graph do
         # Track current module
         {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, {_mod, edges}
         when is_atom(hd(aliases)) ->
-          mod = safe_concat(aliases)
-          if mod do
-            {node, {mod, edges}}
-          else
-            {node, {nil, edges}}
-          end
+          {node, {safe_concat(aliases), edges}}
 
         # alias MyApp.Foo
         {:alias, meta, [{:__aliases__, _, aliases} | _]} = node, {mod, edges} when mod != nil ->

@@ -66,14 +66,7 @@ defmodule Archdo do
     source_files = collect_files(paths)
 
     file_asts =
-      source_files
-      |> Enum.map(fn file ->
-        case AST.parse_file(file) do
-          {:ok, ast} -> {file, ast}
-          {:error, _} -> nil
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
+      for file <- source_files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
 
     god_context_diagnostics = GodContext.analyze_project(source_files)
     mockability_diagnostics = Mockability.analyze_project(file_asts)
@@ -358,14 +351,7 @@ defmodule Archdo do
   end
 
   defp parse_many(files) do
-    files
-    |> Enum.map(fn file ->
-      case AST.parse_file(file) do
-        {:ok, ast} -> {file, ast}
-        {:error, _} -> nil
-      end
-    end)
-    |> Enum.reject(&is_nil/1)
+    for file <- files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
   end
 
   defp filter_diagnostics(diagnostics, opts) do

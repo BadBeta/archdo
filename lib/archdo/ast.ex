@@ -242,7 +242,7 @@ defmodule Archdo.AST do
     callbacks = extract_callbacks(ast)
 
     Enum.any?([:handle_call, :handle_cast, :handle_info], fn cb ->
-      callbacks[cb] != []
+      match?([_ | _], callbacks[cb])
     end)
   end
 end
