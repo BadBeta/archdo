@@ -8,7 +8,7 @@
 
 1. [What Archdo is and why](#1-what-archdo-is-and-why)
 2. [Installation](#2-installation)
-3. [The 111 rules at a glance](#3-the-111-rules-at-a-glance)
+3. [The 122 rules at a glance](#3-the-122-rules-at-a-glance)
 4. [The diagnostic shape](#4-the-diagnostic-shape)
 5. [Output formats](#5-output-formats)
 6. [CLI reference](#6-cli-reference)
@@ -63,7 +63,7 @@ mix deps.get
 mix archdo --help     # confirm install
 ```
 
-Archdo only needs `Jason` at runtime (for the JSON/LLM/MCP outputs). It does not start an OTP application, does not modify your supervision tree, and does not depend on Phoenix or Ecto — those are detected if present.
+Archdo needs `Jason` (JSON encoding) and `JSV` (JSON Schema validation for MCP tool inputs) at runtime. It does not start an OTP application, does not modify your supervision tree, and does not depend on Phoenix or Ecto — those are detected if present.
 
 ### Supported environments
 
@@ -74,19 +74,19 @@ Archdo only needs `Jason` at runtime (for the JSON/LLM/MCP outputs). It does not
 
 ---
 
-## 3. The 111 rules at a glance
+## 3. The 122 rules at a glance
 
-Archdo currently ships **111 rules in 11 categories**. Full text for every rule is in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md).
+Archdo currently ships **122 rules in 11 categories**. Full text for every rule is in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md).
 
 | #   | Category                         | Rules    | Severity mix          | What it catches                                                                  |
 |-----|----------------------------------|----------|-----------------------|----------------------------------------------------------------------------------|
-| 1   | Boundaries                       | 13       | error / warning / info | Dependency direction, context encapsulation, circular deps, Repo in interface, schema ownership, function-level boundary leaks, chatty boundaries, anemic contexts, untyped boundaries |
+| 1   | Boundaries                       | 19       | error / warning / info | Dependency direction, context encapsulation, circular deps, Repo in interface, schema ownership, function-level boundary leaks, chatty boundaries, anemic contexts, untyped boundaries, unvalidated params at controllers/LiveViews |
 | 2   | Public API                       | 3        | warning / info        | Missing `@moduledoc`, missing `@spec`, calls into `@moduledoc false` modules     |
 | 3   | Single Source of Truth           | 6        | warning / info        | Type-2 clones, scattered config, library config via `Application.get_env`, Type-3 similar code, reinvented enumerable, duplicated validation across layers |
-| 4   | Coupling & Abstraction           | 16       | warning / info        | Behaviour size, single-impl protocols, type-dispatching case, external deps without behaviour, broad imports, unused deps, god contexts, mockability score, feature envy, speculative generality, parallel hierarchies, primitive obsession, mixed concerns, natural seams, hand-rolled pubsub, adapters without behaviour |
-| 5   | OTP Process Architecture         | 33       | error / warning / info | Unsupervised processes, GenServer hygiene, blocking init/callbacks, supervision tree shape, restart strategies, Task discipline, ETS patterns, process-naming safety, bottlenecks, tracing safety, GenStage backpressure |
-| 6   | Module Quality                   | 8        | error / warning / info | Module cohesion, function complexity & arity, struct field count, file length, function fan-out, boolean flag args, pretentious names, distance from main sequence |
-| 7   | Test Architecture                | 14       | warning / info        | Test mirrors source, Repo in tests, mocks need behaviours, async eligibility, sleep in tests, test naming, no/trivial assertions, long setup/test bodies, Mox verification, coverage gap, mocking own modules, runtime DI, generic test names |
+| 4   | Coupling & Abstraction           | 21       | warning / info        | Behaviour size, single-impl protocols, type-dispatching case, external deps without behaviour, broad imports, unused deps, god contexts, mockability score, feature envy, speculative generality, parallel hierarchies, primitive obsession, mixed concerns, natural seams, hand-rolled pubsub, adapters without behaviour, unbounded external calls, missing telemetry, unprotected bang calls |
+| 5   | OTP Process Architecture         | 35       | error / warning / info | Unsupervised processes, GenServer hygiene, blocking init/callbacks, supervision tree shape, restart strategies, Task discipline, ETS patterns, process-naming safety, bottlenecks, tracing safety, GenStage backpressure |
+| 6   | Module Quality                   | 12       | error / warning / info | Module cohesion, function complexity & arity, struct field count, file length, function fan-out, boolean flag args, pretentious names, distance from main sequence, error handling consistency (rescue swallowing, raise in non-bang, inconsistent error shapes) |
+| 7   | Test Architecture                | 15       | warning / info        | Test mirrors source, Repo in tests, mocks need behaviours, async eligibility, sleep in tests, test naming, no/trivial assertions, long setup/test bodies, Mox verification, coverage gap, mocking own modules, runtime DI, generic test names |
 | 8   | Event Sourcing                   | 8        | error / warning / info | Command/event naming, **pure aggregate apply/2**, immutable events, shared projections, events need `Jason.Encoder`, projector reads external/non-deterministic, process manager reads projection, aggregates without Commanded behaviour |
 | 9   | State Machine                    | 3        | warning / info        | Unreachable states, terminal state integrity, implicit state via boolean flags |
 | 10  | Composition                      | 2        | info                  | Deep `use` chains, excessive namespace nesting                                  |
@@ -628,9 +628,10 @@ Archdo is a small, deterministic, single-process analyzer. There's no daemon, no
 | `Archdo.Config`             | `.archdo.exs` loading, layer/context classification.                         |
 | `Archdo.Freeze`             | Baseline fingerprinting + filter.                                           |
 | `Archdo.Formatter`          | The four output formats. Stateless, takes `[Diagnostic.t()]`.               |
-| `Archdo.Mcp.Server`         | The hand-rolled JSON-RPC stdio MCP server.                                  |
+| `Archdo.Mcp.Server`         | JSON-RPC 2.0 stdio MCP server with JSV input validation.                    |
+| `Archdo.Mcp.SchemaValidator` | Validates tool arguments against `input_schema/0` using JSV.               |
 | `Archdo.Mcp.Encoder`        | `Diagnostic` → JSON-friendly map (with MapSet/atom coercion).               |
-| `Archdo.Mcp.Tools.*`        | The four MCP tools (each with `name/0`, `description/0`, `input_schema/0`, `call/1`). |
+| `Archdo.Mcp.Tools.*`        | The five MCP tools (each with `name/0`, `description/0`, `input_schema/0`, `call/1`). |
 | `Mix.Tasks.Archdo`          | The `mix archdo` CLI.                                                       |
 | `Mix.Tasks.Archdo.Mcp`      | The `mix archdo.mcp` entry point (boots `Archdo.Mcp.Server`).               |
 

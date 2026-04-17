@@ -36,7 +36,10 @@ defmodule Archdo.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      links: %{}
+      links: %{
+        "GitHub" => "https://github.com/BadBeta/archdo",
+        "Elixir Skill" => "https://github.com/BadBeta/Elixir_skill"
+      }
     ]
   end
 end

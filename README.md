@@ -2,22 +2,28 @@
 
 Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, and boundary enforcement.
 
-**125+ rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+**122 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
 
 ## What it checks
 
-| Category | Examples |
-|----------|----------|
-| **SOLID principles** | SRP (function clustering), OCP (type dispatch), ISP (no-op stubs), DIP (dependency direction) |
-| **Seam integrity** | Calls bypassing behaviour/protocol seams, missing behaviours on adapters/NIFs |
-| **OTP discipline** | Blocking callbacks, unsupervised processes, GenServer anti-patterns |
-| **Resilience** | External calls without timeouts, bang functions on HTTP clients, missing telemetry |
-| **Boundaries** | Circular dependencies, context encapsulation, cross-context write coupling |
-| **Duplication** | Type-2/3 function clones, duplicated validation logic |
-| **Module quality** | Complexity, cohesion, fan-out, Martin package metrics (Ca/Ce/I/A/D) |
-| **Testing** | Mox without behaviours, coverage gaps, test naming, async eligibility |
-| **Event sourcing** | Aggregate purity, projection isolation, event immutability |
-| **NIF safety** | Panic-inducing patterns, scheduler misuse, missing behaviour wrapping |
+| Category | Rules | Examples |
+|----------|-------|----------|
+| **Boundaries** | 19 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params |
+| **Module quality** | 44 | Complexity, cohesion, fan-out, Martin metrics (Ca/Ce/I/A/D), error shape consistency |
+| **OTP discipline** | 35 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches |
+| **Testing** | 15 | Mox without behaviours, coverage gaps, test naming, async eligibility, unverified mocks |
+| **SOLID / Seams** | — | SRP (function clustering), OCP (type dispatch), ISP (no-op stubs), DIP (dependency direction) |
+| **Resilience** | — | External calls without timeouts, bang functions on HTTP clients, missing telemetry |
+| **Duplication** | — | Type-2/3 function clones, duplicated validation logic |
+| **Event sourcing** | 8 | Aggregate purity, projection isolation, event immutability, command/event naming |
+| **NIF safety** | 4 | Panic-inducing Rust patterns, scheduler misuse, missing behaviour wrapping |
+| **State machines** | 3 | Unreachable states, terminal state integrity, implicit boolean state |
+| **Composition** | 2 | Deep `use` chains, excessive namespace depth |
+
+## Dependencies
+
+- **Jason** — JSON encoding for MCP and output formats
+- **JSV** — JSON Schema validation at MCP boundary (tool input validation)
 
 ## Quick start
 
@@ -37,6 +43,8 @@ mix archdo --paths lib/my_app/accounts  # scan specific paths
 mix archdo --only 4.17,6.12             # run specific rules
 mix archdo --boundaries                 # cross-module dependency analysis
 mix archdo --functions                  # function-level graph analysis
+mix archdo --coverage                   # test coverage gap matrix
+mix archdo --metrics                    # Martin package metrics matrix
 ```
 
 ### Scan any project without installing
@@ -98,7 +106,7 @@ For projects that want Archdo available as an MCP tool:
 }
 ```
 
-This exposes 5 tools: `archdo_deep_review`, `archdo_analyze_paths`, `archdo_analyze_file`, `archdo_list_rules`, `archdo_explain_rule`.
+This exposes 5 tools: `archdo_deep_review`, `archdo_analyze_paths`, `archdo_analyze_file`, `archdo_list_rules`, `archdo_explain_rule`. Tool inputs are validated against their JSON Schema definitions using JSV.
 
 ## Output formats
 
@@ -123,7 +131,8 @@ mix archdo --freeze-stats    # track progress
 ## Documentation
 
 - **[GUIDE.md](GUIDE.md)** — comprehensive user guide
-- [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md) — all rules documented
+- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all rules documented
+- **[DESIGN.md](DESIGN.md)** — design philosophy and architecture
 
 ## License
 

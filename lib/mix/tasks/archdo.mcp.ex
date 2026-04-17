@@ -16,6 +16,10 @@ defmodule Mix.Tasks.Archdo.Mcp do
     * `archdo_analyze_file` — analyze an in-memory source string
     * `archdo_list_rules` — list all rules, optionally filtered by category
     * `archdo_explain_rule` — look up a rule's description by id
+    * `archdo_deep_review` — static analysis plus structured review plan for deeper investigation
+
+  Tool arguments are validated against their JSON Schema definitions using JSV
+  before execution. Invalid arguments return a clear error message.
 
   ## Configuring an MCP client
 
