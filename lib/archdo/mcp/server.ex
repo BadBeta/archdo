@@ -10,6 +10,7 @@ defmodule Archdo.Mcp.Server do
   #
   # Spec: https://modelcontextprotocol.io/specification
 
+  alias Archdo.Mcp.SchemaValidator
   alias Archdo.Mcp.Tools.{AnalyzeFile, AnalyzePaths, DeepReview, ExplainRule, ListRules}
 
   @protocol_version "2024-11-05"
@@ -160,7 +161,13 @@ defmodule Archdo.Mcp.Server do
   defp find_tool(name), do: Enum.find(@tools, fn tool -> tool.name() == name end)
 
   defp safe_call(tool, arguments) do
-    tool.call(arguments)
+    case SchemaValidator.validate(tool, arguments) do
+      {:ok, validated} ->
+        tool.call(validated)
+
+      {:error, message} ->
+        {:error, "Invalid arguments: #{message}"}
+    end
   rescue
     e ->
       log("tool #{tool.name()} crashed: #{inspect(e)}")
