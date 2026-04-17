@@ -157,14 +157,7 @@ defmodule Archdo.Formatter do
     }
   end
 
-  defp fix_to_map(%Fix{} = fix) do
-    %{
-      summary: fix.summary,
-      detail: fix.detail,
-      example: fix.example,
-      applies_when: fix.applies_when
-    }
-  end
+  defp fix_to_map(%Fix{} = fix), do: Fix.to_map(fix)
 
   defp render_markdown(%Diagnostic{} = d) do
     [
@@ -261,12 +254,7 @@ defmodule Archdo.Formatter do
   defp category_order("Native Interop"), do: 10
   defp category_order(_), do: 11
 
-  defp relative_path(path) do
-    case File.cwd() do
-      {:ok, cwd} -> Path.relative_to(path, cwd)
-      _ -> path
-    end
-  end
+  defp relative_path(path), do: Archdo.AST.relative_path(path)
 
   # Word-wrap a string at the given column count, returning a list of lines.
   defp wrap(text, width) when is_binary(text) and width > 0 do

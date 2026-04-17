@@ -56,7 +56,7 @@ defmodule Archdo.Rules.Module.FatInterface do
 
       # Check if this module defines a behaviour (has @callback)
       defs =
-        case AST.contains?(ast, fn {:@, _, [{:callback, _, _}]} -> true; _ -> false end) do
+        case AST.contains?(ast, &match?({:@, _, [{:callback, _, _}]}, &1)) do
           true -> Map.put(defs, module_name, %{file: file})
           false -> defs
         end

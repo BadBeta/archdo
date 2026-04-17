@@ -47,4 +47,10 @@ defmodule Archdo.Diagnostic do
   defp build(severity, rule_id, opts) do
     struct!(__MODULE__, [{:rule_id, rule_id}, {:severity, severity} | opts])
   end
+
+  @doc "Numeric sort key for severity: error=0, warning=1, info=2."
+  @spec severity_order(severity()) :: 0 | 1 | 2
+  def severity_order(:error), do: 0
+  def severity_order(:warning), do: 1
+  def severity_order(:info), do: 2
 end

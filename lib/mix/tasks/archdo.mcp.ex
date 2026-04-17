@@ -36,13 +36,14 @@ defmodule Mix.Tasks.Archdo.Mcp do
 
   use Mix.Task
 
+  alias Archdo.Mcp.Server
+
   @impl Mix.Task
   def run(_args) do
     # MCP wants the application running so the rule modules are loaded.
-    # Ensure application config is loaded (apply avoids Dialyzer PLT warning)
-    apply(Mix.Task, :run, ["app.config"])
+    Mix.Task.run("app.config")
 
     # Run the server loop in the foreground until stdin closes.
-    Archdo.Mcp.Server.run()
+    Server.run()
   end
 end

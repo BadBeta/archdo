@@ -195,7 +195,11 @@ defmodule Archdo.AST do
   def ast_size(nil), do: 0
   def ast_size({a, b, c}), do: 1 + ast_size(a) + ast_size(b) + ast_size(c)
   def ast_size({a, b}), do: 1 + ast_size(a) + ast_size(b)
-  def ast_size(list) when is_list(list), do: Enum.sum(Enum.map(list, &ast_size/1))
+  def ast_size(list) when is_list(list) do
+    list
+    |> Enum.map(&ast_size/1)
+    |> Enum.sum()
+  end
   def ast_size(_), do: 1
 
   @doc """
@@ -237,6 +241,33 @@ defmodule Archdo.AST do
   def module_name(mod) when is_binary(mod) do
     String.replace_leading(mod, "Elixir.", "")
   end
+
+  @doc """
+  Check if a module AST is a NIF module (uses Rustler, Zig, or has @on_load).
+  """
+  @spec nif_module?(Macro.t()) :: boolean()
+  def nif_module?(ast) do
+    contains?(ast, fn
+      {:use, _, [{:__aliases__, _, [:Rustler]} | _]} -> true
+      {:use, _, [{:__aliases__, _, [:Zig]} | _]} -> true
+      {:@, _, [{:on_load, _, _}]} -> true
+      {{:., _, [:erlang, :load_nif]}, _, _} -> true
+      _ -> false
+    end)
+  end
+
+  @doc """
+  Normalize a file path to be relative to the current working directory.
+  """
+  @spec relative_path(String.t()) :: String.t()
+  def relative_path(path) when is_binary(path) do
+    case File.cwd() do
+      {:ok, cwd} -> Path.relative_to(path, cwd)
+      _ -> path
+    end
+  end
+
+  def relative_path(path), do: to_string(path)
 
   defp defines_genserver_callbacks?(ast) do
     callbacks = extract_callbacks(ast)

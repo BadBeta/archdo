@@ -1,7 +1,7 @@
 defmodule Archdo.Runner do
   @moduledoc false
 
-  alias Archdo.{AST, Config, Graph}
+  alias Archdo.{AST, Config, Diagnostic, Graph}
 
   @phase1_rules [
     # OTP rules
@@ -212,10 +212,6 @@ defmodule Archdo.Runner do
   end
 
   defp sort_diagnostics(diagnostics) do
-    Enum.sort_by(diagnostics, fn d -> {severity_order(d.severity), d.file, d.line} end)
+    Enum.sort_by(diagnostics, fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end)
   end
-
-  defp severity_order(:error), do: 0
-  defp severity_order(:warning), do: 1
-  defp severity_order(:info), do: 2
 end

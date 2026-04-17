@@ -1,7 +1,7 @@
 defmodule Archdo.Rules.Module.ConfigRulesTest do
   use Archdo.RuleCase
 
-  alias Archdo.Rules.Module.{ScatteredConfig, LibConfigViaArgs}
+  alias Archdo.Rules.Module.{LibConfigViaArgs, ScatteredConfig}
 
   describe "3.2 ScatteredConfig" do
     test "flags System.get_env in module code" do

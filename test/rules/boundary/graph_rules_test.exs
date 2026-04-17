@@ -3,10 +3,10 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
 
   alias Archdo.{Config, Graph}
   alias Archdo.Rules.Boundary.{
+    CircularDependencies,
+    ContextEncapsulation,
     DependencyDirection,
     FrameworkInDomain,
-    ContextEncapsulation,
-    CircularDependencies,
     RepoInInterface
   }
 

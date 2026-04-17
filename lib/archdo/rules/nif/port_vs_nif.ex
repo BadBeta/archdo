@@ -12,8 +12,8 @@ defmodule Archdo.Rules.NIF.PortVsNif do
 
   @impl true
   def analyze(file, ast, _opts) do
-    cond do
-      nif_module?(ast) and does_io?(ast) ->
+    case {nif_module?(ast), does_io?(ast)} do
+      {true, true} ->
         module_name = AST.extract_module_name(ast)
 
         [
@@ -51,19 +51,12 @@ defmodule Archdo.Rules.NIF.PortVsNif do
           )
         ]
 
-      true ->
+      _ ->
         []
     end
   end
 
-  defp nif_module?(ast) do
-    AST.contains?(ast, fn
-      {:use, _, [{:__aliases__, _, [:Rustler]} | _]} -> true
-      {:use, _, [{:__aliases__, _, [:Zig]} | _]} -> true
-      {:@, _, [{:on_load, _, _}]} -> true
-      _ -> false
-    end)
-  end
+  defp nif_module?(ast), do: AST.nif_module?(ast)
 
   defp does_io?(ast) do
     # Heuristic: check for function names suggesting I/O

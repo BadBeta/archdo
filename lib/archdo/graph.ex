@@ -195,8 +195,7 @@ defmodule Archdo.Graph do
     end
   end
 
-  defp line(meta) when is_list(meta), do: Keyword.get(meta, :line, 0)
-  defp line(_), do: 0
+  defp line(meta), do: AST.line(meta)
 
   # --- Cycle detection ---
 

@@ -3,6 +3,7 @@ defmodule Archdo.Rules.EventSourcing.EventsNeedJasonEncoder do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Rules.EventSourcing.Helpers
 
   @impl true
   def id, do: "8.5"
@@ -107,5 +108,5 @@ defmodule Archdo.Rules.EventSourcing.EventsNeedJasonEncoder do
   end
 
   defp upcaster_module?(ast),
-    do: Archdo.Rules.EventSourcing.Helpers.upcaster_module?(ast)
+    do: Helpers.upcaster_module?(ast)
 end

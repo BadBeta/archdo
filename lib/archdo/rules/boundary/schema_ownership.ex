@@ -116,11 +116,16 @@ defmodule Archdo.Rules.Boundary.SchemaOwnership do
   end
 
   defp owning_context_of(schema_name) do
-    parts = String.split(schema_name, ".")
+    schema_name
+    |> String.split(".")
+    |> case do
+      [_root, _context | _rest] = parts ->
+        parts
+        |> Enum.take(2)
+        |> Enum.join(".")
 
-    cond do
-      length(parts) >= 3 -> parts |> Enum.take(2) |> Enum.join(".")
-      true -> schema_name
+      _ ->
+        schema_name
     end
   end
 

@@ -6,7 +6,7 @@ defmodule Archdo do
   the gap that Credo, Dialyzer, and Sobelow don't cover.
   """
 
-  alias Archdo.{AST, Config, Formatter, Freeze, FunctionGraph, Graph, Metrics, Runner}
+  alias Archdo.{AST, Config, Diagnostic, Formatter, Freeze, FunctionGraph, Graph, Metrics, Runner}
   alias Archdo.Rules.Module.MainSequenceDistance
   alias Archdo.Rules.Testing.{CoverageGap, TestMirrorsSource}
 
@@ -59,8 +59,29 @@ defmodule Archdo do
     project_diagnostics = run_project_arch_rules(paths, opts)
 
     (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics)
-    |> Enum.sort_by(fn d -> {severity_order(d.severity), d.file, d.line} end)
+    |> Enum.sort_by(fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end)
   end
+
+  # Project-level rules that take file_asts (most common pattern).
+  # New project rules only need to implement analyze_project/1.
+  @project_file_ast_rules [
+    Mockability,
+    DuplicatedCode,
+    SimilarCode,
+    SpeculativeGenerality,
+    ParallelHierarchies,
+    SchemaOwnership,
+    AdaptersWithoutBehaviour,
+    SeamIntegrity,
+    MissingTelemetry,
+    FatInterface
+  ]
+
+  # Project-level rules that take source file paths (directory-based analysis).
+  @project_file_path_rules [
+    GodContext,
+    AnemicContext
+  ]
 
   defp run_project_arch_rules(paths, opts) do
     source_files = collect_files(paths)
@@ -68,18 +89,12 @@ defmodule Archdo do
     file_asts =
       for file <- source_files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
 
-    god_context_diagnostics = GodContext.analyze_project(source_files)
-    mockability_diagnostics = Mockability.analyze_project(file_asts)
-    duplicated_code_diagnostics = DuplicatedCode.analyze_project(file_asts)
-    similar_code_diagnostics = SimilarCode.analyze_project(file_asts)
-    speculative_diagnostics = SpeculativeGenerality.analyze_project(file_asts)
-    parallel_diagnostics = ParallelHierarchies.analyze_project(file_asts)
-    schema_ownership_diagnostics = SchemaOwnership.analyze_project(file_asts)
-    anemic_context_diagnostics = AnemicContext.analyze_project(source_files)
-    adapters_diagnostics = AdaptersWithoutBehaviour.analyze_project(file_asts)
-    seam_diagnostics = SeamIntegrity.analyze_project(file_asts)
-    telemetry_diagnostics = MissingTelemetry.analyze_project(file_asts)
-    fat_interface_diagnostics = FatInterface.analyze_project(file_asts)
+    file_ast_diagnostics =
+      Enum.flat_map(@project_file_ast_rules, & &1.analyze_project(file_asts))
+
+    file_path_diagnostics =
+      Enum.flat_map(@project_file_path_rules, & &1.analyze_project(source_files))
+
     metrics_diagnostics = run_metrics_rules(file_asts)
 
     function_graph_diagnostics =
@@ -89,18 +104,8 @@ defmodule Archdo do
         []
       end
 
-    (god_context_diagnostics ++
-       mockability_diagnostics ++
-       duplicated_code_diagnostics ++
-       similar_code_diagnostics ++
-       speculative_diagnostics ++
-       parallel_diagnostics ++
-       schema_ownership_diagnostics ++
-       anemic_context_diagnostics ++
-       adapters_diagnostics ++
-       seam_diagnostics ++
-       telemetry_diagnostics ++
-       fat_interface_diagnostics ++
+    (file_ast_diagnostics ++
+       file_path_diagnostics ++
        metrics_diagnostics ++
        function_graph_diagnostics)
     |> filter_diagnostics(opts)
@@ -315,7 +320,11 @@ defmodule Archdo do
         ])
       end)
 
-    avg_distance = Enum.sum(Enum.map(metrics, & &1.distance)) / length(metrics)
+    total_distance =
+      metrics
+      |> Enum.map(& &1.distance)
+      |> Enum.sum()
+    avg_distance = total_distance / length(metrics)
 
     footer = [
       String.duplicate("-", 88),
@@ -388,7 +397,4 @@ defmodule Archdo do
     |> Enum.uniq()
   end
 
-  defp severity_order(:error), do: 0
-  defp severity_order(:warning), do: 1
-  defp severity_order(:info), do: 2
 end

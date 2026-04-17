@@ -1,7 +1,7 @@
 defmodule Archdo.Rules.CompositionTest do
   use Archdo.RuleCase
 
-  alias Archdo.Rules.Composition.{ShallowUse, NamespaceDepth}
+  alias Archdo.Rules.Composition.{NamespaceDepth, ShallowUse}
 
   describe "10.1 ShallowUse" do
     test "flags module with many non-standard use statements" do

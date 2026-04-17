@@ -52,19 +52,7 @@ defmodule Archdo.Rules.NIF.NifBehindBehaviour do
     end
   end
 
-  defp nif_module?(ast) do
-    AST.contains?(ast, fn
-      # use Rustler
-      {:use, _, [{:__aliases__, _, [:Rustler]} | _]} -> true
-      # use Zig (Zigler)
-      {:use, _, [{:__aliases__, _, [:Zig]} | _]} -> true
-      # @on_load :load_nif
-      {:@, _, [{:on_load, _, _}]} -> true
-      # :erlang.load_nif
-      {{:., _, [:erlang, :load_nif]}, _, _} -> true
-      _ -> false
-    end)
-  end
+  defp nif_module?(ast), do: AST.nif_module?(ast)
 
   defp implements_behaviour?(ast), do: AST.implements_behaviour?(ast)
 

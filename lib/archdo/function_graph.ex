@@ -136,7 +136,7 @@ defmodule Archdo.FunctionGraph do
     # state. Macro.prewalk can't easily express "this AST node is inside a def"
     # because the def's body is walked after the def header. Instead we do
     # explicit recursion.
-    state = %{module: nil, function: nil, arity: nil, defs: %{}, calls: [], file: file}
+    state = %{module: nil, function: nil, arity: nil, in_spec: false, defs: %{}, calls: [], file: file}
     state = walk(ast, state)
     {state.defs, state.calls}
   end
@@ -173,10 +173,18 @@ defmodule Archdo.FunctionGraph do
     %{new_state | function: state.function, arity: state.arity}
   end
 
-  # Remote function call: Module.fn(args)
+  # @spec, @type, @callback, @typep, @opaque — skip type references (not real calls)
+  defp walk({:@, _, [{attr, _, _} | _]} = node, state)
+       when attr in [:spec, :type, :typep, :opaque, :callback, :macrocallback] do
+    # Walk children with in_spec flag so remote references aren't recorded as calls
+    walk_children(node, %{state | in_spec: true})
+    |> then(fn s -> %{s | in_spec: state.in_spec} end)
+  end
+
+  # Remote function call: Module.fn(args) — skip if inside @spec/@type
   defp walk(
          {{:., _, [{:__aliases__, _, aliases}, target_fn]}, meta, args} = _node,
-         %{module: mod} = state
+         %{module: mod, in_spec: false} = state
        )
        when is_atom(target_fn) and mod != nil do
     target_mod = aliases |> Module.concat() |> normalize_module()
@@ -215,6 +223,12 @@ defmodule Archdo.FunctionGraph do
   end
 
   defp walk(_, state), do: state
+
+  # Walk children of an AST node without matching specific node types
+  defp walk_children({_, _, args}, state) when is_list(args), do: walk(args, state)
+  defp walk_children({a, b}, state), do: state |> walk(a) |> walk(b)
+  defp walk_children(list, state) when is_list(list), do: Enum.reduce(list, state, &walk(&1, &2))
+  defp walk_children(_, state), do: state
 
   # Body keyword list may be wrapped by literal_encoder.
   # Plain form: [do: body]
@@ -258,8 +272,7 @@ defmodule Archdo.FunctionGraph do
   defp arg_count(args) when is_list(args), do: length(args)
   defp arg_count(_), do: 0
 
-  defp line(meta) when is_list(meta), do: AST.line(meta)
-  defp line(_), do: 0
+  defp line(meta), do: AST.line(meta)
 
   defp normalize_module(mod) when is_atom(mod), do: AST.module_name(mod)
 

@@ -3,6 +3,7 @@ defmodule Archdo.Rules.EventSourcing.PureAggregateApply do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Rules.EventSourcing.Helpers
 
   @impl true
   def id, do: "8.2"
@@ -134,5 +135,5 @@ defmodule Archdo.Rules.EventSourcing.PureAggregateApply do
   end
 
   defp has_execute_and_apply?(ast),
-    do: Archdo.Rules.EventSourcing.Helpers.aggregate_shape?(ast)
+    do: Helpers.aggregate_shape?(ast)
 end

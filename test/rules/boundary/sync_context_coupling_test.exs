@@ -1,7 +1,7 @@
 defmodule Archdo.Rules.Boundary.SyncContextCouplingTest do
   use ExUnit.Case, async: true
 
-  alias Archdo.{FunctionGraph}
+  alias Archdo.FunctionGraph
   alias Archdo.Rules.Boundary.SyncContextCoupling
 
   defp build_graph(file_code_pairs) do

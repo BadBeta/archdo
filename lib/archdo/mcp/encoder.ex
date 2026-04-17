@@ -36,14 +36,7 @@ defmodule Archdo.Mcp.Encoder do
     }
   end
 
-  defp fix_to_map(%Fix{} = fix) do
-    %{
-      summary: fix.summary,
-      detail: fix.detail,
-      example: fix.example,
-      applies_when: fix.applies_when
-    }
-  end
+  defp fix_to_map(%Fix{} = fix), do: Fix.to_map(fix)
 
   defp summary(diagnostics) do
     {errors, warnings, infos} =

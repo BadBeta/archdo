@@ -10,7 +10,7 @@ defmodule Archdo.Mcp.Server do
   #
   # Spec: https://modelcontextprotocol.io/specification
 
-  alias Archdo.Mcp.Tools.{AnalyzePaths, AnalyzeFile, ListRules, ExplainRule, DeepReview}
+  alias Archdo.Mcp.Tools.{AnalyzeFile, AnalyzePaths, DeepReview, ExplainRule, ListRules}
 
   @protocol_version "2024-11-05"
   @server_name "archdo"

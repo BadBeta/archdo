@@ -1,7 +1,7 @@
 defmodule Archdo.Rules.EventSourcing.EventSourcingTest do
   use Archdo.RuleCase
 
-  alias Archdo.Rules.EventSourcing.{CommandEventNaming, PureAggregateApply, ImmutableEvents}
+  alias Archdo.Rules.EventSourcing.{CommandEventNaming, ImmutableEvents, PureAggregateApply}
 
   describe "8.1 CommandEventNaming" do
     test "flags command not in imperative form" do

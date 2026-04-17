@@ -110,13 +110,5 @@ defmodule Archdo.Rules.NIF.NifSchedulerSafety do
     _ -> ""
   end
 
-  defp nif_module?(ast) do
-    AST.contains?(ast, fn
-      {:use, _, [{:__aliases__, _, [:Rustler]} | _]} -> true
-      {:use, _, [{:__aliases__, _, [:Zig]} | _]} -> true
-      {:@, _, [{:on_load, _, _}]} -> true
-      _ -> false
-    end)
-  end
-
+  defp nif_module?(ast), do: AST.nif_module?(ast)
 end

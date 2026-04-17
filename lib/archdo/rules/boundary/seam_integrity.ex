@@ -58,7 +58,9 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
   end
 
   defp index_behaviour_def({behaviours, itb, protocols, itp}, file, ast) do
-    case AST.contains?(ast, fn {:@, _, [{:callback, _, _}]} -> true; _ -> false end) do
+    has_callback? = AST.contains?(ast, &match?({:@, _, [{:callback, _, _}]}, &1))
+
+    case has_callback? do
       true ->
         name = AST.extract_module_name(ast)
         {Map.put(behaviours, name, %{file: file}), itb, protocols, itp}
@@ -95,7 +97,9 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
   end
 
   defp index_protocol_def({behaviours, itb, protocols, itp}, file, ast) do
-    case AST.contains?(ast, fn {:defprotocol, _, _} -> true; _ -> false end) do
+    has_protocol? = AST.contains?(ast, &match?({:defprotocol, _, _}, &1))
+
+    case has_protocol? do
       true ->
         name = AST.extract_module_name(ast)
         {behaviours, itb, Map.put(protocols, name, %{file: file}), itp}

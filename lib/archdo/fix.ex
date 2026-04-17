@@ -12,4 +12,15 @@ defmodule Archdo.Fix do
   defstruct [:summary, :detail, :example, :applies_when]
 
   def new(attrs), do: struct!(__MODULE__, attrs)
+
+  @doc "Convert a Fix struct to a plain map for JSON serialization."
+  @spec to_map(t()) :: map()
+  def to_map(%__MODULE__{} = fix) do
+    %{
+      summary: fix.summary,
+      detail: fix.detail,
+      example: fix.example,
+      applies_when: fix.applies_when
+    }
+  end
 end

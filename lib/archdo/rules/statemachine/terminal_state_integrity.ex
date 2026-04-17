@@ -78,11 +78,7 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
     Enum.any?(targets, &(&1 != state))
   end
 
-  defp collect_all_states(transitions) do
-    sources = Map.keys(transitions) |> MapSet.new()
-    targets = transitions |> Map.values() |> List.flatten() |> MapSet.new()
-    MapSet.union(sources, targets)
-  end
+  defp collect_all_states(transitions), do: Archdo.Rules.StateMachine.Helpers.collect_all_states(transitions)
 
   # Reuse the same transition map detection logic from StateReachability
   defp find_fsmx_transitions(ast) do
@@ -114,18 +110,5 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
     end) and length(pairs) >= 2
   end
 
-  defp pairs_to_transition_map(pairs) do
-    Map.new(pairs, fn
-      {{:__block__, _, [key]}, targets} -> {key, extract_string_list(targets)}
-      {key, targets} -> {key, extract_string_list(targets)}
-    end)
-  end
-
-  defp extract_string_list(list) when is_list(list) do
-    Enum.map(list, fn
-      {:__block__, _, [v]} when is_binary(v) -> v
-      v when is_binary(v) -> v
-      _ -> "?"
-    end)
-  end
+  defp pairs_to_transition_map(pairs), do: Archdo.Rules.StateMachine.Helpers.pairs_to_transition_map(pairs)
 end

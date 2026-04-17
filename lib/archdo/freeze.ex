@@ -157,15 +157,7 @@ defmodule Archdo.Freeze do
     |> String.downcase()
   end
 
-  # Normalize a file path so it's stable across absolute/relative forms.
-  defp normalize_file(file) when is_binary(file) do
-    case File.cwd() do
-      {:ok, cwd} -> Path.relative_to(file, cwd)
-      _ -> file
-    end
-  end
-
-  defp normalize_file(file), do: to_string(file)
+  defp normalize_file(file), do: Archdo.AST.relative_path(file)
 
   defp format_timestamp do
     {{y, mo, d}, {h, mi, _s}} = :calendar.local_time()

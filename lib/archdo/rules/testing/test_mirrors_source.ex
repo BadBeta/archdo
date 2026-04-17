@@ -83,10 +83,5 @@ defmodule Archdo.Rules.Testing.TestMirrorsSource do
       String.ends_with?(file, "/mailer.ex")
   end
 
-  defp relative(path) do
-    case File.cwd() do
-      {:ok, cwd} -> Path.relative_to(path, cwd)
-      _ -> path
-    end
-  end
+  defp relative(path), do: Archdo.AST.relative_path(path)
 end

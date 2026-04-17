@@ -1,7 +1,7 @@
 defmodule Archdo.Rules.OTP.MoreOTPTest do
   use Archdo.RuleCase
 
-  alias Archdo.Rules.OTP.{SyncCallChains, UnboundedState, SingletonBottleneck, LargeMessages}
+  alias Archdo.Rules.OTP.{LargeMessages, SingletonBottleneck, SyncCallChains, UnboundedState}
 
   describe "5.18 SyncCallChains" do
     test "flags GenServer.call inside handle_call" do
