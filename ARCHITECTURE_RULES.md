@@ -1425,9 +1425,9 @@ Choose Port when safety matters more than NIF latency. Ports run in a separate O
 
 | Severity | Meaning | CLI exit code |
 |----------|---------|---------------|
-| `:error` | Almost always a bug. Should block PRs. | 2 |
-| `:warning` | Almost always wrong, may have legitimate exceptions. Should block PRs by default. | 1 |
-| `:info` | Architectural smell, often a judgment call. For human review. | 0 |
+| `:error` | Almost always a bug. | 2 |
+| `:warning` | Almost always wrong, may have legitimate exceptions. | 1 |
+| `:info` | Architectural smell, often a judgment call. | 0 |
 
 ## What These Rules Do NOT Enforce
 
