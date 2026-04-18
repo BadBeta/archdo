@@ -1,6 +1,6 @@
 # Archdo — Architectural Quality Rules for Elixir
 
-> 143 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, and **test quality** — the gap none of them cover.
+> 144 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, and **test quality** — the gap none of them cover.
 
 ## Design Philosophy
 
@@ -457,7 +457,7 @@ Choose Port when safety matters more than NIF latency. Ports run in a separate O
 | State Machine | 3 | 9.1–9.3 |
 | Composition | 2 | 10.1–10.2 |
 | Native Interop | 4 | 11.1–11.4 |
-| **Total** | **143** | |
+| **Total** | **144** | |
 
 ## Severity Levels
 

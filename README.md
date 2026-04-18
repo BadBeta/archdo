@@ -2,7 +2,7 @@
 
 Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, and boundary enforcement.
 
-**143 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+**144 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
 
 ## What it checks
 
