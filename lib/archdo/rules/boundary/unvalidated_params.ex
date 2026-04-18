@@ -174,7 +174,10 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
   end
 
   defp validation_module?(mod_parts) when is_list(mod_parts) do
-    last = mod_parts |> List.last() |> Atom.to_string()
+    last =
+      mod_parts
+      |> List.last()
+      |> Atom.to_string()
 
     Enum.any?(@validation_modules, fn prefix ->
       String.contains?(last, prefix)

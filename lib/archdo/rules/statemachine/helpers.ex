@@ -18,7 +18,10 @@ defmodule Archdo.Rules.StateMachine.Helpers do
   """
   @spec collect_all_states(%{String.t() => [String.t()]}) :: MapSet.t(String.t())
   def collect_all_states(transitions) do
-    sources = transitions |> Map.keys() |> MapSet.new()
+    sources =
+      transitions
+      |> Map.keys()
+      |> MapSet.new()
 
     targets =
       transitions

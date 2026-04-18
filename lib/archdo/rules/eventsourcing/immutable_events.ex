@@ -80,7 +80,10 @@ defmodule Archdo.Rules.EventSourcing.ImmutableEvents do
   defp uses_event_macro?(ast) do
     AST.contains?(ast, fn
       {:use, _, [{:__aliases__, _, aliases} | _]} ->
-        last = aliases |> List.last() |> Atom.to_string()
+        last =
+          aliases
+          |> List.last()
+          |> Atom.to_string()
         last == "Event" or String.ends_with?(last, "Event")
       _ -> false
     end)

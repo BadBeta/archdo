@@ -268,7 +268,10 @@ defmodule Archdo.Formatter do
       end
     end)
     |> then(fn {lines, current} ->
-      if current == "", do: Enum.reverse(lines), else: Enum.reverse([current | lines])
+      case current do
+        "" -> Enum.reverse(lines)
+        _ -> Enum.reverse([current | lines])
+      end
     end)
   end
 

@@ -116,7 +116,11 @@ defmodule Archdo.Rules.Boundary.Mockability do
     if total_files == 0 do
       []
     else
-      ratio = if direct_count == 0, do: :infinity, else: behaviour_count / direct_count
+      ratio =
+        case direct_count do
+          0 -> :infinity
+          n -> behaviour_count / n
+        end
 
       severity =
         cond do
@@ -187,7 +191,7 @@ defmodule Archdo.Rules.Boundary.Mockability do
           context: %{
             direct_io_count: direct_count,
             behaviour_count: behaviour_count,
-            ratio: if(ratio == :infinity, do: nil, else: ratio)
+            ratio: (case ratio do :infinity -> nil; r -> r end)
           },
           file: "project",
           line: 0

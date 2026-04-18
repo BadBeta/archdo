@@ -88,7 +88,11 @@ defmodule Archdo.Config do
     Enum.find_value([:interface, :domain, :infrastructure], :unknown, fn layer ->
       case Map.get(layers, layer) do
         nil -> false
-        regex -> if Regex.match?(regex, module_name), do: layer, else: false
+        regex ->
+          case Regex.match?(regex, module_name) do
+            true -> layer
+            false -> false
+          end
       end
     end)
   end
@@ -143,11 +147,17 @@ defmodule Archdo.Config do
       ctx_str = Archdo.AST.module_name(ctx)
       module_name == ctx_str or String.starts_with?(module_name, ctx_str <> ".")
     end)
-    |> Enum.max_by(fn ctx -> ctx |> to_string() |> String.length() end, fn -> nil end)
+    |> Enum.max_by(&context_name_length/1, fn -> nil end)
     |> case do
       nil -> nil
       ctx -> Archdo.AST.module_name(ctx)
     end
+  end
+
+  defp context_name_length(ctx) do
+    ctx
+    |> to_string()
+    |> String.length()
   end
 
   # --- Private ---
@@ -241,8 +251,10 @@ defmodule Archdo.Config do
         |> String.trim_trailing(".ex")
         |> Macro.camelize()
         |> then(fn name ->
-          # Module.concat accepts strings — no atom creation needed
-          if app != "", do: Module.concat([app, name]), else: Module.concat([name])
+          case app do
+            "" -> Module.concat([name])
+            _ -> Module.concat([app, name])
+          end
         end)
       end)
     else

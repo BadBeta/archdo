@@ -44,7 +44,9 @@ defmodule Archdo.Pattern do
   """
   @spec normalize(module() | String.t()) :: String.t()
   def normalize(mod) when is_atom(mod) do
-    mod |> Atom.to_string() |> normalize()
+    mod
+    |> Atom.to_string()
+    |> normalize()
   end
 
   def normalize(mod) when is_binary(mod) do

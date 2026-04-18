@@ -229,7 +229,10 @@ defmodule Archdo.AST do
       |> String.split(".")
       |> hd()
 
-    target_root = target_parts |> hd() |> to_string()
+    target_root =
+      target_parts
+      |> hd()
+      |> to_string()
     caller_root == target_root
   end
 
@@ -238,7 +241,9 @@ defmodule Archdo.AST do
   """
   @spec module_name(atom() | String.t()) :: String.t()
   def module_name(mod) when is_atom(mod) do
-    mod |> Atom.to_string() |> String.replace_leading("Elixir.", "")
+    mod
+    |> Atom.to_string()
+    |> String.replace_leading("Elixir.", "")
   end
 
   def module_name(mod) when is_binary(mod) do

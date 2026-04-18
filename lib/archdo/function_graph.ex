@@ -232,7 +232,11 @@ defmodule Archdo.FunctionGraph do
 
   # Walk children of an AST node without matching specific node types
   defp walk_children({_, _, args}, state) when is_list(args), do: walk(args, state)
-  defp walk_children({a, b}, state), do: state |> walk(a) |> walk(b)
+  defp walk_children({a, b}, state) do
+    state
+    |> walk(a)
+    |> walk(b)
+  end
   defp walk_children(list, state) when is_list(list), do: Enum.reduce(list, state, &walk(&1, &2))
   defp walk_children(_, state), do: state
 

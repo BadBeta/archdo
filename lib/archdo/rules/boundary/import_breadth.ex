@@ -93,7 +93,10 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
           {node, acc}
       end)
 
-    alias_count = aliases |> Enum.uniq() |> length()
+    alias_count =
+      aliases
+      |> Enum.uniq()
+      |> length()
 
     if alias_count > 10 do
       module_name = extract_module_name(ast)

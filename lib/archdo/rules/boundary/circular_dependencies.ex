@@ -34,8 +34,11 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
               (e.target == second or String.starts_with?(e.target, second <> "."))
           end)
 
-        file = if edge, do: edge.file, else: "unknown"
-        line = if edge, do: edge.line, else: 0
+        {file, line} =
+          case edge do
+            nil -> {"unknown", 0}
+            edge -> {edge.file, edge.line}
+          end
 
         Diagnostic.error("1.3",
           title: "Circular dependency between contexts",

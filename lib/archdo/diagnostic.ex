@@ -48,6 +48,12 @@ defmodule Archdo.Diagnostic do
     struct!(__MODULE__, [{:rule_id, rule_id}, {:severity, severity} | opts])
   end
 
+  @doc "Returns the constructor function for a given severity."
+  @spec builder_for(severity()) :: (String.t(), keyword() -> t())
+  def builder_for(:error), do: &error/2
+  def builder_for(:warning), do: &warning/2
+  def builder_for(:info), do: &info/2
+
   @doc "Numeric sort key for severity: error=0, warning=1, info=2."
   @spec severity_order(severity()) :: 0 | 1 | 2
   def severity_order(:error), do: 0

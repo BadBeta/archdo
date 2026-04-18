@@ -74,7 +74,11 @@ defmodule Archdo.Rules.Boundary.ContextEncapsulation do
 
   defp internal_module?(target, context) do
     ctx_str = normalize(context)
-    target_str = if is_binary(target), do: target, else: normalize(target)
+    target_str =
+      case target do
+        t when is_binary(t) -> t
+        t -> normalize(t)
+      end
 
     # The target is under the context namespace but is NOT the context itself
     target_str != ctx_str and String.starts_with?(target_str, ctx_str <> ".")

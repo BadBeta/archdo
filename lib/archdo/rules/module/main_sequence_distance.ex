@@ -42,7 +42,7 @@ defmodule Archdo.Rules.Module.MainSequenceDistance do
   end
 
   defp build_distance_diag(m, zone, severity, file) do
-    builder = if severity == :warning, do: &Diagnostic.warning/2, else: &Diagnostic.info/2
+    builder = Diagnostic.builder_for(severity)
 
     builder.("6.8",
       title: "Far from main sequence — #{zone}",

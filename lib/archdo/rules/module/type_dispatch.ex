@@ -118,7 +118,10 @@ defmodule Archdo.Rules.Module.TypeDispatch do
             message:
               "#{name}/#{arity} has #{length(distinct)} clauses dispatching on atom types: " <>
                 "#{Enum.map_join(Enum.take(distinct, 5), ", ", &inspect/1)}" <>
-                if(match?([_, _, _, _, _, _ | _], distinct), do: ", ...", else: ""),
+                (case match?([_, _, _, _, _, _ | _], distinct) do
+                   true -> ", ..."
+                   false -> ""
+                 end),
             why:
               "When a function has many clauses each matching a different atom as the first argument, " <>
                 "adding a new type requires editing this module. This violates Open/Closed — the module " <>

@@ -91,22 +91,25 @@ defmodule Archdo.Rules.OTP.CastForCall do
           false
       end)
 
-    if repo_calls != [], do: ["Repo operations"], else: []
+    case repo_calls do
+      [_ | _] -> ["Repo operations"]
+      [] -> []
+    end
   end
 
   defp check_message_name(args) do
-    case args do
-      [{:{}, _, [name | _]} | _] when is_atom(name) ->
-        if name in @result_suggesting_names, do: [":#{name} message"], else: []
+    name = extract_message_name(args)
 
-      [{name, _, _} | _] when is_atom(name) ->
-        if name in @result_suggesting_names, do: [":#{name} message"], else: []
-
-      [{:__block__, _, [name]} | _] when is_atom(name) ->
-        if name in @result_suggesting_names, do: [":#{name} message"], else: []
-
-      _ ->
-        []
+    case name do
+      nil -> []
+      name when name in @result_suggesting_names -> [":#{name} message"]
+      _ -> []
     end
   end
+
+  defp extract_message_name([{:{}, _, [name | _]} | _]) when is_atom(name), do: name
+  defp extract_message_name([{name, _, _} | _]) when is_atom(name), do: name
+  defp extract_message_name([{:__block__, _, [name]} | _]) when is_atom(name), do: name
+  defp extract_message_name(_), do: nil
+
 end

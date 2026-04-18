@@ -19,7 +19,10 @@ defmodule Archdo.Mcp.ReviewHints do
   """
   def generate(diagnostics, opts \\ []) do
     project_hints = project_level_hints(diagnostics, opts)
-    finding_hints = diagnostics |> Enum.flat_map(&hints_for_finding/1) |> deduplicate()
+    finding_hints =
+      diagnostics
+      |> Enum.flat_map(&hints_for_finding/1)
+      |> deduplicate()
 
     (project_hints ++ finding_hints)
     |> Enum.sort_by(& &1.priority)

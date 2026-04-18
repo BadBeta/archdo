@@ -55,7 +55,7 @@ defmodule Archdo.Rules.Module.StructFieldCount do
   end
 
   defp field_count_diag(file, line, module_name, count, severity) do
-    builder = if severity == :error, do: &Diagnostic.error/2, else: &Diagnostic.warning/2
+    builder = Diagnostic.builder_for(severity)
 
     builder.("6.3",
       title: "Struct with too many fields",

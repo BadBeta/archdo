@@ -82,7 +82,7 @@ defmodule Archdo.Rules.Module.ModuleCohesion do
   end
 
   defp cohesion_diag(severity, file, module_name, total_count, suffix, line, effective_count) do
-    builder = if severity == :error, do: &Diagnostic.error/2, else: &Diagnostic.warning/2
+    builder = Diagnostic.builder_for(severity)
 
     builder.("6.1",
       title: "Module with too many public functions",

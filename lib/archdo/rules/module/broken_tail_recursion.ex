@@ -42,8 +42,9 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
     else
       breakers =
         clauses
-        |> Enum.flat_map(fn {_, _, _, _, body} ->
-          if body == nil, do: [], else: find_tco_breakers(body, name, arity)
+        |> Enum.flat_map(fn
+          {_, _, _, _, nil} -> []
+          {_, _, _, _, body} -> find_tco_breakers(body, name, arity)
         end)
 
       case breakers do

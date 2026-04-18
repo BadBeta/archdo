@@ -61,7 +61,11 @@ defmodule Archdo.Mcp.Encoder do
   defp encodable(value) when is_atom(value) and value not in [nil, true, false],
     do: Atom.to_string(value)
 
-  defp encodable(%MapSet{} = set), do: set |> MapSet.to_list() |> Enum.map(&encodable/1)
+  defp encodable(%MapSet{} = set) do
+    set
+    |> MapSet.to_list()
+    |> Enum.map(&encodable/1)
+  end
   defp encodable(list) when is_list(list), do: Enum.map(list, &encodable/1)
 
   defp encodable(map) when is_map(map) and not is_struct(map),

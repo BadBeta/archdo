@@ -50,7 +50,11 @@ defmodule Archdo.Metrics do
       ca = afferent_coupling(graph, mod)
       ce = efferent_coupling(graph, mod)
       instability = compute_instability(ca, ce)
-      abstractness = if MapSet.member?(abstract_modules, mod), do: 1.0, else: 0.0
+      abstractness =
+        case MapSet.member?(abstract_modules, mod) do
+          true -> 1.0
+          false -> 0.0
+        end
       distance = abs(abstractness + instability - 1.0)
 
       %{
@@ -122,7 +126,10 @@ defmodule Archdo.Metrics do
   # Heuristic: anything in a top-level stdlib-ish namespace is excluded
   # from metrics so we only measure the project's own modules.
   defp stdlib?(name) when is_binary(name) do
-    top = name |> String.split(".") |> hd()
+    top =
+      name
+      |> String.split(".")
+      |> hd()
 
     top in ~w(
       Enum List Map MapSet Keyword Process Kernel IO File Path String Integer Float
