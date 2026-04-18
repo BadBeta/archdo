@@ -10,8 +10,21 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
   @impl true
   def description, do: "Non-bang functions should return ok/error tuples, not raise"
 
-  # Functions where raising is idiomatic (setup, validation, compile-time)
+  # Functions where raising is idiomatic (setup, validation, compile-time, framework callbacks)
   @raise_ok_contexts ~w(validate! assert! ensure! check! start! stop! init)a
+
+  # Framework callbacks where raising is "let it crash" by convention
+  @framework_callbacks ~w(
+    handle_init handle_setup handle_playing handle_terminate
+    handle_pad_added handle_pad_removed handle_child_notification
+    handle_parent_notification handle_element_start_of_stream
+    handle_element_end_of_stream handle_tick handle_stream_format
+    handle_event handle_buffer handle_process handle_demand
+    handle_info handle_call handle_cast handle_continue
+    handle_set_up_tracks handle_input_tracks_negotiated
+    handle_output_tracks_negotiated
+    terminate code_change format_status callback_mode
+  )a
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -27,7 +40,8 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
 
     fns
     |> Enum.reject(fn {name, _arity, _meta, _args, _body} ->
-      not is_atom(name) or bang_function?(name) or name in @raise_ok_contexts
+      not is_atom(name) or bang_function?(name) or name in @raise_ok_contexts or
+        name in @framework_callbacks
     end)
     |> Enum.filter(fn {_name, _arity, _meta, _args, body} ->
       body != nil and contains_raise?(body) and not has_rescue?(body)

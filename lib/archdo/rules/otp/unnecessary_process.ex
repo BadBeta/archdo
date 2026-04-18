@@ -14,7 +14,8 @@ defmodule Archdo.Rules.OTP.UnnecessaryProcess do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if AST.genserver_module?(ast) and not liveview_module?(ast) and not supervisor_module?(ast) do
+    if AST.genserver_module?(ast) and not liveview_module?(ast) and
+         not supervisor_module?(ast) and not framework_process?(ast) do
       check_for_unnecessary_genserver(file, ast)
     else
       []
@@ -167,10 +168,35 @@ defmodule Archdo.Rules.OTP.UnnecessaryProcess do
   defp supervisor_module?(ast) do
     AST.contains?(ast, fn
       {:use, _, [{:__aliases__, _, aliases} | _]} ->
-        mod = Module.concat(aliases)
-        mod in [Supervisor, DynamicSupervisor]
-      _ -> false
+        case AST.safe_concat(aliases) do
+          nil -> false
+          mod -> mod in [Supervisor, DynamicSupervisor]
+        end
+
+      _ ->
+        false
     end)
   end
 
+  # Modules that MUST be processes by framework design
+  defp framework_process?(ast) do
+    AST.contains?(ast, fn
+      {:use, _, [{:__aliases__, _, aliases} | _]} ->
+        last = List.last(aliases)
+
+        last in [
+          # Membrane Framework
+          :Bin, :Source, :Sink, :Filter, :Endpoint,
+          # Broadway
+          :Broadway,
+          # GenStage
+          :GenStage,
+          # Phoenix
+          :Channel, :Socket
+        ]
+
+      _ ->
+        false
+    end)
+  end
 end

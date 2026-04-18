@@ -20,6 +20,7 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
   def analyze(file, ast, _opts) do
     cond do
       AST.test_file?(file) -> []
+      fallback_controller?(file) -> []
       controller_file?(file) -> check_controller(file, ast)
       live_view_file?(file) -> check_live_view(file, ast)
       true -> []
@@ -115,35 +116,49 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
     )
   end
 
-  # Check if a function argument list includes a params-like variable
+  # Check if a function argument list includes a raw params variable (not destructured)
   defp has_params_arg?(args) when is_list(args) do
-    Enum.any?(args, fn
-      # Pattern: def action(conn, params)
+    # Get the second argument (first is conn/socket)
+    case Enum.at(args, 1) do
+      # Raw variable: def action(conn, params) — no destructuring
       {name, _, nil} when is_atom(name) ->
         name_str = Atom.to_string(name)
-        name_str in ~w(params attrs parameters body payload input) or
-          String.starts_with?(name_str, "_")  |> Kernel.not()
 
-      # Pattern: def action(conn, %{"key" => _})
-      {:%{}, _, _} -> true
+        name_str in ~w(params attrs parameters body payload input) and
+          not String.starts_with?(name_str, "_")
 
-      # Pattern: def action(conn, %SomeStruct{})
-      {:%, _, _} -> true
+      # Destructured map: def action(conn, %{"id" => id}) — shows intent, skip
+      {:%{}, _, pairs} when is_list(pairs) and pairs != [] ->
+        false
 
-      _ -> false
-    end)
+      # Struct: def action(conn, %SomeStruct{}) — skip
+      {:%, _, _} ->
+        false
+
+      # Bare underscore: def action(conn, _params) — skip
+      {:_, _, _} ->
+        false
+
+      _ ->
+        false
+    end
   end
 
   defp has_params_arg?(_), do: false
 
-  # Check if a function body contains any validation call
+  defp fallback_controller?(file) do
+    String.contains?(file, "fallback")
+  end
+
+  # Check if a function body contains any validation call or context delegation
   defp has_validation?(nil), do: false
 
   defp has_validation?(body) do
     AST.contains?(body, fn
       # Remote call to a validation module: Module.changeset(...), Module.validate(...)
       {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _} ->
-        validation_module?(mod_parts) or validation_function?(func)
+        validation_module?(mod_parts) or validation_function?(func) or
+          context_function?(func)
 
       # Local call to changeset/cast/validate
       {func, _, args} when is_atom(func) and is_list(args) ->
@@ -176,6 +191,23 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
   end
 
   defp validation_function?(_), do: false
+
+  # Context functions that accept params and validate internally
+  defp context_function?(func) when is_atom(func) do
+    func_str = Atom.to_string(func)
+
+    String.starts_with?(func_str, "create_") or
+      String.starts_with?(func_str, "update_") or
+      String.starts_with?(func_str, "register") or
+      String.starts_with?(func_str, "insert_") or
+      String.starts_with?(func_str, "save_") or
+      String.starts_with?(func_str, "submit_") or
+      String.starts_with?(func_str, "sign_in") or
+      String.starts_with?(func_str, "log_in") or
+      func_str in ~w(create update register authenticate sign_up)
+  end
+
+  defp context_function?(_), do: false
 
   defp controller_file?(file) do
     String.contains?(file, "_controller.ex") or
