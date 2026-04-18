@@ -38,6 +38,12 @@ defmodule Archdo.Runner do
     Archdo.Rules.OTP.UnnamedSingleton,
     Archdo.Rules.OTP.UnsafeTracing,
     Archdo.Rules.OTP.GenstageNoDemand,
+    Archdo.Rules.OTP.StalePidReference,
+    Archdo.Rules.OTP.MissingHandleInfo,
+    Archdo.Rules.OTP.CallSelfDeadlock,
+    Archdo.Rules.OTP.BrutalKill,
+    Archdo.Rules.OTP.EtsOwnershipLeak,
+    Archdo.Rules.OTP.HardcodedCallTimeout,
     # Module quality rules
     Archdo.Rules.Module.MissingModuledoc,
     Archdo.Rules.Module.MissingSpec,
@@ -63,6 +69,15 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.RescueSwallowsError,
     Archdo.Rules.Module.RaiseInNonBang,
     Archdo.Rules.Module.InconsistentErrorShape,
+    Archdo.Rules.Module.RescueForExpected,
+    Archdo.Rules.Module.BangInOkErrorFunction,
+    Archdo.Rules.Module.MissingRescueAtBoundary,
+    Archdo.Rules.Module.NestingDepth,
+    Archdo.Rules.Module.ExceptionLaundering,
+    Archdo.Rules.Module.IfElseDispatch,
+    Archdo.Rules.Module.NonTailRecursion,
+    Archdo.Rules.Module.UnnecessaryRecursion,
+    Archdo.Rules.Module.BrokenTailRecursion,
     Archdo.Rules.Boundary.UntypedBoundary,
     # NIF rules
     Archdo.Rules.NIF.NifPanic,
@@ -95,12 +110,19 @@ defmodule Archdo.Runner do
     Archdo.Rules.Testing.MockingOwnModules,
     Archdo.Rules.Testing.RuntimeConfigForDi,
     Archdo.Rules.Testing.GenericTestNames,
+    Archdo.Rules.Testing.WeakAssertion,
+    Archdo.Rules.Testing.MissingTestCleanup,
+    Archdo.Rules.Testing.HardcodedTestData,
     # Composition rules
     Archdo.Rules.Composition.ShallowUse,
     Archdo.Rules.Composition.NamespaceDepth,
     # Per-file boundary rules
     Archdo.Rules.Boundary.ImportBreadth,
     Archdo.Rules.Boundary.UnusedDependency,
+    Archdo.Rules.Boundary.UnvalidatedParams,
+    Archdo.Rules.Boundary.LogicInController,
+    Archdo.Rules.Boundary.LargeLiveviewAssigns,
+    Archdo.Rules.Boundary.PubsubWithoutHandler,
     # Resilience rules
     Archdo.Rules.Module.UnprotectedExternalCall,
     Archdo.Rules.Module.UnboundedExternalCall
