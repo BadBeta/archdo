@@ -18,7 +18,10 @@ defmodule Archdo.AST do
     {_, name} =
       Macro.prewalk(ast, "Unknown", fn
         {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, _acc ->
-          {node, Module.concat(aliases) |> Atom.to_string() |> String.replace_leading("Elixir.", "")}
+          case safe_concat(aliases) do
+            nil -> {node, "Unknown"}
+            mod -> {node, module_name(mod)}
+          end
 
         node, acc ->
           {node, acc}
@@ -240,6 +243,31 @@ defmodule Archdo.AST do
 
   def module_name(mod) when is_binary(mod) do
     String.replace_leading(mod, "Elixir.", "")
+  end
+
+  @doc """
+  Safely concatenate alias parts into a module atom.
+  Handles `__MODULE__` and other non-atom AST nodes by converting to string.
+  Returns nil if the alias list is empty or entirely dynamic.
+  """
+  @spec safe_concat([atom() | term()]) :: atom() | nil
+  def safe_concat([]), do: nil
+
+  def safe_concat(aliases) when is_list(aliases) do
+    parts =
+      Enum.map(aliases, fn
+        part when is_atom(part) -> part
+        {:__MODULE__, _, _} -> :__MODULE__
+        {:__block__, _, [atom]} when is_atom(atom) -> atom
+        _ -> nil
+      end)
+
+    case Enum.any?(parts, &is_nil/1) do
+      true -> nil
+      false -> Module.concat(parts)
+    end
+  rescue
+    _ -> nil
   end
 
   @doc """

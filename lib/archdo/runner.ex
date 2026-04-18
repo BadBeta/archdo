@@ -189,13 +189,21 @@ defmodule Archdo.Runner do
   defp analyze_file(file, rules, opts) do
     case AST.parse_file(file) do
       {:ok, ast} ->
-        Enum.flat_map(rules, fn rule ->
-          rule.analyze(file, ast, opts)
-        end)
+        Enum.flat_map(rules, &safe_analyze(&1, file, ast, opts))
 
       {:error, _reason} ->
         []
     end
+  end
+
+  # Run a single rule, isolating crashes so one broken rule doesn't block others.
+  # A rule crash is a bug in Archdo, not in the analyzed code — log visibly and continue.
+  defp safe_analyze(rule, file, ast, opts) do
+    rule.analyze(file, ast, opts)
+  rescue
+    e ->
+      IO.puts(:standard_error, "[archdo] rule #{rule.id()} crashed on #{file}: #{Exception.message(e)}")
+      []
   end
 
   defp filter_rules(rules, opts) do

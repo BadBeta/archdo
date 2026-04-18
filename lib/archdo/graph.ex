@@ -124,7 +124,10 @@ defmodule Archdo.Graph do
     {_, names} =
       Macro.prewalk(ast, [], fn
         {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, acc ->
-          {node, [AST.module_name(Module.concat(aliases)) | acc]}
+          case AST.safe_concat(aliases) do
+            nil -> {node, acc}
+            mod -> {node, [AST.module_name(mod) | acc]}
+          end
 
         node, acc ->
           {node, acc}

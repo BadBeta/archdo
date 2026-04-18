@@ -143,7 +143,10 @@ defmodule Archdo.FunctionGraph do
 
   # Module definition — body may be wrapped by literal_encoder, use helper
   defp walk({:defmodule, _meta, [{:__aliases__, _, aliases}, body_kw]}, state) do
-    mod = aliases |> Module.concat() |> normalize_module()
+    mod = case AST.safe_concat(aliases) do
+      nil -> "Unknown"
+      atom -> normalize_module(atom)
+    end
     body = extract_do_body(body_kw)
     body_state = walk(body, %{state | module: mod})
     %{state | defs: body_state.defs, calls: body_state.calls}
@@ -187,7 +190,10 @@ defmodule Archdo.FunctionGraph do
          %{module: mod, in_spec: false} = state
        )
        when is_atom(target_fn) and mod != nil do
-    target_mod = aliases |> Module.concat() |> normalize_module()
+    target_mod = case AST.safe_concat(aliases) do
+      nil -> "Unknown"
+      atom -> normalize_module(atom)
+    end
     target_arity = arg_count(args)
 
     call = %{

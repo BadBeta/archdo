@@ -37,8 +37,12 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
       _ -> false
     end)
     |> Enum.filter(fn {:import, _meta, [{:__aliases__, _, aliases} | opts]} ->
-      target = AST.module_name(Module.concat(aliases))
-      no_only_clause?(opts) and not tolerated_import?(target)
+      case AST.safe_concat(aliases) do
+        nil -> false
+        mod ->
+          target = AST.module_name(mod)
+          no_only_clause?(opts) and not tolerated_import?(target)
+      end
     end)
     |> Enum.map(fn {:import, meta, [{:__aliases__, _, aliases} | _]} ->
       target = Enum.join(aliases, ".")
@@ -80,8 +84,10 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
     {_, aliases} =
       Macro.prewalk(ast, [], fn
         {:alias, _meta, [{:__aliases__, _, aliases} | _]} = node, acc ->
-          target = AST.module_name(Module.concat(aliases))
-          {node, [target | acc]}
+          case AST.safe_concat(aliases) do
+            nil -> {node, acc}
+            mod -> {node, [AST.module_name(mod) | acc]}
+          end
 
         node, acc ->
           {node, acc}

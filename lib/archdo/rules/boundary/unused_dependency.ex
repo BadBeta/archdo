@@ -73,10 +73,16 @@ defmodule Archdo.Rules.Boundary.UnusedDependency do
     {_, aliases} =
       Macro.prewalk(ast, [], fn
         {:alias, meta, [{:__aliases__, _, parts} | _opts]} = node, acc ->
-          full = AST.module_name(Module.concat(parts))
-          short = List.last(parts) |> Atom.to_string()
-          line = AST.line(meta)
-          {node, [{short, full, line} | acc]}
+          case AST.safe_concat(parts) do
+            nil ->
+              {node, acc}
+
+            mod ->
+              full = AST.module_name(mod)
+              short = List.last(parts) |> Atom.to_string()
+              line = AST.line(meta)
+              {node, [{short, full, line} | acc]}
+          end
 
         node, acc ->
           {node, acc}
