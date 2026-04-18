@@ -2,6 +2,20 @@
 
 > 144 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, and **test quality** — the gap none of them cover.
 
+## Contents
+
+1. [Boundary Integrity](#1-boundary-integrity) — 17 rules (1.1–1.17)
+2. [Public API Quality](#2-public-api-quality) — 3 rules (2.1–2.3)
+3. [Single Source of Truth](#3-single-source-of-truth) — 6 rules (3.1–3.6)
+4. [Coupling & Abstraction](#4-coupling--abstraction) — 21 rules (4.1–4.21)
+5. [OTP Process Architecture](#5-otp-process-architecture) — 41 rules (5.1–5.41)
+6. [Module Quality](#6-module-quality) — 23 rules (6.1–6.23)
+7. [Test Architecture](#7-test-architecture) — 18 rules (7.1–7.20)
+8. [Event Sourcing](#8-event-sourcing-architecture) — 8 rules (8.1–8.8)
+9. [State Machine](#9-state-machine-architecture) — 3 rules (9.1–9.3)
+10. [Composition](#10-composition-and-extensibility) — 2 rules (10.1–10.2)
+11. [Native Interop](#11-native-interop-nifs-ports-rustler) — 4 rules (11.1–11.4)
+
 ## Design Philosophy
 
 These rules must be:
