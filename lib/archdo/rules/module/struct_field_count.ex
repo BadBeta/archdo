@@ -109,7 +109,10 @@ defmodule Archdo.Rules.Module.StructFieldCount do
     {_, name} =
       Macro.prewalk(ast, "Unknown", fn
         {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, _acc ->
-          {node, Module.concat(aliases) |> Atom.to_string() |> String.replace("Elixir.", "")}
+          case AST.safe_concat(aliases) do
+            nil -> {node, "Unknown"}
+            mod -> {node, AST.module_name(mod)}
+          end
 
         node, acc ->
           {node, acc}

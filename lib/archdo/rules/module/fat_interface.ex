@@ -175,7 +175,10 @@ defmodule Archdo.Rules.Module.FatInterface do
 
   defp build_diagnostic(impl, behaviour, stubs, _behaviour_defs) do
     stub_names = Enum.map_join(stubs, ", ", fn s -> "#{s.name}/#{s.arity}" end)
-    first_line = stubs |> Enum.map(& &1.line) |> Enum.min()
+    first_line =
+      stubs
+      |> Enum.map(& &1.line)
+      |> Enum.min()
 
     Diagnostic.warning("4.21",
       title: "Behaviour implementation has no-op stubs",

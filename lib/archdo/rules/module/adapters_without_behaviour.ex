@@ -86,7 +86,10 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
   end
 
   defp adapter_module?(name) when is_binary(name) do
-    last = name |> String.split(".") |> List.last() || ""
+    last =
+      name
+      |> String.split(".")
+      |> List.last("")
     String.ends_with?(last, "Adapter") or String.ends_with?(last, "Client")
   end
 
@@ -96,7 +99,10 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
     case parts do
       [] -> "(root)"
       [_] -> "(root)"
-      _ -> parts |> Enum.drop(-1) |> Enum.join(".")
+      _ ->
+        parts
+        |> Enum.drop(-1)
+        |> Enum.join(".")
     end
   end
 

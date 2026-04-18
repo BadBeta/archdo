@@ -171,7 +171,11 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
   end
 
   defp same_namespace?(caller, target) do
-    target_parent = target |> String.split(".") |> Enum.drop(-1) |> Enum.join(".")
+    target_parent =
+      target
+      |> String.split(".")
+      |> Enum.drop(-1)
+      |> Enum.join(".")
     target_parent != "" and (caller == target_parent or String.starts_with?(caller, target_parent <> "."))
   end
 

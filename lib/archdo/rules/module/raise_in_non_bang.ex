@@ -52,7 +52,9 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
   end
 
   defp bang_function?(name) do
-    name |> Atom.to_string() |> String.ends_with?("!")
+    name
+    |> Atom.to_string()
+    |> String.ends_with?("!")
   end
 
   defp contains_raise?(body) do

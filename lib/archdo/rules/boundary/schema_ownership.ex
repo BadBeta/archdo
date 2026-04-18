@@ -130,8 +130,18 @@ defmodule Archdo.Rules.Boundary.SchemaOwnership do
   end
 
   defp in_same_context?(caller, schema) do
-    caller_top = caller |> String.split(".") |> Enum.take(2) |> Enum.join(".")
-    schema_top = schema |> String.split(".") |> Enum.take(2) |> Enum.join(".")
+    caller_top =
+      caller
+      |> String.split(".")
+      |> Enum.take(2)
+      |> Enum.join(".")
+
+    schema_top =
+      schema
+      |> String.split(".")
+      |> Enum.take(2)
+      |> Enum.join(".")
+
     caller_top == schema_top
   end
 end
