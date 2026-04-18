@@ -20,7 +20,10 @@ defmodule Archdo.Rules.Module.ModuleLength do
     else
       case File.read(file) do
         {:ok, content} ->
-          lines = content |> String.split("\n") |> length()
+          lines =
+            content
+            |> String.split("\n")
+            |> length()
           check_length(file, lines)
 
         _ ->

@@ -87,9 +87,20 @@ defmodule Archdo.Rules.Module.InconsistentErrorShape do
   defp build_diagnostic(file, ast, styles, style_groups) do
     module_name = AST.extract_module_name(ast)
 
-    raising_fns = styles |> Enum.filter(fn {_, _, s} -> s == :raises end) |> format_fns()
-    ok_error_fns = styles |> Enum.filter(fn {_, _, s} -> s == :ok_error end) |> format_fns()
-    nil_fns = styles |> Enum.filter(fn {_, _, s} -> s == :returns_nil end) |> format_fns()
+    raising_fns =
+      styles
+      |> Enum.filter(fn {_, _, s} -> s == :raises end)
+      |> format_fns()
+
+    ok_error_fns =
+      styles
+      |> Enum.filter(fn {_, _, s} -> s == :ok_error end)
+      |> format_fns()
+
+    nil_fns =
+      styles
+      |> Enum.filter(fn {_, _, s} -> s == :returns_nil end)
+      |> format_fns()
 
     detail_parts =
       [

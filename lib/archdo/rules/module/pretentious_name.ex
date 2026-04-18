@@ -32,7 +32,10 @@ defmodule Archdo.Rules.Module.PretentiousName do
     {_, results} =
       Macro.prewalk(ast, [], fn
         {:defmodule, meta, [{:__aliases__, _, aliases} | _]} = node, acc ->
-          last_part = aliases |> List.last() |> Atom.to_string()
+          last_part =
+            aliases
+            |> List.last()
+            |> Atom.to_string()
           full = AST.module_name(Module.concat(aliases))
 
           if pretentious?(last_part) do

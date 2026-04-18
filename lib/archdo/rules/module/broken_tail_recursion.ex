@@ -62,15 +62,15 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
   end
 
   defp find_tco_breakers(body, name, arity) do
-    tco_in_try = self_call_inside_try?(body, name, arity)
-    tco_in_pipe = self_call_piped?(body, name, arity)
-    tco_in_binary_op = self_call_in_binary_op?(body, name, arity)
+    checks = [
+      {:try_rescue, &self_call_inside_try?/3},
+      {:pipe_after, &self_call_piped?/3},
+      {:binary_op, &self_call_in_binary_op?/3}
+    ]
 
-    breakers = []
-    breakers = if tco_in_try, do: [:try_rescue | breakers], else: breakers
-    breakers = if tco_in_pipe, do: [:pipe_after | breakers], else: breakers
-    breakers = if tco_in_binary_op, do: [:binary_op | breakers], else: breakers
-    breakers
+    for {breaker, check_fn} <- checks,
+        check_fn.(body, name, arity),
+        do: breaker
   end
 
   # Recursive call inside try/rescue/catch — BEAM keeps frame for exception handling

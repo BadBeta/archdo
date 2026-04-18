@@ -55,9 +55,11 @@ defmodule Archdo.Rules.Module.FeatureEnvy do
       case Enum.max_by(external, fn {_mod, c} -> c end, fn -> nil end) do
         {dominant_mod, count} when count >= @min_external_calls ->
           if envious?(count, self_calls) do
-            def_meta = Map.get(graph.definitions, {caller_mod, name, arity})
-            file = if def_meta, do: def_meta.file, else: "unknown"
-            line = if def_meta, do: def_meta.line, else: 0
+            {file, line} =
+              case Map.get(graph.definitions, {caller_mod, name, arity}) do
+                nil -> {"unknown", 0}
+                meta -> {meta.file, meta.line}
+              end
 
             [
               Diagnostic.info("4.9",
@@ -117,7 +119,10 @@ defmodule Archdo.Rules.Module.FeatureEnvy do
 
   defp stdlib?(mod) when is_binary(mod) do
     # Strip any sub-namespace — we want top-level matches
-    top = mod |> String.split(".") |> hd()
+    top =
+      mod
+      |> String.split(".")
+      |> hd()
     MapSet.member?(@stdlib, top)
   end
 
