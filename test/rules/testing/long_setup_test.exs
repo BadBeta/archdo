@@ -5,8 +5,8 @@ defmodule Archdo.Rules.Testing.LongSetupTest do
 
   describe "analyze/3" do
     test "flags very large setup block" do
-      # Generate a setup with many lines
-      setup_lines = Enum.map_join(1..40, "\n", fn i -> "      var_#{i} = #{i}" end)
+      # Generate a setup with many lines (needs >250 AST nodes)
+      setup_lines = Enum.map_join(1..100, "\n", fn i -> "      var_#{i} = #{i}" end)
 
       code = """
       defmodule MyApp.BigSetupTest do

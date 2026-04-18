@@ -4,13 +4,13 @@ defmodule Archdo.Rules.Testing.LongTest do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
-  @max_test_nodes 200
+  @max_test_nodes 1200
 
   @impl true
   def id, do: "7.12"
 
   @impl true
-  def description, do: "Test bodies > 50 lines test too many things at once"
+  def description, do: "Very large test bodies — likely testing too many things at once"
 
   @impl true
   def analyze(file, ast, _opts) do

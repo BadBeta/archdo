@@ -4,13 +4,13 @@ defmodule Archdo.Rules.Testing.LongSetup do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
-  @max_setup_nodes 80
+  @max_setup_nodes 400
 
   @impl true
   def id, do: "7.11"
 
   @impl true
-  def description, do: "Setup blocks > 30 lines suggest over-coupled tests"
+  def description, do: "Very large setup blocks suggest over-coupled tests"
 
   @impl true
   def analyze(file, ast, _opts) do
