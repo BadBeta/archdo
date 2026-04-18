@@ -78,6 +78,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.NonTailRecursion,
     Archdo.Rules.Module.UnnecessaryRecursion,
     Archdo.Rules.Module.BrokenTailRecursion,
+    Archdo.Rules.Module.UnboundedRecursion,
     Archdo.Rules.Boundary.UntypedBoundary,
     # NIF rules
     Archdo.Rules.NIF.NifPanic,
