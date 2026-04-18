@@ -2,7 +2,7 @@ defmodule Archdo do
   @moduledoc """
   Architectural quality checker for Elixir.
 
-  122 rules across 11 categories checking OTP patterns, module boundaries,
+  143 rules across 11 categories checking OTP patterns, module boundaries,
   test architecture, event sourcing, NIF safety, and more — the gap that
   Credo (style), Dialyzer (types), and Sobelow (security) don't cover.
 

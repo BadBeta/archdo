@@ -2,16 +2,16 @@
 
 Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, and boundary enforcement.
 
-**122 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+**143 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
 
 ## What it checks
 
 | Category | Rules | Examples |
 |----------|-------|----------|
-| **Boundaries** | 19 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params |
-| **Module quality** | 44 | Complexity, cohesion, fan-out, Martin metrics (Ca/Ce/I/A/D), error shape consistency |
-| **OTP discipline** | 35 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches |
-| **Testing** | 15 | Mox without behaviours, coverage gaps, test naming, async eligibility, unverified mocks |
+| **Boundaries** | 24 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params, PubSub without handler, large LiveView assigns |
+| **Module quality** | 23 | Complexity, cohesion, fan-out, Martin metrics, error handling (7 rules), recursion (4 rules), if/else dispatch, nesting depth |
+| **OTP discipline** | 41 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock detection, missing handle_info |
+| **Testing** | 18 | Mox without behaviours, coverage gaps, test naming, async eligibility, weak assertions, missing cleanup, hardcoded test data |
 | **SOLID / Seams** | — | SRP (function clustering), OCP (type dispatch), ISP (no-op stubs), DIP (dependency direction) |
 | **Resilience** | — | External calls without timeouts, bang functions on HTTP clients, missing telemetry |
 | **Duplication** | — | Type-2/3 function clones, duplicated validation logic |
