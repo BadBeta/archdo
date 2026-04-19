@@ -150,6 +150,92 @@ defmodule Archdo.Compiled.GraphTest do
     end
   end
 
+  describe "knows_about/2" do
+    setup do
+      beam_dir = find_archdo_beam_dir()
+      %{graph: Graph.build(beam_dir)}
+    end
+
+    @tag :self_analysis
+    test "returns modules the given module calls", %{graph: graph} do
+      entries = Graph.knows_about(graph, Archdo.Runner)
+      assert is_list(entries)
+      assert length(entries) > 0
+
+      # Runner calls AST.parse_file
+      ast_entry = Enum.find(entries, fn e -> e.module == Archdo.AST end)
+      assert ast_entry != nil
+      assert {:parse_file, 1} in ast_entry.functions_called
+    end
+
+    @tag :self_analysis
+    test "entries are sorted by call count descending", %{graph: graph} do
+      entries = Graph.knows_about(graph, Archdo.Runner)
+      counts = Enum.map(entries, & &1.call_count)
+      assert counts == Enum.sort(counts, :desc)
+    end
+  end
+
+  describe "known_by/2" do
+    setup do
+      beam_dir = find_archdo_beam_dir()
+      %{graph: Graph.build(beam_dir)}
+    end
+
+    @tag :self_analysis
+    test "returns modules that call the given module", %{graph: graph} do
+      entries = Graph.known_by(graph, Archdo.AST)
+      assert length(entries) > 10
+    end
+
+    @tag :self_analysis
+    test "each entry lists which functions are called", %{graph: graph} do
+      [entry | _] = Graph.known_by(graph, Archdo.AST)
+      assert is_atom(entry.module)
+      assert is_list(entry.functions_called)
+      assert entry.call_count > 0
+    end
+  end
+
+  describe "context_knows_about/2" do
+    setup do
+      beam_dir = find_archdo_beam_dir()
+      %{graph: Graph.build(beam_dir)}
+    end
+
+    @tag :self_analysis
+    test "returns contexts the given context depends on", %{graph: graph} do
+      entries = Graph.context_knows_about(graph, "Archdo.Rules")
+      assert is_list(entries)
+      assert length(entries) > 0
+
+      Enum.each(entries, fn e ->
+        assert is_binary(e.context)
+        assert is_list(e.modules_called)
+        assert e.call_count > 0
+      end)
+    end
+  end
+
+  describe "context_known_by/2" do
+    setup do
+      beam_dir = find_archdo_beam_dir()
+      %{graph: Graph.build(beam_dir)}
+    end
+
+    @tag :self_analysis
+    test "returns contexts that depend on the given context", %{graph: graph} do
+      entries = Graph.context_known_by(graph, "Archdo.Compiled")
+      assert is_list(entries)
+
+      Enum.each(entries, fn e ->
+        assert is_binary(e.context)
+        assert is_list(e.calling_modules)
+        assert e.call_count > 0
+      end)
+    end
+  end
+
   describe "discover_contexts/1" do
     setup do
       beam_dir = find_archdo_beam_dir()

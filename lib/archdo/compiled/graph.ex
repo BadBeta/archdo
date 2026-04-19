@@ -454,6 +454,159 @@ defmodule Archdo.Compiled.Graph do
 
   defp classify_expr(_), do: :unknown
 
+  # --- Module Awareness Queries ---
+
+  @type awareness_entry :: %{
+          module: module(),
+          functions_called: [{atom(), non_neg_integer()}],
+          call_count: non_neg_integer()
+        }
+
+  @doc """
+  What does this module know about? Returns all modules it calls,
+  with which functions and how many times.
+
+  This is the module's outgoing awareness — its dependency footprint.
+  """
+  @spec knows_about(t(), module()) :: [awareness_entry()]
+  def knows_about(%__MODULE__{calls_by_module: index, modules: modules}, module) do
+    project_modules = MapSet.new(Map.keys(modules))
+
+    index
+    |> Map.get(module, [])
+    |> Enum.group_by(fn call -> elem(call.callee, 0) end)
+    |> Enum.filter(fn {target, _calls} ->
+      target != module and MapSet.member?(project_modules, target)
+    end)
+    |> Enum.map(fn {target, calls} ->
+      fns =
+        calls
+        |> Enum.map(fn call -> {elem(call.callee, 1), elem(call.callee, 2)} end)
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      %{module: target, functions_called: fns, call_count: length(calls)}
+    end)
+    |> Enum.sort_by(& &1.call_count, :desc)
+  end
+
+  @doc """
+  Who knows about this module? Returns all modules that call it,
+  with which functions they call and how many times.
+
+  This is the module's incoming awareness — its visibility footprint.
+  """
+  @spec known_by(t(), module()) :: [awareness_entry()]
+  def known_by(%__MODULE__{calls: calls, modules: modules}, module) do
+    project_modules = MapSet.new(Map.keys(modules))
+
+    calls
+    |> Enum.filter(fn call ->
+      elem(call.callee, 0) == module and
+        elem(call.caller, 0) != module and
+        MapSet.member?(project_modules, elem(call.caller, 0))
+    end)
+    |> Enum.group_by(fn call -> elem(call.caller, 0) end)
+    |> Enum.map(fn {caller, caller_calls} ->
+      fns =
+        caller_calls
+        |> Enum.map(fn call -> {elem(call.callee, 1), elem(call.callee, 2)} end)
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      %{module: caller, functions_called: fns, call_count: length(caller_calls)}
+    end)
+    |> Enum.sort_by(& &1.call_count, :desc)
+  end
+
+  @doc """
+  What does this context know about? Returns all external contexts it calls into,
+  with the specific modules and call counts.
+
+  A context "knows about" another context when any of its member modules
+  call functions in modules belonging to the other context.
+  """
+  @spec context_knows_about(t(), String.t()) :: [%{context: String.t(), modules_called: [module()], call_count: non_neg_integer()}]
+  def context_knows_about(%__MODULE__{} = graph, context_name) do
+    contexts = discover_contexts(graph)
+    context_of = build_context_membership(contexts)
+
+    members =
+      contexts
+      |> Enum.find(fn c -> c.context == context_name end)
+      |> case do
+        nil -> []
+        ctx -> ctx.members
+      end
+
+    member_set = MapSet.new(members)
+
+    # Collect all outgoing calls from this context's members to other contexts
+    members
+    |> Enum.flat_map(fn mod -> knows_about(graph, mod) end)
+    |> Enum.reject(fn entry -> MapSet.member?(member_set, entry.module) end)
+    |> Enum.group_by(fn entry -> Map.get(context_of, entry.module, "external") end)
+    |> Enum.map(fn {target_ctx, entries} ->
+      modules_called =
+        entries
+        |> Enum.map(& &1.module)
+        |> Enum.uniq()
+
+      total_calls = Enum.sum(Enum.map(entries, & &1.call_count))
+
+      %{context: target_ctx, modules_called: modules_called, call_count: total_calls}
+    end)
+    |> Enum.sort_by(& &1.call_count, :desc)
+  end
+
+  @doc """
+  Who knows about this context? Returns all external contexts that call into it,
+  with the specific modules and call counts.
+
+  A context is "known by" another when modules from the other context
+  call functions in this context's members.
+  """
+  @spec context_known_by(t(), String.t()) :: [%{context: String.t(), calling_modules: [module()], call_count: non_neg_integer()}]
+  def context_known_by(%__MODULE__{} = graph, context_name) do
+    contexts = discover_contexts(graph)
+    context_of = build_context_membership(contexts)
+
+    members =
+      contexts
+      |> Enum.find(fn c -> c.context == context_name end)
+      |> case do
+        nil -> []
+        ctx -> ctx.members
+      end
+
+    member_set = MapSet.new(members)
+
+    # Collect all incoming calls to this context's members from other contexts
+    members
+    |> Enum.flat_map(fn mod -> known_by(graph, mod) end)
+    |> Enum.reject(fn entry -> MapSet.member?(member_set, entry.module) end)
+    |> Enum.group_by(fn entry -> Map.get(context_of, entry.module, "external") end)
+    |> Enum.map(fn {source_ctx, entries} ->
+      calling_modules =
+        entries
+        |> Enum.map(& &1.module)
+        |> Enum.uniq()
+
+      total_calls = Enum.sum(Enum.map(entries, & &1.call_count))
+
+      %{context: source_ctx, calling_modules: calling_modules, call_count: total_calls}
+    end)
+    |> Enum.sort_by(& &1.call_count, :desc)
+  end
+
+  defp build_context_membership(contexts) do
+    contexts
+    |> Enum.flat_map(fn ctx ->
+      Enum.map(ctx.members, fn mod -> {mod, ctx.context} end)
+    end)
+    |> Map.new()
+  end
+
   # --- Context Discovery ---
 
   @doc """
