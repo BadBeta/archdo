@@ -58,7 +58,7 @@ defmodule Archdo.Graph do
   def find_cycles(%__MODULE__{} = graph, root_modules) do
     # Build adjacency map between root modules only
     adjacency =
-      Enum.reduce(root_modules, %{}, fn mod, acc ->
+      Map.new(root_modules, fn mod ->
         mod_str = AST.module_name(mod)
 
         targets =
@@ -80,7 +80,7 @@ defmodule Archdo.Graph do
           end)
           |> Enum.uniq()
 
-        Map.put(acc, mod_str, targets)
+        {mod_str, targets}
       end)
 
     # DFS cycle detection
@@ -109,7 +109,7 @@ defmodule Archdo.Graph do
 
     %{
       graph
-      | modules: Enum.reduce(modules, graph.modules, &MapSet.put(&2, &1)),
+      | modules: MapSet.union(graph.modules, MapSet.new(modules)),
         edges: edges ++ graph.edges,
         edges_by_source:
           Enum.reduce(edges, graph.edges_by_source, fn edge, acc ->

@@ -107,11 +107,11 @@ defmodule Archdo.Compiled.Graph do
   """
   @spec module_dependencies(t(), module()) :: [module()]
   def module_dependencies(%__MODULE__{calls_by_module: index}, module) do
-    index
-    |> Map.get(module, [])
-    |> Enum.map(fn call -> elem(call.callee, 0) end)
-    |> Enum.uniq()
-    |> Enum.reject(&(&1 == module))
+    for call <- Map.get(index, module, []),
+        callee = elem(call.callee, 0),
+        callee != module,
+        uniq: true,
+        do: callee
   end
 
   @doc """
@@ -119,11 +119,12 @@ defmodule Archdo.Compiled.Graph do
   """
   @spec module_dependents(t(), module()) :: [module()]
   def module_dependents(%__MODULE__{calls: calls}, module) do
-    calls
-    |> Enum.filter(fn call -> elem(call.callee, 0) == module end)
-    |> Enum.map(fn call -> elem(call.caller, 0) end)
-    |> Enum.uniq()
-    |> Enum.reject(&(&1 == module))
+    for call <- calls,
+        elem(call.callee, 0) == module,
+        caller = elem(call.caller, 0),
+        caller != module,
+        uniq: true,
+        do: caller
   end
 
   @doc """
@@ -135,20 +136,14 @@ defmodule Archdo.Compiled.Graph do
     # Build per-module set of behaviour callback functions
     behaviour_fns = build_behaviour_fns(modules)
 
-    modules
-    |> Enum.flat_map(fn {module, info} ->
-      module_callbacks = Map.get(behaviour_fns, module, MapSet.new())
-
-      info.exports
-      |> Enum.reject(fn {func, arity} ->
-        framework_callback?(func, arity) or
-          MapSet.member?(module_callbacks, {func, arity}) or
-          has_external_callers?(callee_index, module, func, arity)
-      end)
-      |> Enum.map(fn {func, arity} ->
-        %{module: module, function: func, arity: arity}
-      end)
-    end)
+    for {module, info} <- modules,
+        module_callbacks = Map.get(behaviour_fns, module, MapSet.new()),
+        {func, arity} <- info.exports,
+        not framework_callback?(func, arity),
+        not MapSet.member?(module_callbacks, {func, arity}),
+        not has_external_callers?(callee_index, module, func, arity) do
+      %{module: module, function: func, arity: arity}
+    end
   end
 
   @doc """
@@ -318,7 +313,7 @@ defmodule Archdo.Compiled.Graph do
         by_depth
 
       _ ->
-        new_visited = Enum.reduce(next_level, visited, &MapSet.put(&2, &1))
+        new_visited = MapSet.union(visited, MapSet.new(next_level))
         new_by_depth = Map.put(by_depth, depth, next_level)
         walk_dependents(graph, next_level, new_visited, new_by_depth, depth + 1)
     end

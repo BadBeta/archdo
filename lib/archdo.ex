@@ -187,9 +187,7 @@ defmodule Archdo do
   end
 
   defp build_module_file_map(file_asts) do
-    Enum.reduce(file_asts, %{}, fn {file, ast}, acc ->
-      Map.put(acc, AST.extract_module_name(ast), file)
-    end)
+    Map.new(file_asts, fn {file, ast} -> {AST.extract_module_name(ast), file} end)
   end
 
   defp run_function_graph_rules(file_asts, _opts) do
