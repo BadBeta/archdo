@@ -96,8 +96,8 @@ Archdo currently ships **164 rules in 12 categories** (including 18 compiled-ana
 
 | Severity   | Meaning                                                                      | CLI exit code |
 |------------|------------------------------------------------------------------------------|---------------|
-| `:error`   | Almost always a bug. Should block PRs.                                       | 2             |
-| `:warning` | Almost always wrong, but may have legitimate exceptions. Should block PRs by default. | 1             |
+| `:error`   | Almost always a bug.                                                         | 2             |
+| `:warning` | Almost always wrong, but may have legitimate exceptions.                     | 1             |
 | `:info`    | Architectural smell, often a judgment call. For human review.                | 0             |
 
 **Discoverable from the MCP server:**

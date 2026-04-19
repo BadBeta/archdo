@@ -148,7 +148,7 @@ Developer Review:
   Claude Code skill                # Architecture review (Tier 3)
 ```
 
-**Tier 1+2** catch objective violations — things that are always or usually wrong regardless of context. These block PRs.
+**Tier 1+2** catch objective violations — things that are always or usually wrong regardless of context.
 
 **Tier 3** handles the subjective — "is this the right abstraction?" "should this be split?" These inform human decisions.
 
