@@ -171,11 +171,13 @@ defmodule Archdo do
         false -> []
       end
 
-    (file_ast_diagnostics ++
-       file_path_diagnostics ++
-       metrics_diagnostics ++
-       function_graph_diagnostics)
-    |> filter_diagnostics(opts)
+    all =
+      file_ast_diagnostics ++
+        file_path_diagnostics ++
+        metrics_diagnostics ++
+        function_graph_diagnostics
+
+    filter_diagnostics(all, opts)
   end
 
   defp run_metrics_rules(file_asts) do
@@ -314,8 +316,7 @@ defmodule Archdo do
     test_asts = parse_many(test_files)
     coverage_diagnostics = CoverageGap.analyze_project(source_asts ++ test_asts)
 
-    (mirror_diagnostics ++ coverage_diagnostics)
-    |> filter_diagnostics(opts)
+    filter_diagnostics(mirror_diagnostics ++ coverage_diagnostics, opts)
   end
 
   @doc """
@@ -330,8 +331,7 @@ defmodule Archdo do
     source_asts = parse_many(source_files)
     test_asts = parse_many(test_files)
 
-    CoverageGap.matrix_report(source_asts ++ test_asts)
-    |> IO.write()
+    IO.write(CoverageGap.matrix_report(source_asts ++ test_asts))
 
     0
   end
@@ -372,8 +372,7 @@ defmodule Archdo do
     ]
 
     rows =
-      metrics
-      |> Enum.map(fn m ->
+      Enum.map(metrics, fn m ->
         :io_lib.format("~-55ts ~4w ~4w ~6.2f ~6.2f ~6.2f~n", [
           truncate(m.module, 55),
           m.ca,
