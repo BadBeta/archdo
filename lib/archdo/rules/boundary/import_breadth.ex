@@ -141,10 +141,20 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
   defp no_only_clause?([]), do: true
 
   defp no_only_clause?([opts]) when is_list(opts) do
-    not Keyword.has_key?(opts, :only)
+    # With literal_encoder (token_metadata: true), keyword keys may be
+    # wrapped in {:__block__, _, [:only]} instead of bare :only atoms.
+    not has_keyword_key?(opts, :only)
   end
 
   defp no_only_clause?(_), do: true
+
+  defp has_keyword_key?(opts, key) when is_list(opts) do
+    Enum.any?(opts, fn
+      {^key, _} -> true
+      {{:__block__, _, [^key]}, _} -> true
+      _ -> false
+    end)
+  end
 
   defp tolerated_import?(target) do
     Enum.any?(@tolerated_imports, &(target == &1)) or

@@ -29,9 +29,10 @@ defmodule Archdo.Rules.OTP.MonitorWithoutHandler do
 
     has_down_handler? =
       AST.contains?(ast, fn
-        # handle_info({:DOWN, ...}, state) pattern
+        # handle_info({:DOWN, ...}, state) — bare atom
         {:def, _, [{:handle_info, _, [{:{}, _, [:DOWN | _]} | _]} | _]} -> true
-        {:def, _, [{:handle_info, _, [{:__block__, _, [:DOWN]} | _]} | _]} -> true
+        # handle_info({:DOWN, ...}, state) — literal_encoder wraps atom in __block__
+        {:def, _, [{:handle_info, _, [{:{}, _, [{:__block__, _, [:DOWN]} | _]} | _]} | _]} -> true
         _ -> false
       end)
 
@@ -96,8 +97,10 @@ defmodule Archdo.Rules.OTP.MonitorWithoutHandler do
 
     has_exit_handler? =
       AST.contains?(ast, fn
+        # handle_info({:EXIT, ...}, state) — bare atom
         {:def, _, [{:handle_info, _, [{:{}, _, [:EXIT | _]} | _]} | _]} -> true
-        {:def, _, [{:handle_info, _, [{:__block__, _, [:EXIT]} | _]} | _]} -> true
+        # handle_info({:EXIT, ...}, state) — literal_encoder wraps atom in __block__
+        {:def, _, [{:handle_info, _, [{:{}, _, [{:__block__, _, [:EXIT]} | _]} | _]} | _]} -> true
         _ -> false
       end)
 
