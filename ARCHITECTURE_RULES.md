@@ -22,7 +22,7 @@ These rules must be:
 - **Universal** — valid across Phoenix contexts, event sourcing, state machines, OTP, and Ash domains
 - **Tolerant** — common patterns in quality Elixir projects must pass (validated against 8+ production codebases)
 - **Actionable** — each rule produces a clear diagnostic with ranked fix suggestions
-- **Checkable** — statically via AST analysis, or heuristically with reasonable confidence
+- **Checkable** — statically via AST analysis, via compiled beam analysis (ground-truth after macro expansion), or heuristically with reasonable confidence
 
 Rules are organized by architectural concern. Each rule has:
 - A short name and description
