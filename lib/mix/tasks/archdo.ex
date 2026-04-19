@@ -185,6 +185,10 @@ defmodule Mix.Tasks.Archdo do
     Archdo.Compiled.DiagramOTP.messaging_diagram(graph)
   end
 
+  defp generate_diagram(graph, "system") do
+    Archdo.Compiled.DiagramSystem.system_diagram(graph)
+  end
+
   defp generate_diagram(graph, "blast:" <> module_name) do
     mod = String.to_atom("Elixir.#{module_name}")
     Archdo.Compiled.Diagram.blast_radius(graph, mod)
