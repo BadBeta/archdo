@@ -176,6 +176,15 @@ defmodule Mix.Tasks.Archdo do
     Archdo.Compiled.DiagramSVG.context_dataflow(graph, context_name)
   end
 
+  # OTP diagrams
+  defp generate_diagram(graph, "otp") do
+    Archdo.Compiled.DiagramOTP.supervision_diagram(graph)
+  end
+
+  defp generate_diagram(graph, "otp-messages") do
+    Archdo.Compiled.DiagramOTP.messaging_diagram(graph)
+  end
+
   defp generate_diagram(graph, "blast:" <> module_name) do
     mod = String.to_atom("Elixir.#{module_name}")
     Archdo.Compiled.Diagram.blast_radius(graph, mod)
