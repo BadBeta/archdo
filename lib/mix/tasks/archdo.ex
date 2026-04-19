@@ -17,6 +17,9 @@ defmodule Mix.Tasks.Archdo do
       Phoenix conventions for layer detection.
     * `--tests` - Enable project-level test architecture checks (e.g., missing test files)
     * `--functions` - Enable function-level graph analysis (slowest, deepest)
+    * `--compiled` - Enable xref-enhanced analysis using compiled beam files.
+      Adds dead code detection, macro-aware behaviour checking, and precise
+      call graph. Requires the target project to be compiled (`mix compile`).
     * `--coverage` - Print test coverage gap matrix and exit (no other rules run)
     * `--metrics` - Print Martin package metrics (Ca/Ce/I/A/D) matrix and exit
 
@@ -58,6 +61,7 @@ defmodule Mix.Tasks.Archdo do
           boundaries: :boolean,
           tests: :boolean,
           functions: :boolean,
+          compiled: :boolean,
           coverage: :boolean,
           metrics: :boolean,
           freeze: :boolean,
@@ -108,8 +112,9 @@ defmodule Mix.Tasks.Archdo do
     boundaries = Keyword.get(opts, :boundaries, false)
     tests = Keyword.get(opts, :tests, false)
     functions = Keyword.get(opts, :functions, false)
+    compiled = Keyword.get(opts, :compiled, false)
 
-    [format: format, ignore: ignore, boundaries: boundaries, tests: tests, functions: functions]
+    [format: format, ignore: ignore, boundaries: boundaries, tests: tests, functions: functions, compiled: compiled]
     |> maybe_add(:only, only)
   end
 

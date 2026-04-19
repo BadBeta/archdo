@@ -61,8 +61,77 @@ defmodule Archdo do
 
     project_diagnostics = run_project_arch_rules(paths, opts)
 
-    (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics)
+    xref_diagnostics =
+      if Keyword.get(opts, :compiled, false) do
+        run_xref_rules(paths, opts)
+      else
+        []
+      end
+
+    (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ xref_diagnostics)
     |> Enum.sort_by(fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end)
+  end
+
+  defp run_xref_rules(paths, _opts) do
+    project_root =
+      case paths do
+        [path | _] ->
+          path
+          |> Path.expand()
+          |> find_project_root()
+
+        _ ->
+          File.cwd!()
+      end
+
+    case Archdo.Xref.analyze(project_root) do
+      {:ok, xref_data} ->
+        dead = Archdo.Rules.Module.DeadCode.analyze_xref(xref_data)
+        missing = missing_callback_diagnostics(xref_data)
+        dead ++ missing
+
+      {:error, reason} ->
+        IO.puts(:standard_error, "[archdo] xref: #{reason}")
+        []
+    end
+  end
+
+  defp missing_callback_diagnostics(xref_data) do
+    xref_data
+    |> Archdo.Xref.missing_callbacks()
+    |> Enum.map(fn %{module: mod, behaviour: bhv, missing: missing} ->
+      mod_name = Archdo.AST.module_name(mod)
+      bhv_name = Archdo.AST.module_name(bhv)
+      missing_str = Enum.map_join(missing, ", ", fn {f, a} -> "#{f}/#{a}" end)
+
+      Diagnostic.warning("4.1b",
+        title: "Missing behaviour callbacks (xref-verified)",
+        message: "#{mod_name} implements #{bhv_name} but is missing: #{missing_str}",
+        why:
+          "Xref analysis of compiled beam files shows this module declares @behaviour " <>
+            "but doesn't export all required callbacks. This is detected after macro " <>
+            "expansion, so macro-injected functions are accounted for.",
+        alternatives: [
+          Archdo.Fix.new(
+            summary: "Implement the missing callbacks",
+            detail: "Add `@impl true` definitions for: #{missing_str}",
+            applies_when: "The callbacks should be implemented."
+          )
+        ],
+        references: ["ARCHITECTURE_RULES.md#4.1"],
+        context: %{module: mod_name, behaviour: bhv_name, missing: missing_str},
+        file: "lib",
+        line: 0
+      )
+    end)
+  end
+
+  defp find_project_root(path) do
+    cond do
+      File.exists?(Path.join(path, "mix.exs")) -> path
+      path == "/" -> File.cwd!()
+      true -> find_project_root(Path.dirname(path))
+    end
   end
 
   # Project-level rules that take file_asts (most common pattern).
