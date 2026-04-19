@@ -72,6 +72,27 @@ defmodule Archdo do
     |> Enum.sort_by(fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end)
   end
 
+  @compiled_rules [
+    Archdo.Rules.Compiled.DeadCode,
+    Archdo.Rules.Compiled.TransitiveDeadCode,
+    Archdo.Rules.Compiled.UnusedImports,
+    Archdo.Rules.Compiled.CompileDependencyHotspot,
+    Archdo.Rules.Compiled.WeakDependency,
+    Archdo.Rules.Compiled.TestOnlyPublic,
+    Archdo.Rules.Compiled.ApiSurfaceWeight,
+    Archdo.Rules.Compiled.CircularFunctionCalls,
+    Archdo.Rules.Compiled.ProtocolCompleteness,
+    Archdo.Rules.Compiled.ChangeRisk,
+    Archdo.Rules.Compiled.NonExhaustiveApi,
+    Archdo.Rules.Compiled.InconsistentApiReturn,
+    Archdo.Rules.Compiled.CrossBoundaryCall,
+    Archdo.Rules.Compiled.InternalModuleLeak,
+    Archdo.Rules.Compiled.PhantomDependency,
+    Archdo.Rules.Compiled.RepoBypass,
+    Archdo.Rules.Compiled.DegenerateFunction,
+    Archdo.Rules.Compiled.LookupTableCandidate
+  ]
+
   defp run_compiled_rules(paths, _opts) do
     project_root =
       case paths do
@@ -85,45 +106,21 @@ defmodule Archdo do
       end
 
     case Archdo.Compiled.analyze(project_root) do
-      {:ok, compiled_data} ->
-        dead = Archdo.Rules.Module.DeadCode.analyze_compiled(compiled_data)
-        missing = missing_callback_diagnostics(compiled_data)
-        dead ++ missing
+      {:ok, graph} ->
+        Enum.flat_map(@compiled_rules, fn rule ->
+          try do
+            rule.analyze_compiled(graph)
+          rescue
+            e ->
+              IO.puts(:standard_error, "[archdo] compiled rule #{rule.id()} crashed: #{Exception.message(e)}")
+              []
+          end
+        end)
 
       {:error, reason} ->
-        IO.puts(:standard_error, "[archdo] xref: #{reason}")
+        IO.puts(:standard_error, "[archdo] compiled: #{reason}")
         []
     end
-  end
-
-  defp missing_callback_diagnostics(compiled_data) do
-    compiled_data
-    |> Archdo.Compiled.missing_callbacks()
-    |> Enum.map(fn %{module: mod, behaviour: bhv, missing: missing} ->
-      mod_name = Archdo.AST.module_name(mod)
-      bhv_name = Archdo.AST.module_name(bhv)
-      missing_str = Enum.map_join(missing, ", ", fn {f, a} -> "#{f}/#{a}" end)
-
-      Diagnostic.warning("4.1b",
-        title: "Missing behaviour callbacks (xref-verified)",
-        message: "#{mod_name} implements #{bhv_name} but is missing: #{missing_str}",
-        why:
-          "Xref analysis of compiled beam files shows this module declares @behaviour " <>
-            "but doesn't export all required callbacks. This is detected after macro " <>
-            "expansion, so macro-injected functions are accounted for.",
-        alternatives: [
-          Archdo.Fix.new(
-            summary: "Implement the missing callbacks",
-            detail: "Add `@impl true` definitions for: #{missing_str}",
-            applies_when: "The callbacks should be implemented."
-          )
-        ],
-        references: ["ARCHITECTURE_RULES.md#4.1"],
-        context: %{module: mod_name, behaviour: bhv_name, missing: missing_str},
-        file: "lib",
-        line: 0
-      )
-    end)
   end
 
   defp find_project_root(path) do

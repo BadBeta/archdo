@@ -2,19 +2,17 @@
 
 Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, and boundary enforcement.
 
-**144 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+**164 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
 
 ## What it checks
 
 | Category | Rules | Examples |
 |----------|-------|----------|
-| **Boundaries** | 24 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params, PubSub without handler, large LiveView assigns |
-| **Module quality** | 23 | Complexity, cohesion, fan-out, Martin metrics, error handling (7 rules), recursion (4 rules), if/else dispatch, nesting depth |
-| **OTP discipline** | 41 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock detection, missing handle_info |
-| **Testing** | 18 | Mox without behaviours, coverage gaps, test naming, async eligibility, weak assertions, missing cleanup, hardcoded test data |
-| **SOLID / Seams** | — | SRP (function clustering), OCP (type dispatch), ISP (no-op stubs), DIP (dependency direction) |
-| **Resilience** | — | External calls without timeouts, bang functions on HTTP clients, missing telemetry |
-| **Duplication** | — | Type-2/3 function clones, duplicated validation logic |
+| **Boundaries** | 29 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params, compiled cross-boundary call detection, internal module leak, Repo bypass, phantom dependencies |
+| **Module quality** | 31 | Complexity, cohesion, fan-out, Martin metrics, error handling (7 rules), recursion (4 rules), stub detection, non-exhaustive API, inconsistent return shapes, degenerate functions, lookup table candidates |
+| **OTP discipline** | 42 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock detection, sequential-where-parallel |
+| **Testing** | 19 | Mox without behaviours, coverage gaps, test naming, async eligibility, weak assertions, test-only public functions |
+| **Compiled analysis** | 18 | Dead code, transitive dead code, blast radius, unused imports, weak dependencies, API surface weight, function cycles (Tarjan's SCC), protocol completeness, change risk |
 | **Event sourcing** | 8 | Aggregate purity, projection isolation, event immutability, command/event naming |
 | **NIF safety** | 4 | Panic-inducing Rust patterns, scheduler misuse, missing behaviour wrapping |
 | **State machines** | 3 | Unreachable states, terminal state integrity, implicit boolean state |
@@ -43,6 +41,7 @@ mix archdo --paths lib/my_app/accounts  # scan specific paths
 mix archdo --only 4.17,6.12             # run specific rules
 mix archdo --boundaries                 # cross-module dependency analysis
 mix archdo --functions                  # function-level graph analysis
+mix archdo --compiled                   # compiled beam analysis (dead code, blast radius, API checks)
 mix archdo --coverage                   # test coverage gap matrix
 mix archdo --metrics                    # Martin package metrics matrix
 ```

@@ -8,7 +8,7 @@
 
 1. [What Archdo is and why](#1-what-archdo-is-and-why)
 2. [Installation](#2-installation)
-3. [The 144 rules at a glance](#3-the-144-rules-at-a-glance)
+3. [The 164 rules at a glance](#3-the-164-rules-at-a-glance)
 4. [The diagnostic shape](#4-the-diagnostic-shape)
 5. [Output formats](#5-output-formats)
 6. [CLI reference](#6-cli-reference)
@@ -74,19 +74,19 @@ Archdo needs `Jason` (JSON encoding) and `JSV` (JSON Schema validation for MCP t
 
 ---
 
-## 3. The 144 rules at a glance
+## 3. The 164 rules at a glance
 
-Archdo currently ships **144 rules in 11 categories**. Full text for every rule is in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md).
+Archdo currently ships **164 rules in 12 categories** (including 18 compiled-analysis rules). Full text for every rule is in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md).
 
 | #   | Category                         | Rules    | Severity mix          | What it catches                                                                  |
 |-----|----------------------------------|----------|-----------------------|----------------------------------------------------------------------------------|
-| 1   | Boundaries                       | 24       | error / warning / info | Dependency direction, context encapsulation, circular deps, Repo in interface, schema ownership, function-level boundary leaks, chatty boundaries, anemic contexts, untyped boundaries, unvalidated params, large controller actions, PubSub without handler, large LiveView assigns |
+| 1   | Boundaries                       | 29       | error / warning / info | Dependency direction, context encapsulation, circular deps, Repo in interface, schema ownership, function-level boundary leaks, chatty boundaries, anemic contexts, untyped boundaries, unvalidated params, large controller actions, PubSub without handler, large LiveView assigns, **compiled**: compile dependency hotspot, circular function calls, change blast radius, cross-boundary call detection, Repo bypass |
 | 2   | Public API                       | 3        | warning / info        | Missing `@moduledoc`, missing `@spec`, calls into `@moduledoc false` modules     |
 | 3   | Single Source of Truth           | 6        | warning / info        | Type-2 clones, scattered config, library config via `Application.get_env`, Type-3 similar code, reinvented enumerable, duplicated validation across layers |
-| 4   | Coupling & Abstraction           | 21       | warning / info        | Behaviour size, single-impl protocols, type-dispatching case, external deps without behaviour, broad imports, unused deps, god contexts, mockability score, feature envy, speculative generality, parallel hierarchies, primitive obsession, mixed concerns, natural seams, hand-rolled pubsub, adapters without behaviour, unbounded external calls, missing telemetry, unprotected bang calls |
-| 5   | OTP Process Architecture         | 41       | error / warning / info | Unsupervised processes, GenServer hygiene, blocking init/callbacks, supervision tree shape, restart strategies, Task discipline, ETS patterns, process-naming safety, bottlenecks, tracing safety, GenStage backpressure, stale PIDs, deadlock detection, missing handle_info, brutal kill, ETS ownership leak, hardcoded timeouts |
-| 6   | Module Quality                   | 23       | error / warning / info | Module cohesion, function complexity & arity, struct field count, file length, function fan-out, boolean flag args, pretentious names, distance from main sequence, error handling (7 rules: rescue swallowing, raise in non-bang, inconsistent shapes, try/rescue for expected, bang in ok/error, missing rescue at boundary, exception laundering), nesting depth, if/else dispatch, recursion (4 rules: non-tail, unnecessary, broken TCO, unbounded) |
-| 7   | Test Architecture                | 18       | warning / info        | Test mirrors source, Repo in tests, mocks need behaviours, async eligibility, sleep in tests, test naming, no/trivial assertions, long setup/test bodies, Mox verification, coverage gap, mocking own modules, runtime DI, generic test names, weak assertions, missing cleanup, hardcoded test data |
+| 4   | Coupling & Abstraction           | 26       | warning / info        | Behaviour size, single-impl protocols, type-dispatching case, external deps without behaviour, broad imports, unused deps, god contexts, mockability score, feature envy, speculative generality, parallel hierarchies, primitive obsession, mixed concerns, natural seams, hand-rolled pubsub, adapters without behaviour, unbounded external calls, missing telemetry, unprotected bang calls, **compiled**: unused imports, weak dependency, protocol completeness, internal module leak, phantom dependency |
+| 5   | OTP Process Architecture         | 42       | error / warning / info | Unsupervised processes, GenServer hygiene, blocking init/callbacks, supervision tree shape, restart strategies, Task discipline, ETS patterns, process-naming safety, bottlenecks, tracing safety, GenStage backpressure, stale PIDs, deadlock detection, missing handle_info, brutal kill, ETS ownership leak, hardcoded timeouts, **sequential-where-parallel** |
+| 6   | Module Quality                   | 31       | error / warning / info | Module cohesion, function complexity & arity, struct field count, file length, function fan-out, boolean flag args, pretentious names, distance from main sequence, error handling (7 rules), nesting depth, if/else dispatch, recursion (4 rules), stub functions, **compiled**: dead code, transitive dead code, API surface weight, non-exhaustive API, inconsistent return shapes, degenerate functions, lookup table candidates |
+| 7   | Test Architecture                | 19       | warning / info        | Test mirrors source, Repo in tests, mocks need behaviours, async eligibility, sleep in tests, test naming, no/trivial assertions, long setup/test bodies, Mox verification, coverage gap, mocking own modules, runtime DI, generic test names, weak assertions, missing cleanup, hardcoded test data, **compiled**: test-only public functions |
 | 8   | Event Sourcing                   | 8        | error / warning / info | Command/event naming, **pure aggregate apply/2**, immutable events, shared projections, events need `Jason.Encoder`, projector reads external/non-deterministic, process manager reads projection, aggregates without Commanded behaviour |
 | 9   | State Machine                    | 3        | warning / info        | Unreachable states, terminal state integrity, implicit state via boolean flags |
 | 10  | Composition                      | 2        | info                  | Deep `use` chains, excessive namespace nesting                                  |

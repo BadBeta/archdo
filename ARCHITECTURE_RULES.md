@@ -1,16 +1,16 @@
 # Archdo — Architectural Quality Rules for Elixir
 
-> 144 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, and **test quality** — the gap none of them cover.
+> 164 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, **test quality**, and **compiled beam analysis** — the gap none of them cover.
 
 ## Contents
 
-1. [Boundary Integrity](#1-boundary-integrity) — 17 rules (1.1–1.17)
+1. [Boundary Integrity](#1-boundary-integrity) — 22 rules (1.1–1.22)
 2. [Public API Quality](#2-public-api-quality) — 3 rules (2.1–2.3)
 3. [Single Source of Truth](#3-single-source-of-truth) — 6 rules (3.1–3.6)
-4. [Coupling & Abstraction](#4-coupling--abstraction) — 21 rules (4.1–4.21)
-5. [OTP Process Architecture](#5-otp-process-architecture) — 41 rules (5.1–5.41)
-6. [Module Quality](#6-module-quality) — 23 rules (6.1–6.23)
-7. [Test Architecture](#7-test-architecture) — 18 rules (7.1–7.20)
+4. [Coupling & Abstraction](#4-coupling--abstraction) — 26 rules (4.1–4.26)
+5. [OTP Process Architecture](#5-otp-process-architecture) — 42 rules (5.1–5.42)
+6. [Module Quality](#6-module-quality) — 31 rules (6.1–6.31)
+7. [Test Architecture](#7-test-architecture) — 19 rules (7.1–7.21)
 8. [Event Sourcing](#8-event-sourcing-architecture) — 8 rules (8.1–8.8)
 9. [State Machine](#9-state-machine-architecture) — 3 rules (9.1–9.3)
 10. [Composition](#10-composition-and-extensibility) — 2 rules (10.1–10.2)
@@ -214,6 +214,51 @@ LiveView subscribes to PubSub but has no `handle_info/2` to receive broadcasts.
 - **Why:** `PubSub.subscribe` sets up a subscription, but broadcasts arrive as regular process messages. Without `handle_info/2`, the messages pile up in the LiveView process mailbox — consuming memory, never being processed, and making the subscription effectively dead code. (Silent Resource Leak)
 - **Check:** Detect `.subscribe` calls in LiveView modules that lack `handle_info/2` definitions or `attach_hook` for `:handle_info`.
 - **Tolerate:** LiveViews using `attach_hook` in `on_mount` for zero-boilerplate broadcast handling.
+- **Severity:** `warning`
+
+### 1.18 Compile Dependency Hotspot *(compiled)*
+
+Module depended on by many others — changes trigger cascading recompilation.
+
+- **Why:** Modules at the center of the dependency graph become recompilation bottlenecks. Changing a module with 50+ dependents forces all of them to recompile, slowing development cycles. Struct and behaviour changes cause broader recompilation than function-body changes. (Build Performance, Change Isolation)
+- **Check:** Build compiled call graph. Count transitive dependents for each module. Flag modules with >10 dependents.
+- **Tolerate:** Core utility modules (AST helpers, type modules) that are stable and rarely change.
+- **Severity:** `info`
+
+### 1.19 Circular Function Calls *(compiled)*
+
+Function-level circular call chain between modules detected via Tarjan's SCC algorithm.
+
+- **Why:** A circular call chain between functions in different modules (A.foo → B.bar → A.foo) creates tight coupling. Module-level cycles (rule 1.3) are coarser — this identifies the exact functions involved, making the cycle actionable. (Dependency Acyclicity, Testability)
+- **Check:** Build function-level call graph from compiled beams. Run Tarjan's SCC. Report cycles that span 2+ modules (intra-module recursion is normal).
+- **Tolerate:** Mutual recursion within a single module.
+- **Severity:** `warning`
+
+### 1.20 High Change Blast Radius *(compiled)*
+
+Module change affects many transitive dependents across multiple dependency layers.
+
+- **Why:** Changes to high-blast-radius modules ripple through the codebase. The risk score combines: number of transitive dependents, dependency depth, whether the module defines structs or behaviours (broader recompilation impact). High scores demand careful review and thorough testing. (Change Isolation, Risk Management)
+- **Check:** Walk the dependency graph outward from each module. Compute transitive dependents by depth. Calculate risk score with struct/behaviour weighting.
+- **Tolerate:** Core infrastructure modules whose central role is by design (Repo, PubSub).
+- **Severity:** `warning`
+
+### 1.21 Cross-Boundary Call Bypasses Context API *(compiled)*
+
+Module in one context calls an internal module in another context directly, bypassing the boundary module.
+
+- **Why:** Compiled analysis confirms this is a ground-truth dependency after macro expansion — not an AST guess. Calling internal modules across context boundaries creates hidden coupling. Changes to the internal module can break callers in other contexts without warning. (Context Encapsulation, Information Hiding)
+- **Check:** Build compiled call graph. For calls between modules in different contexts, flag when the callee is an internal module (not the context boundary module itself).
+- **Tolerate:** Shared utility modules intentionally designed for cross-context use.
+- **Severity:** `warning`
+
+### 1.22 Direct Repo Access Outside Context *(compiled)*
+
+Non-context module calls Repo functions directly instead of going through the owning context.
+
+- **Why:** Only context boundary modules should access the Repo — this ensures data access is encapsulated and business rules are enforced consistently. Direct Repo calls bypass validation, authorization, and cross-cutting concerns the context provides. Compiled data catches Repo calls injected by macros. (Data Encapsulation, Single Responsibility)
+- **Check:** Find all calls to Repo.get/insert/update/delete/all from non-context modules. Context modules are identified as top-level domain modules.
+- **Tolerate:** Migration modules, context-internal submodules explicitly delegated by the context.
 - **Severity:** `warning`
 
 ---
@@ -496,6 +541,51 @@ Behaviour implementations with no-op stubs suggest the interface should be split
 - **Why:** If an implementation provides `def callback(_), do: :ok` for half the callbacks, those callbacks don't apply to this implementation. The behaviour is too broad — it should be split into focused interfaces where each implementation uses all callbacks meaningfully. (Interface Segregation Principle)
 - **Check:** Flag behaviour implementations where >30% of callbacks are no-op stubs (return `:ok`, `nil`, or match-all with no logic).
 - **Tolerate:** `@optional_callbacks` (explicitly optional), transitional implementations during migration.
+- **Severity:** `info`
+
+### 4.22 Unused Imports *(compiled)*
+
+Module uses less than 50% of another module's exports — the dependency is wider than necessary.
+
+- **Why:** When a module depends on another but uses only a small fraction of its API, the dependency is wider than it needs to be. This makes the caller harder to understand and creates unnecessary coupling. (Narrow Dependencies, Interface Segregation)
+- **Check:** Build compiled call graph. For each module pair, compare functions actually called vs total exports. Flag when <50% of a module's exports (minimum 5) are used.
+- **Tolerate:** Modules using a utility module where the unused functions serve other callers.
+- **Severity:** `info`
+
+### 4.23 Weak Dependency *(compiled)*
+
+Module depends on another but uses only 1-2 of its many exports.
+
+- **Why:** A dependency on a large module for 1-2 functions creates coupling without proportional benefit. The caller should depend on a more focused interface, or the large module should be split. (Minimal Coupling, Interface Segregation)
+- **Check:** Flag when a module uses ≤2 functions from a module with ≥10 exports.
+- **Tolerate:** Modules using well-known utility functions (e.g., `String.trim/1`).
+- **Severity:** `info`
+
+### 4.24 Protocol/Behaviour Completeness *(compiled)*
+
+Module declares `@behaviour` but doesn't export all required callbacks after macro expansion.
+
+- **Why:** Compiled beam analysis shows the actual exports after all macros have expanded. Missing callbacks will cause runtime failures. This catches cases that the compiler's own check might miss due to macro injection. (Contract Compliance)
+- **Check:** For each module with `@behaviour`, verify all required callbacks from `behaviour_info(:callbacks)` are exported.
+- **Tolerate:** `@optional_callbacks` in the behaviour definition.
+- **Severity:** `warning`
+
+### 4.25 Internal Module Leak *(compiled)*
+
+Internal module (child of a context) called from outside its parent's namespace.
+
+- **Why:** Modules nested under a parent (e.g., `MyApp.Accounts.UserQuery`) are typically internal implementation details. External access bypasses the parent's public API, creating coupling to internals. Compiled data catches macro-injected calls invisible to AST analysis. (Encapsulation, Information Hiding)
+- **Check:** Find calls from outside a module's parent namespace to child modules. Exclude widely-used modules (>5 dependents) — they're shared infrastructure.
+- **Tolerate:** Shared utility modules, protocol implementations.
+- **Severity:** `info`
+
+### 4.26 Phantom Dependency *(compiled)*
+
+Module references another module (in struct patterns, type specs, attributes) but never calls any of its functions.
+
+- **Why:** After compilation, a module references another (e.g., pattern matches on `%Module{}`) but makes zero function calls to it. This may be a leftover from a refactor, an unused alias, or a compile-time-only dependency. Phantom dependencies add noise to the dependency graph and may trigger unnecessary recompilation. (Minimal Dependencies)
+- **Check:** Extract all Elixir module atoms from beam abstract code. Compare against modules with actual function calls. Report the difference, classified by reference type (struct, attribute, general).
+- **Tolerate:** `@behaviour` declarations (compile-time contracts by design), compile-time macro providers.
 - **Severity:** `info`
 
 ---
@@ -865,6 +955,15 @@ GenStage consumer subscription without explicit `max_demand`/`min_demand`.
 - **Tolerate:** Simple producer-consumer pairs in low-throughput scenarios.
 - **Severity:** `info`
 
+#### 5.42 Sequential Where Parallel
+
+Sequential collection processing with I/O in the callback — candidate for `Task.async_stream`.
+
+- **Why:** `Enum.map/each/flat_map` processing where each iteration performs I/O (HTTP, database, file) blocks sequentially. For N items with T seconds of I/O each, sequential takes N*T wall-clock time. `Task.async_stream` runs iterations in parallel, reducing wall-clock time to approximately T. Also detects sequential independent variable bindings that could use `Task.async`. (Performance, Parallelism)
+- **Check:** Flag `Enum.map/each/flat_map`, `Stream.map/each/flat_map`, and `for` comprehensions where the callback body calls known I/O modules (Repo, HTTPoison, Req, Finch, Tesla, File, GenServer, Mailer, etc.). Also flag consecutive independent variable bindings that each perform I/O and don't depend on each other.
+- **Tolerate:** Test files, callbacks that must run in order, rate-limited external services, already-parallel code (Task.async_stream).
+- **Severity:** `info`
+
 ---
 
 ## 6. Module Quality
@@ -1082,6 +1181,80 @@ Recursive function without depth guard or finite base case — stack overflow ri
 - **Tolerate:** Tail-recursive functions (safe at any depth), list recursion with `[]` base case (bounded by input length), tree walks with struct patterns.
 - **Severity:** `info`
 
+### 6E. Compiled Analysis
+
+#### 6.24 Dead Public Function *(compiled)*
+
+Public function exported but never called from outside the module.
+
+- **Why:** Public functions are part of a module's API contract. An exported function nobody calls is dead weight — it increases the API surface, survives refactors that should have removed it, and misleads developers. (Dead Code Elimination, API Clarity)
+- **Check:** Build compiled call graph from beam files. Find exported functions with zero external callers. Exclude framework callbacks (init, handle_call, mount, render, etc.) and behaviour callbacks.
+- **Tolerate:** Library API functions called by external consumers, dynamically called functions (apply/3, protocol dispatch).
+- **Severity:** `info`
+
+#### 6.25 Transitively Dead Function *(compiled)*
+
+Function only called from dead functions — removing the dead callers would make this unreachable.
+
+- **Why:** This function has callers, but every caller is itself dead code (rule 6.24). The entire call chain is dead. (Transitive Dead Code, Call Graph Analysis)
+- **Check:** Walk outward from dead roots in the compiled call graph. If all callers of a function are dead, the function is transitively dead. Only checks project modules, not stdlib.
+- **Tolerate:** Same as 6.24.
+- **Severity:** `info`
+
+#### 6.26 Oversized API Surface *(compiled)*
+
+Module exports many functions but less than 25% are called by external modules.
+
+- **Why:** A module with many exports but few external callers has an oversized public API. Every exported function is a contract. Functions only used internally should be `defp`. (Minimal API Surface, Encapsulation)
+- **Check:** Count external callers per exported function. Flag modules with ≥8 exports where <25% are used externally.
+- **Tolerate:** Library modules designed for external consumption, utility modules with intentionally broad APIs.
+- **Severity:** `info`
+
+#### 6.27 Non-Exhaustive Public API *(compiled)*
+
+Public function has multiple clause patterns but no catch-all — crashes with FunctionClauseError on unexpected input.
+
+- **Why:** A public API function pattern-matching on specific shapes without a fallback clause will crash if called with unexpected input. For internal dispatch this is fine (let it crash), but public API functions should handle all inputs gracefully or document their constraints. (API Robustness, Defensive Programming)
+- **Check:** Extract function clauses from beam abstract code. Flag exported functions with ≥2 clauses where no clause is a catch-all (all args are variables with no guards).
+- **Tolerate:** Functions where the restricted input set is by design (dispatch tables, type-specific handlers), internal functions that are public for technical reasons.
+- **Severity:** `info`
+
+#### 6.28 Inconsistent API Return Shapes *(compiled)*
+
+Public function returns different shapes from different clauses.
+
+- **Why:** A function returning `{:ok, _}` from one clause and `:ok` from another forces callers to handle all possible shapes. Consistent return shapes make the API predictable and pattern-matchable. (API Consistency, Contract Clarity)
+- **Check:** Classify return expressions from each clause in beam abstract code. Flag functions where clauses return different shape categories. Excludes `{:ok, _} | {:error, _}` which is a valid standard pattern.
+- **Tolerate:** Functions where varying return shapes are intentional and documented with `@spec`.
+- **Severity:** `warning`
+
+#### 6.29 Stub Function
+
+Function body is a placeholder that will fail at runtime — `raise "not implemented"`, TODO, or similar.
+
+- **Why:** Stub functions are useful during development but dangerous in production. They crash or silently misbehave when the code path is reached. (Production Readiness, Code Completeness)
+- **Check:** Flag function bodies containing: `raise "not implemented"`, `raise "TODO"`, `IO.warn("not implemented")`, or returning `:not_implemented`. Skip test files.
+- **Tolerate:** Test helpers, intentionally unsupported behaviour callbacks with `@doc` explaining why.
+- **Severity:** `warning`
+
+#### 6.30 Degenerate Function *(compiled)*
+
+Public function always raises or returns a fixed value regardless of input — likely a stub surviving macro expansion.
+
+- **Why:** After all macros expand, this function's compiled body is degenerate — it either always raises or every clause returns the same fixed atom. This catches stubs injected by macros that aren't visible in source code. (Post-Expansion Stub Detection)
+- **Check:** Analyze beam abstract code. Flag exported functions where all clauses either raise or return the same literal. Exclude OTP callbacks (init, terminate, etc.) and single-clause `:ok` returns (normal side-effect functions).
+- **Tolerate:** OTP callbacks, side-effect functions that legitimately return `:ok`.
+- **Severity:** `info` (warning for "not implemented" raises)
+
+#### 6.31 Lookup Table Candidate *(compiled)*
+
+Function is a pure literal-to-literal mapping — equivalent to a Map lookup.
+
+- **Why:** Multi-clause functions that map literal values to literal values with no computation are functionally equivalent to `Map.fetch!/2`. Replacing with a module attribute map is more concise, self-documenting, and can be more efficient (O(log n) map lookup vs O(n) clause matching for large tables). The data becomes extractable for documentation or serialization. (Data vs Code, Clarity)
+- **Check:** Analyze beam abstract code. Flag functions where ≥3 clauses all have literal-only patterns (atoms, integers, strings, tuples of literals) and literal-only return values. Also detects single-clause functions with a `case` body that is a lookup table.
+- **Tolerate:** Small dispatch tables (2 clauses), functions expected to gain guards or logic later.
+- **Severity:** `info`
+
 ---
 
 ## 7. Test Architecture
@@ -1246,6 +1419,15 @@ Test files containing real-looking email addresses (gmail.com, yahoo.com), Strip
 - **Why:** Hardcoded real email addresses risk accidental side effects in integration tests (sending real emails). Hardcoded API keys risk leaking secrets to version control. Hardcoded production URLs risk hitting real APIs from CI. Use `@example.com` (RFC 2606 reserved), factories with generated values, or environment-based test credentials. (Safety, Test Hygiene)
 - **Check:** Scan test file content for regex patterns matching real email providers, API key formats, and Bearer token patterns.
 - **Tolerate:** `@example.com` addresses (RFC 2606), `localhost` URLs, obviously fake data.
+- **Severity:** `info`
+
+#### 7.21 Test-Only Public Function *(compiled)*
+
+Public function only called from test modules — never from production code.
+
+- **Why:** A public function exercised only by tests suggests the test is reaching into implementation details rather than testing through the public API. Consider making the function `defp` and testing the behaviour through the module's public interface. (Test Architecture, Encapsulation)
+- **Check:** Build compiled call graph. Find exported functions where all callers are test modules (modules ending in `Test`, `DataCase`, `ConnCase`, etc.). Exclude framework functions.
+- **Tolerate:** Test helper functions intentionally public, functions called dynamically.
 - **Severity:** `info`
 
 ---
@@ -1423,17 +1605,19 @@ Choose Port when safety matters more than NIF latency. Ports run in a separate O
 
 | Category | Count | Rule IDs |
 |----------|-------|----------|
-| Boundaries | 24 | 1.1–1.17, 2.1–2.3, 4.5–4.8, 4.11, 4.17 |
+| Boundaries | 29 | 1.1–1.22, 2.1–2.3, 4.5–4.8, 4.11, 4.17 |
 | Single Source of Truth | 6 | 3.1–3.6 |
-| Coupling & Abstraction | 21 | 4.1–4.4, 4.9–4.10, 4.12–4.16, 4.18–4.21 |
-| OTP Process Architecture | 41 | 5.1–5.41 |
-| Module Quality | 23 | 6.1–6.23 |
-| Test Architecture | 18 | 7.1–7.20 |
+| Coupling & Abstraction | 26 | 4.1–4.4, 4.9–4.10, 4.12–4.16, 4.18–4.26 |
+| OTP Process Architecture | 42 | 5.1–5.42 |
+| Module Quality | 31 | 6.1–6.31 |
+| Test Architecture | 19 | 7.1–7.21 |
 | Event Sourcing | 8 | 8.1–8.8 |
 | State Machine | 3 | 9.1–9.3 |
 | Composition | 2 | 10.1–10.2 |
 | Native Interop | 4 | 11.1–11.4 |
-| **Total** | **144** | |
+| **Total** | **164** | |
+
+Rules marked *(compiled)* require the `--compiled` flag and work by analyzing beam files after `mix compile`. They see ground-truth dependencies after macro expansion — no AST guessing.
 
 ## Severity Levels
 

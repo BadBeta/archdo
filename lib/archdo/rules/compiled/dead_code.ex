@@ -1,8 +1,9 @@
-defmodule Archdo.Rules.Module.DeadCode do
+defmodule Archdo.Rules.Compiled.DeadCode do
   @moduledoc false
   @behaviour Archdo.Rule
 
   alias Archdo.{Diagnostic, Fix}
+  alias Archdo.Compiled.Graph
 
   @impl true
   def id, do: "6.24"
@@ -15,12 +16,12 @@ defmodule Archdo.Rules.Module.DeadCode do
   def analyze(_file, _ast, _opts), do: []
 
   @doc """
-  Project-level analysis using compiled beam data from compiled beam files.
-  Call with the result of Archdo.Compiled.analyze/1.
+  Compiled-mode analysis using the interaction graph.
   """
-  def analyze_compiled(compiled_data) do
-    compiled_data
-    |> Archdo.Compiled.dead_functions()
+  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
+  def analyze_compiled(%Graph{} = graph) do
+    graph
+    |> Graph.dead_functions()
     |> Enum.map(&build_diagnostic/1)
   end
 
