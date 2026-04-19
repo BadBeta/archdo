@@ -46,26 +46,23 @@ defmodule Archdo do
     files = collect_files(paths)
 
     per_file_diagnostics =
-      if Keyword.get(opts, :boundaries, false) do
-        Runner.analyze_with_graph(files, opts)
-      else
-        Runner.analyze(files, opts)
+      case Keyword.get(opts, :boundaries, false) do
+        true -> Runner.analyze_with_graph(files, opts)
+        false -> Runner.analyze(files, opts)
       end
 
     test_diagnostics =
-      if Keyword.get(opts, :tests, false) do
-        run_test_project_rules(paths, opts)
-      else
-        []
+      case Keyword.get(opts, :tests, false) do
+        true -> run_test_project_rules(paths, opts)
+        false -> []
       end
 
     project_diagnostics = run_project_arch_rules(paths, opts)
 
     compiled_diagnostics =
-      if Keyword.get(opts, :compiled, false) do
-        run_compiled_rules(paths, opts)
-      else
-        []
+      case Keyword.get(opts, :compiled, false) do
+        true -> run_compiled_rules(paths, opts)
+        false -> []
       end
 
     (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ compiled_diagnostics)
@@ -168,10 +165,9 @@ defmodule Archdo do
     metrics_diagnostics = run_metrics_rules(file_asts)
 
     function_graph_diagnostics =
-      if Keyword.get(opts, :functions, false) do
-        run_function_graph_rules(file_asts, opts)
-      else
-        []
+      case Keyword.get(opts, :functions, false) do
+        true -> run_function_graph_rules(file_asts, opts)
+        false -> []
       end
 
     (file_ast_diagnostics ++
@@ -203,10 +199,9 @@ defmodule Archdo do
     contexts = config.contexts
 
     boundary_diagnostics =
-      if contexts != [] do
-        FunctionBoundary.analyze_project(fn_graph, contexts)
-      else
-        []
+      case contexts do
+        [_ | _] -> FunctionBoundary.analyze_project(fn_graph, contexts)
+        [] -> []
       end
 
     fan_out_diagnostics = FunctionFanOut.analyze_project(fn_graph)
@@ -214,17 +209,15 @@ defmodule Archdo do
     feature_envy_diagnostics = FeatureEnvy.analyze_project(fn_graph)
 
     chatty_diagnostics =
-      if contexts != [] do
-        ChattyBoundary.analyze_project(fn_graph, contexts)
-      else
-        []
+      case contexts do
+        [_ | _] -> ChattyBoundary.analyze_project(fn_graph, contexts)
+        [] -> []
       end
 
     sync_coupling_diagnostics =
-      if contexts != [] do
-        SyncContextCoupling.analyze_project(fn_graph, contexts)
-      else
-        []
+      case contexts do
+        [_ | _] -> SyncContextCoupling.analyze_project(fn_graph, contexts)
+        [] -> []
       end
 
     boundary_diagnostics ++
@@ -246,12 +239,14 @@ defmodule Archdo do
     diagnostics = run(paths, opts)
 
     final_diagnostics =
-      if Keyword.get(opts, :show_all, false) do
-        diagnostics
-      else
-        baseline = Freeze.load()
-        {new, _baselined} = Freeze.partition(diagnostics, baseline)
-        new
+      case Keyword.get(opts, :show_all, false) do
+        true ->
+          diagnostics
+
+        false ->
+          baseline = Freeze.load()
+          {new, _baselined} = Freeze.partition(diagnostics, baseline)
+          new
       end
 
     Formatter.format(final_diagnostics, opts)
@@ -405,13 +400,8 @@ defmodule Archdo do
     [header, rows, footer]
   end
 
-  defp truncate(str, max) do
-    if String.length(str) > max do
-      String.slice(str, 0, max - 3) <> "..."
-    else
-      str
-    end
-  end
+  defp truncate(str, max) when byte_size(str) <= max, do: str
+  defp truncate(str, max), do: String.slice(str, 0, max - 3) <> "..."
 
   # Find test files near each source path. For /foo/bar/lib → /foo/bar/test.
   defp collect_tests_for(paths) do
