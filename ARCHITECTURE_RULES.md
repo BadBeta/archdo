@@ -1,15 +1,15 @@
 # Archdo — Architectural Quality Rules for Elixir
 
-> 164 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, **test quality**, and **compiled beam analysis** — the gap none of them cover.
+> 165 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, **test quality**, and **compiled beam analysis** — the gap none of them cover.
 
 ## Contents
 
-1. [Boundary Integrity](#1-boundary-integrity) — 22 rules (1.1–1.22)
+1. [Boundary Integrity](#1-boundary-integrity) — 24 rules (1.1–1.23)
 2. [Public API Quality](#2-public-api-quality) — 3 rules (2.1–2.3)
 3. [Single Source of Truth](#3-single-source-of-truth) — 6 rules (3.1–3.6)
 4. [Coupling & Abstraction](#4-coupling--abstraction) — 26 rules (4.1–4.26)
-5. [OTP Process Architecture](#5-otp-process-architecture) — 42 rules (5.1–5.42)
-6. [Module Quality](#6-module-quality) — 31 rules (6.1–6.31)
+5. [OTP Process Architecture](#5-otp-process-architecture) — 40 rules (5.1–5.42)
+6. [Module Quality](#6-module-quality) — 30 rules (6.1–6.31)
 7. [Test Architecture](#7-test-architecture) — 19 rules (7.1–7.21)
 8. [Event Sourcing](#8-event-sourcing-architecture) — 8 rules (8.1–8.8)
 9. [State Machine](#9-state-machine-architecture) — 3 rules (9.1–9.3)
@@ -1605,17 +1605,17 @@ Choose Port when safety matters more than NIF latency. Ports run in a separate O
 
 | Category | Count | Rule IDs |
 |----------|-------|----------|
-| Boundaries | 29 | 1.1–1.22, 2.1–2.3, 4.5–4.8, 4.11, 4.17 |
+| Boundaries | 30 | 1.1–1.23, 2.1–2.3, 4.5–4.8, 4.11, 4.17 |
 | Single Source of Truth | 6 | 3.1–3.6 |
 | Coupling & Abstraction | 26 | 4.1–4.4, 4.9–4.10, 4.12–4.16, 4.18–4.26 |
-| OTP Process Architecture | 42 | 5.1–5.42 |
-| Module Quality | 31 | 6.1–6.31 |
+| OTP Process Architecture | 40 | 5.1–5.42 |
+| Module Quality | 30 | 6.1–6.31 |
 | Test Architecture | 19 | 7.1–7.21 |
 | Event Sourcing | 8 | 8.1–8.8 |
 | State Machine | 3 | 9.1–9.3 |
 | Composition | 2 | 10.1–10.2 |
 | Native Interop | 4 | 11.1–11.4 |
-| **Total** | **164** | |
+| **Total** | **165** | |
 
 Rules marked *(compiled)* require the `--compiled` flag and work by analyzing beam files after `mix compile`. They see ground-truth dependencies after macro expansion — no AST guessing.
 
