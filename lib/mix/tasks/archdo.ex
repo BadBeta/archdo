@@ -166,6 +166,16 @@ defmodule Mix.Tasks.Archdo do
     Archdo.Compiled.Diagram.dataflow_context(graph, context_name)
   end
 
+  # SVG variants — proper port-based LabVIEW/Grasshopper-style diagrams
+  defp generate_diagram(graph, "svg:" <> module_name) do
+    mod = String.to_atom("Elixir.#{module_name}")
+    Archdo.Compiled.DiagramSVG.module_dataflow(graph, mod)
+  end
+
+  defp generate_diagram(graph, "svg-context:" <> context_name) do
+    Archdo.Compiled.DiagramSVG.context_dataflow(graph, context_name)
+  end
+
   defp generate_diagram(graph, "blast:" <> module_name) do
     mod = String.to_atom("Elixir.#{module_name}")
     Archdo.Compiled.Diagram.blast_radius(graph, mod)
