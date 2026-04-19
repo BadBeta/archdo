@@ -22,6 +22,12 @@ defmodule Mix.Tasks.Archdo do
       Requires the target project to be compiled (`mix compile`).
     * `--coverage` - Print test coverage gap matrix and exit (no other rules run)
     * `--metrics` - Print Martin package metrics (Ca/Ce/I/A/D) matrix and exit
+    * `--diagram` - Generate Mermaid architecture diagram from compiled beams.
+      Values: `overview` (contexts + cross-boundary deps), `modules` (all module deps),
+      `api` (public API surface per context), `blast:Module.Name` (blast radius for a module),
+      `context:Context.Name` (detail view of one context), `delta` (AST vs compiled diff —
+      shows hidden macro-injected deps and phantom unused deps), `delta-only` (only the
+      differences). Requires compiled beams.
 
   ## Baseline / Freeze
 
@@ -63,6 +69,7 @@ defmodule Mix.Tasks.Archdo do
           functions: :boolean,
           compiled: :boolean,
           coverage: :boolean,
+          diagram: :string,
           metrics: :boolean,
           freeze: :boolean,
           freeze_stats: :boolean,
@@ -73,6 +80,10 @@ defmodule Mix.Tasks.Archdo do
     paths = parse_list(Keyword.get(opts, :paths, "lib"))
 
     cond do
+      Keyword.has_key?(opts, :diagram) ->
+        run_diagram(opts[:diagram], paths)
+        :ok
+
       Keyword.get(opts, :coverage, false) ->
         Archdo.print_coverage_matrix(paths)
         :ok
@@ -116,6 +127,55 @@ defmodule Mix.Tasks.Archdo do
 
     [format: format, ignore: ignore, boundaries: boundaries, tests: tests, functions: functions, compiled: compiled]
     |> maybe_add(:only, only)
+  end
+
+  defp run_diagram(diagram_type, paths) do
+    project_root =
+      case paths do
+        [path | _] ->
+          path
+          |> Path.expand()
+          |> find_project_root()
+
+        _ ->
+          File.cwd!()
+      end
+
+    case Archdo.Compiled.analyze(project_root) do
+      {:ok, graph} ->
+        mermaid = generate_diagram(graph, diagram_type)
+        IO.puts(mermaid)
+
+      {:error, reason} ->
+        IO.puts(:standard_error, "[archdo] diagram: #{reason}")
+    end
+  end
+
+  defp generate_diagram(graph, "overview"), do: Archdo.Compiled.Diagram.architecture_overview(graph)
+  defp generate_diagram(graph, "modules"), do: Archdo.Compiled.Diagram.module_dependencies(graph)
+  defp generate_diagram(graph, "api"), do: Archdo.Compiled.Diagram.api_surface(graph)
+  defp generate_diagram(graph, "delta"), do: Archdo.Compiled.Diagram.dependency_delta(graph, ["lib"])
+  defp generate_diagram(graph, "delta-only"), do: Archdo.Compiled.Diagram.dependency_delta_only(graph, ["lib"])
+
+  defp generate_diagram(graph, "blast:" <> module_name) do
+    mod = String.to_atom("Elixir.#{module_name}")
+    Archdo.Compiled.Diagram.blast_radius(graph, mod)
+  end
+
+  defp generate_diagram(graph, "context:" <> context_name) do
+    Archdo.Compiled.Diagram.context_detail(graph, context_name)
+  end
+
+  defp generate_diagram(_graph, other) do
+    "graph LR\n  error[\"Unknown diagram type: #{other}<br/>Use: overview, modules, api, blast:Module, context:Name\"]"
+  end
+
+  defp find_project_root(path) do
+    cond do
+      File.exists?(Path.join(path, "mix.exs")) -> path
+      path == "/" -> File.cwd!()
+      true -> find_project_root(Path.dirname(path))
+    end
   end
 
   defp maybe_exit(exit_status) do

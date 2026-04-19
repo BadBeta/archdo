@@ -150,6 +150,84 @@ defmodule Archdo.Compiled.GraphTest do
     end
   end
 
+  describe "discover_contexts/1" do
+    setup do
+      beam_dir = find_archdo_beam_dir()
+      %{graph: Graph.build(beam_dir)}
+    end
+
+    @tag :self_analysis
+    test "discovers contexts automatically", %{graph: graph} do
+      contexts = Graph.discover_contexts(graph)
+      assert is_list(contexts)
+      assert length(contexts) >= 2
+    end
+
+    @tag :self_analysis
+    test "each context has required fields", %{graph: graph} do
+      [ctx | _] = Graph.discover_contexts(graph)
+      assert is_binary(ctx.context)
+      assert is_list(ctx.members)
+      assert is_float(ctx.cohesion)
+      assert is_float(ctx.coupling)
+      assert is_float(ctx.quality_score)
+      assert is_integer(ctx.internal_calls)
+      assert is_integer(ctx.incoming_calls)
+      assert is_integer(ctx.outgoing_calls)
+    end
+  end
+
+  describe "Diagram.compute_delta/2" do
+    setup do
+      beam_dir = find_archdo_beam_dir()
+      %{graph: Graph.build(beam_dir)}
+    end
+
+    @tag :self_analysis
+    test "computes delta between AST and compiled", %{graph: graph} do
+      delta = Archdo.Compiled.Diagram.compute_delta(graph, ["lib"])
+      assert MapSet.size(delta.both) > 0
+      assert MapSet.size(delta.compiled_only) > 0
+      assert MapSet.size(delta.ast_only) >= 0
+    end
+
+    @tag :self_analysis
+    test "delta edges are module pairs", %{graph: graph} do
+      delta = Archdo.Compiled.Diagram.compute_delta(graph, ["lib"])
+
+      delta.both
+      |> MapSet.to_list()
+      |> Enum.take(5)
+      |> Enum.each(fn {from, to} ->
+        assert is_atom(from)
+        assert is_atom(to)
+      end)
+    end
+
+    @tag :self_analysis
+    test "hidden count is reasonable", %{graph: graph} do
+      delta = Archdo.Compiled.Diagram.compute_delta(graph, ["lib"])
+      # There should be more compiled edges than AST edges
+      # (macros inject calls invisible to AST)
+      assert delta.compiled_total > delta.ast_total
+    end
+  end
+
+  describe "Diagram.dependency_delta_only/2" do
+    setup do
+      beam_dir = find_archdo_beam_dir()
+      %{graph: Graph.build(beam_dir)}
+    end
+
+    @tag :self_analysis
+    test "generates valid Mermaid output", %{graph: graph} do
+      mermaid = Archdo.Compiled.Diagram.dependency_delta_only(graph, ["lib"])
+      assert String.starts_with?(mermaid, "graph LR")
+      assert mermaid =~ "HIDDEN"
+      assert mermaid =~ "PHANTOM"
+    end
+  end
+
   defp find_archdo_beam_dir do
     Path.join([File.cwd!(), "_build", "test", "lib", "archdo", "ebin"])
   end

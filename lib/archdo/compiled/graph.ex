@@ -454,6 +454,243 @@ defmodule Archdo.Compiled.Graph do
 
   defp classify_expr(_), do: :unknown
 
+  # --- Context Discovery ---
+
+  @doc """
+  Discover domain contexts automatically from namespace structure and call patterns.
+
+  Groups project modules by their top-level namespace (e.g., MyApp.Accounts.*),
+  then analyzes call patterns to compute cohesion, coupling, and boundary quality
+  for each group.
+
+  Returns a list of context reports sorted by quality score (worst first).
+  """
+  @spec discover_contexts(t()) :: [context_report()]
+  def discover_contexts(%__MODULE__{modules: modules, calls: calls} = graph) do
+    project_modules = Map.keys(modules)
+
+    # Detect the app prefix (e.g., "Archdo" or "MyApp")
+    app_prefix = detect_app_prefix(project_modules)
+
+    # Group modules into namespaces at the second level: MyApp.Accounts, MyApp.Billing
+    groups = group_by_context(project_modules, app_prefix)
+
+    # For each group, compute context metrics
+    groups
+    |> Enum.map(fn {context_name, member_modules} ->
+      analyze_context(graph, context_name, member_modules, calls, project_modules)
+    end)
+    |> Enum.filter(fn report -> length(report.members) >= 2 end)
+    |> Enum.sort_by(& &1.quality_score)
+  end
+
+  @type context_report :: %{
+          context: String.t(),
+          members: [module()],
+          boundary_module: module() | nil,
+          internal_calls: non_neg_integer(),
+          incoming_calls: non_neg_integer(),
+          outgoing_calls: non_neg_integer(),
+          boundary_calls: non_neg_integer(),
+          leak_calls: non_neg_integer(),
+          cohesion: float(),
+          coupling: float(),
+          quality_score: float(),
+          leaking_modules: [%{module: module(), external_callers: non_neg_integer()}],
+          misplaced_modules: [%{module: module(), calls_to_own: non_neg_integer(), calls_to_other: non_neg_integer(), strongest_affinity: String.t()}]
+        }
+
+  defp detect_app_prefix(modules) do
+    # Find the most common first segment of Elixir module names
+    modules
+    |> Enum.map(fn mod ->
+      mod
+      |> Module.split()
+      |> List.first()
+    end)
+    |> Enum.frequencies()
+    |> Enum.max_by(fn {_prefix, count} -> count end, fn -> {"App", 0} end)
+    |> elem(0)
+  end
+
+  defp group_by_context(modules, app_prefix) do
+    modules
+    |> Enum.group_by(fn mod ->
+      parts = Module.split(mod)
+
+      case parts do
+        # MyApp.Context.* → context is "MyApp.Context"
+        [^app_prefix, context | _] -> "#{app_prefix}.#{context}"
+        # MyApp → top-level module, its own context
+        [^app_prefix] -> app_prefix
+        # Other (shouldn't happen for project modules)
+        _ -> Enum.join(Enum.take(parts, 2), ".")
+      end
+    end)
+  end
+
+  defp analyze_context(graph, context_name, members, all_calls, project_modules) do
+    member_set = MapSet.new(members)
+    project_set = MapSet.new(project_modules)
+
+    # The boundary module is the one with the same name as the context
+    boundary_module =
+      Enum.find(members, fn mod ->
+        mod
+        |> Module.split()
+        |> Enum.join(".")
+        == context_name
+      end)
+
+    # Classify all calls involving this context
+    {internal, incoming, outgoing, boundary_incoming, leak_incoming} =
+      classify_context_calls(all_calls, member_set, project_set, boundary_module)
+
+    internal_count = length(internal)
+    incoming_count = length(incoming)
+    outgoing_count = length(outgoing)
+    boundary_count = length(boundary_incoming)
+    leak_count = length(leak_incoming)
+
+    # Cohesion: ratio of internal calls to total calls involving this context
+    total_calls = internal_count + incoming_count + outgoing_count
+
+    cohesion =
+      case total_calls do
+        0 -> 1.0
+        _ -> internal_count / total_calls
+      end
+
+    # Coupling: ratio of external calls to total calls
+    coupling =
+      case total_calls do
+        0 -> 0.0
+        _ -> (incoming_count + outgoing_count) / total_calls
+      end
+
+    # Quality: high cohesion + low leak ratio = good context
+    leak_ratio =
+      case incoming_count do
+        0 -> 0.0
+        _ -> leak_count / incoming_count
+      end
+
+    quality_score = cohesion * (1.0 - leak_ratio)
+
+    # Find leaking modules: internal modules called from outside
+    leaking_modules = find_leaking_modules(leak_incoming, boundary_module)
+
+    # Find misplaced modules: members that call more into other contexts than their own
+    misplaced = find_misplaced_modules(graph, members, member_set, project_set, context_name)
+
+    %{
+      context: context_name,
+      members: members,
+      boundary_module: boundary_module,
+      internal_calls: internal_count,
+      incoming_calls: incoming_count,
+      outgoing_calls: outgoing_count,
+      boundary_calls: boundary_count,
+      leak_calls: leak_count,
+      cohesion: Float.round(cohesion, 3),
+      coupling: Float.round(coupling, 3),
+      quality_score: Float.round(quality_score, 3),
+      leaking_modules: leaking_modules,
+      misplaced_modules: misplaced
+    }
+  end
+
+  defp classify_context_calls(all_calls, member_set, project_set, boundary_module) do
+    Enum.reduce(all_calls, {[], [], [], [], []}, fn call, {internal, incoming, outgoing, boundary_in, leak_in} ->
+      caller_mod = elem(call.caller, 0)
+      callee_mod = elem(call.callee, 0)
+      caller_in = MapSet.member?(member_set, caller_mod)
+      callee_in = MapSet.member?(member_set, callee_mod)
+      caller_project = MapSet.member?(project_set, caller_mod)
+      callee_project = MapSet.member?(project_set, callee_mod)
+
+      cond do
+        # Both in this context = internal
+        caller_in and callee_in ->
+          {[call | internal], incoming, outgoing, boundary_in, leak_in}
+
+        # External caller → context member = incoming
+        not caller_in and callee_in and caller_project ->
+          case callee_mod == boundary_module do
+            true ->
+              {internal, [call | incoming], outgoing, [call | boundary_in], leak_in}
+
+            false ->
+              {internal, [call | incoming], outgoing, boundary_in, [call | leak_in]}
+          end
+
+        # Context member → external = outgoing
+        caller_in and not callee_in and callee_project ->
+          {internal, incoming, [call | outgoing], boundary_in, leak_in}
+
+        true ->
+          {internal, incoming, outgoing, boundary_in, leak_in}
+      end
+    end)
+  end
+
+  defp find_leaking_modules(leak_calls, boundary_module) do
+    leak_calls
+    |> Enum.group_by(fn call -> elem(call.callee, 0) end)
+    |> Enum.reject(fn {mod, _calls} -> mod == boundary_module end)
+    |> Enum.map(fn {mod, calls} ->
+      external_callers =
+        calls
+        |> Enum.map(fn call -> elem(call.caller, 0) end)
+        |> Enum.uniq()
+        |> length()
+
+      %{module: mod, external_callers: external_callers}
+    end)
+    |> Enum.sort_by(& &1.external_callers, :desc)
+  end
+
+  defp find_misplaced_modules(graph, members, member_set, project_set, context_name) do
+    members
+    |> Enum.flat_map(fn mod ->
+      deps = module_dependencies(graph, mod)
+
+      own_calls =
+        Enum.count(deps, fn dep ->
+          MapSet.member?(member_set, dep)
+        end)
+
+      other_context_calls =
+        deps
+        |> Enum.filter(fn dep ->
+          MapSet.member?(project_set, dep) and not MapSet.member?(member_set, dep)
+        end)
+
+      other_count = length(other_context_calls)
+
+      case other_count > own_calls and other_count >= 3 do
+        true ->
+          # Find which context it has the strongest affinity to
+          strongest =
+            other_context_calls
+            |> Enum.map(fn dep ->
+              dep
+              |> Module.split()
+              |> Enum.take(2)
+              |> Enum.join(".")
+            end)
+            |> Enum.frequencies()
+            |> Enum.max_by(fn {_ctx, count} -> count end, fn -> {context_name, 0} end)
+            |> elem(0)
+
+          [%{module: mod, calls_to_own: own_calls, calls_to_other: other_count, strongest_affinity: strongest}]
+
+        false ->
+          []
+      end
+    end)
+  end
+
   # --- Build Helpers (Private) ---
 
   defp load_modules(beam_files) do

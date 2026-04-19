@@ -90,7 +90,8 @@ defmodule Archdo do
     Archdo.Rules.Compiled.PhantomDependency,
     Archdo.Rules.Compiled.RepoBypass,
     Archdo.Rules.Compiled.DegenerateFunction,
-    Archdo.Rules.Compiled.LookupTableCandidate
+    Archdo.Rules.Compiled.LookupTableCandidate,
+    Archdo.Rules.Compiled.ContextQuality
   ]
 
   defp run_compiled_rules(paths, _opts) do

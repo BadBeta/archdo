@@ -22,7 +22,8 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     PhantomDependency,
     RepoBypass,
     DegenerateFunction,
-    LookupTableCandidate
+    LookupTableCandidate,
+    ContextQuality
   }
 
   setup_all do
@@ -106,6 +107,10 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     test "LookupTableCandidate has correct id" do
       assert LookupTableCandidate.id() == "6.31"
     end
+
+    test "ContextQuality has correct id" do
+      assert ContextQuality.id() == "1.23"
+    end
   end
 
   # --- AST mode returns empty ---
@@ -130,7 +135,8 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
         PhantomDependency,
         RepoBypass,
         DegenerateFunction,
-        LookupTableCandidate
+        LookupTableCandidate,
+        ContextQuality
       ]
 
       Enum.each(rules, fn rule ->
@@ -538,6 +544,68 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
       [fix | _] = diag.alternatives
       assert fix.detail =~ "@"
       assert fix.detail =~ "%{"
+    end
+  end
+
+  # --- ContextQuality (1.23) ---
+
+  describe "ContextQuality (1.23)" do
+    test "produces diagnostics", %{graph: graph} do
+      diagnostics = ContextQuality.analyze_compiled(graph)
+      assert is_list(diagnostics)
+      assert Enum.all?(diagnostics, &(&1.rule_id == "1.23"))
+    end
+
+    test "detects Archdo.Rules low cohesion", %{graph: graph} do
+      diagnostics = ContextQuality.analyze_compiled(graph)
+      messages = Enum.map(diagnostics, & &1.message)
+
+      assert Enum.any?(messages, &(&1 =~ "Archdo.Rules" and &1 =~ "cohesion")),
+             "Should detect low cohesion in Archdo.Rules"
+    end
+  end
+
+  # --- Graph.discover_contexts/1 ---
+
+  describe "Graph.discover_contexts/1" do
+    test "discovers contexts from Archdo's own beam files", %{graph: graph} do
+      contexts = Graph.discover_contexts(graph)
+      assert is_list(contexts)
+      assert length(contexts) > 0
+
+      # Each context has the expected fields
+      [ctx | _] = contexts
+      assert is_binary(ctx.context)
+      assert is_list(ctx.members)
+      assert is_float(ctx.cohesion)
+      assert is_float(ctx.coupling)
+      assert is_float(ctx.quality_score)
+    end
+
+    test "finds the Rules context", %{graph: graph} do
+      contexts = Graph.discover_contexts(graph)
+      rules_ctx = Enum.find(contexts, fn c -> c.context == "Archdo.Rules" end)
+      assert rules_ctx != nil
+      assert length(rules_ctx.members) > 100
+    end
+
+    test "detects boundary modules when they exist", %{graph: graph} do
+      contexts = Graph.discover_contexts(graph)
+      compiled_ctx = Enum.find(contexts, fn c -> c.context == "Archdo.Compiled" end)
+
+      case compiled_ctx do
+        nil -> :ok
+        ctx -> assert ctx.boundary_module == Archdo.Compiled
+      end
+    end
+
+    test "computes cohesion and coupling as ratios between 0 and 1", %{graph: graph} do
+      contexts = Graph.discover_contexts(graph)
+
+      Enum.each(contexts, fn ctx ->
+        assert ctx.cohesion >= 0.0 and ctx.cohesion <= 1.0
+        assert ctx.coupling >= 0.0 and ctx.coupling <= 1.0
+      end)
     end
   end
 end
