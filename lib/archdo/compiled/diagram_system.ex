@@ -13,13 +13,17 @@ defmodule Archdo.Compiled.DiagramSystem do
 
   alias Archdo.Compiled.Graph
 
-  # Layout
-  @layer_gap 40
-  @node_w 170
+  # Layout — horizontal layers stacked top to bottom
+  # Each layer is a full-width horizontal band.
+  # Modules within a layer spread left to right.
+  # Connections between layers go vertically (↓↑ bidirectional).
+  @layer_gap 32
+  @node_w 160
   @node_h 44
-  @node_gap 12
+  @node_gap 14
   @margin 40
-  @layer_header 28
+  @layer_header 24
+  @layer_padding 10
   @state_radius 14
   # @state_gap 36
 
@@ -300,99 +304,132 @@ defmodule Archdo.Compiled.DiagramSystem do
     domain_count = min(length(layers.domain), 10)
     infra_count = min(length(layers.infrastructure), 6)
     tools_count = max(length(tools), 1)
-    sm_count = map_size(state_machines)
+    sm_count = min(map_size(state_machines), 3)
 
-    max_rows = Enum.max([outside_count, interface_count, domain_count + sm_count, infra_count, tools_count])
+    max_cols = Enum.max([outside_count, interface_count, domain_count + sm_count, infra_count, tools_count])
 
-    layer_h = max_rows * (@node_h + @node_gap) + @layer_header + @margin
+    total_w = max(max_cols * (@node_w + @node_gap) + @margin * 2 + 100, 800)
+
+    # Each layer: header + one row of nodes + padding
+    layer_h = @layer_header + @node_h + @layer_padding * 2
+
+    # Domain layer is taller if it has state machines
+    domain_layer_h =
+      case sm_count > 0 do
+        true -> layer_h + 60
+        false -> layer_h
+      end
+
+    total_h = @margin + 24 + layer_h * 4 + domain_layer_h + @layer_gap * 4 + @margin
 
     %{
+      total_w: total_w,
+      total_h: total_h,
       layer_h: layer_h,
-      total_w: @margin * 2 + 5 * @node_w + 4 * @layer_gap,
-      total_h: layer_h + @margin * 2 + 20
+      domain_layer_h: domain_layer_h
     }
   end
 
   # --- Rendering ---
 
   defp render_system(layout, layers, state_machines, tools, outside, graph) do
-    x = @margin
+    y = @margin + 24
 
-    # Layer 1: Outside World
-    {outside_elems, x} = render_layer(
-      x, @margin + 20, layout.layer_h,
+    # Layer 1: Outside World (top)
+    {outside_elems, y} = render_horizontal_layer(
+      @margin, y, layout.total_w - @margin * 2, layout.layer_h,
       "Outside World", @layer_bg_outside, @layer_border_outside,
       render_outside_nodes(outside)
     )
 
-    x = x + @layer_gap
+    # Arrow down/up between layers
+    arrow1 = render_vertical_arrows(layout.total_w / 2, y, @layer_gap)
+    y = y + @layer_gap
 
     # Layer 2: Interface
-    {interface_elems, x} = render_layer(
-      x, @margin + 20, layout.layer_h,
+    {interface_elems, y} = render_horizontal_layer(
+      @margin, y, layout.total_w - @margin * 2, layout.layer_h,
       "Interface", @layer_bg_interface, @layer_border_interface,
       render_module_nodes(layers.interface, @layer_border_interface, 8)
     )
 
-    x = x + @layer_gap
+    arrow2 = render_vertical_arrows(layout.total_w / 2, y, @layer_gap)
+    y = y + @layer_gap
 
     # Layer 3: Domain (with state machines)
     domain_nodes = render_module_nodes(layers.domain, @layer_border_domain, 8)
     sm_nodes = render_state_machine_nodes(state_machines)
 
-    {domain_elems, x} = render_layer(
-      x, @margin + 20, layout.layer_h,
+    {domain_elems, y} = render_horizontal_layer(
+      @margin, y, layout.total_w - @margin * 2, layout.domain_layer_h,
       "Domain", @layer_bg_domain, @layer_border_domain,
       domain_nodes ++ sm_nodes
     )
 
-    x = x + @layer_gap
+    arrow3 = render_vertical_arrows(layout.total_w / 2, y, @layer_gap)
+    y = y + @layer_gap
 
     # Layer 4: Infrastructure
-    {infra_elems, x} = render_layer(
-      x, @margin + 20, layout.layer_h,
+    {infra_elems, y} = render_horizontal_layer(
+      @margin, y, layout.total_w - @margin * 2, layout.layer_h,
       "Infrastructure", @layer_bg_infra, @layer_border_infra,
       render_module_nodes(layers.infrastructure, @layer_border_infra, 6)
     )
 
-    x = x + @layer_gap
+    arrow4 = render_vertical_arrows(layout.total_w / 2, y, @layer_gap)
+    y = y + @layer_gap
 
-    # Layer 5: Inside Tools
-    {tools_elems, _x} = render_layer(
-      x, @margin + 20, layout.layer_h,
+    # Layer 5: Inside Tools (bottom)
+    {tools_elems, _y} = render_horizontal_layer(
+      @margin, y, layout.total_w - @margin * 2, layout.layer_h,
       "Inside Tools", @layer_bg_tools, @layer_border_tools,
       render_tool_nodes(tools)
     )
 
-    # Flow arrows between layers
-    arrows = render_flow_arrows(layout)
-
     # Title
     title = [
-      ~s[<text x="#{@margin}" y="16" fill="#{@text}" font-size="13" font-weight="600" font-family="monospace">System Architecture — #{map_size(graph.modules)} modules</text>]
+      ~s[<text x="#{@margin}" y="18" fill="#{@text}" font-size="13" font-weight="600" font-family="monospace">System Architecture — #{map_size(graph.modules)} modules</text>]
     ]
 
-    all = title ++ outside_elems ++ interface_elems ++ domain_elems ++ infra_elems ++ tools_elems ++ arrows
+    # Arrowhead def
+    arrow_def = [
+      ~s[<defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#{@wire_color}" opacity="0.5"/></marker></defs>]
+    ]
+
+    all = arrow_def ++ title ++ outside_elems ++ arrow1 ++ interface_elems ++ arrow2 ++ domain_elems ++ arrow3 ++ infra_elems ++ arrow4 ++ tools_elems
     wrap_svg(all, layout.total_w, layout.total_h)
   end
 
-  defp render_layer(x, y, height, title, bg_color, border_color, node_renderers) do
-    w = @node_w + 20
-
+  defp render_horizontal_layer(x, y, width, height, title, bg_color, border_color, node_renderers) do
     frame = [
-      ~s[<rect x="#{x}" y="#{y}" width="#{w}" height="#{height}" rx="8" fill="#{bg_color}" stroke="#{border_color}" stroke-width="1.5" opacity="0.6"/>],
-      ~s[<text x="#{x + w / 2}" y="#{y + 18}" text-anchor="middle" fill="#{border_color}" font-size="11" font-weight="600" font-family="monospace">#{title}</text>]
+      ~s[<rect x="#{x}" y="#{y}" width="#{width}" height="#{height}" rx="8" fill="#{bg_color}" stroke="#{border_color}" stroke-width="1.5" opacity="0.6"/>],
+      ~s[<text x="#{x + 12}" y="#{y + 17}" fill="#{border_color}" font-size="11" font-weight="600" font-family="monospace">#{title}</text>]
     ]
 
+    # Spread nodes horizontally within the layer
     node_elems =
       node_renderers
       |> Enum.with_index()
       |> Enum.flat_map(fn {renderer, idx} ->
-        ny = y + @layer_header + 8 + idx * (@node_h + @node_gap)
-        renderer.(x + 10, ny)
+        nx = x + @layer_padding + idx * (@node_w + @node_gap)
+        ny = y + @layer_header + @layer_padding
+        renderer.(nx, ny)
       end)
 
-    {frame ++ node_elems, x + w}
+    {frame ++ node_elems, y + height}
+  end
+
+  defp render_vertical_arrows(center_x, y, gap) do
+    # Bidirectional arrows: ↓ on left side, ↑ on right side
+    left_x = center_x - 12
+    right_x = center_x + 12
+
+    [
+      # Down arrow (request)
+      ~s[<line x1="#{left_x}" y1="#{y + 2}" x2="#{left_x}" y2="#{y + gap - 2}" stroke="#{@wire_color}" stroke-width="1.5" opacity="0.4" marker-end="url(#arrowhead)"/>],
+      # Up arrow (response)
+      ~s[<line x1="#{right_x}" y1="#{y + gap - 2}" x2="#{right_x}" y2="#{y + 2}" stroke="#{@wire_color}" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>]
+    ]
   end
 
   defp render_outside_nodes(connections) do
@@ -532,24 +569,6 @@ defmodule Archdo.Compiled.DiagramSystem do
         ]
       end
     end)
-  end
-
-  defp render_flow_arrows(layout) do
-    # Horizontal flow arrows between layers
-    y_mid = @margin + 20 + layout.layer_h / 2
-    layer_w = @node_w + 20
-
-    0..3
-    |> Enum.flat_map(fn i ->
-      x_start = @margin + (i + 1) * layer_w + i * @layer_gap - 4
-      x_end = x_start + @layer_gap + 8
-
-      [
-        ~s[<defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#{@wire_color}" opacity="0.5"/></marker></defs>],
-        ~s[<line x1="#{x_start}" y1="#{y_mid}" x2="#{x_end}" y2="#{y_mid}" stroke="#{@wire_color}" stroke-width="2" opacity="0.3" marker-end="url(#arrowhead)"/>]
-      ]
-    end)
-    |> Enum.uniq()
   end
 
   defp state_color(_state, 0, _total), do: @state_idle
