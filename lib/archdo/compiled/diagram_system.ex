@@ -347,8 +347,8 @@ defmodule Archdo.Compiled.DiagramSystem do
     )
     y = y + @layer_gap
 
-    # Layer 2: Interface
-    interface_mods = Enum.take(layers.interface, 8)
+    # Layer 2: Interface — prioritize modules with most connections
+    interface_mods = prioritize_by_connections(layers.interface, graph, 8)
     {interface_elems, y, pos_interface} = render_horizontal_layer(
       @margin, y, w, layout.layer_h,
       "Interface", @layer_bg_interface, @layer_border_interface,
@@ -357,11 +357,15 @@ defmodule Archdo.Compiled.DiagramSystem do
     )
     y = y + @layer_gap
 
-    # Layer 3: Domain (with state machines)
-    domain_mods = Enum.take(layers.domain, 8)
+    # Layer 3: Domain — prioritize connected modules + state machines
+    domain_mods = prioritize_by_connections(layers.domain, graph, 8)
     sm_mods = state_machines |> Map.keys() |> Enum.take(3)
-    all_domain_mods = domain_mods ++ sm_mods
-    domain_nodes = render_module_nodes(domain_mods, @layer_border_domain, 8)
+    # Ensure state machine modules are included
+    all_domain_mods =
+      (sm_mods ++ domain_mods)
+      |> Enum.uniq()
+      |> Enum.take(11)
+    domain_nodes = render_module_nodes(Enum.reject(all_domain_mods, &(&1 in sm_mods)), @layer_border_domain, 8)
     sm_nodes = render_state_machine_nodes(state_machines)
 
     {domain_elems, y, pos_domain} = render_horizontal_layer(
@@ -372,8 +376,8 @@ defmodule Archdo.Compiled.DiagramSystem do
     )
     y = y + @layer_gap
 
-    # Layer 4: Infrastructure
-    infra_mods = Enum.take(layers.infrastructure, 6)
+    # Layer 4: Infrastructure — prioritize connected modules
+    infra_mods = prioritize_by_connections(layers.infrastructure, graph, 6)
     {infra_elems, y, pos_infra} = render_horizontal_layer(
       @margin, y, w, layout.layer_h,
       "Infrastructure", @layer_bg_infra, @layer_border_infra,
@@ -445,17 +449,25 @@ defmodule Archdo.Compiled.DiagramSystem do
     {frame ++ node_elems, y + height, positions}
   end
 
+  # Tunnel size
+  @tunnel_size 8
+
   defp render_cross_layer_wires(graph, layer_pairs) do
-    # For each pair of adjacent layers, find cross-layer calls
-    # and draw vertical bezier wires between the specific modules
+    # LabVIEW-style tunnels:
+    # - Output tunnels on the BOTTOM edge of the source layer
+    # - Input tunnels on the LEFT edge of the target layer
+    # - Orthogonal wire routing: down from output tunnel, then left to input tunnel
+
     layer_pairs
-    |> Enum.flat_map(fn {upper_positions, lower_positions, color} ->
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {{upper_positions, lower_positions, color}, _pair_idx} ->
       upper_mods = Map.keys(upper_positions)
       lower_mods = Map.keys(lower_positions)
       lower_set = MapSet.new(lower_mods)
+      upper_set = MapSet.new(upper_mods)
 
       # Find calls from upper → lower
-      connections =
+      down_connections =
         upper_mods
         |> Enum.flat_map(fn upper_mod ->
           Graph.module_dependencies(graph, upper_mod)
@@ -464,56 +476,102 @@ defmodule Archdo.Compiled.DiagramSystem do
         end)
         |> Enum.uniq()
 
-      # Also find calls from lower → upper (bidirectional)
-      upper_set = MapSet.new(upper_mods)
-
-      reverse_connections =
+      # Find calls from lower → upper (return/callback)
+      up_connections =
         lower_mods
         |> Enum.flat_map(fn lower_mod ->
           Graph.module_dependencies(graph, lower_mod)
           |> Enum.filter(&MapSet.member?(upper_set, &1))
-          |> Enum.map(fn upper_mod -> {upper_mod, lower_mod} end)
+          |> Enum.map(fn upper_mod -> {lower_mod, upper_mod} end)
         end)
         |> Enum.uniq()
 
-      all_connections = Enum.uniq(connections ++ reverse_connections)
+      shown_down = Enum.take(down_connections, 5)
+      shown_up = Enum.take(up_connections, 3)
+      hidden_count = length(down_connections) - length(shown_down) + length(up_connections) - length(shown_up)
 
-      # Only show top 6 connections to avoid clutter
-      shown = Enum.take(all_connections, 6)
-      hidden_count = length(all_connections) - length(shown)
-
-      wire_elems =
-        shown
-        |> Enum.flat_map(fn {upper_mod, lower_mod} ->
-          case {Map.get(upper_positions, upper_mod), Map.get(lower_positions, lower_mod)} do
-            {{ux, _uy_top, uy_bottom}, {lx, ly_top, _ly_bottom}} ->
-              # Bezier curve from bottom of upper to top of lower
-              mid_y = (uy_bottom + ly_top) / 2
-
-              [~s[<path d="M #{ux} #{uy_bottom} C #{ux} #{mid_y}, #{lx} #{mid_y}, #{lx} #{ly_top}" fill="none" stroke="#{color}" stroke-width="1.2" opacity="0.35"/>]]
-
-            _ ->
-              []
-          end
+      # Render downward tunnels (output bottom → input left)
+      down_elems =
+        shown_down
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {{upper_mod, lower_mod}, wire_idx} ->
+          render_tunnel_wire(
+            upper_positions, lower_positions,
+            upper_mod, lower_mod,
+            color, wire_idx, :down
+          )
         end)
 
-      # Badge showing hidden connection count
+      # Render upward tunnels (output from lower right → input upper)
+      up_elems =
+        shown_up
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {{lower_mod, upper_mod}, wire_idx} ->
+          render_tunnel_wire(
+            lower_positions, upper_positions,
+            lower_mod, upper_mod,
+            @wire_color, wire_idx, :up
+          )
+        end)
+
+      # "+N more" badge
       badge =
         case hidden_count > 0 do
           true ->
-            # Place near the middle of the gap between layers
-            {_first_mod, {fx, _ft, fb}} = Enum.at(Map.to_list(upper_positions), 0, {nil, {0, 0, 0}})
-            badge_x = fx + @node_w
-            badge_y = fb + 8
+            case Enum.at(Map.values(upper_positions), 0) do
+              {_cx, _ty, by} ->
+                [~s[<text x="#{@margin + 4}" y="#{by + 14}" fill="#{@dim}" font-size="8" font-family="monospace" opacity="0.6">+#{hidden_count} more</text>]]
 
-            [~s[<text x="#{badge_x}" y="#{badge_y}" fill="#{@dim}" font-size="9" font-family="monospace">+#{hidden_count} more connections</text>]]
+              _ ->
+                []
+            end
 
           false ->
             []
         end
 
-      wire_elems ++ badge
+      down_elems ++ up_elems ++ badge
     end)
+  end
+
+  defp render_tunnel_wire(source_positions, target_positions, source_mod, target_mod, color, wire_idx, direction) do
+    case {Map.get(source_positions, source_mod), Map.get(target_positions, target_mod)} do
+      {{src_cx, _src_ty, src_by}, {_tgt_cx, tgt_ty, _tgt_by}} ->
+        # Output tunnel: colored square on bottom edge of source module
+        out_x = src_cx - @tunnel_size / 2
+        out_y = src_by - @tunnel_size / 2
+
+        # Input tunnel: colored square on left edge of target layer
+        # Offset vertically by wire_idx to avoid overlap
+        in_x = @margin - @tunnel_size
+        in_y = tgt_ty + wire_idx * (@tunnel_size + 4)
+
+        # Route point: go down from output tunnel, then left to input tunnel
+        route_y =
+          case direction do
+            :down -> src_by + 8 + wire_idx * 6
+            :up -> tgt_ty - 8 - wire_idx * 6
+          end
+
+        label = "#{short_name(source_mod)}→#{short_name(target_mod)}"
+
+        [
+          # Output tunnel (square on bottom of source)
+          ~s[<rect x="#{out_x}" y="#{out_y}" width="#{@tunnel_size}" height="#{@tunnel_size}" rx="1" fill="#{color}" opacity="0.7"/>],
+
+          # Input tunnel (square on left edge of target layer)
+          ~s[<rect x="#{in_x}" y="#{in_y}" width="#{@tunnel_size}" height="#{@tunnel_size}" rx="1" fill="#{color}" opacity="0.7"/>],
+
+          # Wire: orthogonal routing — down from output, then left to input
+          ~s[<path d="M #{src_cx} #{out_y + @tunnel_size} L #{src_cx} #{route_y} L #{in_x + @tunnel_size} #{route_y} L #{in_x + @tunnel_size} #{in_y + @tunnel_size / 2}" fill="none" stroke="#{color}" stroke-width="1" opacity="0.3"/>],
+
+          # Small label near input tunnel
+          ~s[<text x="#{in_x + @tunnel_size + 3}" y="#{in_y + @tunnel_size - 1}" fill="#{color}" font-size="7" font-family="monospace" opacity="0.5">#{label}</text>]
+        ]
+
+      _ ->
+        []
+    end
   end
 
   defp render_outside_nodes(connections) do
@@ -653,6 +711,20 @@ defmodule Archdo.Compiled.DiagramSystem do
         ]
       end
     end)
+  end
+
+  # Prioritize modules with the most connections (both incoming + outgoing)
+  # so the most important modules appear in the diagram
+  defp prioritize_by_connections(modules, graph, max) do
+    modules
+    |> Enum.map(fn mod ->
+      deps = length(Graph.module_dependencies(graph, mod))
+      dependents = length(Graph.module_dependents(graph, mod))
+      {mod, deps + dependents}
+    end)
+    |> Enum.sort_by(fn {_mod, score} -> score end, :desc)
+    |> Enum.take(max)
+    |> Enum.map(fn {mod, _score} -> mod end)
   end
 
   defp state_color(_state, 0, _total), do: @state_idle
