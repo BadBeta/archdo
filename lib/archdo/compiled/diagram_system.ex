@@ -332,59 +332,68 @@ defmodule Archdo.Compiled.DiagramSystem do
 
   # --- Rendering ---
 
+  # Each layer render returns {svg_elements, next_y, positions_map}
+  # positions_map: %{module => {center_x, top_y, bottom_y}}
+
   defp render_system(layout, layers, state_machines, tools, outside, graph) do
     y = @margin + 24
+    w = layout.total_w - @margin * 2
 
     # Layer 1: Outside World (top)
-    {outside_elems, y} = render_horizontal_layer(
-      @margin, y, layout.total_w - @margin * 2, layout.layer_h,
+    {outside_elems, y, _pos0} = render_horizontal_layer(
+      @margin, y, w, layout.layer_h,
       "Outside World", @layer_bg_outside, @layer_border_outside,
-      render_outside_nodes(outside)
+      render_outside_nodes(outside), []
     )
-
-    # Arrow down/up between layers
-    arrow1 = render_vertical_arrows(layout.total_w / 2, y, @layer_gap)
     y = y + @layer_gap
 
     # Layer 2: Interface
-    {interface_elems, y} = render_horizontal_layer(
-      @margin, y, layout.total_w - @margin * 2, layout.layer_h,
+    interface_mods = Enum.take(layers.interface, 8)
+    {interface_elems, y, pos_interface} = render_horizontal_layer(
+      @margin, y, w, layout.layer_h,
       "Interface", @layer_bg_interface, @layer_border_interface,
-      render_module_nodes(layers.interface, @layer_border_interface, 8)
+      render_module_nodes(interface_mods, @layer_border_interface, 8),
+      interface_mods
     )
-
-    arrow2 = render_vertical_arrows(layout.total_w / 2, y, @layer_gap)
     y = y + @layer_gap
 
     # Layer 3: Domain (with state machines)
-    domain_nodes = render_module_nodes(layers.domain, @layer_border_domain, 8)
+    domain_mods = Enum.take(layers.domain, 8)
+    sm_mods = state_machines |> Map.keys() |> Enum.take(3)
+    all_domain_mods = domain_mods ++ sm_mods
+    domain_nodes = render_module_nodes(domain_mods, @layer_border_domain, 8)
     sm_nodes = render_state_machine_nodes(state_machines)
 
-    {domain_elems, y} = render_horizontal_layer(
-      @margin, y, layout.total_w - @margin * 2, layout.domain_layer_h,
+    {domain_elems, y, pos_domain} = render_horizontal_layer(
+      @margin, y, w, layout.domain_layer_h,
       "Domain", @layer_bg_domain, @layer_border_domain,
-      domain_nodes ++ sm_nodes
+      domain_nodes ++ sm_nodes,
+      all_domain_mods
     )
-
-    arrow3 = render_vertical_arrows(layout.total_w / 2, y, @layer_gap)
     y = y + @layer_gap
 
     # Layer 4: Infrastructure
-    {infra_elems, y} = render_horizontal_layer(
-      @margin, y, layout.total_w - @margin * 2, layout.layer_h,
+    infra_mods = Enum.take(layers.infrastructure, 6)
+    {infra_elems, y, pos_infra} = render_horizontal_layer(
+      @margin, y, w, layout.layer_h,
       "Infrastructure", @layer_bg_infra, @layer_border_infra,
-      render_module_nodes(layers.infrastructure, @layer_border_infra, 6)
+      render_module_nodes(infra_mods, @layer_border_infra, 6),
+      infra_mods
     )
-
-    arrow4 = render_vertical_arrows(layout.total_w / 2, y, @layer_gap)
     y = y + @layer_gap
 
     # Layer 5: Inside Tools (bottom)
-    {tools_elems, _y} = render_horizontal_layer(
-      @margin, y, layout.total_w - @margin * 2, layout.layer_h,
+    {tools_elems, _y, _pos_tools} = render_horizontal_layer(
+      @margin, y, w, layout.layer_h,
       "Inside Tools", @layer_bg_tools, @layer_border_tools,
-      render_tool_nodes(tools)
+      render_tool_nodes(tools), []
     )
+
+    # Cross-layer wires between specific modules
+    cross_wires = render_cross_layer_wires(graph, [
+      {pos_interface, pos_domain, @layer_border_interface},
+      {pos_domain, pos_infra, @layer_border_domain}
+    ])
 
     # Title
     title = [
@@ -396,40 +405,115 @@ defmodule Archdo.Compiled.DiagramSystem do
       ~s[<defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#{@wire_color}" opacity="0.5"/></marker></defs>]
     ]
 
-    all = arrow_def ++ title ++ outside_elems ++ arrow1 ++ interface_elems ++ arrow2 ++ domain_elems ++ arrow3 ++ infra_elems ++ arrow4 ++ tools_elems
+    all = arrow_def ++ title ++ outside_elems ++ interface_elems ++ domain_elems ++ infra_elems ++ tools_elems ++ cross_wires
     wrap_svg(all, layout.total_w, layout.total_h)
   end
 
-  defp render_horizontal_layer(x, y, width, height, title, bg_color, border_color, node_renderers) do
+  defp render_horizontal_layer(x, y, width, height, title, bg_color, border_color, node_renderers, modules) do
     frame = [
       ~s[<rect x="#{x}" y="#{y}" width="#{width}" height="#{height}" rx="8" fill="#{bg_color}" stroke="#{border_color}" stroke-width="1.5" opacity="0.6"/>],
       ~s[<text x="#{x + 12}" y="#{y + 17}" fill="#{border_color}" font-size="11" font-weight="600" font-family="monospace">#{title}</text>]
     ]
 
-    # Spread nodes horizontally within the layer
-    node_elems =
+    # Spread nodes horizontally and track positions
+    {node_elems, positions} =
       node_renderers
       |> Enum.with_index()
-      |> Enum.flat_map(fn {renderer, idx} ->
+      |> Enum.reduce({[], %{}}, fn {renderer, idx}, {elems, pos} ->
         nx = x + @layer_padding + idx * (@node_w + @node_gap)
         ny = y + @layer_header + @layer_padding
-        renderer.(nx, ny)
+
+        new_elems = renderer.(nx, ny)
+
+        # Track module position for wire routing
+        mod =
+          case Enum.at(modules, idx) do
+            nil -> nil
+            m -> m
+          end
+
+        center_x = nx + @node_w / 2
+        new_pos =
+          case mod do
+            nil -> pos
+            _ -> Map.put(pos, mod, {center_x, ny, ny + @node_h})
+          end
+
+        {elems ++ new_elems, new_pos}
       end)
 
-    {frame ++ node_elems, y + height}
+    {frame ++ node_elems, y + height, positions}
   end
 
-  defp render_vertical_arrows(center_x, y, gap) do
-    # Bidirectional arrows: ↓ on left side, ↑ on right side
-    left_x = center_x - 12
-    right_x = center_x + 12
+  defp render_cross_layer_wires(graph, layer_pairs) do
+    # For each pair of adjacent layers, find cross-layer calls
+    # and draw vertical bezier wires between the specific modules
+    layer_pairs
+    |> Enum.flat_map(fn {upper_positions, lower_positions, color} ->
+      upper_mods = Map.keys(upper_positions)
+      lower_mods = Map.keys(lower_positions)
+      lower_set = MapSet.new(lower_mods)
 
-    [
-      # Down arrow (request)
-      ~s[<line x1="#{left_x}" y1="#{y + 2}" x2="#{left_x}" y2="#{y + gap - 2}" stroke="#{@wire_color}" stroke-width="1.5" opacity="0.4" marker-end="url(#arrowhead)"/>],
-      # Up arrow (response)
-      ~s[<line x1="#{right_x}" y1="#{y + gap - 2}" x2="#{right_x}" y2="#{y + 2}" stroke="#{@wire_color}" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>]
-    ]
+      # Find calls from upper → lower
+      connections =
+        upper_mods
+        |> Enum.flat_map(fn upper_mod ->
+          Graph.module_dependencies(graph, upper_mod)
+          |> Enum.filter(&MapSet.member?(lower_set, &1))
+          |> Enum.map(fn lower_mod -> {upper_mod, lower_mod} end)
+        end)
+        |> Enum.uniq()
+
+      # Also find calls from lower → upper (bidirectional)
+      upper_set = MapSet.new(upper_mods)
+
+      reverse_connections =
+        lower_mods
+        |> Enum.flat_map(fn lower_mod ->
+          Graph.module_dependencies(graph, lower_mod)
+          |> Enum.filter(&MapSet.member?(upper_set, &1))
+          |> Enum.map(fn upper_mod -> {upper_mod, lower_mod} end)
+        end)
+        |> Enum.uniq()
+
+      all_connections = Enum.uniq(connections ++ reverse_connections)
+
+      # Only show top 6 connections to avoid clutter
+      shown = Enum.take(all_connections, 6)
+      hidden_count = length(all_connections) - length(shown)
+
+      wire_elems =
+        shown
+        |> Enum.flat_map(fn {upper_mod, lower_mod} ->
+          case {Map.get(upper_positions, upper_mod), Map.get(lower_positions, lower_mod)} do
+            {{ux, _uy_top, uy_bottom}, {lx, ly_top, _ly_bottom}} ->
+              # Bezier curve from bottom of upper to top of lower
+              mid_y = (uy_bottom + ly_top) / 2
+
+              [~s[<path d="M #{ux} #{uy_bottom} C #{ux} #{mid_y}, #{lx} #{mid_y}, #{lx} #{ly_top}" fill="none" stroke="#{color}" stroke-width="1.2" opacity="0.35"/>]]
+
+            _ ->
+              []
+          end
+        end)
+
+      # Badge showing hidden connection count
+      badge =
+        case hidden_count > 0 do
+          true ->
+            # Place near the middle of the gap between layers
+            {_first_mod, {fx, _ft, fb}} = Enum.at(Map.to_list(upper_positions), 0, {nil, {0, 0, 0}})
+            badge_x = fx + @node_w
+            badge_y = fb + 8
+
+            [~s[<text x="#{badge_x}" y="#{badge_y}" fill="#{@dim}" font-size="9" font-family="monospace">+#{hidden_count} more connections</text>]]
+
+          false ->
+            []
+        end
+
+      wire_elems ++ badge
+    end)
   end
 
   defp render_outside_nodes(connections) do
