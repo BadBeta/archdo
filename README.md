@@ -9,7 +9,7 @@ Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (
 | Category | Rules | Examples |
 |----------|-------|----------|
 | **Boundaries** | 30 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params, compiled cross-boundary call detection, internal module leak, Repo bypass, phantom dependencies |
-| **Module quality** | 30 | Complexity, cohesion, fan-out, Martin metrics, error handling (7 rules), recursion (4 rules), stub detection, non-exhaustive API, inconsistent return shapes, degenerate functions, lookup table candidates |
+| **Module quality** | 31 | Complexity, cohesion, fan-out, Martin metrics, error handling (7 rules), recursion (4 rules), stub detection, non-exhaustive API, inconsistent return shapes, degenerate functions, lookup table candidates, buried try/rescue |
 | **OTP discipline** | 40 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock detection, sequential-where-parallel |
 | **Testing** | 19 | Mox without behaviours, coverage gaps, test naming, async eligibility, weak assertions, test-only public functions |
 | **Compiled analysis** | 18 | Dead code, transitive dead code, blast radius, unused imports, weak dependencies, API surface weight, function cycles (Tarjan's SCC), protocol completeness, change risk |

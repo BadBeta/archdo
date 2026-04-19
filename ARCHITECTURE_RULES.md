@@ -1255,6 +1255,15 @@ Function is a pure literal-to-literal mapping — equivalent to a Map lookup.
 - **Tolerate:** Small dispatch tables (2 clauses), functions expected to gain guards or logic later.
 - **Severity:** `info`
 
+#### 6.32 Buried try/rescue
+
+try/rescue block buried inside an anonymous function, Enum callback, or Task callback — should be extracted to a named function.
+
+- **Why:** A try/rescue hidden inside a lambda or Enum.map callback obscures the error handling intent. The rescue clause silently converts exceptions to fallback values, making bugs invisible. Extracting to a named function (like `safe_process/1`) makes the fault isolation visible at the call site and documents that exceptions are expected. Named functions are also testable independently and reusable. (Clarity, Error Handling Visibility, Testability)
+- **Check:** Flag try/rescue blocks inside: `Enum.map/flat_map/each/reduce` callbacks, `Task.async/async_stream` callbacks, or standalone `fn -> ... end` expressions. Does not flag try/rescue in named private functions (correct pattern) or try/after (cleanup pattern).
+- **Tolerate:** try/rescue in named private functions — this IS the correct pattern. The rule specifically targets the anonymous/inline form.
+- **Severity:** `info`
+
 ---
 
 ## 7. Test Architecture
