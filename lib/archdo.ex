@@ -105,20 +105,21 @@ defmodule Archdo do
 
     case Archdo.Compiled.analyze(project_root) do
       {:ok, graph} ->
-        Enum.flat_map(@compiled_rules, fn rule ->
-          try do
-            rule.analyze_compiled(graph)
-          rescue
-            e ->
-              IO.puts(:standard_error, "[archdo] compiled rule #{rule.id()} crashed: #{Exception.message(e)}")
-              []
-          end
-        end)
+        Enum.flat_map(@compiled_rules, &safe_analyze_compiled(&1, graph))
 
       {:error, reason} ->
         IO.puts(:standard_error, "[archdo] compiled: #{reason}")
         []
     end
+  end
+
+  # Run a single compiled rule, isolating crashes so one broken rule doesn't block others.
+  defp safe_analyze_compiled(rule, graph) do
+    rule.analyze_compiled(graph)
+  rescue
+    e ->
+      IO.puts(:standard_error, "[archdo] compiled rule #{rule.id()} crashed: #{Exception.message(e)}")
+      []
   end
 
   defp find_project_root(path) do
