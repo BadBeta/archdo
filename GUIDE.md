@@ -8,7 +8,7 @@
 
 1. [What Archdo is and why](#1-what-archdo-is-and-why)
 2. [Installation](#2-installation)
-3. [The 165 rules at a glance](#3-the-165-rules-at-a-glance)
+3. [The 166 rules at a glance](#3-the-165-rules-at-a-glance)
 4. [The diagnostic shape](#4-the-diagnostic-shape)
 5. [Output formats](#5-output-formats)
 6. [CLI reference](#6-cli-reference)
@@ -74,9 +74,9 @@ Archdo needs `Jason` (JSON encoding) and `JSV` (JSON Schema validation for MCP t
 
 ---
 
-## 3. The 165 rules at a glance
+## 3. The 166 rules at a glance
 
-Archdo currently ships **165 rules in 12 categories** (including 18 compiled-analysis rules). Full text for every rule is in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md).
+Archdo currently ships **166 rules in 12 categories** (including 18 compiled-analysis rules). Full text for every rule is in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md).
 
 | #   | Category                         | Rules    | Severity mix          | What it catches                                                                  |
 |-----|----------------------------------|----------|-----------------------|----------------------------------------------------------------------------------|
