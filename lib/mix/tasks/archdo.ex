@@ -157,6 +157,15 @@ defmodule Mix.Tasks.Archdo do
   defp generate_diagram(graph, "delta"), do: Archdo.Compiled.Diagram.dependency_delta(graph, ["lib"])
   defp generate_diagram(graph, "delta-only"), do: Archdo.Compiled.Diagram.dependency_delta_only(graph, ["lib"])
 
+  defp generate_diagram(graph, "dataflow:" <> module_name) do
+    mod = String.to_atom("Elixir.#{module_name}")
+    Archdo.Compiled.Diagram.dataflow_module(graph, mod)
+  end
+
+  defp generate_diagram(graph, "dataflow-context:" <> context_name) do
+    Archdo.Compiled.Diagram.dataflow_context(graph, context_name)
+  end
+
   defp generate_diagram(graph, "blast:" <> module_name) do
     mod = String.to_atom("Elixir.#{module_name}")
     Archdo.Compiled.Diagram.blast_radius(graph, mod)

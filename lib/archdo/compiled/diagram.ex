@@ -688,6 +688,318 @@ defmodule Archdo.Compiled.Diagram do
     end
   end
 
+  # --- Dataflow Diagram (LabVIEW/Grasshopper inspired) ---
+
+  @doc """
+  Generate a dataflow diagram for a specific module, showing it as a box with
+  input terminals (arguments) on the left and output terminals (return type)
+  on the right. Connected modules shown with typed wires.
+
+  Inspired by LabVIEW block diagrams and Grasshopper component graphs.
+  """
+  @spec dataflow_module(CompiledGraph.t(), module()) :: String.t()
+  def dataflow_module(%CompiledGraph{} = graph, module) do
+    mod_name = format_mod(module)
+    mod_id = sanitize_id(mod_name)
+
+    # Get function clause info for this module
+    clauses_map =
+      case graph.beam_dir do
+        nil -> %{}
+        dir -> CompiledGraph.extract_function_clauses(dir)
+      end
+
+    functions = Map.get(clauses_map, module, [])
+    exports = Enum.filter(functions, & &1.exported)
+
+    # What this module knows about (outgoing)
+    outgoing = CompiledGraph.knows_about(graph, module)
+
+    # Who knows about this module (incoming)
+    incoming = CompiledGraph.known_by(graph, module)
+
+    lines = [
+      "graph LR",
+      ""
+    ]
+
+    # Render incoming callers on the left
+    caller_lines =
+      incoming
+      |> Enum.take(10)
+      |> Enum.flat_map(fn entry ->
+        caller_id = sanitize_id(format_mod(entry.module))
+        caller_short = short_name(entry.module)
+
+        fns = Enum.map_join(entry.functions_called, "<br/>", fn {f, a} -> "#{f}/#{a}" end)
+
+        [
+          "  #{caller_id}[\"#{caller_short}\"] -->|\"#{fns}\"| #{mod_id}"
+        ]
+      end)
+
+    # Render the module itself as a detailed box
+    export_list =
+      exports
+      |> Enum.take(15)
+      |> Enum.map(fn fn_info ->
+        clause_tag =
+          case fn_info.has_catch_all do
+            true -> ""
+            false -> " ⚠"
+          end
+
+        return_tag = format_return_shape(fn_info)
+
+        "#{fn_info.name}/#{fn_info.arity}#{clause_tag} → #{return_tag}"
+      end)
+      |> Enum.join("<br/>")
+
+    more_exports =
+      case length(exports) > 15 do
+        true -> "<br/>... +#{length(exports) - 15} more"
+        false -> ""
+      end
+
+    module_lines = [
+      "",
+      "  #{mod_id}[\"**#{mod_name}**<br/>─────────<br/>#{export_list}#{more_exports}\"]",
+      ""
+    ]
+
+    # Render outgoing dependencies on the right
+    dep_lines =
+      outgoing
+      |> Enum.take(10)
+      |> Enum.flat_map(fn entry ->
+        dep_id = sanitize_id(format_mod(entry.module))
+        dep_short = short_name(entry.module)
+
+        fns = Enum.map_join(entry.functions_called, "<br/>", fn {f, a} -> "#{f}/#{a}" end)
+
+        wire_style = wire_style_for(entry)
+
+        [
+          "  #{mod_id} #{wire_style}|\"#{fns}\"| #{dep_id}[\"#{dep_short}\"]"
+        ]
+      end)
+
+    # Style the central module
+    style_lines = [
+      "",
+      "  style #{mod_id} fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,text-align:left"
+    ]
+
+    Enum.join(lines ++ caller_lines ++ module_lines ++ dep_lines ++ style_lines, "\n")
+  end
+
+  @doc """
+  Generate a dataflow diagram for an entire context, showing each module
+  as a component with terminals, internal wiring, and external connections.
+  Uses LabVIEW-style layout: inputs left, processing center, outputs right.
+  """
+  @spec dataflow_context(CompiledGraph.t(), String.t()) :: String.t()
+  def dataflow_context(%CompiledGraph{} = graph, context_name) do
+    contexts = CompiledGraph.discover_contexts(graph)
+
+    case Enum.find(contexts, fn c -> c.context == context_name end) do
+      nil ->
+        "graph LR\n  not_found[\"Context '#{context_name}' not found\"]"
+
+      ctx ->
+        render_dataflow_context(graph, ctx)
+    end
+  end
+
+  defp render_dataflow_context(graph, ctx) do
+    member_set = MapSet.new(ctx.members)
+    ctx_id = sanitize_id(ctx.context)
+
+    # Classify members by role
+    boundary = ctx.boundary_module
+    internal = Enum.reject(ctx.members, &(&1 == boundary))
+
+    # Find external callers (incoming to context)
+    external_callers =
+      ctx.members
+      |> Enum.flat_map(fn mod ->
+        CompiledGraph.known_by(graph, mod)
+        |> Enum.reject(fn e -> MapSet.member?(member_set, e.module) end)
+        |> Enum.map(fn e -> {e.module, mod, e.functions_called, e.call_count} end)
+      end)
+      |> Enum.group_by(fn {caller, _callee, _fns, _count} -> caller end)
+      |> Enum.take(8)
+
+    # Find external dependencies (outgoing from context)
+    external_deps =
+      ctx.members
+      |> Enum.flat_map(fn mod ->
+        CompiledGraph.knows_about(graph, mod)
+        |> Enum.reject(fn e -> MapSet.member?(member_set, e.module) end)
+        |> Enum.map(fn e -> {mod, e.module, e.functions_called, e.call_count} end)
+      end)
+      |> Enum.group_by(fn {_caller, dep, _fns, _count} -> dep end)
+      |> Enum.sort_by(fn {_dep, calls} -> -length(calls) end)
+      |> Enum.take(8)
+
+    lines = ["graph LR", ""]
+
+    # Left side: external callers
+    caller_lines =
+      external_callers
+      |> Enum.flat_map(fn {caller, calls} ->
+        caller_id = sanitize_id(format_mod(caller))
+        caller_short = short_name(caller)
+
+        targets =
+          calls
+          |> Enum.map(fn {_, callee, fns, _} ->
+            callee_id = sanitize_id(format_mod(callee))
+            fn_str = Enum.map_join(fns, ", ", fn {f, a} -> "#{f}/#{a}" end)
+            {callee_id, fn_str}
+          end)
+
+        node_line = "  #{caller_id}([\"#{caller_short}\"])"
+
+        edge_lines =
+          Enum.map(targets, fn {callee_id, fn_str} ->
+            "  #{caller_id} -->|\"#{fn_str}\"| #{callee_id}"
+          end)
+
+        [node_line | edge_lines]
+      end)
+
+    # Center: context subgraph
+    context_lines = ["", "  subgraph #{ctx_id}[\"#{ctx.context}\"]"]
+
+    boundary_line =
+      case boundary do
+        nil -> []
+        mod ->
+          id = sanitize_id(format_mod(mod))
+          ["    #{id}{{\"#{short_name(mod)}<br/>BOUNDARY\"}}"]
+      end
+
+    internal_lines =
+      internal
+      |> Enum.take(12)
+      |> Enum.map(fn mod ->
+        id = sanitize_id(format_mod(mod))
+        "    #{id}[\"#{short_name(mod)}\"]"
+      end)
+
+    more_line =
+      case length(internal) > 12 do
+        true -> ["    more_#{ctx_id}[\"... +#{length(internal) - 12} more\"]"]
+        false -> []
+      end
+
+    context_end = ["  end", ""]
+
+    # Internal wiring within context
+    internal_wiring =
+      ctx.members
+      |> Enum.flat_map(fn mod ->
+        CompiledGraph.knows_about(graph, mod)
+        |> Enum.filter(fn e -> MapSet.member?(member_set, e.module) end)
+        |> Enum.map(fn e ->
+          from_id = sanitize_id(format_mod(mod))
+          to_id = sanitize_id(format_mod(e.module))
+          "  #{from_id} --> #{to_id}"
+        end)
+      end)
+      |> Enum.uniq()
+
+    # Right side: external dependencies
+    dep_lines =
+      external_deps
+      |> Enum.flat_map(fn {dep, calls} ->
+        dep_id = sanitize_id(format_mod(dep))
+        dep_short = short_name(dep)
+
+        sources =
+          calls
+          |> Enum.map(fn {caller, _, fns, _} ->
+            caller_id = sanitize_id(format_mod(caller))
+            fn_str = Enum.map_join(fns, ", ", fn {f, a} -> "#{f}/#{a}" end)
+            {caller_id, fn_str}
+          end)
+          |> Enum.take(3)
+
+        node_line = "  #{dep_id}([\"#{dep_short}\"])"
+
+        edge_lines =
+          Enum.map(sources, fn {caller_id, fn_str} ->
+            "  #{caller_id} -.->|\"#{fn_str}\"| #{dep_id}"
+          end)
+
+        [node_line | edge_lines]
+      end)
+
+    # Styling
+    style_lines = [""]
+
+    boundary_style =
+      case boundary do
+        nil -> []
+        mod -> ["  style #{sanitize_id(format_mod(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
+      end
+
+    # Style external callers as input terminals (blue)
+    caller_style =
+      external_callers
+      |> Enum.map(fn {caller, _} ->
+        "  style #{sanitize_id(format_mod(caller))} fill:#BBDEFB,stroke:#1565C0"
+      end)
+
+    # Style external deps as output terminals (orange)
+    dep_style =
+      external_deps
+      |> Enum.map(fn {dep, _} ->
+        "  style #{sanitize_id(format_mod(dep))} fill:#FFE0B2,stroke:#E65100"
+      end)
+
+    Enum.join(
+      lines ++ caller_lines ++ context_lines ++ boundary_line ++ internal_lines ++ more_line ++
+        context_end ++ internal_wiring ++ [""] ++ dep_lines ++ style_lines ++ boundary_style ++
+        caller_style ++ dep_style,
+      "\n"
+    )
+  end
+
+  defp format_return_shape(fn_info) do
+    shapes =
+      fn_info.clauses
+      |> Enum.map(& &1.return_shape)
+      |> Enum.uniq()
+
+    case shapes do
+      [{:tagged_tuple, :ok}] -> "{:ok, _}"
+      [{:tagged_tuple, :error}] -> "{:error, _}"
+      [{:atom, val}] -> ":#{val}"
+      [:list] -> "[...]"
+      [:map] -> "%{}"
+      [:binary] -> "<<>>"
+      [:call] -> "fn()"
+      [:variable] -> "var"
+      [{:mixed, _}] -> "mixed"
+      _ ->
+        tags = for {:tagged_tuple, t} <- shapes, do: t
+
+        case tags do
+          [] -> "?"
+          _ -> Enum.map_join(tags, "|", fn t -> ":#{t}" end)
+        end
+    end
+  end
+
+  defp wire_style_for(entry) do
+    case entry.call_count do
+      n when n >= 10 -> "==>"
+      _ -> "-->"
+    end
+  end
+
   defp format_mod(mod) do
     mod
     |> Atom.to_string()
