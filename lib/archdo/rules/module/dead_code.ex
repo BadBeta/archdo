@@ -10,17 +10,17 @@ defmodule Archdo.Rules.Module.DeadCode do
   @impl true
   def description, do: "Public function exported but never called — dead code"
 
-  # Per-file analysis returns nothing — this rule requires xref data
+  # Per-file analysis returns nothing — this rule requires compiled beam data
   @impl true
   def analyze(_file, _ast, _opts), do: []
 
   @doc """
-  Project-level analysis using xref data from compiled beam files.
-  Call with the result of Archdo.Xref.analyze/1.
+  Project-level analysis using compiled beam data from compiled beam files.
+  Call with the result of Archdo.Compiled.analyze/1.
   """
-  def analyze_xref(xref_data) do
-    xref_data
-    |> Archdo.Xref.dead_functions()
+  def analyze_compiled(compiled_data) do
+    compiled_data
+    |> Archdo.Compiled.dead_functions()
     |> Enum.map(&build_diagnostic/1)
   end
 

@@ -1,4 +1,4 @@
-defmodule Archdo.Xref do
+defmodule Archdo.Compiled do
   @moduledoc false
 
   # Compilation tracer-based cross-reference analysis.
@@ -16,11 +16,11 @@ defmodule Archdo.Xref do
 
   @doc """
   Compile a project directory with our tracer enabled and return
-  the collected cross-reference data.
+  the collected compiled beam analysis data.
 
-  Returns `{:ok, xref_data}` or `{:error, reason}`.
+  Returns `{:ok, compiled_data}` or `{:error, reason}`.
 
-  The xref_data map contains:
+  The compiled_data map contains:
     - `:calls` — list of `%{caller_module, callee_module, callee_function, callee_arity, file, line}`
     - `:exports` — map of `module => [{function, arity}]` (all public functions including macro-injected)
     - `:behaviours` — map of `module => [behaviour_module]`
@@ -43,7 +43,7 @@ defmodule Archdo.Xref do
 
   @doc """
   Find dead public functions — exported but never called from outside the module.
-  Requires xref data from `analyze/1`.
+  Requires compiled data from `analyze/1`.
   """
   @spec dead_functions(map()) :: [%{module: module(), function: atom(), arity: non_neg_integer()}]
   def dead_functions(%{exports: exports, calls: calls, behaviours: behaviours, callbacks: callback_defs}) do

@@ -1,13 +1,13 @@
-defmodule Archdo.Xref.Tracer do
+defmodule Archdo.Compiled.Tracer do
   @moduledoc false
 
   # Compilation tracer that captures cross-reference data during compilation.
   #
   # Usage: add to compiler options before compiling a project:
   #
-  #     Code.put_compiler_option(:tracers, [Archdo.Xref.Tracer])
+  #     Code.put_compiler_option(:tracers, [Archdo.Compiled.Tracer])
   #
-  # The tracer sends events to a collector process (Archdo.Xref.Collector)
+  # The tracer sends events to a collector process (Archdo.Compiled.Collector)
   # which aggregates them. This is the modern replacement for Mix.Tasks.Xref.calls/0.
   #
   # The tracer MUST be fast — it runs synchronously during compilation.
@@ -58,7 +58,7 @@ defmodule Archdo.Xref.Tracer do
   def trace(_event, _env), do: :ok
 
   defp send_event(type, data) do
-    case Process.whereis(Archdo.Xref.Collector) do
+    case Process.whereis(Archdo.Compiled.Collector) do
       nil -> :ok
       pid -> send(pid, {type, data})
     end

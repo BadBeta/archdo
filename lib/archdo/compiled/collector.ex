@@ -1,4 +1,4 @@
-defmodule Archdo.Xref.Collector do
+defmodule Archdo.Compiled.Collector do
   @moduledoc false
 
   # Collects trace events from the compilation tracer.

@@ -61,18 +61,18 @@ defmodule Archdo do
 
     project_diagnostics = run_project_arch_rules(paths, opts)
 
-    xref_diagnostics =
+    compiled_diagnostics =
       if Keyword.get(opts, :compiled, false) do
-        run_xref_rules(paths, opts)
+        run_compiled_rules(paths, opts)
       else
         []
       end
 
-    (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ xref_diagnostics)
+    (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ compiled_diagnostics)
     |> Enum.sort_by(fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end)
   end
 
-  defp run_xref_rules(paths, _opts) do
+  defp run_compiled_rules(paths, _opts) do
     project_root =
       case paths do
         [path | _] ->
@@ -84,10 +84,10 @@ defmodule Archdo do
           File.cwd!()
       end
 
-    case Archdo.Xref.analyze(project_root) do
-      {:ok, xref_data} ->
-        dead = Archdo.Rules.Module.DeadCode.analyze_xref(xref_data)
-        missing = missing_callback_diagnostics(xref_data)
+    case Archdo.Compiled.analyze(project_root) do
+      {:ok, compiled_data} ->
+        dead = Archdo.Rules.Module.DeadCode.analyze_compiled(compiled_data)
+        missing = missing_callback_diagnostics(compiled_data)
         dead ++ missing
 
       {:error, reason} ->
@@ -96,9 +96,9 @@ defmodule Archdo do
     end
   end
 
-  defp missing_callback_diagnostics(xref_data) do
-    xref_data
-    |> Archdo.Xref.missing_callbacks()
+  defp missing_callback_diagnostics(compiled_data) do
+    compiled_data
+    |> Archdo.Compiled.missing_callbacks()
     |> Enum.map(fn %{module: mod, behaviour: bhv, missing: missing} ->
       mod_name = Archdo.AST.module_name(mod)
       bhv_name = Archdo.AST.module_name(bhv)
