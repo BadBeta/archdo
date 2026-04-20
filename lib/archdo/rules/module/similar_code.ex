@@ -136,8 +136,8 @@ defmodule Archdo.Rules.Module.SimilarCode do
   defp collect_tokens(_, acc), do: acc
 
   defp jaccard(set_a, set_b) do
-    intersection = MapSet.intersection(set_a, set_b) |> MapSet.size()
-    union = MapSet.union(set_a, set_b) |> MapSet.size()
+    intersection = MapSet.size(MapSet.intersection(set_a, set_b))
+    union = MapSet.size(MapSet.union(set_a, set_b))
     case union do
       0 -> 0.0
       _ -> intersection / union

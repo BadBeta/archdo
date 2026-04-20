@@ -79,7 +79,7 @@ defmodule Archdo.Rules.Boundary.UnusedDependency do
 
             mod ->
               full = AST.module_name(mod)
-              short = List.last(parts) |> Atom.to_string()
+              short = Atom.to_string(List.last(parts))
               line = AST.line(meta)
               {node, [{short, full, line} | acc]}
           end

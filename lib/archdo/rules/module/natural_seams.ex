@@ -93,7 +93,7 @@ defmodule Archdo.Rules.Module.NaturalSeams do
   end
 
   defp extract_prefix(name) when is_atom(name) do
-    case Atom.to_string(name) |> String.split("_", parts: 2) do
+    case String.split(Atom.to_string(name), "_", parts: 2) do
       [prefix, _] when byte_size(prefix) >= 3 -> prefix
       _ -> nil
     end

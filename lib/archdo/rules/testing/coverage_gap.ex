@@ -153,7 +153,7 @@ defmodule Archdo.Rules.Testing.CoverageGap do
         {false, []}
 
       test_ast ->
-        module_parts = String.split(module_name, ".") |> Enum.map(&String.to_atom/1)
+        module_parts = Enum.map(String.split(module_name, "."), &String.to_atom/1)
 
         module_referenced? =
           AST.contains?(test_ast, fn

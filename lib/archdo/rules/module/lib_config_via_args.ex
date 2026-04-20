@@ -86,7 +86,7 @@ defmodule Archdo.Rules.Module.LibConfigViaArgs do
       String.contains?(file, "/config/") or
       AST.contains?(ast, fn
         {:defmodule, _, [{:__aliases__, _, aliases} | _]} ->
-          name = List.last(aliases) |> Atom.to_string()
+          name = Atom.to_string(List.last(aliases))
           name in ["Config", "Configuration", "Settings"]
         _ -> false
       end)

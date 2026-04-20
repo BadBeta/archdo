@@ -116,11 +116,10 @@ defmodule Archdo.Rules.OTP.AgentMisuse do
   end
 
   defp count_calls(ast, func_name) do
-    AST.find_all(ast, fn
+    length(AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, [:Agent]}, ^func_name]}, _, _} -> true
       _ -> false
-    end)
-    |> length()
+    end))
   end
 
   defp has_complex_agent_fns?(ast) do

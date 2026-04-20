@@ -79,7 +79,7 @@ defmodule Archdo.Rules.Testing.AsyncEligibility do
   defp find_use_clauses(ast) do
     AST.find_all(ast, fn
       {:use, _meta, [{:__aliases__, _, aliases} | _]} ->
-        last = List.last(aliases) |> Atom.to_string()
+        last = Atom.to_string(List.last(aliases))
 
         last in ["Case", "CaseTemplate"] or
           String.ends_with?(last, "Case") or

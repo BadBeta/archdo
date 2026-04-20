@@ -215,8 +215,7 @@ defmodule Archdo.Graph do
         end
       end)
 
-    result.cycles
-    |> Enum.uniq_by(&MapSet.new/1)
+    Enum.uniq_by(result.cycles, &MapSet.new/1)
   end
 
   defp dfs_visit(node, adjacency, state, path) do

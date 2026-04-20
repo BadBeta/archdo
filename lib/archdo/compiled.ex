@@ -55,8 +55,7 @@ defmodule Archdo.Compiled do
 
       app_name ->
         # Look for _build/ENV/lib/APP/ebin — try dev first, then prod
-        ["dev", "prod", "test"]
-        |> Enum.find_value(fn env ->
+        Enum.find_value(["dev", "prod", "test"], fn env ->
           dir = Path.join([build_dir, env, "lib", app_name, "ebin"])
 
           case File.dir?(dir) and Path.wildcard(Path.join(dir, "*.beam")) != [] do

@@ -215,20 +215,17 @@ defmodule Archdo.Rules.Boundary.Mockability do
   end
 
   defp count_behaviours_used(ast) do
-    AST.find_all(ast, fn
+    length(AST.find_all(ast, fn
       {:@, _, [{:behaviour, _, _}]} -> true
       _ -> false
-    end)
-    |> length()
+    end))
   end
 
   defp count_behaviour_definitions(ast) do
-    AST.find_all(ast, fn
+    case length(AST.find_all(ast, fn
       {:@, _, [{:callback, _, _}]} -> true
       _ -> false
-    end)
-    |> length()
-    |> case do
+    end)) do
       0 -> 0
       _ -> 1
     end

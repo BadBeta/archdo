@@ -110,7 +110,7 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   end
 
   defp only_in_same_file?(infos) do
-    files = Enum.map(infos, & &1.file) |> Enum.uniq()
+    files = Enum.uniq(Enum.map(infos, & &1.file))
     length(files) == 1
   end
 

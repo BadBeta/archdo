@@ -115,13 +115,13 @@ defmodule Archdo.Pattern do
   end
 
   defp do_tokenize([], [], tokens), do: Enum.reverse(tokens)
-  defp do_tokenize([], buf, tokens), do: Enum.reverse([{:lit, Enum.reverse(buf) |> List.to_string()} | tokens])
+  defp do_tokenize([], buf, tokens), do: Enum.reverse([{:lit, List.to_string(Enum.reverse(buf))} | tokens])
 
   defp do_tokenize([?*, ?* | rest], buf, tokens) do
     tokens =
       case buf do
         [] -> tokens
-        _ -> [{:lit, Enum.reverse(buf) |> List.to_string()} | tokens]
+        _ -> [{:lit, List.to_string(Enum.reverse(buf))} | tokens]
       end
 
     do_tokenize(rest, [], [:double_star | tokens])
@@ -131,7 +131,7 @@ defmodule Archdo.Pattern do
     tokens =
       case buf do
         [] -> tokens
-        _ -> [{:lit, Enum.reverse(buf) |> List.to_string()} | tokens]
+        _ -> [{:lit, List.to_string(Enum.reverse(buf))} | tokens]
       end
 
     do_tokenize(rest, [], [:star | tokens])

@@ -65,8 +65,10 @@ defmodule Archdo do
         false -> []
       end
 
-    (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ compiled_diagnostics)
-    |> Enum.sort_by(fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end)
+    Enum.sort_by(
+      per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ compiled_diagnostics,
+      fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end
+    )
   end
 
   @compiled_rules [

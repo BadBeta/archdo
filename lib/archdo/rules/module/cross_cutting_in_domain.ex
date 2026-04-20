@@ -67,15 +67,14 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
   end
 
   defp count_logger_calls(ast) do
-    AST.find_all(ast, fn
+    length(AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, [:Logger]}, level]}, _, _}
       when level in [:debug, :info, :warning, :warn, :notice] ->
         true
 
       _ ->
         false
-    end)
-    |> length()
+    end))
   end
 
   defp extract_module_name(ast), do: AST.extract_module_name(ast)

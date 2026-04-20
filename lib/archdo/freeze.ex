@@ -110,9 +110,9 @@ defmodule Archdo.Freeze do
   def stats(diagnostics, baseline) do
     current_fingerprints = MapSet.new(diagnostics, &fingerprint/1)
 
-    still_present = MapSet.intersection(baseline, current_fingerprints) |> MapSet.size()
-    resolved = MapSet.difference(baseline, current_fingerprints) |> MapSet.size()
-    new = MapSet.difference(current_fingerprints, baseline) |> MapSet.size()
+    still_present = MapSet.size(MapSet.intersection(baseline, current_fingerprints))
+    resolved = MapSet.size(MapSet.difference(baseline, current_fingerprints))
+    new = MapSet.size(MapSet.difference(current_fingerprints, baseline))
 
     %{
       baseline_size: MapSet.size(baseline),
@@ -161,6 +161,6 @@ defmodule Archdo.Freeze do
 
   defp format_timestamp do
     {{y, mo, d}, {h, mi, _s}} = :calendar.local_time()
-    :io_lib.format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w", [y, mo, d, h, mi]) |> to_string()
+    to_string(:io_lib.format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w", [y, mo, d, h, mi]))
   end
 end
