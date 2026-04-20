@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -34,13 +34,13 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
     cycle_str =
       scc
       |> Enum.map(fn {mod, func, arity} ->
-        "#{format_mod(mod)}.#{func}/#{arity}"
+        "#{AST.module_name(mod)}.#{func}/#{arity}"
       end)
       |> Enum.join(" → ")
 
     modules_involved =
       scc
-      |> Enum.map(fn {mod, _f, _a} -> format_mod(mod) end)
+      |> Enum.map(fn {mod, _f, _a} -> AST.module_name(mod) end)
       |> Enum.uniq()
       |> Enum.join(", ")
 
@@ -79,9 +79,4 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end

@@ -11,6 +11,7 @@ defmodule Archdo.Compiled.DiagramSystem do
   # OTP processes shown with mailboxes.
   # The whole thing flows left-to-right like a LabVIEW block diagram.
 
+  alias Archdo.AST
   alias Archdo.Compiled.Graph
 
   # Layout — horizontal layers stacked top to bottom
@@ -553,7 +554,7 @@ defmodule Archdo.Compiled.DiagramSystem do
             :up -> tgt_ty - 8 - wire_idx * 6
           end
 
-        label = "#{short_name(source_mod)}→#{short_name(target_mod)}"
+        label = "#{AST.short_name(source_mod)}→#{AST.short_name(target_mod)}"
 
         [
           # Output tunnel (square on bottom of source)
@@ -609,13 +610,13 @@ defmodule Archdo.Compiled.DiagramSystem do
     module_list
     |> Enum.take(max_count)
     |> Enum.map(fn mod ->
-      name = short_name(mod)
+      name = AST.short_name(mod)
 
       fn x, y ->
         [
           ~s[<rect x="#{x}" y="#{y}" width="#{@node_w}" height="#{@node_h}" rx="6" fill="#2D2D3F" stroke="#{accent_color}" stroke-width="1"/>],
           ~s[<text x="#{x + 10}" y="#{y + 20}" fill="#{accent_color}" font-size="11" font-weight="500" font-family="monospace">#{name}</text>],
-          ~s[<text x="#{x + 10}" y="#{y + 34}" fill="#{@dim}" font-size="8" font-family="monospace">#{format_mod(mod)}</text>]
+          ~s[<text x="#{x + 10}" y="#{y + 34}" fill="#{@dim}" font-size="8" font-family="monospace">#{AST.module_name(mod)}</text>]
         ]
       end
     end)
@@ -625,7 +626,7 @@ defmodule Archdo.Compiled.DiagramSystem do
     state_machines
     |> Enum.take(3)
     |> Enum.map(fn {mod, sm_info} ->
-      name = short_name(mod)
+      name = AST.short_name(mod)
       states = Enum.take(sm_info.states, 5)
 
       fn x, y ->
@@ -745,17 +746,5 @@ defmodule Archdo.Compiled.DiagramSystem do
 
     footer = ["</svg>"]
     Enum.join(header ++ elements ++ footer, "\n")
-  end
-
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
-
-  defp short_name(mod) do
-    mod
-    |> Module.split()
-    |> List.last()
   end
 end

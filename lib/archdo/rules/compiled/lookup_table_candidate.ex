@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -27,7 +27,7 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
 
       case :beam_lib.chunks(charlist, [:abstract_code]) do
         {:ok, {mod, [{:abstract_code, {:raw_abstract_v1, forms}}]}} ->
-          exports = collect_exports(forms)
+          exports = Graph.collect_exports_from_forms(forms)
           find_lookup_candidates(mod, forms, exports)
 
         _ ->
@@ -37,15 +37,6 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
   end
 
   def analyze_compiled(_graph), do: []
-
-  defp collect_exports(forms) do
-    forms
-    |> Enum.flat_map(fn
-      {:attribute, _, :export, exps} -> exps
-      _ -> []
-    end)
-    |> MapSet.new()
-  end
 
   defp find_lookup_candidates(mod, forms, exports) do
     forms
@@ -235,7 +226,7 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
   defp format_literal(_), do: "?"
 
   defp build_diagnostic(mod, result) do
-    mod_name = format_mod(mod)
+    mod_name = AST.module_name(mod)
     via = if Map.get(result, :via_case), do: " (via case statement)", else: ""
 
     sample =
@@ -314,9 +305,4 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
       catch_all_line
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end

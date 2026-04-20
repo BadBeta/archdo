@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.ChangeRisk do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -33,7 +33,7 @@ defmodule Archdo.Rules.Compiled.ChangeRisk do
   end
 
   defp build_diagnostic(report) do
-    mod_name = format_mod(report.module)
+    mod_name = AST.module_name(report.module)
 
     depth_by_level =
       report.transitive_dependents
@@ -105,9 +105,4 @@ defmodule Archdo.Rules.Compiled.ChangeRisk do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end

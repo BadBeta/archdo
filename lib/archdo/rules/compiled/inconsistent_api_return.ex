@@ -2,8 +2,9 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
+  alias Archdo.Rules.Compiled.Helpers
 
   @impl true
   def id, do: "6.28"
@@ -26,8 +27,8 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
       |> Enum.filter(fn fn_info ->
         fn_info.exported and
           fn_info.clause_count >= @min_clauses and
-          not framework_function?(fn_info.name) and
-          not generated_function?(fn_info.name)
+          not Helpers.framework_function?(fn_info.name) and
+          not Helpers.generated_function?(fn_info.name)
       end)
       |> Enum.flat_map(fn fn_info ->
         case check_return_consistency(fn_info) do
@@ -100,7 +101,7 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
   end
 
   defp build_diagnostic(module, fn_info, shapes) do
-    mod_name = format_mod(module)
+    mod_name = AST.module_name(module)
 
     shape_strs =
       shapes
@@ -155,31 +156,4 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
   defp format_shape({:mixed, shapes}), do: "mixed(#{Enum.map_join(shapes, "|", &format_shape/1)})"
   defp format_shape(other), do: "#{inspect(other)}"
 
-  defp framework_function?(name) do
-    name in [
-      :__struct__,
-      :__schema__,
-      :__changeset__,
-      :__impl__,
-      :__protocol__,
-      :__deriving__,
-      :__using__,
-      :__before_compile__,
-      :__after_compile__,
-      :behaviour_info
-    ]
-  end
-
-  defp generated_function?(name) do
-    name_str = Atom.to_string(name)
-
-    String.starts_with?(name_str, "__") or
-      String.starts_with?(name_str, "MACRO-")
-  end
-
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end

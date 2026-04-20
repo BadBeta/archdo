@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -67,7 +67,7 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
     leaking =
       ctx.leaking_modules
       |> Enum.take(5)
-      |> Enum.map_join(", ", fn m -> format_mod(m.module) end)
+      |> Enum.map_join(", ", fn m -> AST.module_name(m.module) end)
 
     Diagnostic.warning("1.23",
       title: "Context boundary leak",
@@ -155,7 +155,7 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
   end
 
   defp build_misplaced_diagnostic(context_name, misplaced) do
-    mod_name = format_mod(misplaced.module)
+    mod_name = AST.module_name(misplaced.module)
 
     Diagnostic.info("1.23",
       title: "Misplaced module",
@@ -171,7 +171,7 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
         Fix.new(
           summary: "Move to #{misplaced.strongest_affinity}",
           detail:
-            "Rename #{mod_name} to #{misplaced.strongest_affinity}.#{last_part(misplaced.module)}. " <>
+            "Rename #{mod_name} to #{misplaced.strongest_affinity}.#{AST.short_name(misplaced.module)}. " <>
               "Update all callers.",
           applies_when: "The module's functionality belongs in the other context."
         ),
@@ -228,17 +228,5 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
   end
 
   defp boundary_note(nil), do: " (no boundary module found)"
-  defp boundary_note(mod), do: " (#{format_mod(mod)})"
-
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
-
-  defp last_part(mod) do
-    mod
-    |> Module.split()
-    |> List.last()
-  end
+  defp boundary_note(mod), do: " (#{AST.module_name(mod)})"
 end

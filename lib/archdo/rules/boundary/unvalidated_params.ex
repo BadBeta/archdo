@@ -21,8 +21,8 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
     cond do
       AST.test_file?(file) -> []
       fallback_controller?(file) -> []
-      controller_file?(file) -> check_controller(file, ast)
-      live_view_file?(file) -> check_live_view(file, ast)
+      AST.controller_file?(file) -> check_controller(file, ast)
+      AST.live_view_file?(file) -> check_live_view(file, ast)
       true -> []
     end
   end
@@ -211,14 +211,4 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
   end
 
   defp context_function?(_), do: false
-
-  defp controller_file?(file) do
-    String.contains?(file, "_controller.ex") or
-      String.contains?(file, "/controllers/")
-  end
-
-  defp live_view_file?(file) do
-    String.contains?(file, "_live.ex") or
-      String.contains?(file, "/live/")
-  end
 end

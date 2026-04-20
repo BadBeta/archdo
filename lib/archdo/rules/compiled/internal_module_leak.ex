@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -81,8 +81,8 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
   # More precisely: same if one is a prefix of the other or they share
   # a common ancestor at the context level.
   defp same_context?(mod_a, mod_b) do
-    a_str = format_mod(mod_a)
-    b_str = format_mod(mod_b)
+    a_str = AST.module_name(mod_a)
+    b_str = AST.module_name(mod_b)
 
     # Find common prefix — they're in the same context if one is a parent of the other
     # or they share the same parent
@@ -96,9 +96,9 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
   end
 
   defp build_diagnostic(caller_mod, callee_mod, calls) do
-    caller_name = format_mod(caller_mod)
-    callee_name = format_mod(callee_mod)
-    parent_name = format_mod(parent_module(callee_mod))
+    caller_name = AST.module_name(caller_mod)
+    callee_name = AST.module_name(callee_mod)
+    parent_name = AST.module_name(parent_module(callee_mod))
 
     functions_called =
       calls
@@ -148,9 +148,4 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end

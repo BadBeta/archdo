@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -46,8 +46,8 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
   end
 
   defp build_diagnostic(module, behaviour, missing) do
-    mod_name = format_mod(module)
-    bhv_name = format_mod(behaviour)
+    mod_name = AST.module_name(module)
+    bhv_name = AST.module_name(behaviour)
 
     missing_str =
       missing
@@ -88,9 +88,4 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end

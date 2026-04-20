@@ -14,7 +14,8 @@ defmodule Archdo.Compiled.DiagramSVG do
   #   - Thickness: call frequency (thin=1-2, medium=3-9, thick=10+)
   #   - Style: solid=synchronous call, dashed=async/cast/send
 
-  alias Archdo.Compiled.Graph
+  alias Archdo.AST
+  alias Archdo.Compiled.{DiagramHelpers, Graph}
 
   # Layout constants
   @node_width 220
@@ -28,7 +29,6 @@ defmodule Archdo.Compiled.DiagramSVG do
   @header_font_size 13
 
   # Colors
-  @bg "#1E1E2E"
   @node_bg "#2D2D3F"
   @node_border "#4A4A6A"
   @node_header_bg "#3D3D5C"
@@ -123,7 +123,7 @@ defmodule Archdo.Compiled.DiagramSVG do
     all_elements =
       elements ++ caller_elements ++ center_elements ++ dep_elements ++ caller_wires ++ dep_wires
 
-    wrap_svg(all_elements, total_width, total_height)
+    DiagramHelpers.wrap_svg(all_elements, total_width, total_height)
   end
 
   @doc """
@@ -136,7 +136,7 @@ defmodule Archdo.Compiled.DiagramSVG do
 
     case Enum.find(contexts, fn c -> c.context == context_name end) do
       nil ->
-        error_svg("Context '#{context_name}' not found")
+        DiagramHelpers.error_svg("Context '#{context_name}' not found", @wire_error)
 
       ctx ->
         render_context_svg(graph, ctx)
@@ -146,8 +146,8 @@ defmodule Archdo.Compiled.DiagramSVG do
   # --- Rendering helpers ---
 
   defp render_module_box(module, exports, x, y, height) do
-    mod_name = short_name(module)
-    full_name = format_mod(module)
+    mod_name = AST.short_name(module)
+    full_name = AST.module_name(module)
 
     # Header
     header = [
@@ -202,7 +202,7 @@ defmodule Archdo.Compiled.DiagramSVG do
             ey = y_start + idx * spacing
             node_h = 36
 
-            mod_name = short_name(entry.module)
+            mod_name = AST.short_name(entry.module)
             fns = Enum.map_join(entry.functions_called, ", ", fn {f, a} -> "#{f}/#{a}" end)
             fns_truncated = String.slice(fns, 0, 28)
 
@@ -355,8 +355,8 @@ defmodule Archdo.Compiled.DiagramSVG do
 
         label =
           case is_boundary do
-            true -> "#{short_name(mod)} [BOUNDARY]"
-            false -> short_name(mod)
+            true -> "#{AST.short_name(mod)} [BOUNDARY]"
+            false -> AST.short_name(mod)
           end
 
         [
@@ -373,7 +373,7 @@ defmodule Archdo.Compiled.DiagramSVG do
         ey = 40 + idx * 50
         [
           ~s(<rect x="20" y="#{ey}" width="#{@node_width}" height="36" rx="4" fill="#1E3A5F" stroke="#2563EB" stroke-width="1"/>),
-          ~s(<text x="30" y="#{ey + 22}" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{short_name(entry.module)}</text>),
+          ~s(<text x="30" y="#{ey + 22}" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{AST.short_name(entry.module)}</text>),
           ~s(<path d="M #{20 + @node_width} #{ey + 18} L #{frame_x} #{frame_y + frame_h / 2}" fill="none" stroke="#{@wire_ok}" stroke-width="1.2" opacity="0.4"/>)
         ]
       end)
@@ -387,36 +387,13 @@ defmodule Archdo.Compiled.DiagramSVG do
         dx = frame_x + frame_w + @col_gap
         [
           ~s(<rect x="#{dx}" y="#{ey}" width="#{@node_width}" height="36" rx="4" fill="#3D2E1E" stroke="#D97706" stroke-width="1"/>),
-          ~s(<text x="#{dx + 10}" y="#{ey + 22}" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{short_name(entry.module)}</text>),
+          ~s(<text x="#{dx + 10}" y="#{ey + 22}" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{AST.short_name(entry.module)}</text>),
           ~s(<path d="M #{frame_x + frame_w} #{frame_y + frame_h / 2} L #{dx} #{ey + 18}" fill="none" stroke="#{@wire_atom}" stroke-width="1.2" opacity="0.4" stroke-dasharray="4,2"/>)
         ]
       end)
 
     all = frame_elements ++ member_elements ++ caller_elements ++ dep_elements
-    wrap_svg(all, total_w, total_h)
-  end
-
-  defp wrap_svg(elements, width, height) do
-    header = [
-      ~s(<?xml version="1.0" encoding="UTF-8"?>),
-      ~s(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 #{ceil(width)} #{ceil(height)}" width="#{ceil(width)}" height="#{ceil(height)}">),
-      ~s(<rect width="100%" height="100%" fill="#{@bg}"/>),
-      ~s(<style>),
-      ~s(  text { user-select: none; }),
-      ~s(</style>)
-    ]
-
-    footer = ["</svg>"]
-
-    Enum.join(header ++ elements ++ footer, "\n")
-  end
-
-  defp error_svg(message) do
-    wrap_svg(
-      [~s(<text x="20" y="30" fill="#{@wire_error}" font-size="14" font-family="monospace">#{message}</text>)],
-      400,
-      60
-    )
+    DiagramHelpers.wrap_svg(all, total_w, total_h)
   end
 
   defp wire_color_for_fn(fn_info) do
@@ -459,17 +436,5 @@ defmodule Archdo.Compiled.DiagramSVG do
           _ -> Enum.map_join(tags, "|", &":#{&1}")
         end
     end
-  end
-
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
-
-  defp short_name(mod) do
-    mod
-    |> Module.split()
-    |> List.last()
   end
 end

@@ -11,7 +11,8 @@ defmodule Archdo.Compiled.DiagramOTP do
   #   - Message wires: dashed lines from outbox → mailbox
   #   - Supervision links: solid lines from supervisor frame to child
 
-  alias Archdo.Compiled.{Graph, OTPTopology}
+  alias Archdo.AST
+  alias Archdo.Compiled.{DiagramHelpers, Graph, OTPTopology}
 
   # Layout constants
   @process_w 200
@@ -111,7 +112,7 @@ defmodule Archdo.Compiled.DiagramOTP do
     legend = render_legend(total_w - 260, 8)
 
     all = title ++ legend ++ tree_elements ++ orphan_elements ++ msg_elements
-    wrap_svg(all, total_w, total_h)
+    DiagramHelpers.wrap_svg(all, total_w, total_h)
   end
 
   defp layout_tree([], _x, _y), do: {[], 0, 0}
@@ -164,7 +165,7 @@ defmodule Archdo.Compiled.DiagramOTP do
     # Supervisor frame
     frame_elements = [
       ~s(<rect x="#{x}" y="#{y}" width="#{frame_w}" height="#{frame_h}" rx="8" fill="#{@sup_bg}" stroke="#{@supervisor_accent}" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.8"/>),
-      ~s(<text x="#{x + 10}" y="#{y + 18}" fill="#{@supervisor_accent}" font-size="12" font-weight="600" font-family="monospace">⬡ #{short_name(process.module)}#{strategy_str}</text>),
+      ~s(<text x="#{x + 10}" y="#{y + 18}" fill="#{@supervisor_accent}" font-size="12" font-weight="600" font-family="monospace">⬡ #{AST.short_name(process.module)}#{strategy_str}</text>),
       # Mailbox in (top-left of frame)
       render_mailbox_in(x + 2, y + 2),
       # Outbox (bottom-right of frame)
@@ -220,7 +221,7 @@ defmodule Archdo.Compiled.DiagramOTP do
   defp render_process_box(process, x, y) do
     accent = accent_color(process.type)
     type_icon = type_icon(process.type)
-    mod_name = short_name(process.module)
+    mod_name = AST.short_name(process.module)
 
     incoming_count = length(process.incoming_messages)
     outgoing_count = length(process.outgoing_messages)
@@ -233,7 +234,7 @@ defmodule Archdo.Compiled.DiagramOTP do
       ~s(<text x="#{x + 28}" y="#{y + 22}" fill="#{accent}" font-size="12" font-weight="600" font-family="monospace">#{type_icon} #{mod_name}</text>),
 
       # Full module name
-      ~s(<text x="#{x + 10}" y="#{y + 40}" fill="#{@dim_text}" font-size="9" font-family="monospace">#{format_mod(process.module)}</text>),
+      ~s(<text x="#{x + 10}" y="#{y + 40}" fill="#{@dim_text}" font-size="9" font-family="monospace">#{AST.module_name(process.module)}</text>),
 
       # Mailbox in (top-left corner)
       render_mailbox_in(x - 4, y - 4),
@@ -370,11 +371,11 @@ defmodule Archdo.Compiled.DiagramOTP do
     ]
 
     all = title ++ render_legend(total_w - 260, 8) ++ process_elements ++ wire_elements
-    wrap_svg(all, total_w, total_h)
+    DiagramHelpers.wrap_svg(all, total_w, total_h)
   end
 
   defp no_otp_svg do
-    wrap_svg(
+    DiagramHelpers.wrap_svg(
       [~s(<text x="40" y="40" fill="#{@dim_text}" font-size="14" font-family="monospace">No OTP processes detected in compiled beams.</text>)],
       500,
       80
@@ -396,30 +397,4 @@ defmodule Archdo.Compiled.DiagramOTP do
   defp type_icon(:task), do: "▶"
   defp type_icon(:gen_statem), do: "◈"
   defp type_icon(_), do: "○"
-
-  defp wrap_svg(elements, width, height) do
-    header = [
-      ~s(<?xml version="1.0" encoding="UTF-8"?>),
-      ~s(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 #{ceil(width)} #{ceil(height)}" width="#{ceil(width)}" height="#{ceil(height)}">),
-      ~s(<rect width="100%" height="100%" fill="#{@bg}"/>),
-      ~s(<style>),
-      ~s(  text { user-select: none; }),
-      ~s(</style>)
-    ]
-
-    footer = ["</svg>"]
-    Enum.join(header ++ elements ++ footer, "\n")
-  end
-
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
-
-  defp short_name(mod) do
-    mod
-    |> Module.split()
-    |> List.last()
-  end
 end

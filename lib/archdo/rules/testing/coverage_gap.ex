@@ -374,12 +374,7 @@ defmodule Archdo.Rules.Testing.CoverageGap do
       only_moduledoc_false?(ast)
   end
 
-  defp only_moduledoc_false?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:moduledoc, _, [false]}]} -> true
-      _ -> false
-    end)
-  end
+  defp only_moduledoc_false?(ast), do: AST.internal_module?(ast)
 
   # --- Matrix formatting ---
 

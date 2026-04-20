@@ -116,12 +116,7 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
 
   defp has_self_call_direct?(_, _, _), do: false
 
-  defp has_self_call?(body, name, arity) do
-    AST.contains?(body, fn
-      {^name, _, args} when is_list(args) -> length(args) == arity
-      _ -> false
-    end)
-  end
+  defp has_self_call?(body, name, arity), do: AST.has_self_call?(body, name, arity)
 
   defp build_diagnostic(file, name, arity, meta, breaker) do
     reason =

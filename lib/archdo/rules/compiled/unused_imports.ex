@@ -2,8 +2,9 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
+  alias Archdo.Rules.Compiled.Helpers
 
   @impl true
   def id, do: "4.22"
@@ -71,8 +72,8 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
   end
 
   defp build_diagnostic(caller_mod, target_mod, used_count, total_exports, used_fns) do
-    caller_name = format_mod(caller_mod)
-    target_name = format_mod(target_mod)
+    caller_name = AST.module_name(caller_mod)
+    target_name = AST.module_name(target_mod)
 
     only_list =
       used_fns
@@ -83,7 +84,7 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
       title: "Low import utilization",
       message:
         "#{caller_name} uses #{used_count} of #{total_exports} exports " <>
-          "from #{target_name} (#{percentage(used_count, total_exports)}%)",
+          "from #{target_name} (#{Helpers.percentage(used_count, total_exports)}%)",
       why:
         "When a module depends on another but uses only a small fraction of its API, " <>
           "the dependency is wider than necessary. This makes the caller harder to " <>
@@ -114,13 +115,4 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
-
-  defp percentage(used, total) do
-    round(used / total * 100)
-  end
 end

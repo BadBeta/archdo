@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.CompileDependencyHotspot do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -33,12 +33,12 @@ defmodule Archdo.Rules.Compiled.CompileDependencyHotspot do
   end
 
   defp build_diagnostic(module, dependent_count, dependents) do
-    mod_name = format_mod(module)
+    mod_name = AST.module_name(module)
 
     sample =
       dependents
       |> Enum.take(5)
-      |> Enum.map_join(", ", &format_mod/1)
+      |> Enum.map_join(", ", &AST.module_name/1)
 
     Diagnostic.info("1.18",
       title: "Compile dependency hotspot",
@@ -78,9 +78,4 @@ defmodule Archdo.Rules.Compiled.CompileDependencyHotspot do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end

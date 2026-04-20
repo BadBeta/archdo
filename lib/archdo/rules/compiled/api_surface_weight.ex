@@ -2,8 +2,9 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
+  alias Archdo.Rules.Compiled.Helpers
 
   @impl true
   def id, do: "6.26"
@@ -49,7 +50,7 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
   end
 
   defp build_diagnostic(module, externally_used, total_exports, usage) do
-    mod_name = format_mod(module)
+    mod_name = AST.module_name(module)
 
     unused_fns =
       usage
@@ -63,7 +64,7 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
       title: "Oversized API surface",
       message:
         "#{mod_name} exports #{total_exports} functions but only #{externally_used} " <>
-          "(#{percentage(externally_used, total_exports)}%) are called externally",
+          "(#{Helpers.percentage(externally_used, total_exports)}%) are called externally",
       why:
         "A module with many exports but few external callers has an oversized public API. " <>
           "Every exported function is a contract — callers must understand it, documentation " <>
@@ -95,13 +96,4 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
-
-  defp percentage(used, total) do
-    round(used / total * 100)
-  end
 end

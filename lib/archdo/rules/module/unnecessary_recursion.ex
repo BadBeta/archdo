@@ -119,11 +119,5 @@ defmodule Archdo.Rules.Module.UnnecessaryRecursion do
 
   defp matches_empty_list?(_), do: false
 
-  # Calls itself with a variable (presumably the tail)
-  defp calls_self_with_tail?(body, name, arity) do
-    AST.contains?(body, fn
-      {^name, _, args} when is_list(args) -> length(args) == arity
-      _ -> false
-    end)
-  end
+  defp calls_self_with_tail?(body, name, arity), do: AST.has_self_call?(body, name, arity)
 end

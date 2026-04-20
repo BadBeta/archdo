@@ -16,7 +16,7 @@ defmodule Archdo.Rules.Boundary.LogicInController do
   def analyze(file, ast, _opts) do
     cond do
       AST.test_file?(file) -> []
-      controller_file?(file) -> check_controller_actions(file, ast)
+      AST.controller_file?(file) -> check_controller_actions(file, ast)
       true -> []
     end
   end
@@ -63,8 +63,4 @@ defmodule Archdo.Rules.Boundary.LogicInController do
     end)
   end
 
-  defp controller_file?(file) do
-    String.contains?(file, "_controller.ex") or
-      String.contains?(file, "/controllers/")
-  end
 end

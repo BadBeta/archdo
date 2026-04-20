@@ -14,7 +14,7 @@ defmodule Archdo.Rules.Boundary.PubsubWithoutHandler do
   def analyze(file, ast, _opts) do
     cond do
       AST.test_file?(file) -> []
-      live_view_file?(file) or uses_live_view?(ast) -> check_pubsub(file, ast)
+      AST.live_view_file?(file) or uses_live_view?(ast) -> check_pubsub(file, ast)
       true -> []
     end
   end
@@ -85,11 +85,6 @@ defmodule Archdo.Rules.Boundary.PubsubWithoutHandler do
     else
       []
     end
-  end
-
-  defp live_view_file?(file) do
-    String.contains?(file, "_live.ex") or
-      String.contains?(file, "/live/")
   end
 
   defp uses_live_view?(ast) do

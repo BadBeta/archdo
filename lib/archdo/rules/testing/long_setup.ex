@@ -27,7 +27,7 @@ defmodule Archdo.Rules.Testing.LongSetup do
       _ -> false
     end)
     |> Enum.map(fn {kind, meta, args} ->
-      size = ast_size(args)
+      size = AST.ast_size(args)
 
       if size > @max_setup_nodes do
         {kind, AST.line(meta), size}
@@ -70,5 +70,4 @@ defmodule Archdo.Rules.Testing.LongSetup do
     end)
   end
 
-  defp ast_size(node), do: Archdo.AST.ast_size(node)
 end

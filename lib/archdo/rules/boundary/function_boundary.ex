@@ -26,7 +26,7 @@ defmodule Archdo.Rules.Boundary.FunctionBoundary do
       {call.caller_module, call.target_module, call.target_fn, call.target_arity}
     end)
     |> Enum.map(fn call ->
-      target_context = owning_context(call.target_module, contexts)
+      target_context = Archdo.Config.owning_context(call.target_module, contexts)
 
       Diagnostic.warning("1.7",
         title: "Cross-context call to non-API function",
@@ -75,8 +75,8 @@ defmodule Archdo.Rules.Boundary.FunctionBoundary do
   end
 
   defp cross_context_violation?(call, contexts, graph) do
-    target_context = owning_context(call.target_module, contexts)
-    caller_context = owning_context(call.caller_module, contexts)
+    target_context = Archdo.Config.owning_context(call.target_module, contexts)
+    caller_context = Archdo.Config.owning_context(call.caller_module, contexts)
 
     cond do
       # Target is not in any tracked context
@@ -98,9 +98,6 @@ defmodule Archdo.Rules.Boundary.FunctionBoundary do
         true
     end
   end
-
-  defp owning_context(module_name, contexts),
-    do: Archdo.Config.owning_context(module_name, contexts)
 
   defp function_exists_in_module?(graph, module, name, arity) do
     Map.has_key?(graph.definitions, {module, name, arity})

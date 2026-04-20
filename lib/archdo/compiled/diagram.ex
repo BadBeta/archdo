@@ -16,7 +16,7 @@ defmodule Archdo.Compiled.Diagram do
     contexts = CompiledGraph.discover_contexts(graph)
 
     # Build context membership lookup
-    context_of = build_context_lookup(contexts)
+    context_of = CompiledGraph.build_context_membership(contexts)
 
     # Collect cross-context edges (aggregated at module level)
     cross_edges = collect_cross_context_edges(graph, context_of)
@@ -49,7 +49,7 @@ defmodule Archdo.Compiled.Diagram do
       |> Enum.flat_map(fn ctx ->
         case ctx.boundary_module do
           nil -> []
-          mod -> ["  style #{sanitize_id(format_mod(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
+          mod -> ["  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
         end
       end)
 
@@ -100,8 +100,8 @@ defmodule Archdo.Compiled.Diagram do
       modules
       |> Map.keys()
       |> Enum.map(fn mod ->
-        name = short_name(mod)
-        id = sanitize_id(format_mod(mod))
+        name = AST.short_name(mod)
+        id = sanitize_id(AST.module_name(mod))
         "  #{id}[\"#{name}\"]"
       end)
 
@@ -110,8 +110,8 @@ defmodule Archdo.Compiled.Diagram do
       edges
       |> Enum.filter(fn {_from, _to, count} -> count >= 2 end)
       |> Enum.map(fn {from, to, count} ->
-        from_id = sanitize_id(format_mod(from))
-        to_id = sanitize_id(format_mod(to))
+        from_id = sanitize_id(AST.module_name(from))
+        to_id = sanitize_id(AST.module_name(to))
 
         case count do
           n when n >= 10 -> "  #{from_id} ==>|#{count}| #{to_id}"
@@ -149,12 +149,12 @@ defmodule Archdo.Compiled.Diagram do
   @spec blast_radius(CompiledGraph.t(), module()) :: String.t()
   def blast_radius(%CompiledGraph{} = graph, module) do
     report = CompiledGraph.blast_radius(graph, module)
-    mod_name = format_mod(module)
+    mod_name = AST.module_name(module)
 
     lines = [
       "graph TD",
       "",
-      "  #{sanitize_id(mod_name)}[\"#{short_name(module)}<br/>CHANGED\"]",
+      "  #{sanitize_id(mod_name)}[\"#{AST.short_name(module)}<br/>CHANGED\"]",
       "  style #{sanitize_id(mod_name)} fill:#F44336,color:#fff,stroke:#B71C1C",
       ""
     ]
@@ -170,8 +170,8 @@ defmodule Archdo.Compiled.Diagram do
           mods
           |> Enum.take(15)
           |> Enum.map(fn mod ->
-            id = sanitize_id(format_mod(mod))
-            "    #{id}[\"#{short_name(mod)}\"]"
+            id = sanitize_id(AST.module_name(mod))
+            "    #{id}[\"#{AST.short_name(mod)}\"]"
           end)
 
         more =
@@ -195,7 +195,7 @@ defmodule Archdo.Compiled.Diagram do
           depth1_mods
           |> Enum.take(15)
           |> Enum.map(fn mod ->
-            "  #{sanitize_id(mod_name)} --> #{sanitize_id(format_mod(mod))}"
+            "  #{sanitize_id(mod_name)} --> #{sanitize_id(AST.module_name(mod))}"
           end)
       end
 
@@ -214,7 +214,7 @@ defmodule Archdo.Compiled.Diagram do
         mods
         |> Enum.take(15)
         |> Enum.map(fn mod ->
-          "  style #{sanitize_id(format_mod(mod))} fill:#{color}"
+          "  style #{sanitize_id(AST.module_name(mod))} fill:#{color}"
         end)
       end)
 
@@ -222,14 +222,6 @@ defmodule Archdo.Compiled.Diagram do
   end
 
   # --- Private helpers ---
-
-  defp build_context_lookup(contexts) do
-    contexts
-    |> Enum.flat_map(fn ctx ->
-      Enum.map(ctx.members, fn mod -> {mod, ctx.context} end)
-    end)
-    |> Map.new()
-  end
 
   defp collect_cross_context_edges(%CompiledGraph{calls_by_module: calls_by_module, modules: modules}, context_of) do
     project_modules = MapSet.new(Map.keys(modules))
@@ -264,8 +256,8 @@ defmodule Archdo.Compiled.Diagram do
       case ctx.boundary_module do
         nil -> []
         mod ->
-          id = sanitize_id(format_mod(mod))
-          ["    #{id}([\"#{short_name(mod)}<br/>BOUNDARY\"])"]
+          id = sanitize_id(AST.module_name(mod))
+          ["    #{id}([\"#{AST.short_name(mod)}<br/>BOUNDARY\"])"]
       end
 
     internal =
@@ -273,8 +265,8 @@ defmodule Archdo.Compiled.Diagram do
       |> Enum.reject(fn mod -> mod == ctx.boundary_module end)
       |> Enum.take(8)
       |> Enum.map(fn mod ->
-        id = sanitize_id(format_mod(mod))
-        "    #{id}[\"#{short_name(mod)}\"]"
+        id = sanitize_id(AST.module_name(mod))
+        "    #{id}[\"#{AST.short_name(mod)}\"]"
       end)
 
     more =
@@ -301,8 +293,8 @@ defmodule Archdo.Compiled.Diagram do
     member_lines =
       ctx.members
       |> Enum.map(fn mod ->
-        id = sanitize_id(format_mod(mod))
-        name = short_name(mod)
+        id = sanitize_id(AST.module_name(mod))
+        name = AST.short_name(mod)
 
         case mod == ctx.boundary_module do
           true -> "    #{id}([\"#{name}<br/>BOUNDARY\"])"
@@ -322,7 +314,7 @@ defmodule Archdo.Compiled.Diagram do
       end)
       |> Enum.uniq()
       |> Enum.map(fn {from, to} ->
-        "  #{sanitize_id(format_mod(from))} --> #{sanitize_id(format_mod(to))}"
+        "  #{sanitize_id(AST.module_name(from))} --> #{sanitize_id(AST.module_name(to))}"
       end)
 
     # External callers (show as dashed arrows)
@@ -336,9 +328,9 @@ defmodule Archdo.Compiled.Diagram do
         |> Enum.reject(&MapSet.member?(member_set, &1))
         |> Enum.take(3)
         |> Enum.map(fn caller ->
-          caller_id = sanitize_id(format_mod(caller))
-          mod_id = sanitize_id(format_mod(mod))
-          "  #{caller_id}[\"#{short_name(caller)}\"] -.->|leak| #{mod_id}"
+          caller_id = sanitize_id(AST.module_name(caller))
+          mod_id = sanitize_id(AST.module_name(mod))
+          "  #{caller_id}[\"#{AST.short_name(caller)}\"] -.->|leak| #{mod_id}"
         end)
       end)
 
@@ -346,14 +338,14 @@ defmodule Archdo.Compiled.Diagram do
     style_lines =
       case ctx.boundary_module do
         nil -> []
-        mod -> ["", "  style #{sanitize_id(format_mod(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
+        mod -> ["", "  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
       end
 
     leak_style =
       ctx.leaking_modules
       |> Enum.take(5)
       |> Enum.map(fn %{module: mod} ->
-        "  style #{sanitize_id(format_mod(mod))} fill:#FF9800,color:#fff"
+        "  style #{sanitize_id(AST.module_name(mod))} fill:#FF9800,color:#fff"
       end)
 
     Enum.join(
@@ -393,8 +385,8 @@ defmodule Archdo.Compiled.Diagram do
       api_functions
       |> Enum.take(20)
       |> Enum.map(fn {mod, func, arity} ->
-        id = sanitize_id("#{format_mod(mod)}_#{func}_#{arity}")
-        mod_short = short_name(mod)
+        id = sanitize_id("#{AST.module_name(mod)}_#{func}_#{arity}")
+        mod_short = AST.short_name(mod)
         "    #{id}[\"#{mod_short}.#{func}/#{arity}\"]"
       end)
 
@@ -491,8 +483,8 @@ defmodule Archdo.Compiled.Diagram do
     node_lines =
       all_modules
       |> Enum.map(fn mod ->
-        id = sanitize_id(format_mod(mod))
-        "  #{id}[\"#{short_name(mod)}\"]"
+        id = sanitize_id(AST.module_name(mod))
+        "  #{id}[\"#{AST.short_name(mod)}\"]"
       end)
 
     # Render confirmed edges (green, solid)
@@ -501,7 +493,7 @@ defmodule Archdo.Compiled.Diagram do
       |> MapSet.to_list()
       |> Enum.take(50)
       |> Enum.map(fn {from, to} ->
-        "  #{sanitize_id(format_mod(from))} -->|confirmed| #{sanitize_id(format_mod(to))}"
+        "  #{sanitize_id(AST.module_name(from))} -->|confirmed| #{sanitize_id(AST.module_name(to))}"
       end)
 
     # Render hidden edges (red, dashed) — the interesting ones
@@ -510,7 +502,7 @@ defmodule Archdo.Compiled.Diagram do
       |> MapSet.to_list()
       |> Enum.take(30)
       |> Enum.map(fn {from, to} ->
-        "  #{sanitize_id(format_mod(from))} -.->|hidden| #{sanitize_id(format_mod(to))}"
+        "  #{sanitize_id(AST.module_name(from))} -.->|hidden| #{sanitize_id(AST.module_name(to))}"
       end)
 
     # Render phantom edges (grey, dotted)
@@ -519,7 +511,7 @@ defmodule Archdo.Compiled.Diagram do
       |> MapSet.to_list()
       |> Enum.take(20)
       |> Enum.map(fn {from, to} ->
-        "  #{sanitize_id(format_mod(from))} ~~~|phantom| #{sanitize_id(format_mod(to))}"
+        "  #{sanitize_id(AST.module_name(from))} ~~~|phantom| #{sanitize_id(AST.module_name(to))}"
       end)
 
     # Style hidden endpoints
@@ -530,7 +522,7 @@ defmodule Archdo.Compiled.Diagram do
       |> Enum.flat_map(fn {_from, to} -> [to] end)
       |> Enum.uniq()
       |> Enum.map(fn mod ->
-        "  style #{sanitize_id(format_mod(mod))} stroke:#F44336,stroke-width:2px"
+        "  style #{sanitize_id(AST.module_name(mod))} stroke:#F44336,stroke-width:2px"
       end)
 
     phantom_style =
@@ -540,7 +532,7 @@ defmodule Archdo.Compiled.Diagram do
       |> Enum.flat_map(fn {from, _to} -> [from] end)
       |> Enum.uniq()
       |> Enum.map(fn mod ->
-        "  style #{sanitize_id(format_mod(mod))} stroke:#9E9E9E,stroke-dasharray: 5 5"
+        "  style #{sanitize_id(AST.module_name(mod))} stroke:#9E9E9E,stroke-dasharray: 5 5"
       end)
 
     summary = [
@@ -586,8 +578,8 @@ defmodule Archdo.Compiled.Diagram do
             |> Enum.sort()
             |> Enum.take(40)
             |> Enum.map(fn {from, to} ->
-              from_id = sanitize_id(format_mod(from))
-              to_id = sanitize_id(format_mod(to))
+              from_id = sanitize_id(AST.module_name(from))
+              to_id = sanitize_id(AST.module_name(to))
               "    #{from_id} -.->|macro/import| #{to_id}"
             end)
 
@@ -615,8 +607,8 @@ defmodule Archdo.Compiled.Diagram do
             |> Enum.sort()
             |> Enum.take(30)
             |> Enum.map(fn {from, to} ->
-              from_id = sanitize_id(format_mod(from))
-              to_id = sanitize_id(format_mod(to))
+              from_id = sanitize_id(AST.module_name(from))
+              to_id = sanitize_id(AST.module_name(to))
               "    #{from_id} ~~~|unused| #{to_id}"
             end)
 
@@ -699,7 +691,7 @@ defmodule Archdo.Compiled.Diagram do
   """
   @spec dataflow_module(CompiledGraph.t(), module()) :: String.t()
   def dataflow_module(%CompiledGraph{} = graph, module) do
-    mod_name = format_mod(module)
+    mod_name = AST.module_name(module)
     mod_id = sanitize_id(mod_name)
 
     # Get function clause info for this module
@@ -728,8 +720,8 @@ defmodule Archdo.Compiled.Diagram do
       incoming
       |> Enum.take(10)
       |> Enum.flat_map(fn entry ->
-        caller_id = sanitize_id(format_mod(entry.module))
-        caller_short = short_name(entry.module)
+        caller_id = sanitize_id(AST.module_name(entry.module))
+        caller_short = AST.short_name(entry.module)
 
         fns = Enum.map_join(entry.functions_called, "<br/>", fn {f, a} -> "#{f}/#{a}" end)
 
@@ -772,8 +764,8 @@ defmodule Archdo.Compiled.Diagram do
       outgoing
       |> Enum.take(10)
       |> Enum.flat_map(fn entry ->
-        dep_id = sanitize_id(format_mod(entry.module))
-        dep_short = short_name(entry.module)
+        dep_id = sanitize_id(AST.module_name(entry.module))
+        dep_short = AST.short_name(entry.module)
 
         fns = Enum.map_join(entry.functions_called, "<br/>", fn {f, a} -> "#{f}/#{a}" end)
 
@@ -848,13 +840,13 @@ defmodule Archdo.Compiled.Diagram do
     caller_lines =
       external_callers
       |> Enum.flat_map(fn {caller, calls} ->
-        caller_id = sanitize_id(format_mod(caller))
-        caller_short = short_name(caller)
+        caller_id = sanitize_id(AST.module_name(caller))
+        caller_short = AST.short_name(caller)
 
         targets =
           calls
           |> Enum.map(fn {_, callee, fns, _} ->
-            callee_id = sanitize_id(format_mod(callee))
+            callee_id = sanitize_id(AST.module_name(callee))
             fn_str = Enum.map_join(fns, ", ", fn {f, a} -> "#{f}/#{a}" end)
             {callee_id, fn_str}
           end)
@@ -876,16 +868,16 @@ defmodule Archdo.Compiled.Diagram do
       case boundary do
         nil -> []
         mod ->
-          id = sanitize_id(format_mod(mod))
-          ["    #{id}{{\"#{short_name(mod)}<br/>BOUNDARY\"}}"]
+          id = sanitize_id(AST.module_name(mod))
+          ["    #{id}{{\"#{AST.short_name(mod)}<br/>BOUNDARY\"}}"]
       end
 
     internal_lines =
       internal
       |> Enum.take(12)
       |> Enum.map(fn mod ->
-        id = sanitize_id(format_mod(mod))
-        "    #{id}[\"#{short_name(mod)}\"]"
+        id = sanitize_id(AST.module_name(mod))
+        "    #{id}[\"#{AST.short_name(mod)}\"]"
       end)
 
     more_line =
@@ -903,8 +895,8 @@ defmodule Archdo.Compiled.Diagram do
         CompiledGraph.knows_about(graph, mod)
         |> Enum.filter(fn e -> MapSet.member?(member_set, e.module) end)
         |> Enum.map(fn e ->
-          from_id = sanitize_id(format_mod(mod))
-          to_id = sanitize_id(format_mod(e.module))
+          from_id = sanitize_id(AST.module_name(mod))
+          to_id = sanitize_id(AST.module_name(e.module))
           "  #{from_id} --> #{to_id}"
         end)
       end)
@@ -914,13 +906,13 @@ defmodule Archdo.Compiled.Diagram do
     dep_lines =
       external_deps
       |> Enum.flat_map(fn {dep, calls} ->
-        dep_id = sanitize_id(format_mod(dep))
-        dep_short = short_name(dep)
+        dep_id = sanitize_id(AST.module_name(dep))
+        dep_short = AST.short_name(dep)
 
         sources =
           calls
           |> Enum.map(fn {caller, _, fns, _} ->
-            caller_id = sanitize_id(format_mod(caller))
+            caller_id = sanitize_id(AST.module_name(caller))
             fn_str = Enum.map_join(fns, ", ", fn {f, a} -> "#{f}/#{a}" end)
             {caller_id, fn_str}
           end)
@@ -942,21 +934,21 @@ defmodule Archdo.Compiled.Diagram do
     boundary_style =
       case boundary do
         nil -> []
-        mod -> ["  style #{sanitize_id(format_mod(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
+        mod -> ["  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
       end
 
     # Style external callers as input terminals (blue)
     caller_style =
       external_callers
       |> Enum.map(fn {caller, _} ->
-        "  style #{sanitize_id(format_mod(caller))} fill:#BBDEFB,stroke:#1565C0"
+        "  style #{sanitize_id(AST.module_name(caller))} fill:#BBDEFB,stroke:#1565C0"
       end)
 
     # Style external deps as output terminals (orange)
     dep_style =
       external_deps
       |> Enum.map(fn {dep, _} ->
-        "  style #{sanitize_id(format_mod(dep))} fill:#FFE0B2,stroke:#E65100"
+        "  style #{sanitize_id(AST.module_name(dep))} fill:#FFE0B2,stroke:#E65100"
       end)
 
     Enum.join(
@@ -998,18 +990,6 @@ defmodule Archdo.Compiled.Diagram do
       n when n >= 10 -> "==>"
       _ -> "-->"
     end
-  end
-
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
-
-  defp short_name(mod) do
-    mod
-    |> Module.split()
-    |> List.last()
   end
 
   defp sanitize_id(str) do

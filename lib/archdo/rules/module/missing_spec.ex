@@ -146,12 +146,7 @@ defmodule Archdo.Rules.Module.MissingSpec do
     end)
   end
 
-  defp has_moduledoc_false?(body) do
-    AST.contains?(body, fn
-      {:@, _, [{:moduledoc, _, [false]}]} -> true
-      _ -> false
-    end)
-  end
+  defp has_moduledoc_false?(body), do: AST.internal_module?(body)
 
   defp spec_args(0), do: ""
   defp spec_args(n), do: Enum.map_join(1..n, ", ", fn _ -> "term()" end)

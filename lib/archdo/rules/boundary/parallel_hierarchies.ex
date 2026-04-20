@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Boundary.ParallelHierarchies do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
 
   # If a feature requires N+ parallel files, AND those files are too thin,
   # the parallel structure may be ceremonial rather than necessary.
@@ -40,7 +40,7 @@ defmodule Archdo.Rules.Boundary.ParallelHierarchies do
       if length(directories) >= @min_thin_parallel and parallel_dirs?(directories) do
         thin_files =
           files_with_ast
-          |> Enum.filter(fn {_file, ast} -> ast_size(ast) < @thin_node_threshold end)
+          |> Enum.filter(fn {_file, ast} -> AST.ast_size(ast) < @thin_node_threshold end)
 
         if length(thin_files) >= @min_thin_parallel do
           {first_file, _} = hd(thin_files)
@@ -111,5 +111,4 @@ defmodule Archdo.Rules.Boundary.ParallelHierarchies do
     Enum.count(dirs, fn d -> d in parallel_keywords end) >= 2
   end
 
-  defp ast_size(node), do: Archdo.AST.ast_size(node)
 end

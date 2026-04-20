@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.WeakDependency do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -54,8 +54,8 @@ defmodule Archdo.Rules.Compiled.WeakDependency do
   end
 
   defp build_diagnostic(caller_mod, target_mod, used_fns, total_exports) do
-    caller_name = format_mod(caller_mod)
-    target_name = format_mod(target_mod)
+    caller_name = AST.module_name(caller_mod)
+    target_name = AST.module_name(target_mod)
 
     used_str =
       used_fns
@@ -100,9 +100,4 @@ defmodule Archdo.Rules.Compiled.WeakDependency do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end

@@ -32,8 +32,8 @@ defmodule Archdo.Rules.Boundary.SyncContextCoupling do
 
     graph.calls
     |> Enum.flat_map(fn call ->
-      caller_ctx = owning_context(call.caller_module, context_strs)
-      target_ctx = owning_context(call.target_module, context_strs)
+      caller_ctx = Archdo.Config.owning_context(call.caller_module, context_strs)
+      target_ctx = Archdo.Config.owning_context(call.target_module, context_strs)
 
       case {caller_ctx, target_ctx} do
         {c, t} when c != nil and t != nil and c != t ->
@@ -108,9 +108,6 @@ defmodule Archdo.Rules.Boundary.SyncContextCoupling do
     name = to_string(func_name)
     Enum.any?(@write_prefixes, &String.starts_with?(name, &1))
   end
-
-  defp owning_context(module_name, contexts),
-    do: Archdo.Config.owning_context(module_name, contexts)
 
   defp interface_module?(module_name) do
     String.contains?(module_name, "Web") or

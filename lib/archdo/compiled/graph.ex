@@ -343,7 +343,11 @@ defmodule Archdo.Compiled.Graph do
     base + depth_weight + struct_weight + behaviour_weight
   end
 
-  defp collect_exports_from_forms(forms) do
+  @doc """
+  Extracts the export list from Erlang abstract forms as a MapSet of `{name, arity}` tuples.
+  """
+  @spec collect_exports_from_forms(list()) :: MapSet.t({atom(), non_neg_integer()})
+  def collect_exports_from_forms(forms) do
     forms
     |> Enum.flat_map(fn
       {:attribute, _, :export, exports} -> exports
@@ -594,7 +598,11 @@ defmodule Archdo.Compiled.Graph do
     |> Enum.sort_by(& &1.call_count, :desc)
   end
 
-  defp build_context_membership(contexts) do
+  @doc """
+  Build a lookup map from module atoms to their owning context name strings.
+  """
+  @spec build_context_membership([map()]) :: %{atom() => String.t()}
+  def build_context_membership(contexts) do
     contexts
     |> Enum.flat_map(fn ctx ->
       Enum.map(ctx.members, fn mod -> {mod, ctx.context} end)

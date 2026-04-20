@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -186,8 +186,8 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
   defp collect_struct_refs(_), do: []
 
   defp build_diagnostic(caller_mod, target_mod, ref_type) do
-    caller_name = format_mod(caller_mod)
-    target_name = format_mod(target_mod)
+    caller_name = AST.module_name(caller_mod)
+    target_name = AST.module_name(target_mod)
 
     type_desc =
       case ref_type do
@@ -233,9 +233,4 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end

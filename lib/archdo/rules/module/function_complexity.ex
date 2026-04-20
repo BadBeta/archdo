@@ -162,12 +162,7 @@ defmodule Archdo.Rules.Module.FunctionComplexity do
     count
   end
 
-  defp internal_module?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:moduledoc, _, [false]}]} -> true
-      _ -> false
-    end)
-  end
+  defp internal_module?(ast), do: AST.internal_module?(ast)
 
   defp function_visibility(ast, name, arity) do
     {_, vis} =

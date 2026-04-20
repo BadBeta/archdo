@@ -38,8 +38,8 @@ defmodule Archdo.Rules.Boundary.ChattyBoundary do
     cross_calls =
       graph.calls
       |> Enum.map(fn call ->
-        caller_ctx = owning_context(call.caller_module, context_strs)
-        target_ctx = owning_context(call.target_module, context_strs)
+        caller_ctx = Archdo.Config.owning_context(call.caller_module, context_strs)
+        target_ctx = Archdo.Config.owning_context(call.target_module, context_strs)
         {caller_ctx, target_ctx, call}
       end)
       |> Enum.filter(fn {a, b, _} -> a != nil and b != nil and a != b end)
@@ -100,9 +100,6 @@ defmodule Archdo.Rules.Boundary.ChattyBoundary do
       line: first_call.line
     )
   end
-
-  defp owning_context(module_name, contexts),
-    do: Archdo.Config.owning_context(module_name, contexts)
 
   # Stable pair key (alphabetical) so (A, B) and (B, A) group together
   defp pair_key(a, b) when a <= b, do: {a, b}

@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Config, Diagnostic, Fix}
+  alias Archdo.{AST, Config, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -82,7 +82,7 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
   end
 
   defp interface_module?(mod, config) do
-    mod_str = format_mod(mod)
+    mod_str = AST.module_name(mod)
 
     Config.classify_module(config, mod_str) == :interface or
       String.contains?(mod_str, "Controller") or
@@ -99,7 +99,7 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
   # as a boundary. Heuristic: it's at the second level (App.Context)
   # and is not a child module (App.Context.Internal).
   defp context_module?(mod, config, _project_modules) do
-    mod_str = format_mod(mod)
+    mod_str = AST.module_name(mod)
 
     case Config.classify_module(config, mod_str) do
       :domain ->
@@ -113,12 +113,12 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
   end
 
   defp build_diagnostic(caller_mod, repo_calls, _config) do
-    caller_name = format_mod(caller_mod)
+    caller_name = AST.module_name(caller_mod)
 
     repo_fns =
       repo_calls
       |> Enum.map(fn call ->
-        callee_mod = format_mod(elem(call.callee, 0))
+        callee_mod = AST.module_name(elem(call.callee, 0))
         callee_fn = elem(call.callee, 1)
         "#{callee_mod}.#{callee_fn}"
       end)
@@ -163,9 +163,4 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end

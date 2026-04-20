@@ -10,6 +10,24 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  Check if a file path belongs to a LiveView module by naming convention.
+  """
+  @spec live_view_file?(String.t()) :: boolean()
+  def live_view_file?(file) do
+    String.contains?(file, "_live.ex") or
+      String.contains?(file, "/live/")
+  end
+
+  @doc """
+  Check if a file path belongs to a Phoenix controller by naming convention.
+  """
+  @spec controller_file?(String.t()) :: boolean()
+  def controller_file?(file) do
+    String.contains?(file, "_controller.ex") or
+      String.contains?(file, "/controllers/")
+  end
+
+  @doc """
   Extract the top-level module name from a file's AST as a String.
   Returns "Unknown" if no defmodule is found.
   """
@@ -251,6 +269,12 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  Return the last segment of a module name (e.g. `MyApp.Accounts.User` → `"User"`).
+  """
+  @spec short_name(atom()) :: String.t()
+  def short_name(mod) when is_atom(mod), do: List.last(Module.split(mod))
+
+  @doc """
   Safely concatenate alias parts into a module atom.
   Handles `__MODULE__` and other non-atom AST nodes by converting to string.
   Returns nil if the alias list is empty or entirely dynamic.
@@ -301,6 +325,28 @@ defmodule Archdo.AST do
   end
 
   def relative_path(path), do: to_string(path)
+
+  @doc """
+  Check if the given AST body contains a self-call to `name/arity`.
+  """
+  @spec has_self_call?(Macro.t(), atom(), non_neg_integer()) :: boolean()
+  def has_self_call?(body, name, arity) do
+    contains?(body, fn
+      {^name, _, args} when is_list(args) -> length(args) == arity
+      _ -> false
+    end)
+  end
+
+  @doc """
+  Check if a module AST has `@moduledoc false`, indicating an internal module.
+  """
+  @spec internal_module?(Macro.t()) :: boolean()
+  def internal_module?(ast) do
+    contains?(ast, fn
+      {:@, _, [{:moduledoc, _, [false]}]} -> true
+      _ -> false
+    end)
+  end
 
   defp defines_genserver_callbacks?(ast) do
     callbacks = extract_callbacks(ast)

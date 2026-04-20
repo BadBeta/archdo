@@ -95,12 +95,7 @@ defmodule Archdo.Rules.Module.NonTailRecursion do
     end
   end
 
-  defp has_self_call?(body, name, arity) do
-    AST.contains?(body, fn
-      {^name, _, args} when is_list(args) -> length(args) == arity
-      _ -> false
-    end)
-  end
+  defp has_self_call?(body, name, arity), do: AST.has_self_call?(body, name, arity)
 
   # Non-tail: recursive call appears inside a wrapper expression
   # e.g., [h | recurse(t)], result + recurse(t), Enum.concat(x, recurse(t))

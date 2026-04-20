@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.CrossBoundaryCall do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Config, Diagnostic, Fix}
+  alias Archdo.{AST, Config, Diagnostic, Fix}
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -60,7 +60,7 @@ defmodule Archdo.Rules.Compiled.CrossBoundaryCall do
   # The context boundary module is the module with the same name as the context.
   # Calling it is correct — it's the public API.
   defp boundary_module?(module, contexts) do
-    mod_str = format_mod(module)
+    mod_str = AST.module_name(module)
 
     Enum.any?(contexts, fn ctx ->
       Archdo.AST.module_name(ctx) == mod_str
@@ -68,7 +68,7 @@ defmodule Archdo.Rules.Compiled.CrossBoundaryCall do
   end
 
   defp owning_context(module, contexts) do
-    mod_str = format_mod(module)
+    mod_str = AST.module_name(module)
 
     contexts
     |> Enum.filter(fn ctx ->
@@ -83,8 +83,8 @@ defmodule Archdo.Rules.Compiled.CrossBoundaryCall do
   end
 
   defp build_diagnostic(caller_mod, callee_mod, calls, contexts) do
-    caller_name = format_mod(caller_mod)
-    callee_name = format_mod(callee_mod)
+    caller_name = AST.module_name(caller_mod)
+    callee_name = AST.module_name(callee_mod)
     caller_ctx = owning_context(caller_mod, contexts) || "unknown"
     callee_ctx = owning_context(callee_mod, contexts) || "unknown"
 
@@ -142,9 +142,4 @@ defmodule Archdo.Rules.Compiled.CrossBoundaryCall do
     )
   end
 
-  defp format_mod(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
 end
