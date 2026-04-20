@@ -91,7 +91,7 @@ defmodule Archdo.Rules.Boundary.FunctionBoundary do
       call.target_module == target_context ->
         # But verify the function is actually defined as public in the context root
         not function_exists_in_module?(graph, target_context, call.target_fn, call.target_arity) or
-          public_in_root?(graph, target_context, call.target_fn, call.target_arity) == false
+          not public_in_root?(graph, target_context, call.target_fn, call.target_arity)
 
       # Target is a sub-module of the context — internal, this is a violation
       true ->

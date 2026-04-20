@@ -33,7 +33,7 @@ defmodule Archdo.Rules.Module.UnboundedRecursion do
   defp check_unbounded(file, name, arity, clauses) do
     is_recursive =
       Enum.any?(clauses, fn {_, _, _, _, body} ->
-        body != nil and has_self_call?(body, name, arity)
+        body != nil and AST.has_self_call?(body, name, arity)
       end)
 
     if not is_recursive do
@@ -134,7 +134,7 @@ defmodule Archdo.Rules.Module.UnboundedRecursion do
   defp all_tail_calls?(clauses, name, arity) do
     recursive_clauses =
       Enum.filter(clauses, fn {_, _, _, _, body} ->
-        body != nil and has_self_call?(body, name, arity)
+        body != nil and AST.has_self_call?(body, name, arity)
       end)
 
     # If no recursive clauses, it's trivially tail-recursive
@@ -146,14 +146,12 @@ defmodule Archdo.Rules.Module.UnboundedRecursion do
 
   defp has_non_tail_call?({_, _, _, _, body}, name, arity) do
     AST.contains?(body, fn
-      [{:|, _, [_, inner]}] -> has_self_call?(inner, name, arity)
-      {:++, _, [_, right]} -> has_self_call?(right, name, arity)
-      {op, _, [_, right]} when op in [:+, :-, :*, :/] -> has_self_call?(right, name, arity)
+      [{:|, _, [_, inner]}] -> AST.has_self_call?(inner, name, arity)
+      {:++, _, [_, right]} -> AST.has_self_call?(right, name, arity)
+      {op, _, [_, right]} when op in [:+, :-, :*, :/] -> AST.has_self_call?(right, name, arity)
       _ -> false
     end)
   end
-
-  defp has_self_call?(body, name, arity), do: AST.has_self_call?(body, name, arity)
 
   defp build_diagnostic(file, name, arity, meta) do
     Diagnostic.info("6.23",

@@ -1,7 +1,7 @@
 defmodule Archdo.Mcp.Tools.ExplainRule do
   @moduledoc false
 
-  alias Archdo.Runner
+  alias Archdo.{AST, Runner}
 
   def name, do: "archdo_explain_rule"
 
@@ -35,7 +35,7 @@ defmodule Archdo.Mcp.Tools.ExplainRule do
         {:ok,
          %{
            id: mod.id(),
-           module: module_name(mod),
+           module: AST.module_name(mod),
            description: mod.description(),
            reference: "ARCHITECTURE_RULES.md##{mod.id()}",
            note:
@@ -51,5 +51,4 @@ defmodule Archdo.Mcp.Tools.ExplainRule do
     Enum.find(all, fn mod -> mod.id() == id end)
   end
 
-  defp module_name(mod), do: Archdo.AST.module_name(mod)
 end

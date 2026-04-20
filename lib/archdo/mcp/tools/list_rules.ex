@@ -1,7 +1,7 @@
 defmodule Archdo.Mcp.Tools.ListRules do
   @moduledoc false
 
-  alias Archdo.Runner
+  alias Archdo.{AST, Runner}
 
   def name, do: "archdo_list_rules"
 
@@ -54,11 +54,9 @@ defmodule Archdo.Mcp.Tools.ListRules do
       id: mod.id(),
       category: category_for(mod.id()),
       description: mod.description(),
-      module: module_name(mod)
+      module: AST.module_name(mod)
     }
   end
-
-  defp module_name(mod), do: Archdo.AST.module_name(mod)
 
   defp rule_sort_key(mod) do
     id = mod.id()

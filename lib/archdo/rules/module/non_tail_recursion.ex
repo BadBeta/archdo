@@ -39,7 +39,7 @@ defmodule Archdo.Rules.Module.NonTailRecursion do
 
     is_recursive =
       Enum.any?(clauses, fn {_, _, _, _, body} ->
-        body != nil and has_self_call?(body, name, arity)
+        body != nil and AST.has_self_call?(body, name, arity)
       end)
 
     if is_recursive and non_tail do
@@ -95,23 +95,21 @@ defmodule Archdo.Rules.Module.NonTailRecursion do
     end
   end
 
-  defp has_self_call?(body, name, arity), do: AST.has_self_call?(body, name, arity)
-
   # Non-tail: recursive call appears inside a wrapper expression
   # e.g., [h | recurse(t)], result + recurse(t), Enum.concat(x, recurse(t))
   defp has_non_tail_self_call?(body, name, arity) do
     AST.contains?(body, fn
       # [head | recurse(tail)] — cons after recursive call
       [{:|, _, [_, inner]}] ->
-        has_self_call?(inner, name, arity)
+        AST.has_self_call?(inner, name, arity)
 
       # result ++ recurse(tail) — append after recursive call
       {:++, _, [_, right]} ->
-        has_self_call?(right, name, arity)
+        AST.has_self_call?(right, name, arity)
 
       # result + recurse(tail) — arithmetic after recursive call
       {op, _, [_, right]} when op in [:+, :-, :*, :/] ->
-        has_self_call?(right, name, arity)
+        AST.has_self_call?(right, name, arity)
 
       # [recurse(tail) | acc] — this IS tail position (prepend), skip
       _ ->

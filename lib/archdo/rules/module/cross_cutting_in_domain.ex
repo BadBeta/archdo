@@ -26,7 +26,7 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
     logger_calls = count_logger_calls(ast)
 
     if logger_calls > @max_logger_calls do
-      module_name = extract_module_name(ast)
+      module_name = AST.extract_module_name(ast)
 
       [
         Diagnostic.info("1.6",
@@ -76,8 +76,6 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
         false
     end))
   end
-
-  defp extract_module_name(ast), do: AST.extract_module_name(ast)
 
   defp web_file?(file), do: String.contains?(file, "_web/") or String.contains?(file, "web/")
 

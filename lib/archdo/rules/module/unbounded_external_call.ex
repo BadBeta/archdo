@@ -21,7 +21,7 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case test_file?(file) do
+    case AST.test_file?(file) do
       true -> []
       false -> find_unbounded_http(file, ast) ++ find_unbounded_genserver_call(file, ast)
     end
@@ -134,5 +134,4 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
     |> String.to_existing_atom()
   end
 
-  defp test_file?(file), do: AST.test_file?(file)
 end

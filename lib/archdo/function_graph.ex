@@ -155,7 +155,7 @@ defmodule Archdo.FunctionGraph do
   # Public function definition
   defp walk({:def, meta, [head | rest]}, %{module: mod} = state) when mod != nil do
     {name, arity} = head_name_arity(head)
-    state = record_def(state, mod, name, arity, :public, line(meta))
+    state = record_def(state, mod, name, arity, :public, AST.line(meta))
 
     body = extract_def_body(rest)
     body_state = %{state | function: name, arity: arity}
@@ -167,7 +167,7 @@ defmodule Archdo.FunctionGraph do
   # Private function definition
   defp walk({:defp, meta, [head | rest]}, %{module: mod} = state) when mod != nil do
     {name, arity} = head_name_arity(head)
-    state = record_def(state, mod, name, arity, :private, line(meta))
+    state = record_def(state, mod, name, arity, :private, AST.line(meta))
 
     body = extract_def_body(rest)
     body_state = %{state | function: name, arity: arity}
@@ -204,7 +204,7 @@ defmodule Archdo.FunctionGraph do
       target_fn: target_fn,
       target_arity: target_arity,
       file: state.file,
-      line: line(meta)
+      line: AST.line(meta)
     }
 
     state = %{state | calls: [call | state.calls]}
@@ -281,8 +281,6 @@ defmodule Archdo.FunctionGraph do
   defp arg_count(nil), do: 0
   defp arg_count(args) when is_list(args), do: length(args)
   defp arg_count(_), do: 0
-
-  defp line(meta), do: AST.line(meta)
 
   defp normalize_module(mod) when is_atom(mod), do: AST.module_name(mod)
 

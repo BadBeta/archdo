@@ -24,7 +24,7 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
   defp find_terminal_violations(file, transitions) do
     all_states =
       transitions
-      |> collect_all_states()
+      |> Archdo.Rules.StateMachine.Helpers.collect_all_states()
       |> MapSet.to_list()
 
     # Find states that reach a "terminal-looking" state and themselves have no other exits
@@ -78,8 +78,6 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
     Enum.any?(targets, &(&1 != state))
   end
 
-  defp collect_all_states(transitions), do: Archdo.Rules.StateMachine.Helpers.collect_all_states(transitions)
-
   # Reuse the same transition map detection logic from StateReachability
   defp find_fsmx_transitions(ast) do
     {_, transitions} =
@@ -89,7 +87,7 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
 
         {:%{}, _, pairs} = node, acc when is_list(pairs) ->
           if transition_map?(pairs) do
-            map = pairs_to_transition_map(pairs)
+            map = Archdo.Rules.StateMachine.Helpers.pairs_to_transition_map(pairs)
             {node, Map.merge(acc, map)}
           else
             {node, acc}
@@ -110,5 +108,4 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
     end) and length(pairs) >= 2
   end
 
-  defp pairs_to_transition_map(pairs), do: Archdo.Rules.StateMachine.Helpers.pairs_to_transition_map(pairs)
 end

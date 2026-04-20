@@ -13,7 +13,7 @@ defmodule Archdo.Rules.EventSourcing.EventsNeedJasonEncoder do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case event_module?(ast) and not upcaster_module?(ast) do
+    case event_module?(ast) and not Helpers.upcaster_module?(ast) do
       false -> []
       true -> check_jason_encoder(file, ast)
     end
@@ -107,6 +107,4 @@ defmodule Archdo.Rules.EventSourcing.EventsNeedJasonEncoder do
     found?
   end
 
-  defp upcaster_module?(ast),
-    do: Helpers.upcaster_module?(ast)
 end

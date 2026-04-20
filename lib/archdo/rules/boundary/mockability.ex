@@ -204,7 +204,7 @@ defmodule Archdo.Rules.Boundary.Mockability do
     AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
         mod_parts in @external_io_libraries and
-          not self_call?(caller_module, mod_parts)
+          not AST.self_call?(caller_module, mod_parts)
 
       _ ->
         false
@@ -230,8 +230,6 @@ defmodule Archdo.Rules.Boundary.Mockability do
       _ -> 1
     end
   end
-
-  defp self_call?(caller_module, service_parts), do: AST.self_call?(caller_module, service_parts)
 
   defp adapter_or_test?(file) do
     String.contains?(file, "/test/") or

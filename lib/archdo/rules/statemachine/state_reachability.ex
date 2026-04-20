@@ -22,7 +22,7 @@ defmodule Archdo.Rules.StateMachine.StateReachability do
     if transitions == %{} do
       []
     else
-      all_states = collect_all_states(transitions)
+      all_states = Archdo.Rules.StateMachine.Helpers.collect_all_states(transitions)
       # Use the first declared state as the initial state (fsmx convention)
       initial = MapSet.new([first_key])
       reachable = compute_reachable(initial, transitions)
@@ -77,7 +77,7 @@ defmodule Archdo.Rules.StateMachine.StateReachability do
 
         {:%{}, _, pairs} = node, {map, first} when is_list(pairs) ->
           if transition_map?(pairs) do
-            new_map = pairs_to_transition_map(pairs)
+            new_map = Archdo.Rules.StateMachine.Helpers.pairs_to_transition_map(pairs)
             new_first = first || first_key_of(pairs)
             {node, {Map.merge(map, new_map), new_first}}
           else
@@ -107,9 +107,6 @@ defmodule Archdo.Rules.StateMachine.StateReachability do
       _ -> false
     end) and length(pairs) >= 2
   end
-
-  defp pairs_to_transition_map(pairs), do: Archdo.Rules.StateMachine.Helpers.pairs_to_transition_map(pairs)
-  defp collect_all_states(transitions), do: Archdo.Rules.StateMachine.Helpers.collect_all_states(transitions)
 
   defp compute_reachable(initial, transitions) do
     do_reachable(MapSet.to_list(initial), transitions, initial)

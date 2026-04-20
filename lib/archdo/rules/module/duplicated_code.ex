@@ -121,7 +121,7 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
     |> Enum.reject(fn {name, _arity, _meta, _args, _body} -> name in @ignored_callbacks end)
     |> Enum.map(fn {name, arity, meta, _args, body} ->
       normalized = normalize(body)
-      size = ast_size(normalized)
+      size = AST.ast_size(normalized)
       hash = :erlang.phash2(normalized)
 
       {hash,
@@ -214,7 +214,5 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
 
     {Enum.reverse(acc), new_state}
   end
-
-  defp ast_size(node), do: AST.ast_size(node)
 
 end

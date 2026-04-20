@@ -25,7 +25,7 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
         name = AST.extract_module_name(ast)
 
         if adapter_module?(name) do
-          [{name, file, implements_behaviour?(ast)}]
+          [{name, file, AST.implements_behaviour?(ast)}]
         else
           []
         end
@@ -106,5 +106,4 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
     end
   end
 
-  defp implements_behaviour?(ast), do: AST.implements_behaviour?(ast)
 end

@@ -99,7 +99,7 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
       |> length()
 
     if alias_count > 10 do
-      module_name = extract_module_name(ast)
+      module_name = AST.extract_module_name(ast)
 
       [
         Diagnostic.info("4.5",
@@ -169,7 +169,5 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
   defp phoenix_macro_file?(file) do
     String.ends_with?(file, "_web.ex") or String.ends_with?(file, "_web/components.ex")
   end
-
-  defp extract_module_name(ast), do: Archdo.AST.extract_module_name(ast)
 
 end

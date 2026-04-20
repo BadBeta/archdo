@@ -19,7 +19,7 @@ defmodule Archdo.Rules.Module.FunctionComplexity do
 
   @impl true
   def analyze(file, ast, _opts) do
-    is_internal = internal_module?(ast)
+    is_internal = AST.internal_module?(ast)
 
     fns = AST.extract_functions(ast, :all)
 
@@ -161,8 +161,6 @@ defmodule Archdo.Rules.Module.FunctionComplexity do
 
     count
   end
-
-  defp internal_module?(ast), do: AST.internal_module?(ast)
 
   defp function_visibility(ast, name, arity) do
     {_, vis} =

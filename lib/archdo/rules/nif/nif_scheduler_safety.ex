@@ -12,7 +12,7 @@ defmodule Archdo.Rules.NIF.NifSchedulerSafety do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if nif_module?(ast) do
+    if AST.nif_module?(ast) do
       check_for_dirty_scheduling(file, ast)
     else
       []
@@ -110,5 +110,4 @@ defmodule Archdo.Rules.NIF.NifSchedulerSafety do
     _ -> ""
   end
 
-  defp nif_module?(ast), do: AST.nif_module?(ast)
 end

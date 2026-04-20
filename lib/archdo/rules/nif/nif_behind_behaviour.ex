@@ -12,7 +12,7 @@ defmodule Archdo.Rules.NIF.NifBehindBehaviour do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if nif_module?(ast) and not implements_behaviour?(ast) do
+    if AST.nif_module?(ast) and not AST.implements_behaviour?(ast) do
       module_name = AST.extract_module_name(ast)
 
       [
@@ -51,9 +51,5 @@ defmodule Archdo.Rules.NIF.NifBehindBehaviour do
       []
     end
   end
-
-  defp nif_module?(ast), do: AST.nif_module?(ast)
-
-  defp implements_behaviour?(ast), do: AST.implements_behaviour?(ast)
 
 end

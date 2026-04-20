@@ -71,7 +71,7 @@ defmodule Archdo.Rules.Module.SimilarCode do
     |> Enum.map(fn {name, arity, meta, _args, body} ->
       normalized = DuplicatedCode.normalize(body)
       shingles = compute_shingles(normalized)
-      size = ast_size(normalized)
+      size = AST.ast_size(normalized)
 
       %{
         file: file,
@@ -208,5 +208,4 @@ defmodule Archdo.Rules.Module.SimilarCode do
     )
   end
 
-  defp ast_size(node), do: AST.ast_size(node)
 end

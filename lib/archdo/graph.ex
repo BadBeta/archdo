@@ -149,7 +149,7 @@ defmodule Archdo.Graph do
           case safe_concat(aliases) do
             nil -> {node, {mod, edges}}
             target ->
-              edge = %{source: mod, target: target, type: :alias, file: file, line: line(meta)}
+              edge = %{source: mod, target: target, type: :alias, file: file, line: AST.line(meta)}
               {node, {mod, [edge | edges]}}
           end
 
@@ -158,7 +158,7 @@ defmodule Archdo.Graph do
           case safe_concat(aliases) do
             nil -> {node, {mod, edges}}
             target ->
-              edge = %{source: mod, target: target, type: :import, file: file, line: line(meta)}
+              edge = %{source: mod, target: target, type: :import, file: file, line: AST.line(meta)}
               {node, {mod, [edge | edges]}}
           end
 
@@ -167,7 +167,7 @@ defmodule Archdo.Graph do
           case safe_concat(aliases) do
             nil -> {node, {mod, edges}}
             target ->
-              edge = %{source: mod, target: target, type: :use, file: file, line: line(meta)}
+              edge = %{source: mod, target: target, type: :use, file: file, line: AST.line(meta)}
               {node, {mod, [edge | edges]}}
           end
 
@@ -177,7 +177,7 @@ defmodule Archdo.Graph do
           case safe_concat(aliases) do
             nil -> {node, {mod, edges}}
             target ->
-              edge = %{source: mod, target: target, type: :call, file: file, line: line(meta)}
+              edge = %{source: mod, target: target, type: :call, file: file, line: AST.line(meta)}
               {node, {mod, [edge | edges]}}
           end
 
@@ -197,8 +197,6 @@ defmodule Archdo.Graph do
       nil
     end
   end
-
-  defp line(meta), do: AST.line(meta)
 
   # --- Cycle detection ---
 

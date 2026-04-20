@@ -24,7 +24,7 @@ defmodule Archdo.Rules.Module.BehaviourSize do
     count = MapSet.size(required)
 
     if count > @max_required_callbacks do
-      module_name = extract_module_name(ast)
+      module_name = AST.extract_module_name(ast)
 
       [
         Diagnostic.info("4.1",
@@ -100,5 +100,4 @@ defmodule Archdo.Rules.Module.BehaviourSize do
     {callbacks, optional}
   end
 
-  defp extract_module_name(ast), do: AST.extract_module_name(ast)
 end

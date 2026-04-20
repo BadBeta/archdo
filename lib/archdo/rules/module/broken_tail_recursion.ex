@@ -34,7 +34,7 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
     # Only check functions that ARE recursive (have self-calls)
     is_recursive =
       Enum.any?(clauses, fn {_, _, _, _, body} ->
-        body != nil and has_self_call?(body, name, arity)
+        body != nil and AST.has_self_call?(body, name, arity)
       end)
 
     if not is_recursive do
@@ -80,7 +80,7 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
       {:try, _, [kw]} when is_list(kw) ->
         try_body = Keyword.get(kw, :do)
         has_rescue = Keyword.has_key?(kw, :rescue) or Keyword.has_key?(kw, :catch)
-        has_rescue and try_body != nil and has_self_call?(try_body, name, arity)
+        has_rescue and try_body != nil and AST.has_self_call?(try_body, name, arity)
 
       _ ->
         false
@@ -115,8 +115,6 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
        do: true
 
   defp has_self_call_direct?(_, _, _), do: false
-
-  defp has_self_call?(body, name, arity), do: AST.has_self_call?(body, name, arity)
 
   defp build_diagnostic(file, name, arity, meta, breaker) do
     reason =

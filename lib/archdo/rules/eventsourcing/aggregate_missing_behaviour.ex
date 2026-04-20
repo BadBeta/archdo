@@ -3,6 +3,7 @@ defmodule Archdo.Rules.EventSourcing.AggregateMissingBehaviour do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Rules.EventSourcing.Helpers, as: ESHelpers
 
   @impl true
   def id, do: "8.8"
@@ -12,7 +13,7 @@ defmodule Archdo.Rules.EventSourcing.AggregateMissingBehaviour do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if aggregate_shape?(ast) and not uses_aggregate_behaviour?(ast) and not upcaster_module?(ast) do
+    if ESHelpers.aggregate_shape?(ast) and not ESHelpers.uses_aggregate_behaviour?(ast) and not ESHelpers.upcaster_module?(ast) do
       module_name = AST.extract_module_name(ast)
 
       [
@@ -59,9 +60,4 @@ defmodule Archdo.Rules.EventSourcing.AggregateMissingBehaviour do
     end
   end
 
-  alias Archdo.Rules.EventSourcing.Helpers, as: ESHelpers
-
-  defp aggregate_shape?(ast), do: ESHelpers.aggregate_shape?(ast)
-  defp uses_aggregate_behaviour?(ast), do: ESHelpers.uses_aggregate_behaviour?(ast)
-  defp upcaster_module?(ast), do: ESHelpers.upcaster_module?(ast)
 end

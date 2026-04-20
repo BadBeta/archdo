@@ -37,7 +37,7 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviour do
 
     AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
-        mod_parts in @external_services and not self_call?(caller_module, mod_parts)
+        mod_parts in @external_services and not AST.self_call?(caller_module, mod_parts)
 
       _ ->
         false
@@ -107,5 +107,4 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviour do
     String.contains?(file, "/mailer") or String.ends_with?(file, "_client.ex")
   end
 
-  defp self_call?(caller_module, service_parts), do: AST.self_call?(caller_module, service_parts)
 end

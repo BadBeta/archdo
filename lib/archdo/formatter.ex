@@ -1,7 +1,7 @@
 defmodule Archdo.Formatter do
   @moduledoc false
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
 
   defguardp is_non_empty_string(s) when is_binary(s) and s != ""
 
@@ -46,7 +46,7 @@ defmodule Archdo.Formatter do
         severity_str = format_severity(d.severity)
         IO.puts("  #{severity_str} [#{d.rule_id}] #{d.title}")
         IO.puts("         #{d.message}")
-        IO.puts("         in #{relative_path(d.file)}:#{d.line}")
+        IO.puts("         in #{AST.relative_path(d.file)}:#{d.line}")
 
         if is_non_empty_string(d.why) do
           d.why
@@ -93,7 +93,7 @@ defmodule Archdo.Formatter do
   defp format_compact(diagnostics) do
     Enum.each(diagnostics, fn d ->
       IO.puts(
-        "#{relative_path(d.file)}:#{d.line}: #{d.severity} [#{d.rule_id}] #{d.title} — #{d.message}"
+        "#{AST.relative_path(d.file)}:#{d.line}: #{d.severity} [#{d.rule_id}] #{d.title} — #{d.message}"
       )
     end)
 
@@ -152,7 +152,7 @@ defmodule Archdo.Formatter do
       alternatives: Enum.map(d.alternatives, &fix_to_map/1),
       references: d.references,
       context: d.context,
-      file: relative_path(d.file),
+      file: AST.relative_path(d.file),
       line: d.line
     }
   end
@@ -162,7 +162,7 @@ defmodule Archdo.Formatter do
   defp render_markdown(%Diagnostic{} = d) do
     [
       "### [#{d.rule_id}] #{d.title}",
-      "**Severity:** #{d.severity}  \n**Location:** `#{relative_path(d.file)}:#{d.line}`",
+      "**Severity:** #{d.severity}  \n**Location:** `#{AST.relative_path(d.file)}:#{d.line}`",
       "**Finding:** #{d.message}",
       maybe_why(d.why),
       maybe_fixes(d.alternatives),
@@ -253,8 +253,6 @@ defmodule Archdo.Formatter do
   defp category_order("Composition"), do: 9
   defp category_order("Native Interop"), do: 10
   defp category_order(_), do: 11
-
-  defp relative_path(path), do: Archdo.AST.relative_path(path)
 
   # Word-wrap a string at the given column count, returning a list of lines.
   defp wrap(text, width) when is_binary(text) and width > 0 do

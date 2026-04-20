@@ -49,7 +49,7 @@ defmodule Archdo.Rules.Module.ReinventedPubSub do
     if reinventing? do
       module_name = AST.extract_module_name(ast)
       fn_list = [has_subscribe && "subscribe", has_unsubscribe && "unsubscribe", has_broadcast && "broadcast"]
-               |> Enum.reject(&(&1 == false))
+               |> Enum.filter(& &1)
                |> Enum.join("/")
 
       [

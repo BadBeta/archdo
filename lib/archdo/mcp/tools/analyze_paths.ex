@@ -54,7 +54,7 @@ defmodule Archdo.Mcp.Tools.AnalyzePaths do
   def call(args) when is_map(args) do
     with {:ok, paths} <- fetch_paths(args) do
       opts = build_opts(args)
-      files = collect_files(paths)
+      files = Archdo.collect_files(paths)
 
       diagnostics =
         if Keyword.get(opts, :boundaries, true) do
@@ -80,5 +80,4 @@ defmodule Archdo.Mcp.Tools.AnalyzePaths do
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
   end
 
-  defp collect_files(paths), do: Archdo.collect_files(paths)
 end
