@@ -82,6 +82,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.StubFunction,
     Archdo.Rules.Module.SequentialWhereParallel,
     Archdo.Rules.Module.BuriedRescue,
+    Archdo.Rules.Module.CodeSlop,
     Archdo.Rules.Boundary.UntypedBoundary,
     # NIF rules
     Archdo.Rules.NIF.NifPanic,
