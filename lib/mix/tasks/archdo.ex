@@ -421,7 +421,7 @@ defmodule Mix.Tasks.Archdo do
     end
   end
 
-  @auto_fix_rules ["4.27"]
+  @auto_fix_rules ["4.27", "6.33"]
 
   defp auto_fixable?(%{rule_id: rule_id}), do: rule_id in @auto_fix_rules
 
@@ -471,7 +471,55 @@ defmodule Mix.Tasks.Archdo do
     end
   end
 
+  # Rewrite single pipe: "  x |> func(args)" → "  func(x, args)"
+  defp apply_single_fix(%{rule_id: "6.33", title: "Code slop: single-step pipeline" <> _, line: line}, lines) do
+    idx = line - 1
+
+    case Enum.at(lines, idx) do
+      nil ->
+        :skip
+
+      original ->
+        indent = String.length(original) - String.length(String.trim_leading(original))
+        prefix = String.duplicate(" ", indent)
+        trimmed = String.trim(original)
+
+        case rewrite_single_pipe(trimmed) do
+          nil -> :skip
+          ^trimmed -> :skip
+          fixed -> {:fixed, List.replace_at(lines, idx, prefix <> fixed)}
+        end
+    end
+  end
+
   defp apply_single_fix(_, _), do: :skip
+
+  defp rewrite_single_pipe(line) do
+    case Regex.run(~r/^(.+?)\s*\|>\s*(.+)$/, line) do
+      [_, input, call] ->
+        input = String.trim(input)
+
+        case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)\((.*)\)$/s, call) do
+          [_, func_name, existing_args] ->
+            new_args =
+              case String.trim(existing_args) do
+                "" -> input
+                args -> "#{input}, #{args}"
+              end
+
+            "#{func_name}(#{new_args})"
+
+          _ ->
+            case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/, String.trim(call)) do
+              [_, func_name] -> "#{func_name}(#{input})"
+              _ -> nil
+            end
+        end
+
+      _ ->
+        nil
+    end
+  end
 
   # --- --watch ---
 

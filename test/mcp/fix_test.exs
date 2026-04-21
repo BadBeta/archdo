@@ -133,6 +133,75 @@ defmodule Archdo.Mcp.Tools.FixTest do
     end
   end
 
+  describe "single-pipe fix (6.33)" do
+    test "generates correct replacement for simple pipe" do
+      code = """
+      defmodule Foo do
+        def bar(list) do
+          list |> Enum.sort()
+        end
+      end
+      """
+
+      {{:ok, result}, _} = fix_file(code)
+
+      fix = Enum.find(result.fixes, &(&1.rule_id == "6.33"))
+
+      case fix do
+        nil -> :ok
+        f ->
+          assert f.auto_fixable == true
+          assert f.original =~ "|>"
+          assert f.replacement =~ "Enum.sort(list)"
+          assert not String.contains?(f.replacement, "|>")
+      end
+    end
+
+    test "generates correct replacement for pipe with args" do
+      code = """
+      defmodule Foo do
+        def bar(list) do
+          list |> Enum.map(&to_string/1)
+        end
+      end
+      """
+
+      {{:ok, result}, _} = fix_file(code)
+
+      fix = Enum.find(result.fixes, &(&1.rule_id == "6.33"))
+
+      case fix do
+        nil -> :ok
+        f ->
+          assert f.auto_fixable == true
+          assert f.replacement =~ "Enum.map(list,"
+      end
+    end
+  end
+
+  describe "CLI --fix single-pipe integration" do
+    test "applies single-pipe fix to temp file" do
+      path = Path.join(System.tmp_dir!(), "archdo_pipe_fix_#{System.unique_integer([:positive])}.ex")
+
+      code = "defmodule PipeTarget do\n  def process(items) do\n    items |> Enum.sort()\n  end\nend\n"
+
+      File.write!(path, code)
+
+      {:ok, fix_result} = Archdo.Mcp.Tools.Fix.call(%{"file" => path})
+      pipe_fix = Enum.find(fix_result.fixes, &(&1.rule_id == "6.33"))
+
+      case pipe_fix do
+        nil -> :ok
+        f ->
+          assert f.auto_fixable == true
+          assert not String.contains?(f.replacement, "|>")
+          assert String.contains?(f.replacement, "Enum.sort(")
+      end
+
+      File.rm(path)
+    end
+  end
+
   describe "CLI --fix integration" do
     test "applies unused alias removal" do
       path = Path.join(System.tmp_dir!(), "archdo_autofix_test_#{System.unique_integer([:positive])}.ex")

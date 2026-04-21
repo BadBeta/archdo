@@ -127,6 +127,27 @@ defmodule Archdo.Mcp.Tools.Fix do
         end
     end
   end
+  defp generate_fix(%{rule_id: "6.33", title: "Code slop: single-step pipeline" <> _, line: line}, lines) do
+    case Enum.at(lines, line - 1) do
+      nil -> nil
+      original_line ->
+        trimmed = String.trim(original_line)
+
+        case rewrite_single_pipe(trimmed) do
+          nil -> nil
+          ^trimmed -> nil
+          fixed ->
+            %{
+              rule_id: "6.33",
+              line: line,
+              description: "Single pipe → direct function call",
+              original: trimmed,
+              replacement: fixed,
+              auto_fixable: true
+            }
+        end
+    end
+  end
 
   defp generate_fix(%{rule_id: rule_id, line: line, title: title}, lines) do
     case Enum.at(lines, line - 1) do
@@ -140,6 +161,34 @@ defmodule Archdo.Mcp.Tools.Fix do
           suggestion: "See rule #{rule_id} fix alternatives for details",
           auto_fixable: false
         }
+    end
+  end
+
+  # Rewrite "input |> Mod.func(args)" to "Mod.func(input, args)"
+  defp rewrite_single_pipe(line) do
+    case Regex.run(~r/^(.+?)\s*\|>\s*(.+)$/, line) do
+      [_, input, call] ->
+        input = String.trim(input)
+
+        case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)\((.*)\)$/s, call) do
+          [_, func_name, existing_args] ->
+            new_args =
+              case String.trim(existing_args) do
+                "" -> input
+                args -> "#{input}, #{args}"
+              end
+
+            "#{func_name}(#{new_args})"
+
+          _ ->
+            case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/, String.trim(call)) do
+              [_, func_name] -> "#{func_name}(#{input})"
+              _ -> nil
+            end
+        end
+
+      _ ->
+        nil
     end
   end
 end
