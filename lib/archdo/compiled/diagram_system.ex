@@ -82,7 +82,6 @@ defmodule Archdo.Compiled.DiagramSystem do
         :interface -> %{acc | interface: [mod | acc.interface]}
         :infrastructure -> %{acc | infrastructure: [mod | acc.infrastructure]}
         :domain -> %{acc | domain: [mod | acc.domain]}
-        _ -> acc
       end
     end)
   end

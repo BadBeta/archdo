@@ -231,14 +231,8 @@ defmodule Archdo.FunctionGraph do
 
   defp walk(_, state), do: state
 
-  # Walk children of an AST node without matching specific node types
+  # Walk children of a 3-tuple AST node (used for @spec/@type traversal)
   defp walk_children({_, _, args}, state) when is_list(args), do: walk(args, state)
-  defp walk_children({a, b}, state) do
-    state
-    |> walk(a)
-    |> walk(b)
-  end
-  defp walk_children(list, state) when is_list(list), do: Enum.reduce(list, state, &walk(&1, &2))
   defp walk_children(_, state), do: state
 
   # Body keyword list may be wrapped by literal_encoder.

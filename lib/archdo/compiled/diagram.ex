@@ -11,7 +11,7 @@ defmodule Archdo.Compiled.Diagram do
   Generate an architecture overview diagram showing contexts as subgraphs,
   boundary modules highlighted, and cross-context dependencies as arrows.
   """
-  @spec architecture_overview(CompiledCompiledGraph.t()) :: String.t()
+  @spec architecture_overview(CompiledGraph.t()) :: String.t()
   def architecture_overview(%CompiledGraph{} = graph) do
     contexts = CompiledGraph.discover_contexts(graph)
 

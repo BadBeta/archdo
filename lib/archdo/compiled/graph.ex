@@ -298,8 +298,6 @@ defmodule Archdo.Compiled.Graph do
     end)
   end
 
-  defp walk_dependents(_graph, [], _visited, by_depth, _depth), do: by_depth
-
   defp walk_dependents(graph, frontier, visited, by_depth, depth) do
     next_level =
       frontier
