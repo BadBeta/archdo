@@ -71,6 +71,16 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
   defp collect_calls_in_body(body, acc) do
     {_, calls} =
       Macro.prewalk(body, acc, fn
+        # Function capture: &foo/N => {:&, _, [{:/, _, [{:foo, _, _}, N]}]}
+        {:&, _, [{:/, _, [{name, _, _}, arity]}]} = node, call_acc
+        when is_atom(name) and is_integer(arity) ->
+          {node, MapSet.put(call_acc, {name, arity})}
+
+        # Function capture with literal_encoder: &foo/N where N is wrapped
+        {:&, _, [{:/, _, [{name, _, _}, {:__block__, _, [arity]}]}]} = node, call_acc
+        when is_atom(name) and is_integer(arity) ->
+          {node, MapSet.put(call_acc, {name, arity})}
+
         # Bare function call: foo(a, b) => {:foo, meta, [a, b]}
         {name, _meta, args} = node, call_acc when is_atom(name) and is_list(args) ->
           case keyword_or_special?(name) do
