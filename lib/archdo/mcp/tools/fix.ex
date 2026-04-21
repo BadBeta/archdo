@@ -72,21 +72,34 @@ defmodule Archdo.Mcp.Tools.Fix do
 
   def call(_), do: {:error, "Missing required argument: file"}
 
-  # Generate a fix suggestion with original and replacement code
+  # Generate a fix for single-clause with → case
   defp generate_fix(%{rule_id: "6.41", line: line}, lines) do
-    # Single-clause with → case
-    # Read the with block to suggest replacement
     case Enum.at(lines, line - 1) do
       nil -> nil
       original_line ->
-        %{
-          rule_id: "6.41",
-          line: line,
-          description: "Single-clause `with` — replace with `case`",
-          original: String.trim(original_line),
-          suggestion: "Replace `with {:ok, val} <- expr do ... end` with `case expr do {:ok, val} -> ...; {:error, _} = err -> err end`",
-          auto_fixable: false
-        }
+        trimmed = String.trim(original_line)
+
+        case rewrite_single_with(trimmed, lines, line) do
+          {:auto, original, replacement} ->
+            %{
+              rule_id: "6.41",
+              line: line,
+              description: "Single-clause `with` → `case`",
+              original: original,
+              replacement: replacement,
+              auto_fixable: true
+            }
+
+          {:manual, original, suggestion} ->
+            %{
+              rule_id: "6.41",
+              line: line,
+              description: "Single-clause `with` → `case`",
+              original: original,
+              suggestion: suggestion,
+              auto_fixable: false
+            }
+        end
     end
   end
 
@@ -189,6 +202,36 @@ defmodule Archdo.Mcp.Tools.Fix do
 
       _ ->
         nil
+    end
+  end
+
+  # Rewrite single-clause with to case
+  defp rewrite_single_with(line, _lines, _start_line) do
+    case Regex.run(~r/^with\s+(.+?)\s*<-\s*(.+?),\s*do:\s*(.+)$/, line) do
+      [_, pattern, expr, body] ->
+        error_clause = infer_error_clause(pattern)
+        replacement = "case #{expr} do\n  #{pattern} -> #{body}\n  #{error_clause}\nend"
+        {:auto, line, replacement}
+
+      _ ->
+        case Regex.run(~r/^with\s+(.+?)\s*<-\s*(.+?)\s+do\s*$/, line) do
+          [_, pattern, expr] ->
+            error_clause = infer_error_clause(pattern)
+            suggestion = "case #{String.trim(expr)} do\n  #{pattern} -> ...\n  #{error_clause}\nend"
+            {:manual, line, suggestion}
+
+          _ ->
+            {:manual, line, "Replace `with pattern <- expr do ... end` with `case expr do pattern -> ...; error -> error end`"}
+        end
+    end
+  end
+
+  defp infer_error_clause(pattern) do
+    cond do
+      String.starts_with?(pattern, "{:ok") -> "{:error, _} = error -> error"
+      String.starts_with?(pattern, ":ok") -> "{:error, _} = error -> error"
+      String.starts_with?(pattern, "{:error") -> "{:ok, _} = ok -> ok"
+      true -> "other -> other"
     end
   end
 end

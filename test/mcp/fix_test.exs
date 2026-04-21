@@ -92,6 +92,23 @@ defmodule Archdo.Mcp.Tools.FixTest do
           assert f.suggestion =~ "case"
       end
     end
+
+    test "auto-fixes inline with" do
+      code = "defmodule Foo do\n  def bar(x) do\n    with {:ok, val} <- process(x), do: use_val(val)\n  end\nend\n"
+
+      {{:ok, result}, _} = fix_file(code)
+
+      fix = Enum.find(result.fixes, &(&1.rule_id == "6.41"))
+
+      case fix do
+        nil -> :ok
+        f ->
+          assert f.auto_fixable == true
+          assert f.replacement =~ "case"
+          assert f.replacement =~ "{:ok, val}"
+          assert f.replacement =~ "{:error, _} = error -> error"
+      end
+    end
   end
 
   describe "fix response structure" do

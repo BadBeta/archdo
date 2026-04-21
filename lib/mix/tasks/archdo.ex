@@ -421,7 +421,7 @@ defmodule Mix.Tasks.Archdo do
     end
   end
 
-  @auto_fix_rules ["4.27", "6.33"]
+  @auto_fix_rules ["4.27", "6.33", "6.41"]
 
   defp auto_fixable?(%{rule_id: rule_id}), do: rule_id in @auto_fix_rules
 
@@ -467,6 +467,44 @@ defmodule Mix.Tasks.Archdo do
         case String.contains?(line_content, "alias ") do
           true -> {:fixed, List.delete_at(lines, idx)}
           false -> :skip
+        end
+    end
+  end
+
+  # Rewrite inline single-with: "with {:ok, v} <- expr, do: body" → "case expr do ..."
+  defp apply_single_fix(%{rule_id: "6.41", line: line}, lines) do
+    idx = line - 1
+
+    case Enum.at(lines, idx) do
+      nil ->
+        :skip
+
+      original ->
+        indent = String.length(original) - String.length(String.trim_leading(original))
+        prefix = String.duplicate(" ", indent)
+        trimmed = String.trim(original)
+
+        # Only auto-fix inline form: with pattern <- expr, do: body
+        case Regex.run(~r/^with\s+(.+?)\s*<-\s*(.+?),\s*do:\s*(.+)$/, trimmed) do
+          [_, pattern, expr, body] ->
+            error_clause =
+              cond do
+                String.starts_with?(pattern, "{:ok") -> "{:error, _} = error -> error"
+                String.starts_with?(pattern, ":ok") -> "{:error, _} = error -> error"
+                true -> "other -> other"
+              end
+
+            replacement = [
+              "#{prefix}case #{expr} do",
+              "#{prefix}  #{pattern} -> #{body}",
+              "#{prefix}  #{error_clause}",
+              "#{prefix}end"
+            ]
+
+            {:fixed, List.replace_at(lines, idx, Enum.join(replacement, "\n"))}
+
+          _ ->
+            :skip
         end
     end
   end
