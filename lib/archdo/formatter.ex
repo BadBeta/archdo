@@ -16,6 +16,8 @@ defmodule Archdo.Formatter do
       :json -> format_json(diagnostics)
       :compact -> format_compact(diagnostics)
       :llm -> format_llm(diagnostics)
+      :sarif -> format_sarif(diagnostics)
+      :html -> format_html(diagnostics)
     end
   end
 
@@ -207,6 +209,145 @@ defmodule Archdo.Formatter do
     {errors, warnings, _} = counts(diagnostics)
     exit_code(errors, warnings)
   end
+
+  # ───────────────────────────────────────────── :sarif ────────────────────────────────────────────
+
+  # SARIF (Static Analysis Results Interchange Format) for GitHub Code Scanning
+  defp format_sarif(diagnostics) do
+    results =
+      Enum.map(diagnostics, fn d ->
+        %{
+          ruleId: d.rule_id,
+          level: sarif_level(d.severity),
+          message: %{text: "#{d.title}: #{d.message}"},
+          locations: [
+            %{
+              physicalLocation: %{
+                artifactLocation: %{uri: AST.relative_path(d.file)},
+                region: %{startLine: max(d.line, 1)}
+              }
+            }
+          ]
+        }
+      end)
+
+    rules =
+      diagnostics
+      |> Enum.uniq_by(& &1.rule_id)
+      |> Enum.map(fn d ->
+        %{
+          id: d.rule_id,
+          shortDescription: %{text: d.title},
+          fullDescription: %{text: d.why || d.message},
+          defaultConfiguration: %{level: sarif_level(d.severity)}
+        }
+      end)
+
+    sarif = %{
+      "$schema" => "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+      version: "2.1.0",
+      runs: [
+        %{
+          tool: %{
+            driver: %{
+              name: "Archdo",
+              version: Mix.Project.config()[:version] || "0.1.0",
+              informationUri: "https://github.com/BadBeta/archdo",
+              rules: rules
+            }
+          },
+          results: results
+        }
+      ]
+    }
+
+    IO.puts(Jason.encode!(sarif, pretty: true))
+    {errors, warnings, _} = counts(diagnostics)
+    exit_code(errors, warnings)
+  end
+
+  defp sarif_level(:error), do: "error"
+  defp sarif_level(:warning), do: "warning"
+  defp sarif_level(:info), do: "note"
+
+  # ───────────────────────────────────────────── :html ─────────────────────────────────────────────
+
+  defp format_html(diagnostics) do
+    {errors, warnings, infos} = counts(diagnostics)
+    total = errors + warnings + infos
+
+    by_rule =
+      diagnostics
+      |> Enum.group_by(fn d -> {d.rule_id, d.severity, d.title} end)
+      |> Enum.map(fn {{rule_id, severity, title}, diags} ->
+        %{rule_id: rule_id, severity: severity, title: title, count: length(diags)}
+      end)
+      |> Enum.sort_by(fn r -> {severity_sort(r.severity), -r.count} end)
+
+    summary_rows =
+      Enum.map_join(by_rule, "\n", fn r ->
+        sev_class = Atom.to_string(r.severity)
+        "<tr class=\"#{sev_class}\"><td>#{r.severity}</td><td>#{r.rule_id}</td>" <>
+          "<td>#{r.count}</td><td>#{r.title}</td></tr>"
+      end)
+
+    detail_rows =
+      Enum.map_join(diagnostics, "\n", fn d ->
+        sev_class = Atom.to_string(d.severity)
+        why_html = if d.why && d.why != "", do: "<p class=\"why\">#{escape_html(d.why)}</p>", else: ""
+
+        "<tr class=\"#{sev_class}\">" <>
+          "<td>#{d.severity}</td><td>#{d.rule_id}</td>" <>
+          "<td>#{escape_html(AST.relative_path(d.file))}:#{d.line}</td>" <>
+          "<td>#{escape_html(d.message)}#{why_html}</td></tr>"
+      end)
+
+    html = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <title>Archdo Report — #{total} findings</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; background: #1a1a2e; color: #e0e0e0; }
+      h1 { color: #fff; } h2 { color: #ccc; margin-top: 2rem; }
+      table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+      th, td { padding: 0.4rem 0.8rem; text-align: left; border: 1px solid #333; }
+      th { background: #16213e; color: #fff; }
+      tr.error td { background: #3d1f1f; } tr.warning td { background: #3d3a1f; }
+      tr.info td { background: #1f2d3d; }
+      .why { font-size: 0.85em; color: #aaa; margin: 0.3rem 0 0; }
+      .summary { font-size: 1.1em; margin: 1rem 0; }
+    </style>
+    </head>
+    <body>
+    <h1>Archdo Report</h1>
+    <p class="summary">#{total} findings: #{errors} errors, #{warnings} warnings, #{infos} info</p>
+    <h2>Summary</h2>
+    <table><tr><th>Sev</th><th>Rule</th><th>Count</th><th>Finding</th></tr>
+    #{summary_rows}
+    </table>
+    <h2>Details</h2>
+    <table><tr><th>Sev</th><th>Rule</th><th>Location</th><th>Finding</th></tr>
+    #{detail_rows}
+    </table>
+    </body></html>
+    """
+
+    File.write!("archdo_report.html", html)
+    IO.puts("Report written to archdo_report.html (#{total} findings)")
+    exit_code(errors, warnings)
+  end
+
+  defp escape_html(text) when is_binary(text) do
+    text
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+    |> String.replace("\"", "&quot;")
+  end
+
+  defp escape_html(_), do: ""
 
   # ──────────────────────────────────────── shared helpers ─────────────────────────────────────────
 

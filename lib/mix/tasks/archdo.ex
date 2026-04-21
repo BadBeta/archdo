@@ -8,10 +8,14 @@ defmodule Mix.Tasks.Archdo do
 
   ## Options
 
-    * `--format` - Output format: `summary` (default), `text`, `json`, `compact`, `llm`
+    * `--format` - Output format: `summary` (default), `text`, `json`, `compact`, `llm`, `sarif`, `html`
     * `--only` - Comma-separated rule IDs to check (e.g., `--only 5.11,5.12`)
     * `--ignore` - Comma-separated rule IDs to skip
     * `--paths` - Comma-separated paths to check (default: `lib`)
+    * `--since` - Only analyze files changed since this git ref (e.g., `--since main`)
+    * `--explain` - Explain a rule by ID (e.g., `--explain 6.50`)
+    * `--init` - Generate a `.archdo.exs` config file with detected project defaults
+    * `--fix` - Auto-apply mechanical fixes (unused aliases, single-clause with, etc.)
     * `--boundaries` - Enable boundary analysis (Phase 2: dependency direction,
       context encapsulation, circular deps). Uses `.archdo.exs` config or
       Phoenix conventions for layer detection.
@@ -64,6 +68,10 @@ defmodule Mix.Tasks.Archdo do
           only: :string,
           ignore: :string,
           paths: :string,
+          since: :string,
+          explain: :string,
+          init: :boolean,
+          fix: :boolean,
           boundaries: :boolean,
           tests: :boolean,
           functions: :boolean,
@@ -73,13 +81,20 @@ defmodule Mix.Tasks.Archdo do
           metrics: :boolean,
           freeze: :boolean,
           freeze_stats: :boolean,
-          show_all: :boolean
+          show_all: :boolean,
+          watch: :boolean
         ]
       )
 
     paths = parse_list(Keyword.get(opts, :paths, "lib"))
 
     cond do
+      Keyword.has_key?(opts, :explain) ->
+        run_explain(opts[:explain])
+
+      Keyword.get(opts, :init, false) ->
+        run_init()
+
       Keyword.has_key?(opts, :diagram) ->
         run_diagram(opts[:diagram], paths)
         :ok
@@ -101,6 +116,15 @@ defmodule Mix.Tasks.Archdo do
         run_opts = build_run_opts(opts)
         exit_status = Archdo.freeze_stats(paths, run_opts)
         maybe_exit(exit_status)
+
+      Keyword.has_key?(opts, :since) ->
+        run_since(opts, paths)
+
+      Keyword.get(opts, :fix, false) ->
+        run_fix(opts, paths)
+
+      Keyword.get(opts, :watch, false) ->
+        run_watch(opts, paths)
 
       true ->
         run_normal(opts, paths)
@@ -200,6 +224,296 @@ defmodule Mix.Tasks.Archdo do
     "graph LR\n  error[\"Unknown diagram type: #{other}<br/>Use: overview, modules, api, blast:Module, context:Name\"]"
   end
 
+  # --- --explain ---
+
+  defp run_explain(rule_id) do
+    rules = Archdo.Runner.phase1_rules() ++ Archdo.Runner.graph_rules()
+
+    case Enum.find(rules, fn r -> r.id() == rule_id end) do
+      nil ->
+        IO.puts("Unknown rule: #{rule_id}")
+        IO.puts("Use `mix archdo --explain` with a valid rule ID (e.g., 6.50)")
+
+      rule ->
+        IO.puts("\nRule #{rule.id()} — #{rule.description()}\n")
+        IO.puts("Module: #{inspect(rule)}")
+        IO.puts("Category: #{category_for(rule_id)}")
+    end
+  end
+
+  defp category_for("1." <> _), do: "Boundaries"
+  defp category_for("2." <> _), do: "Public API"
+  defp category_for("3." <> _), do: "Single Source of Truth"
+  defp category_for("4." <> _), do: "Coupling & Abstraction"
+  defp category_for("5." <> _), do: "OTP Process Architecture"
+  defp category_for("6." <> _), do: "Module Quality"
+  defp category_for("7." <> _), do: "Test Architecture"
+  defp category_for("8." <> _), do: "Event Sourcing"
+  defp category_for("9." <> _), do: "State Machine"
+  defp category_for("10." <> _), do: "Composition"
+  defp category_for("11." <> _), do: "Native Interop"
+  defp category_for(_), do: "Other"
+
+  # --- --init ---
+
+  defp run_init do
+    case File.exists?(".archdo.exs") do
+      true ->
+        IO.puts(".archdo.exs already exists. Delete it first to regenerate.")
+
+      false ->
+        project_type = detect_project_type()
+        config = generate_config(project_type)
+        File.write!(".archdo.exs", config)
+        IO.puts("Created .archdo.exs (detected: #{project_type})")
+        IO.puts("Edit the file to customize layers, contexts, and severity overrides.")
+    end
+  end
+
+  defp detect_project_type do
+    cond do
+      File.exists?("apps") and File.dir?("apps") -> :umbrella
+      File.exists?("lib") and has_phoenix_dep?() -> :phoenix
+      File.exists?("lib") -> :library
+      true -> :unknown
+    end
+  end
+
+  defp has_phoenix_dep? do
+    case File.read("mix.exs") do
+      {:ok, content} -> String.contains?(content, ":phoenix")
+      _ -> false
+    end
+  end
+
+  defp generate_config(:phoenix) do
+    app_name = detect_app_name()
+
+    """
+    # Archdo configuration — generated for Phoenix project
+    [
+      # Layer definitions
+      layers: [
+        interface: ~r/^#{app_name}Web\\./,
+        domain: ~r/^#{app_name}\\.(?!Repo|Mailer)/,
+        infrastructure: ~r/^#{app_name}\\.(Repo|Mailer)/
+      ],
+
+      # Allowed dependency direction (interface → domain → infrastructure)
+      allowed_deps: %{
+        interface: [:domain, :infrastructure],
+        domain: [:infrastructure],
+        infrastructure: []
+      },
+
+      # Severity overrides (uncomment to customize)
+      # overrides: [
+      #   {:"5.6", :ignore},           # Accept default supervisor restarts
+      #   {:"6.4", severity: :info},    # Downgrade long files to info
+      # ]
+    ]
+    """
+  end
+
+  defp generate_config(:umbrella) do
+    """
+    # Archdo configuration — generated for umbrella project
+    [
+      # Run from each child app: cd apps/my_app && mix archdo
+      # Or from root: mix archdo --paths apps/my_app/lib
+
+      # Severity overrides (uncomment to customize)
+      # overrides: [
+      #   {:"5.6", :ignore},
+      # ]
+    ]
+    """
+  end
+
+  defp generate_config(_) do
+    """
+    # Archdo configuration
+    [
+      # Severity overrides (uncomment to customize)
+      # overrides: [
+      #   {:"5.6", :ignore},           # Accept default supervisor restarts
+      #   {:"6.4", severity: :info},    # Downgrade long files to info
+      # ]
+    ]
+    """
+  end
+
+  defp detect_app_name do
+    case File.read("mix.exs") do
+      {:ok, content} ->
+        case Regex.run(~r/app:\s*:(\w+)/, content) do
+          [_, name] -> Macro.camelize(name)
+          _ -> "MyApp"
+        end
+
+      _ ->
+        "MyApp"
+    end
+  end
+
+  # --- --since ---
+
+  defp run_since(opts, base_paths) do
+    ref = Keyword.fetch!(opts, :since)
+
+    case changed_files_since(ref, base_paths) do
+      {:ok, []} ->
+        IO.puts("\nNo .ex files changed since #{ref}\n")
+
+      {:ok, files} ->
+        IO.puts("\nArchdo — analyzing #{length(files)} files changed since #{ref}\n")
+        run_opts = build_run_opts(opts)
+        diagnostics = Archdo.Runner.analyze(files, run_opts)
+
+        exit_status = Archdo.Formatter.format(diagnostics, run_opts)
+        maybe_exit(exit_status)
+
+      {:error, reason} ->
+        IO.puts(:standard_error, "[archdo] #{reason}")
+    end
+  end
+
+  defp changed_files_since(ref, base_paths) do
+    case System.cmd("git", ["diff", "--name-only", "--diff-filter=ACMR", ref, "--"] ++ base_paths,
+           stderr_to_stdout: true) do
+      {output, 0} ->
+        files =
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.filter(&String.ends_with?(&1, ".ex"))
+          |> Enum.filter(&File.exists?/1)
+
+        {:ok, files}
+
+      {error, _} ->
+        {:error, "git diff failed: #{String.trim(error)}"}
+    end
+  end
+
+  # --- --fix ---
+
+  defp run_fix(opts, paths) do
+    run_opts = build_run_opts(opts)
+    files = Archdo.collect_files(paths)
+    diagnostics = Archdo.Runner.analyze(files, run_opts)
+
+    fixable = Enum.filter(diagnostics, &auto_fixable?/1)
+
+    case fixable do
+      [] ->
+        IO.puts("\nNo auto-fixable findings.\n")
+
+      _ ->
+        IO.puts("\nArchdo — #{length(fixable)} auto-fixable findings\n")
+
+        fixed_count =
+          fixable
+          |> Enum.group_by(& &1.file)
+          |> Enum.reduce(0, fn {file, file_diags}, count ->
+            applied = apply_fixes(file, file_diags)
+            count + applied
+          end)
+
+        IO.puts("Applied #{fixed_count} fixes. Run `mix format` to clean up formatting.\n")
+    end
+  end
+
+  @auto_fix_rules ["4.27"]
+
+  defp auto_fixable?(%{rule_id: rule_id}), do: rule_id in @auto_fix_rules
+
+  defp apply_fixes(file, diagnostics) do
+    case File.read(file) do
+      {:ok, content} ->
+        lines = String.split(content, "\n")
+
+        # Process from bottom to top so line numbers stay valid
+        sorted = Enum.sort_by(diagnostics, & &1.line, :desc)
+
+        {new_lines, count} =
+          Enum.reduce(sorted, {lines, 0}, fn diag, {current_lines, fixed} ->
+            case apply_single_fix(diag, current_lines) do
+              {:fixed, updated} -> {updated, fixed + 1}
+              :skip -> {current_lines, fixed}
+            end
+          end)
+
+        case count > 0 do
+          true ->
+            File.write!(file, Enum.join(new_lines, "\n"))
+            IO.puts("  #{Path.relative_to_cwd(file)}: #{count} fixes applied")
+
+          false ->
+            :ok
+        end
+
+        count
+
+      {:error, _} ->
+        0
+    end
+  end
+
+  # Remove unused alias lines
+  defp apply_single_fix(%{rule_id: "4.27", line: line}, lines) do
+    idx = line - 1
+
+    case Enum.at(lines, idx) do
+      nil -> :skip
+      line_content ->
+        case String.contains?(line_content, "alias ") do
+          true -> {:fixed, List.delete_at(lines, idx)}
+          false -> :skip
+        end
+    end
+  end
+
+  defp apply_single_fix(_, _), do: :skip
+
+  # --- --watch ---
+
+  defp run_watch(opts, paths) do
+    IO.puts("\nArchdo — watching #{Enum.join(paths, ", ")} for changes (Ctrl+C to stop)\n")
+
+    run_normal(opts, paths)
+
+    watch_loop(opts, paths, file_mtimes(paths))
+  end
+
+  defp watch_loop(opts, paths, last_mtimes) do
+    Process.sleep(2_000)
+
+    current = file_mtimes(paths)
+
+    case current != last_mtimes do
+      true ->
+        IO.puts("\n--- File change detected ---\n")
+        run_normal(opts, paths)
+        watch_loop(opts, paths, current)
+
+      false ->
+        watch_loop(opts, paths, last_mtimes)
+    end
+  end
+
+  defp file_mtimes(paths) do
+    paths
+    |> Enum.flat_map(fn path ->
+      Path.wildcard(Path.join(path, "**/*.ex"))
+    end)
+    |> Map.new(fn file ->
+      case File.stat(file) do
+        {:ok, %{mtime: mtime}} -> {file, mtime}
+        _ -> {file, nil}
+      end
+    end)
+  end
+
   defp find_project_root(path) do
     cond do
       File.exists?(Path.join(path, "mix.exs")) -> path
@@ -219,6 +533,8 @@ defmodule Mix.Tasks.Archdo do
   defp parse_format("json"), do: :json
   defp parse_format("compact"), do: :compact
   defp parse_format("llm"), do: :llm
+  defp parse_format("sarif"), do: :sarif
+  defp parse_format("html"), do: :html
   defp parse_format(other), do: raise("Unknown format: #{other}")
 
   defp parse_list(str), do: String.split(str, ",", trim: true)
