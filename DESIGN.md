@@ -87,7 +87,22 @@ A Mix compiler plugin that builds a project-wide module graph at compile time, t
 | Test structure | 7.1, 7.3 | File system + AST |
 | NIF safety | 11.1-11.3 | AST pattern matching |
 
-This covers **~30 of the 49 rules** with fully deterministic, CI-ready checks.
+This covers the majority of AST-based rules with fully deterministic, CI-ready checks.
+
+### Tier 1b: Compiled Beam Analysis (Deterministic, Ground Truth)
+
+When `--compiled` is passed, Archdo reads beam files to build a complete interaction graph from ground-truth compiled data. This catches things AST analysis misses:
+
+| Analysis | Rules | Method |
+|----------|-------|--------|
+| Dead code | 6.24, 6.25 | Exported functions never called (+ transitive) |
+| Dependency analysis | 1.18, 4.22, 4.23, 4.26 | Compile hotspots, unused imports, weak/phantom deps |
+| API quality | 6.26, 6.27, 6.28, 6.30, 6.31 | Surface weight, exhaustiveness, return shapes, degenerate functions |
+| Cycles | 1.19 | Tarjan's SCC on function call graph |
+| Boundaries | 1.21, 4.25, 1.22 | Cross-boundary calls, internal module leaks, Repo bypass |
+| Context quality | 1.23, 1.24, 1.25 | Cohesion/coupling, circular context deps, orphan modules |
+| Testing | 7.21 | Test-only public functions |
+| Risk | 1.20 | Change blast radius with transitive dependents |
 
 ### Tier 2: Multi-Module Heuristic Analysis (Deterministic, Deeper)
 
