@@ -16,11 +16,9 @@ defmodule Mix.Tasks.Archdo do
     * `--explain` - Explain a rule by ID (e.g., `--explain 6.50`)
     * `--init` - Generate a `.archdo.exs` config file with detected project defaults
     * `--fix` - Auto-apply mechanical fixes (unused aliases, single-clause with, etc.)
-    * `--boundaries` - Enable boundary analysis (Phase 2: dependency direction,
-      context encapsulation, circular deps). Uses `.archdo.exs` config or
-      Phoenix conventions for layer detection.
-    * `--tests` - Enable project-level test architecture checks (e.g., missing test files)
-    * `--functions` - Enable function-level graph analysis (slowest, deepest)
+    * `--boundaries` - Cross-file boundary/graph rules (default: true). Disable with `--no-boundaries`.
+    * `--tests` - Project-level test architecture checks (default: false).
+    * `--functions` - Function-level graph analysis (default: true). Disable with `--no-functions`.
     * `--compiled` - Enable analysis using compiled beam files. Adds dead
       code detection, macro-aware behaviour checking, and precise call graph.
       Requires the target project to be compiled (`mix compile`).
@@ -143,9 +141,9 @@ defmodule Mix.Tasks.Archdo do
     format = parse_format(Keyword.get(opts, :format, "summary"))
     only = parse_nullable_list(Keyword.get(opts, :only))
     ignore = parse_nullable_list(Keyword.get(opts, :ignore)) || []
-    boundaries = Keyword.get(opts, :boundaries, false)
+    boundaries = Keyword.get(opts, :boundaries, true)
     tests = Keyword.get(opts, :tests, false)
-    functions = Keyword.get(opts, :functions, false)
+    functions = Keyword.get(opts, :functions, true)
     compiled = Keyword.get(opts, :compiled, false)
 
     maybe_add([format: format, ignore: ignore, boundaries: boundaries, tests: tests, functions: functions, compiled: compiled], :only, only)

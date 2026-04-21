@@ -325,9 +325,9 @@ mix archdo [options]
 | `--init`          | flag            | Generate a `.archdo.exs` config file with detected project defaults                        |
 | `--fix`           | flag            | Auto-apply mechanical fixes (currently: unused alias removal)                               |
 | `--watch`         | flag            | Re-run analysis on file changes (2s poll). Ctrl+C to stop.                                 |
-| `--boundaries`    | flag            | Enable cross-file boundary/graph rules. Slower; uses `.archdo.exs`.                        |
-| `--tests`         | flag            | Enable project-level test architecture rules.                                              |
-| `--functions`     | flag            | Enable function-level graph analysis (slowest, deepest).                                   |
+| `--boundaries`    | flag            | Cross-file boundary/graph rules. **Default: true.** Disable with `--no-boundaries`.        |
+| `--tests`         | flag            | Project-level test architecture rules. Default: false.                                     |
+| `--functions`     | flag            | Function-level graph analysis. **Default: true.** Disable with `--no-functions`.            |
 | `--compiled`      | flag            | Read compiled beam files for ground-truth analysis (dead code, blast radius, cycles).      |
 | `--diagram`       | type            | Generate Mermaid diagram: `overview`, `modules`, `api`, `context:Name`, `blast:Module`.    |
 | `--coverage`      | flag            | Print test coverage gap matrix and exit.                                                   |
@@ -339,14 +339,14 @@ mix archdo [options]
 ### Common invocations
 
 ```bash
-# Quick local check — summary table (default)
+# Full check — boundaries + functions enabled by default
 mix archdo
 
-# Full architectural check including cross-file rules
-mix archdo --paths lib --boundaries
+# Add test architecture and compiled beam analysis
+mix archdo --tests --compiled
 
-# Maximum-depth analysis (boundaries + tests + function graph + compiled)
-mix archdo --paths lib,test --boundaries --tests --functions --compiled
+# Fast check — skip boundary and function graph analysis
+mix archdo --no-boundaries --no-functions
 
 # PR review — only check changed files
 mix archdo --since main
@@ -905,7 +905,7 @@ The CLI's default `text` format already sorts this way; the JSON/LLM outputs lea
 - **Don't paraphrase the `why`** when explaining a finding to the user — it's been carefully written. Quote it directly or close to it.
 - **Don't suggest fixes that aren't in `alternatives`** unless the user explicitly asks for a different approach. The alternatives are the canonical answers.
 - **Don't ignore the freeze baseline.** If the user has `.archdo_baseline.exs`, respect it: pre-existing findings are intentional acceptances, not things to fix.
-- **Don't run `--boundaries` or `--functions`** unsolicited on huge projects — they're slower. Default to `boundaries: false` in MCP calls unless the user is asking about cross-file architecture.
+- **Don't disable `--boundaries` or `--functions`** unless the project is very large and the user is waiting. Both are now enabled by default because they catch the most important architectural issues.
 
 ---
 
