@@ -11,13 +11,20 @@ defmodule Archdo.Mcp.Server do
   # Spec: https://modelcontextprotocol.io/specification
 
   alias Archdo.Mcp.SchemaValidator
-  alias Archdo.Mcp.Tools.{AnalyzeFile, AnalyzePaths, DeepReview, ExplainRule, ListRules}
+
+  alias Archdo.Mcp.Tools.{
+    AnalyzeFile, AnalyzePaths, DeepReview, Diagram, Diff,
+    ExplainFinding, ExplainRule, Fix, Health, ListRules, PerfAudit, Suggest
+  }
 
   @protocol_version "2024-11-05"
   @server_name "archdo"
   @server_version Mix.Project.config()[:version] || "0.0.0"
 
-  @tools [AnalyzePaths, AnalyzeFile, ListRules, ExplainRule, DeepReview]
+  @tools [
+    AnalyzePaths, AnalyzeFile, ListRules, ExplainRule, DeepReview,
+    Health, Diff, Diagram, PerfAudit, Suggest, ExplainFinding, Fix
+  ]
 
   @doc """
   Run the server loop forever, reading JSON-RPC messages from stdin
