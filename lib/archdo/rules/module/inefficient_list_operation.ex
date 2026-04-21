@@ -58,8 +58,16 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
 
   # --- Pattern 3: List.last in loop — only flag in hot path ---
 
+  # Known-small AST structure variables — List.last on these is always O(1)-equivalent
+  @small_list_vars [:args, :aliases, :parts, :meta, :opts, :clauses, :params, :fields,
+                    :items, :mod_parts, :body, :path, :exprs]
+
   defp find_list_last_in_loop(ast, file) do
     find_in_loops(ast, file, :list_last_in_loop, fn
+      {{:., _, [{:__aliases__, _, [:List]}, :last]}, _, [{var, _, ctx}]}
+      when is_atom(var) and is_atom(ctx) ->
+        var not in @small_list_vars
+
       {{:., _, [{:__aliases__, _, [:List]}, :last]}, _, _} -> true
       _ -> false
     end)
@@ -151,6 +159,8 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
     {_, diagnostics} =
       Macro.prewalk(ast, [], fn
         # Enum.<loop_fn>(_, fn ... end) — check callback body for pattern
+        # Skip AST-traversal functions (Macro.prewalk, AST.find_all, etc.) —
+        # their callbacks operate on fixed-structure AST nodes, not user-sized data.
         {{:., _, [{:__aliases__, _, [:Enum]}, func]}, _meta, args} = node, acc
         when func in @enum_loop_fns and is_list(args) ->
           new_diags =
