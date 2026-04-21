@@ -31,10 +31,13 @@ defmodule Archdo.Rules.Module.LongParameterList do
     end)
   end
 
-  defp generated?(name) do
+  defp generated?(name) when is_atom(name) do
     name_str = Atom.to_string(name)
     String.starts_with?(name_str, "__") and String.ends_with?(name_str, "__")
   end
+
+  # Metaprogrammed function names (unquote, etc.) — skip
+  defp generated?(_), do: true
 
   defp build_diagnostic(file, line, name, arity, severity) do
     builder = Diagnostic.builder_for(severity)

@@ -23,6 +23,7 @@ defmodule Archdo.Rules.Module.BooleanBlindness do
   defp find_boolean_blindness(file, ast) do
     ast
     |> AST.extract_functions(:public)
+    |> Enum.filter(fn {name, _, _, _, _} -> is_atom(name) end)
     |> Enum.flat_map(fn {name, arity, meta, _args, body} ->
       name_str = Atom.to_string(name)
 

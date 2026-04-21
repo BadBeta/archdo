@@ -88,6 +88,8 @@ defmodule Archdo.Rules.Module.BangInOkErrorFunction do
     |> String.ends_with?("!")
   end
 
+  defp bang_function?(_), do: false
+
   # Bangs that are safe (don't represent failable operations)
   defp safe_bang?(func) do
     func in [
