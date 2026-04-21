@@ -8,7 +8,7 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
   def id, do: "1.33"
 
   @impl true
-  def description, do: "Multiple contexts access the same named ETS table — shared mutable state across boundaries"
+  def description, do: "Multiple contexts access the same named ETS table directly — consider a shared API module"
 
   # Project-level rule
   @impl true
@@ -92,14 +92,14 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
   end
 
   defp build_diagnostic(file, line, table, contexts) do
-    Diagnostic.warning("1.33",
+    Diagnostic.info("1.33",
       title: "Shared ETS table across contexts",
-      message: "ETS table :#{table} is accessed from multiple contexts: #{contexts}",
+      message: "ETS table :#{table} accessed directly from multiple contexts: #{contexts}",
       why:
-        "Named ETS tables shared between contexts create invisible mutable state " <>
-          "coupling. Changes to the table structure, key format, or access patterns " <>
-          "in one context silently break the other. This is the in-memory equivalent " <>
-          "of sharing a database table across bounded contexts.",
+        "Multiple contexts doing raw :ets calls on the same named table creates " <>
+          "coupling through shared mutable state. This is fine if the table is " <>
+          "managed by a dedicated shared module (cache, registry), but problematic " <>
+          "if contexts read/write directly without a mediating API.",
       alternatives: [
         Fix.new(
           summary: "Each context owns its own ETS table",
