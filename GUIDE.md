@@ -31,7 +31,7 @@ Archdo is an **architectural quality checker for Elixir** projects. It checks th
 | **Credo**    | Style, naming, complexity per file      | Cross-module dependencies, OTP patterns     |
 | **Dialyzer** | Type contracts                          | Architecture, design                        |
 | **Sobelow**  | Phoenix security (XSS, SQLi)            | Anything not security                       |
-| **Archdo**   | Boundaries, OTP, test architecture, duplication, event sourcing, NIF discipline, Martin metrics | Style, types, security |
+| **Archdo**   | Boundaries, OTP, test architecture, duplication, performance traps, LLM slop, event sourcing, NIF discipline, compiled analysis, Martin metrics | Style, types, security |
 
 Archdo is **deterministic** — same code produces the same diagnostics — so it's safe to wire into CI. It's also **self-explanatory**: every diagnostic ships with an explanation of *why* the finding matters and one or more **actionable fix options**, written so an LLM can apply them without re-reading the rule documentation.
 
@@ -80,7 +80,7 @@ Archdo currently ships **200 rules in 11 categories** (including 21 compiled-ana
 
 | #   | Category                         | Rules    | Severity mix          | What it catches                                                                  |
 |-----|----------------------------------|----------|-----------------------|----------------------------------------------------------------------------------|
-| 1   | Boundaries & Architecture        | 24       | error / warning / info | Dependency direction, context encapsulation, circular deps, Repo in interface, schema ownership, function-level boundary leaks, chatty boundaries, anemic contexts, untyped boundaries, unvalidated params, large controller actions, PubSub without handler, large LiveView assigns, unused aliases, **compiled**: compile dependency hotspot, circular function calls, change blast radius, cross-boundary call detection, Repo bypass, circular context deps, orphan modules |
+| 1   | Boundaries & Architecture        | 29       | error / warning / info | Dependency direction, context encapsulation, circular deps, Repo in interface, schema ownership, chatty boundaries, anemic contexts, unvalidated params, reverse dependencies, **query building in interface**, **cross-context schema access**, **direct process call across boundary**, **shared DB table**, **shared ETS table**, **cross-context config**, LiveView logic, **compiled**: compile dependency hotspot, circular function calls, change blast radius, cross-boundary call detection, Repo bypass, circular context deps, orphan modules |
 | 2   | Public API                       | 2        | warning / info        | Missing `@moduledoc`, missing `@spec` |
 | 3   | Single Source of Truth           | 5        | warning / info        | Type-2 clones, scattered config, library config via `Application.get_env`, Type-3 similar code, reinvented enumerable, duplicated validation across layers |
 | 4   | Coupling & Abstraction           | 28       | warning / info        | Behaviour size, single-impl protocols, type-dispatching case, external deps without behaviour, broad imports, unused deps, god contexts, mockability score, feature envy, speculative generality, parallel hierarchies, primitive obsession, mixed concerns, natural seams, hand-rolled pubsub, adapters without behaviour, unbounded external calls, missing telemetry, unprotected bang calls, **compiled**: unused imports, weak dependency, protocol completeness, internal module leak, phantom dependency |
@@ -186,9 +186,26 @@ Every Archdo finding is an `%Archdo.Diagnostic{}` struct. The shape is the contr
 
 ## 5. Output formats
 
-`mix archdo --format <format>` accepts four formats. They're all driven by `Archdo.Formatter` and consume the same `Diagnostic` struct.
+`mix archdo --format <format>` accepts seven formats. All are driven by `Archdo.Formatter` and consume the same `Diagnostic` struct.
 
-### `:text` (default) — for humans at the terminal
+### `:summary` (default) — overview table
+
+Markdown pipe table grouped by rule, sorted by severity then count. Shows a `Tag` column when performance rules are present:
+
+```
+Archdo — 225 findings (0 errors, 26 warnings, 199 info)
+
+| Sev     | Rule  | Count | Tag  | Finding |
+|---------|-------|------:|------|---------|
+| warn    | 3.1   |    17 |      | Structurally identical function clone |
+| warn    | 6.50  |     3 | perf | List ++ in loop accumulator |
+| info    | 6.41  |    23 |      | Single-clause with |
+| info    | 6.53  |     1 | perf | Keyword lookup inside loop |
+
+225 total across 39 rules
+```
+
+### `:text` — for humans at the terminal
 
 Color-coded, grouped by category, full `why` and `alternatives` for each finding:
 
@@ -261,6 +278,24 @@ Newline-delimited JSON (NDJSON), one diagnostic per line. The first line is a `{
 
 The pre-rendered `markdown` field is the easiest path for an LLM that just wants a single string to display or reason about.
 
+### `:sarif` — for GitHub Code Scanning
+
+SARIF 2.1.0 format that integrates with GitHub's code scanning feature. Upload the output to show Archdo findings inline on pull requests:
+
+```bash
+mix archdo --format sarif > archdo.sarif
+# Upload to GitHub via Actions: uses: github/codeql-action/upload-sarif@v3
+```
+
+### `:html` — standalone report
+
+Generates a dark-themed HTML file (`archdo_report.html`) with a summary table and expandable details. Share with stakeholders who don't have terminal access:
+
+```bash
+mix archdo --format html --paths lib
+# Opens archdo_report.html in a browser
+```
+
 ### Exit codes (all formats)
 
 | Findings present  | Exit code |
@@ -282,13 +317,20 @@ mix archdo [options]
 | Option            | Type            | Description                                                                                |
 |-------------------|-----------------|--------------------------------------------------------------------------------------------|
 | `--paths`         | comma-separated | Paths to scan. Default: `lib`. Accepts directories or single files.                        |
-| `--format`        | enum            | `text` (default) / `compact` / `json` / `llm`                                              |
+| `--format`        | enum            | `summary` (default) / `text` / `compact` / `json` / `llm` / `sarif` / `html`              |
 | `--only`          | comma-separated | Restrict the run to these rule ids: `--only 5.11,8.2`                                      |
 | `--ignore`        | comma-separated | Skip these rule ids: `--ignore 6.1,6.4`                                                    |
-| `--boundaries`    | flag            | Enable cross-file boundary/graph rules (1.1, 1.3, 1.4, 8.4, etc.). Slower; uses `.archdo.exs`. |
-| `--tests`         | flag            | Enable project-level test architecture rules (e.g. test mirrors source, coverage gap).    |
-| `--functions`     | flag            | Enable function-level graph analysis (slowest, deepest). Required for 1.7, 1.8, 1.10, 4.9, 6.5. |
-| `--coverage`      | flag            | Print test coverage gap matrix and exit (no other rules).                                  |
+| `--since`         | git ref         | Only analyze files changed since this ref: `--since main`, `--since HEAD~3`                |
+| `--explain`       | rule id         | Print rule description and category: `--explain 6.50`                                      |
+| `--init`          | flag            | Generate a `.archdo.exs` config file with detected project defaults                        |
+| `--fix`           | flag            | Auto-apply mechanical fixes (currently: unused alias removal)                               |
+| `--watch`         | flag            | Re-run analysis on file changes (2s poll). Ctrl+C to stop.                                 |
+| `--boundaries`    | flag            | Enable cross-file boundary/graph rules. Slower; uses `.archdo.exs`.                        |
+| `--tests`         | flag            | Enable project-level test architecture rules.                                              |
+| `--functions`     | flag            | Enable function-level graph analysis (slowest, deepest).                                   |
+| `--compiled`      | flag            | Read compiled beam files for ground-truth analysis (dead code, blast radius, cycles).      |
+| `--diagram`       | type            | Generate Mermaid diagram: `overview`, `modules`, `api`, `context:Name`, `blast:Module`.    |
+| `--coverage`      | flag            | Print test coverage gap matrix and exit.                                                   |
 | `--metrics`       | flag            | Print Martin package metrics (Ca/Ce/I/A/D) matrix and exit.                                |
 | `--freeze`        | flag            | Save current findings as the baseline.                                                     |
 | `--freeze-stats`  | flag            | Show baseline status (resolved, still present, new).                                       |
@@ -297,37 +339,70 @@ mix archdo [options]
 ### Common invocations
 
 ```bash
-# Quick local check (lib/, no boundary rules)
+# Quick local check — summary table (default)
 mix archdo
 
 # Full architectural check including cross-file rules
 mix archdo --paths lib --boundaries
 
-# Maximum-depth analysis (boundaries + tests + function graph)
-mix archdo --paths lib,test --boundaries --tests --functions
+# Maximum-depth analysis (boundaries + tests + function graph + compiled)
+mix archdo --paths lib,test --boundaries --tests --functions --compiled
 
-# Restrict to one rule (useful for iterating on a specific issue)
+# PR review — only check changed files
+mix archdo --since main
+
+# Performance audit only
+mix archdo --only 6.46,6.47,6.48,6.49,6.50,6.51,6.52,6.53
+
+# Restrict to one rule
 mix archdo --only 8.2 --paths lib
 
-# Skip noise from rules you don't care about
-mix archdo --ignore 6.1,6.4,7.4
+# Skip noise
+mix archdo --ignore 6.1,6.4,7.25
 
-# Pipe machine-readable output to a script
+# Auto-fix what's mechanical
+mix archdo --fix
+
+# Watch mode (re-runs on save)
+mix archdo --watch
+
+# Explain a rule
+mix archdo --explain 6.50
+
+# Generate config
+mix archdo --init
+```
+
+### Output for different audiences
+
+```bash
+# Terminal review with full explanations
+mix archdo --format text
+
+# CI pipeline (exit code indicates severity)
+mix archdo --format compact
+
+# GitHub Code Scanning integration
+mix archdo --format sarif > archdo.sarif
+
+# Shareable HTML report
+mix archdo --format html
+
+# Dashboard/API consumption
 mix archdo --format json > diagnostics.json
-mix archdo --format compact | grep error
 
-# LLM-friendly streaming output
+# LLM-friendly streaming
 mix archdo --format llm > diagnostics.ndjson
 ```
 
 ### Special-purpose commands
 
 ```bash
-mix archdo --coverage --paths lib    # Test coverage gap matrix only
-mix archdo --metrics --paths lib     # Martin Ca/Ce/I/A/D table only
+mix archdo --coverage --paths lib    # Test coverage gap matrix
+mix archdo --metrics --paths lib     # Martin Ca/Ce/I/A/D table
+mix archdo --diagram overview        # Mermaid architecture diagram (requires --compiled)
+mix archdo --diagram blast:MyApp.Accounts  # Blast radius for a module
 ```
-
-These commands skip normal rule output and print a single matrix. Useful as standalone reports.
 
 ---
 
@@ -429,15 +504,22 @@ mix archdo.mcp
 
 The server speaks **newline-delimited JSON-RPC 2.0** over stdin/stdout (logs go to stderr). It runs in-process — no extra OS process — and reuses the same `Archdo.Runner` the CLI uses, so results are identical.
 
-### The four tools
+### The 12 tools
 
 | Tool name              | Purpose                                                                       | Returns                                                |
 |------------------------|-------------------------------------------------------------------------------|--------------------------------------------------------|
-| `archdo_analyze_paths` | Run Archdo against directories or files in the project                      | `{summary, diagnostics: [...]}`                         |
+| `archdo_analyze_paths` | Run Archdo against directories or files                                      | `{summary, diagnostics: [...]}`                         |
 | `archdo_analyze_file`  | Analyze an in-memory source string (no file write)                            | `{summary, diagnostics: [...]}`                         |
+| `archdo_deep_review`   | Static analysis + structured review plan for deeper investigation            | `{diagnostics, review_plan: [...], instructions}`       |
 | `archdo_list_rules`    | List rules (optionally filtered by category)                                  | `{count, rules: [{id, category, description, module}]}` |
 | `archdo_explain_rule`  | Look up a rule by id                                                          | `{id, module, description, reference, note}`           |
-| `archdo_deep_review`   | Static analysis + structured review plan for the LLM to investigate deeper   | `{diagnostics, review_plan: [...], instructions}`       |
+| `archdo_health`        | Project health grade (A+ to D) + top rules + perf count                      | `{summary, top_rules, health_grade}`                    |
+| `archdo_diff`          | Analyze only files changed since a git ref (PR review)                       | `{ref, changed_files, diagnostics}`                     |
+| `archdo_diagram`       | Generate Mermaid/SVG architecture diagrams from compiled beams               | `{type, format, content}`                               |
+| `archdo_perf_audit`    | Performance-only scan grouped by impact level                                 | `{total, by_impact, summary}`                           |
+| `archdo_suggest`       | File-type-aware proactive suggestions (GenServer→OTP, LiveView→boundary)     | `{file_type, findings, suggestions}`                    |
+| `archdo_explain_finding` | Given file:line, return finding with code context                           | `{finding, code_context}`                               |
+| `archdo_fix`           | Generate executable edit suggestions for mechanical rules                     | `{fixable_count, fixes: [...]}`                         |
 
 ### Tool input schemas
 
@@ -748,7 +830,14 @@ If you are an LLM agent (Claude Code, Cursor, Cline, Zed, Codex) and you have ac
 | User intent | Tool |
 |---|---|
 | "Check this file quickly" | `archdo_analyze_paths` or `archdo_analyze_file` |
-| "Do a full architectural review" | `archdo_deep_review` — then **read the files listed in the review plan and answer the questions** |
+| "Do a full architectural review" | `archdo_deep_review` — then **read the files in the review plan** |
+| "How's this project doing?" | `archdo_health` |
+| "Check my PR / changed files" | `archdo_diff` with ref `main` |
+| "Show me the architecture" | `archdo_diagram` with type `overview` |
+| "Any performance issues?" | `archdo_perf_audit` |
+| "I'm editing this file, what should I watch for?" | `archdo_suggest` |
+| "What's wrong at this line?" | `archdo_explain_finding` |
+| "Fix these findings for me" | `archdo_fix` |
 | "What rules exist?" | `archdo_list_rules` |
 | "Explain rule X" | `archdo_explain_rule` |
 | "Check code I'm about to write" | `archdo_analyze_file` |
@@ -858,10 +947,8 @@ Archdo parses every file with `Code.string_to_quoted/2`, which can intern atoms.
 
 ## 13. Where to read next
 
-- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — canonical, exhaustive rule reference. Every rule has its own section with `Why`, `Check`, `Tolerate`, and `Severity`. This is the source of truth that the in-rule `why` text and `alternatives` are derived from.
-- **[DESIGN.md](DESIGN.md)** — design rationale and the original three-tier approach. Useful for understanding why Archdo is structured the way it is.
-- **[README.md](README.md)** — short intro and installation cheatsheet.
-- **[PLAN.md](PLAN.md)** — implementation plan, current phase status, and progress log. Useful for contributors.
+- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 200 rules listed by category with descriptions. Auto-generated from rule modules.
+- **[README.md](README.md)** — quick intro, installation, and feature overview.
 
 ---
 
