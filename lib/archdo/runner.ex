@@ -105,6 +105,8 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.CollectionPerf,
     Archdo.Rules.Module.StringLengthCheck,
     Archdo.Rules.Module.KeywordLookupInLoop,
+    Archdo.Rules.Boundary.DevDepInProd,
+    Archdo.Rules.Boundary.UmbrellaDepConsistency,
     Archdo.Rules.Boundary.UnusedAlias,
     Archdo.Rules.Boundary.UntypedBoundary,
     # NIF rules
