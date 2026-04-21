@@ -583,17 +583,23 @@ The `structuredContent` field is the raw map; `content` is the same data seriali
 
 ## 10. Architecture (how Archdo works internally)
 
-Archdo is a small, deterministic, single-process analyzer. There's no daemon, no language server, no compiler hook — just a Mix task that walks the AST.
+Archdo is a deterministic, single-process analyzer. There's no daemon, no language server, no compiler hook — a Mix task that walks the AST, and optionally reads compiled beam files for ground-truth analysis.
 
 ### High-level pipeline
 
 ```
    ┌─────────────┐    ┌──────────────┐    ┌──────────────────┐
    │ collect_files│ → │ parse_file   │ → │ phase1 rules     │
-   │ (lib, test)  │    │ (literal_enc)│    │ (per-file)       │
+   │ (lib, test)  │    │ (literal_enc)│    │ (per-file, 170+) │
    └─────────────┘    └──────────────┘    └────────┬─────────┘
                                                     │
                                                     ▼
+                              ┌─────────────────────────────────────┐
+                              │ Project-level rules: duplication,   │
+                              │ mockability, schema ownership, etc. │
+                              └─────────┬───────────────────────────┘
+                                        │
+                                        ▼
                               ┌─────────────────────────────────────┐
                               │ Optionally: build module graph,     │
                               │ then run graph rules (--boundaries) │
@@ -603,6 +609,14 @@ Archdo is a small, deterministic, single-process analyzer. There's no daemon, no
                               ┌─────────────────────────────────────┐
                               │ Optionally: build function graph,   │
                               │ then run function rules (--functions)│
+                              └─────────┬───────────────────────────┘
+                                        │
+                                        ▼
+                              ┌─────────────────────────────────────┐
+                              │ Optionally: read compiled beam files│
+                              │ build Compiled.Graph, run 21 rules  │
+                              │ (--compiled): dead code, blast      │
+                              │ radius, cycles, API analysis, etc.  │
                               └─────────┬───────────────────────────┘
                                         │
                                         ▼
@@ -627,11 +641,17 @@ Archdo is a small, deterministic, single-process analyzer. There's no daemon, no
 | `Archdo.Metrics`            | Martin package metrics (Ca/Ce/I/A/D).                                       |
 | `Archdo.Config`             | `.archdo.exs` loading, layer/context classification.                         |
 | `Archdo.Freeze`             | Baseline fingerprinting + filter.                                           |
-| `Archdo.Formatter`          | The four output formats. Stateless, takes `[Diagnostic.t()]`.               |
+| `Archdo.Compiled`           | I/O boundary for beam analysis. `analyze/1` returns `{:ok, %Graph{}}`.      |
+| `Archdo.Compiled.Graph`     | Complete interaction graph from beam files: modules, calls, indexes, queries.|
+| `Archdo.Compiled.Diagram`   | Mermaid diagram generators (overview, context detail, blast radius, delta).  |
+| `Archdo.Compiled.DiagramSVG`| SVG module dataflow diagrams with port-based wire routing.                   |
+| `Archdo.Compiled.DiagramOTP`| SVG OTP supervision tree diagrams with mailbox icons.                        |
+| `Archdo.Compiled.DiagramSystem` | SVG system architecture with horizontal layers and tunnel wires.         |
+| `Archdo.Formatter`          | Seven output formats (summary, text, compact, json, llm, sarif, html).      |
 | `Archdo.Mcp.Server`         | JSON-RPC 2.0 stdio MCP server with JSV input validation.                    |
 | `Archdo.Mcp.SchemaValidator` | Validates tool arguments against `input_schema/0` using JSV.               |
 | `Archdo.Mcp.Encoder`        | `Diagnostic` → JSON-friendly map (with MapSet/atom coercion).               |
-| `Archdo.Mcp.Tools.*`        | The five MCP tools (each with `name/0`, `description/0`, `input_schema/0`, `call/1`). |
+| `Archdo.Mcp.Tools.*`        | 12 MCP tools (each with `name/0`, `description/0`, `input_schema/0`, `call/1`). |
 | `Mix.Tasks.Archdo`          | The `mix archdo` CLI.                                                       |
 | `Mix.Tasks.Archdo.Mcp`      | The `mix archdo.mcp` entry point (boots `Archdo.Mcp.Server`).               |
 
