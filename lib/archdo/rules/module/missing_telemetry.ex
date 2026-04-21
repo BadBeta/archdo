@@ -88,8 +88,11 @@ defmodule Archdo.Rules.Module.MissingTelemetry do
 
   defp has_telemetry_call?(ast) do
     AST.contains?(ast, fn
-      # :telemetry.execute(...) or :telemetry.span(...)
+      # :telemetry.execute(...) or :telemetry.span(...) — bare atom
       {{:., _, [:telemetry, func]}, _, _} when func in [:execute, :span] -> true
+      # :telemetry wrapped by literal_encoder as {:__block__, _, [:telemetry]}
+      {{:., _, [{:__block__, _, [:telemetry]}, func]}, _, _}
+      when func in [:execute, :span] -> true
       # Telemetry.execute(...) via alias
       {{:., _, [{:__aliases__, _, aliases}, func]}, _, _}
       when func in [:execute, :span] ->
