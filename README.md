@@ -1,6 +1,6 @@
 # Archdo
 
-Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, boundary enforcement, and LLM code slop.
+Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, boundary enforcement, and some LLM code slop.
 
 **186 rules** across 12 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
 
