@@ -49,35 +49,34 @@ defmodule Archdo.Formatter do
       end)
       |> Enum.sort_by(fn r -> {severity_sort(r.severity), -r.count} end)
 
-    # Calculate column widths
-    sev_width = 7
-    rule_width = 6
-    count_width = 5
+    # Dynamic column widths
+    rule_max = Enum.max_by(by_rule, fn r -> byte_size(r.rule_id) end).rule_id |> byte_size()
+    rule_w = max(rule_max, 4) + 1
+    title_max = Enum.max_by(by_rule, fn r -> byte_size(r.title) end).title |> byte_size()
+    title_w = min(title_max, 60)
+    # Box-drawing table
+    top    = "┌" <> String.duplicate("─", 9) <> "┬" <> String.duplicate("─", rule_w + 1) <> "┬" <> String.duplicate("─", 7) <> "┬" <> String.duplicate("─", title_w + 2) <> "┐"
+    mid    = "├" <> String.duplicate("��", 9) <> "┼" <> String.duplicate("─", rule_w + 1) <> "┼" <> String.duplicate("─", 7) <> "┼" <> String.duplicate("─", title_w + 2) <> "┤"
+    bottom = "└" <> String.duplicate("─", 9) <> "┴" <> String.duplicate("─", rule_w + 1) <> "┴" <> String.duplicate("─", 7) <> "┴" <> String.duplicate("─", title_w + 2) <> "┘"
 
-    # Header
-    IO.puts(
-      String.pad_trailing("Sev", sev_width) <>
-        String.pad_trailing("Rule", rule_width) <>
-        String.pad_leading("Count", count_width) <>
-        "  Finding"
-    )
+    IO.puts(top)
+    IO.puts("│ " <> String.pad_trailing("Sev", 7) <> " │ " <> String.pad_trailing("Rule", rule_w) <> "��� " <> String.pad_trailing("Count", 5) <> " │ " <> String.pad_trailing("Finding", title_w) <> " │")
+    IO.puts(mid)
 
-    IO.puts(String.duplicate("─", 80))
-
-    # Rows
     Enum.each(by_rule, fn r ->
       sev_str = format_severity_short(r.severity)
+      title = String.slice(r.title, 0, title_w)
 
       IO.puts(
-        sev_str <>
-          String.pad_trailing(r.rule_id, rule_width) <>
-          String.pad_leading(Integer.to_string(r.count), count_width) <>
-          "  #{r.title}"
+        "│ " <> sev_str <> " │ " <>
+          String.pad_trailing(r.rule_id, rule_w) <> "│ " <>
+          String.pad_leading(Integer.to_string(r.count), 5) <> " │ " <>
+          String.pad_trailing(title, title_w) <> " │"
       )
     end)
 
-    IO.puts(String.duplicate("─", 80))
-    IO.puts("#{total} total across #{length(by_rule)} rules\n")
+    IO.puts(bottom)
+    IO.puts("\n#{total} total across #{length(by_rule)} rules\n")
     IO.puts(@llm_instruction)
 
     exit_code(errors, warnings)
