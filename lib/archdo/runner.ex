@@ -163,6 +163,10 @@ defmodule Archdo.Runner do
     Archdo.Rules.Boundary.PreloadInLoop,
     Archdo.Rules.Boundary.PubsubWithoutHandler,
     Archdo.Rules.Boundary.ReverseDependency,
+    Archdo.Rules.Boundary.QueryInInterface,
+    Archdo.Rules.Boundary.CrossContextSchema,
+    Archdo.Rules.Boundary.DirectProcessCall,
+    Archdo.Rules.Boundary.CrossContextConfig,
     # Resilience rules
     Archdo.Rules.Module.UnprotectedExternalCall,
     Archdo.Rules.Module.UnboundedExternalCall

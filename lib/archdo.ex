@@ -147,7 +147,8 @@ defmodule Archdo do
     SeamIntegrity,
     MissingTelemetry,
     FatInterface,
-    MissingBoundaryTests
+    MissingBoundaryTests,
+    Archdo.Rules.Boundary.SharedDbTable
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).
