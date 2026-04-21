@@ -2,7 +2,7 @@
 
 Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, boundary enforcement, and some LLM code slop.
 
-**186 rules** across 12 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+**193 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
 
 ### LLM slop detection
 
@@ -12,15 +12,17 @@ Rule 6.33 detects five patterns of unnecessarily verbose code typically generate
 
 | Category | Rules | Examples |
 |----------|-------|----------|
-| **Boundaries** | 31 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params, compiled cross-boundary call detection, internal module leak, Repo bypass, phantom dependencies, unused aliases |
-| **Module quality** | 42 | Complexity, cohesion, fan-out, Martin metrics, error handling (7 rules), recursion (4 rules), stub detection, **LLM slop detection**, dead private functions, identity transformations, defensive nil returns, verbose ok unwrap, single-clause with, constant expressions, unreachable clauses, redundant guard rechecks, long parameter lists, nested control flow, boolean blindness |
-| **OTP discipline** | 41 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock detection, sequential-where-parallel, callback sprawl |
-| **Testing** | 23 | Mox without behaviours, coverage gaps, test naming, async eligibility, weak assertions, test-only public functions, over-mocking, empty describe blocks, missing error path tests, untested modules |
-| **Compiled analysis** | 20 | Dead code, transitive dead code, blast radius, unused imports, weak dependencies, API surface weight, function cycles (Tarjan's SCC), protocol completeness, change risk, circular context dependencies, orphan modules |
+| **Boundaries & Architecture** | 24 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params, reverse dependencies, LiveView logic, N+1 preload, dev dep hygiene, compiled: cross-boundary calls, blast radius, orphan modules |
+| **Public API** | 2 | Missing @moduledoc, missing @spec |
+| **Single Source of Truth** | 5 | Type-2/3 clones, scattered config, reinvented enumerable |
+| **Coupling & Abstraction** | 28 | Behaviour size, broad imports, unused deps/aliases, mockability, feature envy, speculative generality, missing telemetry, N+1 queries, compiled: unused imports, weak deps, phantom deps |
+| **OTP discipline** | 43 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock, callback sprawl, atom exhaustion, ETS cleanup, sequential-where-parallel |
+| **Module quality** | 50 | Complexity, error handling (7 rules), recursion (4 rules), **LLM slop detection** (5 sub-checks), dead functions, **performance traps** (8 rules: string concat, list ops, collection waste, regex, keyword lookup), nested control flow, boolean blindness, stub detection |
+| **Testing** | 24 | Coverage gaps, over-mocking, empty describe, missing error paths, untested modules, process leaks, flaky indicators, assert on implementation, compiled: test-only public |
 | **Event sourcing** | 8 | Aggregate purity, projection isolation, event immutability, command/event naming |
-| **NIF safety** | 4 | Panic-inducing Rust patterns, scheduler misuse, missing behaviour wrapping |
 | **State machines** | 3 | Unreachable states, terminal state integrity, implicit boolean state |
 | **Composition** | 2 | Deep `use` chains, excessive namespace depth |
+| **NIF safety** | 4 | Panic-inducing Rust patterns, scheduler misuse, missing behaviour wrapping |
 
 ## Dependencies
 
@@ -39,13 +41,20 @@ end
 ```
 
 ```bash
-mix archdo                              # scan lib/
+mix archdo                              # scan lib/ (summary table output)
 mix archdo --format compact             # one-line-per-finding
+mix archdo --format html                # standalone HTML report
+mix archdo --format sarif               # GitHub Code Scanning integration
 mix archdo --paths lib/my_app/accounts  # scan specific paths
 mix archdo --only 4.17,6.12             # run specific rules
+mix archdo --since main                 # only files changed since git ref (PR review)
+mix archdo --fix                        # auto-apply mechanical fixes
+mix archdo --explain 6.50               # explain a rule
+mix archdo --init                       # generate .archdo.exs config
+mix archdo --watch                      # re-run on file changes
 mix archdo --boundaries                 # cross-module dependency analysis
 mix archdo --functions                  # function-level graph analysis
-mix archdo --compiled                   # compiled beam analysis (dead code, blast radius, API checks)
+mix archdo --compiled                   # compiled beam analysis (dead code, blast radius)
 mix archdo --coverage                   # test coverage gap matrix
 mix archdo --metrics                    # Martin package metrics matrix
 ```
@@ -109,16 +118,19 @@ For projects that want Archdo available as an MCP tool:
 }
 ```
 
-This exposes 5 tools: `archdo_deep_review`, `archdo_analyze_paths`, `archdo_analyze_file`, `archdo_list_rules`, `archdo_explain_rule`. Tool inputs are validated against their JSON Schema definitions using JSV.
+This exposes 12 tools: `archdo_analyze_paths`, `archdo_analyze_file`, `archdo_deep_review`, `archdo_list_rules`, `archdo_explain_rule`, `archdo_health`, `archdo_diff`, `archdo_diagram`, `archdo_perf_audit`, `archdo_suggest`, `archdo_explain_finding`, `archdo_fix`. Tool inputs are validated against their JSON Schema definitions using JSV.
 
 ## Output formats
 
 | Format    | Use for |
 |-----------|---------|
+| `summary` | Default — markdown pipe table grouped by rule (best for overview) |
 | `text`    | Terminal review — grouped, color-coded, full explanations |
 | `compact` | grep/CI — one line per finding |
 | `json`    | Dashboards, CI integration |
 | `llm`     | NDJSON with markdown for LLM consumption |
+| `sarif`   | GitHub Code Scanning — shows findings inline on PRs |
+| `html`    | Standalone dark-theme HTML report with expandable details |
 
 ## Baseline / freeze
 
