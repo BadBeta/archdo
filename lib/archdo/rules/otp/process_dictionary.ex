@@ -20,11 +20,10 @@ defmodule Archdo.Rules.OTP.ProcessDictionary do
   end
 
   defp find_process_dict(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, [:Process]}, func]}, _, _} when func in [:put, :get, :delete, :erase] -> true
       _ -> false
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, _}, func]}, meta, _} ->
+    end), fn {{:., _, [{:__aliases__, _, _}, func]}, meta, _} ->
       Diagnostic.info("5.32",
         title: "Process dictionary access",
         message: "Process.#{func} writes to or reads from the process dictionary",

@@ -20,8 +20,7 @@ defmodule Archdo.Rules.OTP.TimeoutAsPolling do
 
       # Find handle_info clauses that match :timeout
       timeout_handlers =
-        (callbacks[:handle_info] || [])
-        |> Enum.filter(&timeout_handler?/1)
+        Enum.filter(callbacks[:handle_info] || [], &timeout_handler?/1)
 
       # Only flag if the timeout handler itself returns a timeout
       # (indicating it's being used as a recurring timer)

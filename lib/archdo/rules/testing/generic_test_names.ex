@@ -25,7 +25,8 @@ defmodule Archdo.Rules.Testing.GenericTestNames do
   end
 
   defp find_generic_names(file, ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:test, _, [_name | _]} -> true
       _ -> false
     end)

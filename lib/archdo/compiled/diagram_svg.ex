@@ -297,8 +297,7 @@ defmodule Archdo.Compiled.DiagramSVG do
     ext_callers =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        Graph.known_by(graph, mod)
-        |> Enum.reject(fn e -> MapSet.member?(member_set, e.module) end)
+        Enum.reject(Graph.known_by(graph, mod), fn e -> MapSet.member?(member_set, e.module) end)
       end)
       |> Enum.uniq_by(& &1.module)
       |> Enum.take(6)
@@ -307,8 +306,7 @@ defmodule Archdo.Compiled.DiagramSVG do
     ext_deps =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        Graph.knows_about(graph, mod)
-        |> Enum.reject(fn e -> MapSet.member?(member_set, e.module) end)
+        Enum.reject(Graph.knows_about(graph, mod), fn e -> MapSet.member?(member_set, e.module) end)
       end)
       |> Enum.uniq_by(& &1.module)
       |> Enum.take(6)

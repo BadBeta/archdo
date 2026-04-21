@@ -15,11 +15,10 @@ defmodule Archdo.Rules.OTP.SpawnWithoutLink do
     if AST.test_file?(file) do
       []
     else
-      AST.find_all(ast, fn
+      Enum.map(AST.find_all(ast, fn
         {:spawn, _meta, args} when is_list(args) and length(args) in [1, 3] -> true
         _ -> false
-      end)
-      |> Enum.map(fn {:spawn, meta, args} ->
+      end), fn {:spawn, meta, args} ->
         Diagnostic.warning("5.21",
           title: "Bare spawn without link or monitor",
           message: "spawn/#{length(args)} starts a process the parent neither links nor monitors",

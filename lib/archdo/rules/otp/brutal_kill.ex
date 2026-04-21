@@ -20,14 +20,13 @@ defmodule Archdo.Rules.OTP.BrutalKill do
   end
 
   defp find_brutal_kills(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, [:Process]}, :exit]}, _, [_pid, kill_reason]} ->
         kill_atom?(kill_reason)
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       Diagnostic.warning("5.39",
         title: "Brutal process kill",
         message: "Process.exit(pid, :kill) bypasses terminate/2 — data may be lost",

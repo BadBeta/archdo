@@ -72,12 +72,11 @@ defmodule Archdo.Mcp.Tools.AnalyzePaths do
   defp fetch_paths(_), do: {:error, "missing or empty `paths` argument"}
 
   defp build_opts(args) do
-    [
+    Enum.reject([
       only: Helpers.list_or_nil(args["only"]),
       ignore: args["ignore"] || [],
       boundaries: Map.get(args, "boundaries", true)
-    ]
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+    ], fn {_k, v} -> is_nil(v) end)
   end
 
 end

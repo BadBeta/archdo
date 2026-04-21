@@ -75,8 +75,7 @@ defmodule Archdo.Compiled.DiagramSystem do
   # --- Layer classification ---
 
   defp classify_into_layers(modules, _graph) do
-    modules
-    |> Enum.reduce(%{interface: [], domain: [], infrastructure: []}, fn {mod, info}, acc ->
+    Enum.reduce(modules, %{interface: [], domain: [], infrastructure: []}, fn {mod, info}, acc ->
       layer = classify_module(mod, info)
 
       case layer do
@@ -159,8 +158,7 @@ defmodule Archdo.Compiled.DiagramSystem do
     |> Enum.flat_map(fn fn_info ->
       case fn_info.clause_count >= 2 do
         true ->
-          fn_info.clauses
-          |> Enum.flat_map(fn clause ->
+          Enum.flat_map(fn_info.clauses, fn clause ->
             case clause.patterns do
               [{:atom, _, state} | _] when is_atom(state) -> [state]
               _ -> []
@@ -180,8 +178,7 @@ defmodule Archdo.Compiled.DiagramSystem do
     # or state atoms in return positions that differ from input states
     fns
     |> Enum.flat_map(fn fn_info ->
-      fn_info.clauses
-      |> Enum.flat_map(fn clause ->
+      Enum.flat_map(fn_info.clauses, fn clause ->
         from_state =
           case clause.patterns do
             [{:atom, _, state} | _] when is_atom(state) -> state
@@ -592,8 +589,7 @@ defmodule Archdo.Compiled.DiagramSystem do
       api: "REST / GraphQL API"
     }
 
-    connections
-    |> Enum.map(fn conn ->
+    Enum.map(connections, fn conn ->
       icon = Map.get(icons, conn, "○")
       label = Map.get(labels, conn, to_string(conn))
 
@@ -700,8 +696,7 @@ defmodule Archdo.Compiled.DiagramSystem do
       cache: "Cache"
     }
 
-    tools
-    |> Enum.map(fn tool ->
+    Enum.map(tools, fn tool ->
       icon = Map.get(icons, tool, "○")
       label = Map.get(labels, tool, to_string(tool))
 

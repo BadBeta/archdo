@@ -86,8 +86,7 @@ defmodule Archdo.Compiled.OTPTopology do
       |> Map.new(&{&1.module, &1})
 
     roots =
-      topology
-      |> Enum.filter(fn p ->
+      Enum.filter(topology, fn p ->
         p.type == :supervisor and not MapSet.member?(all_children, p.module)
       end)
 
@@ -113,8 +112,7 @@ defmodule Archdo.Compiled.OTPTopology do
         visited = MapSet.put(visited, process.module)
 
         child_nodes =
-          process.children
-          |> Enum.flat_map(fn child_mod ->
+          Enum.flat_map(process.children, fn child_mod ->
             case Map.get(process_map, child_mod) do
               nil -> []
               child -> [build_tree_node(child, process_map, supervisors, visited)]
@@ -144,8 +142,7 @@ defmodule Archdo.Compiled.OTPTopology do
     # Find calls that represent messaging: GenServer.call/cast, send, etc.
     # Also find direct calls between process modules' client API functions
     message_calls =
-      calls
-      |> Enum.flat_map(fn call ->
+      Enum.flat_map(calls, fn call ->
         caller_mod = elem(call.caller, 0)
         callee_mod = elem(call.callee, 0)
         callee_fn = elem(call.callee, 1)

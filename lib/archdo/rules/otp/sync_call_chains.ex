@@ -18,10 +18,8 @@ defmodule Archdo.Rules.OTP.SyncCallChains do
       true ->
       callbacks = AST.extract_callbacks(ast)
 
-      [:handle_call, :handle_cast, :handle_info]
-      |> Enum.flat_map(fn cb_name ->
-        (callbacks[cb_name] || [])
-        |> Enum.flat_map(fn {_meta, _args, body} ->
+      Enum.flat_map([:handle_call, :handle_cast, :handle_info], fn cb_name ->
+        Enum.flat_map(callbacks[cb_name] || [], fn {_meta, _args, body} ->
           find_genserver_calls_in_callback(file, body, cb_name)
         end)
       end)
@@ -31,11 +29,10 @@ defmodule Archdo.Rules.OTP.SyncCallChains do
   defp find_genserver_calls_in_callback(_file, nil, _cb_name), do: []
 
   defp find_genserver_calls_in_callback(file, body, cb_name) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {{:., _, [{:__aliases__, _, [:GenServer]}, :call]}, _meta, _args} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {_, meta, args} ->
+    end), fn {_, meta, args} ->
       target =
         case args do
           [{:__aliases__, _, parts} | _] -> Enum.join(parts, ".")

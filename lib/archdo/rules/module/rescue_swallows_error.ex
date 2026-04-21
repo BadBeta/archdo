@@ -20,7 +20,8 @@ defmodule Archdo.Rules.Module.RescueSwallowsError do
   end
 
   defp find_swallowing_rescues(file, ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       # rescue _ -> <something that isn't Logger or reraise>
       {:rescue, clauses} when is_list(clauses) ->
         Enum.any?(clauses, &swallows_error?/1)

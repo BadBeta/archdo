@@ -22,8 +22,7 @@ defmodule Archdo.Rules.Module.IfElseDispatch do
   defp find_if_else_dispatch(file, ast) do
     fns = AST.extract_functions(ast, :all)
 
-    fns
-    |> Enum.flat_map(fn {name, arity, _meta, _args, body} ->
+    Enum.flat_map(fns, fn {name, arity, _meta, _args, body} ->
       find_dispatch_ifs(body, file, name, arity)
     end)
   end
@@ -31,7 +30,7 @@ defmodule Archdo.Rules.Module.IfElseDispatch do
   defp find_dispatch_ifs(nil, _file, _name, _arity), do: []
 
   defp find_dispatch_ifs(body, file, name, arity) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       # if/else with both branches returning values (not side-effect-only)
       {:if, _, [condition, [{:do, do_body}, {:else, else_body}]]} ->
         structural_dispatch?(condition) and
@@ -45,8 +44,7 @@ defmodule Archdo.Rules.Module.IfElseDispatch do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       build_diagnostic(file, name, arity, meta)
     end)
   end

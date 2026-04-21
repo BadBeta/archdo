@@ -20,12 +20,11 @@ defmodule Archdo.Rules.OTP.UnsupervisedProcess do
   end
 
   defp find_bare_spawns(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {:spawn, _meta, args} when is_list(args) and length(args) in [1, 3] -> true
       {:spawn_link, _meta, args} when is_list(args) and length(args) in [1, 3] -> true
       _ -> false
-    end)
-    |> Enum.map(fn {name, meta, _} ->
+    end), fn {name, meta, _} ->
       Diagnostic.warning("5.1",
         title: "Bare spawn outside supervision tree",
         message: "#{name}/#{call_arity(name, meta)} starts a process not registered with any supervisor",
@@ -62,12 +61,11 @@ defmodule Archdo.Rules.OTP.UnsupervisedProcess do
 
   defp find_unlinked_starts(file, ast) do
     # GenServer.start (not start_link), Agent.start (not start_link)
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, [:GenServer]}, :start]}, _meta, _args} -> true
       {{:., _, [{:__aliases__, _, [:Agent]}, :start]}, _meta, _args} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, [mod]}, :start]}, meta, _} ->
+    end), fn {{:., _, [{:__aliases__, _, [mod]}, :start]}, meta, _} ->
       Diagnostic.warning("5.1",
         title: "Process started without link",
         message: "#{mod}.start/2 used instead of #{mod}.start_link — caller is not linked to the process",

@@ -20,8 +20,7 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
   def analyze_project(file_asts) do
     # Collect adapter modules with their behaviour usage
     adapters =
-      file_asts
-      |> Enum.flat_map(fn {file, ast} ->
+      Enum.flat_map(file_asts, fn {file, ast} ->
         name = AST.extract_module_name(ast)
 
         if adapter_module?(name) do
@@ -37,8 +36,7 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
       |> Enum.group_by(fn {name, _, _} -> parent_namespace(name) end)
       |> Enum.filter(fn {_, members} -> length(members) >= 2 end)
 
-    groups
-    |> Enum.flat_map(fn {parent, members} ->
+    Enum.flat_map(groups, fn {parent, members} ->
       without_behaviour = Enum.reject(members, fn {_, _, has_bhv?} -> has_bhv? end)
 
       if length(without_behaviour) == length(members) do

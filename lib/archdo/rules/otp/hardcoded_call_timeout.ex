@@ -20,15 +20,14 @@ defmodule Archdo.Rules.OTP.HardcodedCallTimeout do
   end
 
   defp find_hardcoded_timeouts(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       # GenServer.call(server, msg, 5000)
       {{:., _, [{:__aliases__, _, [:GenServer]}, :call]}, _, [_, _, timeout]} ->
         hardcoded_integer?(timeout)
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {_, meta, [_, _, timeout]} ->
+    end), fn {_, meta, [_, _, timeout]} ->
       value = extract_integer(timeout)
 
       Diagnostic.info("5.41",

@@ -37,8 +37,7 @@ defmodule Archdo.Rules.Testing.CoverageGap do
     # Build a map: test_file_stem -> {file, ast} for quick lookup
     test_index = build_test_index(tests)
 
-    sources
-    |> Enum.flat_map(fn {source_file, source_ast} ->
+    Enum.flat_map(sources, fn {source_file, source_ast} ->
       check_source(source_file, source_ast, test_index)
     end)
   end
@@ -79,8 +78,7 @@ defmodule Archdo.Rules.Testing.CoverageGap do
         {module_referenced?, test_refs} = analyze_test_file(source_file, module_name, test_index)
 
         uncovered =
-          public_fns
-          |> Enum.reject(fn {name, arity} ->
+          Enum.reject(public_fns, fn {name, arity} ->
             directly_referenced?(test_refs, name, arity)
           end)
 
@@ -400,8 +398,7 @@ defmodule Archdo.Rules.Testing.CoverageGap do
       ]
 
       table_rows =
-        rows
-        |> Enum.map(fn row ->
+        Enum.map(rows, fn row ->
           :io_lib.format("~-50ts ~6w ~6w ~6w ~5w%~n", [
             truncate(row.module, 50),
             row.total,

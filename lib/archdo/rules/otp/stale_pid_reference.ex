@@ -22,8 +22,7 @@ defmodule Archdo.Rules.OTP.StalePidReference do
   defp find_stale_pid_patterns(file, ast) do
     fns = AST.extract_functions(ast, :all)
 
-    fns
-    |> Enum.flat_map(fn {_name, _arity, _meta, _args, body} ->
+    Enum.flat_map(fns, fn {_name, _arity, _meta, _args, body} ->
       check_function_body(file, body)
     end)
   end

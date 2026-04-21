@@ -68,7 +68,8 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
   end
 
   defp find_unbounded_genserver_call(file, ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {{:., _, [{:__aliases__, _, [:GenServer]}, :call]}, _, [_, _]} ->
         true
 

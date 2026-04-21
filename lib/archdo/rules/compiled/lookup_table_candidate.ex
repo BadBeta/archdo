@@ -39,8 +39,7 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
   def analyze_compiled(_graph), do: []
 
   defp find_lookup_candidates(mod, forms, exports) do
-    forms
-    |> Enum.flat_map(fn
+    Enum.flat_map(forms, fn
       {:function, _line, name, arity, clauses}
       when name not in [:__info__, :module_info] ->
         case check_lookup_table(name, arity, clauses, exports) do

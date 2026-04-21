@@ -46,8 +46,7 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
 
         # Check for misplaced modules
         misplaced_diags =
-          ctx.misplaced_modules
-          |> Enum.map(fn m -> build_misplaced_diagnostic(ctx.context, m) end)
+          Enum.map(ctx.misplaced_modules, fn m -> build_misplaced_diagnostic(ctx.context, m) end)
 
         issues ++ misplaced_diags
       end)

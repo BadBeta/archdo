@@ -18,8 +18,7 @@ defmodule Archdo.Rules.OTP.SendSelfInInit do
       true ->
       callbacks = AST.extract_callbacks(ast)
 
-      (callbacks[:init] || [])
-      |> Enum.flat_map(fn {_meta, _args, body} ->
+      Enum.flat_map(callbacks[:init] || [], fn {_meta, _args, body} ->
         find_send_self(file, body)
       end)
     end
@@ -28,12 +27,11 @@ defmodule Archdo.Rules.OTP.SendSelfInInit do
   defp find_send_self(_file, nil), do: []
 
   defp find_send_self(file, body) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {:send, _meta, [{:self, _, _} | _]} -> true
       {:send, _meta, [{{:., _, [{:__aliases__, _, [:Kernel]}, :self]}, _, _} | _]} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       Diagnostic.warning("5.12",
         title: "send(self()) in init/1",
         message: "init/1 sends a message to self instead of returning a continue tuple",

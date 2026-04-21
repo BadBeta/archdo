@@ -161,8 +161,7 @@ defmodule Archdo.Compiled.Graph do
       end)
       |> Enum.uniq()
 
-    tarjan_scc(nodes, caller_index)
-    |> Enum.filter(fn scc -> length(scc) > 1 end)
+    Enum.filter(tarjan_scc(nodes, caller_index), fn scc -> length(scc) > 1 end)
   end
 
   @doc """
@@ -357,8 +356,7 @@ defmodule Archdo.Compiled.Graph do
   end
 
   defp extract_fns(forms, exports) do
-    forms
-    |> Enum.flat_map(fn
+    Enum.flat_map(forms, fn
       {:function, _line, name, arity, clauses}
       when name not in [:__info__, :module_info] ->
         exported = MapSet.member?(exports, {name, arity})
@@ -440,8 +438,7 @@ defmodule Archdo.Compiled.Graph do
     body_shape = classify_return(body)
 
     catch_shapes =
-      catch_clauses
-      |> Enum.map(fn {:clause, _, _pats, _guards, cbody} -> classify_return(cbody) end)
+      Enum.map(catch_clauses, fn {:clause, _, _pats, _guards, cbody} -> classify_return(cbody) end)
 
     all_shapes = Enum.uniq([body_shape | catch_shapes])
 
@@ -670,8 +667,7 @@ defmodule Archdo.Compiled.Graph do
   end
 
   defp group_by_context(modules, app_prefix) do
-    modules
-    |> Enum.group_by(fn mod ->
+    Enum.group_by(modules, fn mod ->
       parts = Module.split(mod)
 
       case parts do
@@ -807,8 +803,7 @@ defmodule Archdo.Compiled.Graph do
   end
 
   defp find_misplaced_modules(graph, members, member_set, project_set, context_name) do
-    members
-    |> Enum.flat_map(fn mod ->
+    Enum.flat_map(members, fn mod ->
       deps = module_dependencies(graph, mod)
 
       own_calls =
@@ -817,8 +812,7 @@ defmodule Archdo.Compiled.Graph do
         end)
 
       other_context_calls =
-        deps
-        |> Enum.filter(fn dep ->
+        Enum.filter(deps, fn dep ->
           MapSet.member?(project_set, dep) and not MapSet.member?(member_set, dep)
         end)
 
@@ -867,8 +861,7 @@ defmodule Archdo.Compiled.Graph do
   defp collect_module_data(modules) do
     Map.new(modules, fn mod ->
       exports =
-        mod.module_info(:exports)
-        |> Enum.reject(fn {func, _arity} ->
+        Enum.reject(mod.module_info(:exports), fn {func, _arity} ->
           func in [:module_info, :__info__, :__struct__]
         end)
 

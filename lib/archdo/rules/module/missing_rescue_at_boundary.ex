@@ -25,8 +25,7 @@ defmodule Archdo.Rules.Module.MissingRescueAtBoundary do
   defp find_unprotected_genserver_calls(file, ast) do
     fns = AST.extract_functions(ast, :all)
 
-    fns
-    |> Enum.flat_map(fn {_name, _arity, _meta, _args, body} ->
+    Enum.flat_map(fns, fn {_name, _arity, _meta, _args, body} ->
       find_genserver_calls_without_catch(body, file)
     end)
   end
@@ -76,8 +75,7 @@ defmodule Archdo.Rules.Module.MissingRescueAtBoundary do
   defp find_unprotected_deserialization(file, ast) do
     fns = AST.extract_functions(ast, :all)
 
-    fns
-    |> Enum.flat_map(fn {_name, _arity, _meta, _args, body} ->
+    Enum.flat_map(fns, fn {_name, _arity, _meta, _args, body} ->
       find_deserialization_without_rescue(body, file)
     end)
   end

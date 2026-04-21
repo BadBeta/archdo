@@ -77,7 +77,8 @@ defmodule Archdo.Rules.Testing.AsyncEligibility do
   end
 
   defp find_use_clauses(ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:use, _meta, [{:__aliases__, _, aliases} | _]} ->
         last = Atom.to_string(List.last(aliases))
 

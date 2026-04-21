@@ -18,10 +18,8 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
   def analyze_compiled(%Graph{modules: modules} = graph) do
     # Check behaviour implementations: for each module that declares @behaviour,
     # verify it exports all required callbacks
-    modules
-    |> Enum.flat_map(fn {module, info} ->
-      info.behaviours
-      |> Enum.flat_map(fn behaviour ->
+    Enum.flat_map(modules, fn {module, info} ->
+      Enum.flat_map(info.behaviours, fn behaviour ->
         required_callbacks = Graph.callbacks_for(graph, behaviour)
 
         case required_callbacks do

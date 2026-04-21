@@ -27,8 +27,7 @@ defmodule Archdo.Rules.OTP.CastForCall do
       true ->
       callbacks = AST.extract_callbacks(ast)
 
-      (callbacks[:handle_cast] || [])
-      |> Enum.flat_map(fn {meta, args, body} ->
+      Enum.flat_map(callbacks[:handle_cast] || [], fn {meta, args, body} ->
         check_cast(file, meta, args, body)
       end)
     end

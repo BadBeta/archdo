@@ -20,7 +20,8 @@ defmodule Archdo.Rules.Module.ExceptionLaundering do
   end
 
   defp find_laundering(file, ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:rescue, clauses} when is_list(clauses) ->
         Enum.any?(clauses, &launders_exception?/1)
 

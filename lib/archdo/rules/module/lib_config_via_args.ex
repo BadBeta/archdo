@@ -20,7 +20,8 @@ defmodule Archdo.Rules.Module.LibConfigViaArgs do
   end
 
   defp find_app_get_env(file, ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {{:., _, [{:__aliases__, _, [:Application]}, func]}, _, _}
       when func in [:get_env, :fetch_env, :fetch_env!] ->
         true

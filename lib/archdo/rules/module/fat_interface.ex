@@ -76,7 +76,8 @@ defmodule Archdo.Rules.Module.FatInterface do
   end
 
   defp extract_behaviour_names(ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:@, _, [{:behaviour, _, _}]} -> true
       _ -> false
     end)

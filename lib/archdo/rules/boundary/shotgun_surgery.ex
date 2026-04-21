@@ -20,8 +20,7 @@ defmodule Archdo.Rules.Boundary.ShotgunSurgery do
   High fan-in means a change to this function will require updates across many modules.
   """
   def analyze_project(%FunctionGraph{} = graph) do
-    graph.definitions
-    |> Enum.flat_map(fn {{module, name, arity}, def_meta} ->
+    Enum.flat_map(graph.definitions, fn {{module, name, arity}, def_meta} ->
       callers =
         FunctionGraph.calls_to(graph, module, name, arity)
         |> Enum.map(fn call -> call.caller_module end)

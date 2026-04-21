@@ -51,8 +51,7 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
           caller_calls = Map.get(calls_by_module, caller_mod, [])
 
           repo_calls =
-            caller_calls
-            |> Enum.filter(fn call ->
+            Enum.filter(caller_calls, fn call ->
               callee_mod = elem(call.callee, 0)
               callee_fn = elem(call.callee, 1)
 

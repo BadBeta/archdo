@@ -107,8 +107,7 @@ defmodule Archdo.Rules.Module.CodeSlop do
 
   # Check if call args are the same variables as function params
   defp args_match?(params, call_args) when length(params) == length(call_args) do
-    Enum.zip(params, call_args)
-    |> Enum.all?(fn
+    Enum.all?(Enum.zip(params, call_args), fn
       {{name, _, ctx1}, {name, _, ctx2}} when is_atom(ctx1) and is_atom(ctx2) -> true
       _ -> false
     end)
@@ -119,7 +118,7 @@ defmodule Archdo.Rules.Module.CodeSlop do
   # --- Redundant == true / == false ---
 
   defp find_redundant_boolean(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {:==, _, [_, true]} -> true
       {:==, _, [_, {:__block__, _, [true]}]} -> true
       {:==, _, [_, false]} -> true
@@ -129,8 +128,7 @@ defmodule Archdo.Rules.Module.CodeSlop do
       {:!=, _, [_, false]} -> true
       {:!=, _, [_, {:__block__, _, [false]}]} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {op, meta, [_expr, val]} ->
+    end), fn {op, meta, [_expr, val]} ->
       bool_val = unwrap_literal(val)
       build_diagnostic(file, AST.line(meta), :redundant_boolean, %{
         comparison: "#{op} #{bool_val}"
@@ -144,14 +142,13 @@ defmodule Archdo.Rules.Module.CodeSlop do
   # --- Empty @doc "" ---
 
   defp find_empty_doc(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {:@, _, [{:doc, _, [""]}]} -> true
       {:@, _, [{:doc, _, [{:__block__, _, [""]}]}]} -> true
       {:@, _, [{:moduledoc, _, [""]}]} -> true
       {:@, _, [{:moduledoc, _, [{:__block__, _, [""]}]}]} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {:@, meta, [{attr_name, _, _}]} ->
+    end), fn {:@, meta, [{attr_name, _, _}]} ->
       build_diagnostic(file, AST.line(meta), :empty_doc, %{attribute: "@#{attr_name}"})
     end)
   end

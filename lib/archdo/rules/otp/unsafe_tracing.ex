@@ -20,7 +20,7 @@ defmodule Archdo.Rules.OTP.UnsafeTracing do
   end
 
   defp find_unsafe_tracing(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       # :dbg.tracer, :dbg.p, :dbg.tp, :dbg.c, etc.
       {{:., _, [:dbg, func]}, _, _}
       when func in [:tracer, :p, :tp, :tpl, :ctp, :ctpl, :c, :stop, :stop_clear] ->
@@ -33,8 +33,7 @@ defmodule Archdo.Rules.OTP.UnsafeTracing do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {_, meta, _} = node ->
+    end), fn {_, meta, _} = node ->
       {module, func} =
         case node do
           {{:., _, [m, f]}, _, _} -> {m, f}

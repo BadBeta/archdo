@@ -16,12 +16,11 @@ defmodule Archdo.Rules.OTP.DynamicAtomName do
   end
 
   defp find_string_to_atom(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       # String.to_atom(...)
       {{:., _, [{:__aliases__, _, [:String]}, :to_atom]}, _meta, _args} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       Diagnostic.info("5.24",
         title: "Dynamic atom from String.to_atom",
         message: "String.to_atom/1 is called — atoms are never garbage collected",
@@ -65,12 +64,11 @@ defmodule Archdo.Rules.OTP.DynamicAtomName do
 
   defp find_atom_interpolation(file, ast) do
     # Detect :"prefix_#{variable}" patterns
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       # Sigil-style atom with interpolation: :"foo_#{bar}"
       {:"::", _meta, [{{:., _, [Kernel, :to_string]}, _, _}, {:atom, _, _}]} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       Diagnostic.info("5.24",
         title: "Dynamic atom from interpolation",
         message: "Atom is constructed via interpolation (`:\"prefix_\#{variable}\"`)",

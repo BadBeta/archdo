@@ -19,7 +19,8 @@ defmodule Archdo.Rules.Testing.SleepInTests do
   end
 
   defp find_sleeps(file, ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, _, _} -> true
       {{:., _, [:timer, :sleep]}, _, _} -> true
       _ -> false

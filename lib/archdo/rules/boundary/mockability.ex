@@ -43,29 +43,24 @@ defmodule Archdo.Rules.Boundary.Mockability do
   def analyze_project(file_asts) do
     # Per-file: which external libraries does this file call directly?
     file_io =
-      file_asts
-      |> Enum.map(fn {file, ast} ->
+      Enum.map(file_asts, fn {file, ast} ->
         caller = AST.extract_module_name(ast)
         {file, find_external_io_calls(ast, caller), count_behaviours_used(ast)}
       end)
 
     # Direct IO surfaces: files that call external IO directly
     direct_io_files =
-      file_io
-      |> Enum.filter(fn {file, calls, _bhv} ->
+      Enum.filter(file_io, fn {file, calls, _bhv} ->
         calls != [] and not adapter_or_test?(file)
       end)
 
     # Behaviour surfaces: behaviour definitions in the project
     behaviour_count =
-      file_asts
-      |> Enum.map(fn {_file, ast} -> count_behaviour_definitions(ast) end)
-      |> Enum.sum()
+      Enum.sum(Enum.map(file_asts, fn {_file, ast} -> count_behaviour_definitions(ast) end))
 
     # Per-file diagnostics: each file with direct IO and no behaviour wrapper
     file_diagnostics =
-      direct_io_files
-      |> Enum.map(fn {file, calls, _} ->
+      Enum.map(direct_io_files, fn {file, calls, _} ->
         unique_libraries =
           calls
           |> Enum.map(fn {lib, _, _} -> lib end)
@@ -201,15 +196,14 @@ defmodule Archdo.Rules.Boundary.Mockability do
   end
 
   defp find_external_io_calls(ast, caller_module) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
         mod_parts in @external_io_libraries and
           not AST.self_call?(caller_module, mod_parts)
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
       {AST.module_name(Module.concat(mod_parts)), func, AST.line(meta)}
     end)
   end

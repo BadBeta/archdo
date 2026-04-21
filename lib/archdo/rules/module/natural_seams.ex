@@ -103,8 +103,7 @@ defmodule Archdo.Rules.Module.NaturalSeams do
   defp extract_prefix(_), do: nil
 
   defp format_clusters(groups) do
-    groups
-    |> Enum.map_join(", ", fn {prefix, names} -> "#{prefix}_* (#{length(names)})" end)
+    Enum.map_join(groups, ", ", fn {prefix, names} -> "#{prefix}_* (#{length(names)})" end)
   end
 
 end

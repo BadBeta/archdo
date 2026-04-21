@@ -32,8 +32,7 @@ defmodule Archdo.Rules.Module.ReinventedEnumerable do
   defp find_manual_iteration(file, ast) do
     fns = AST.extract_functions(ast, :all)
 
-    fns
-    |> Enum.flat_map(fn {name, arity, meta, _args, body} ->
+    Enum.flat_map(fns, fn {name, arity, meta, _args, body} ->
       check_function(file, name, arity, meta, body)
     end)
   end

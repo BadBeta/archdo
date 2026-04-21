@@ -19,7 +19,8 @@ defmodule Archdo.Rules.Module.SingleClauseWith do
   end
 
   defp find_single_clause_withs(file, ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:with, _meta, _clauses} -> true
       _ -> false
     end)

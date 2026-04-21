@@ -36,8 +36,7 @@ defmodule Archdo.Compiled.Diagram do
 
     # Render cross-context edges
     edge_lines =
-      cross_edges
-      |> Enum.map(fn {from_ctx, to_ctx, count} ->
+      Enum.map(cross_edges, fn {from_ctx, to_ctx, count} ->
         from_id = sanitize_id(from_ctx)
         to_id = sanitize_id(to_ctx)
         "  #{from_id} -->|#{count} calls| #{to_id}"
@@ -45,8 +44,7 @@ defmodule Archdo.Compiled.Diagram do
 
     # Style boundary modules
     style_lines =
-      contexts
-      |> Enum.flat_map(fn ctx ->
+      Enum.flat_map(contexts, fn ctx ->
         case ctx.boundary_module do
           nil -> []
           mod -> ["  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
@@ -83,8 +81,7 @@ defmodule Archdo.Compiled.Diagram do
 
     # Aggregate calls at module level
     edges =
-      calls_by_module
-      |> Enum.flat_map(fn {caller_mod, calls} ->
+      Enum.flat_map(calls_by_module, fn {caller_mod, calls} ->
         calls
         |> Enum.map(fn call -> elem(call.callee, 0) end)
         |> Enum.filter(&MapSet.member?(project_modules, &1))
@@ -291,8 +288,7 @@ defmodule Archdo.Compiled.Diagram do
 
     # Render all members
     member_lines =
-      ctx.members
-      |> Enum.map(fn mod ->
+      Enum.map(ctx.members, fn mod ->
         id = sanitize_id(AST.module_name(mod))
         name = AST.short_name(mod)
 
@@ -364,8 +360,7 @@ defmodule Archdo.Compiled.Diagram do
 
     # Find functions called from outside
     api_functions =
-      ctx.members
-      |> Enum.flat_map(fn mod ->
+      Enum.flat_map(ctx.members, fn mod ->
         exports = Map.get(graph.modules, mod, %{exports: []}).exports
 
         exports
@@ -481,8 +476,7 @@ defmodule Archdo.Compiled.Diagram do
 
     # Render nodes
     node_lines =
-      all_modules
-      |> Enum.map(fn mod ->
+      Enum.map(all_modules, fn mod ->
         id = sanitize_id(AST.module_name(mod))
         "  #{id}[\"#{AST.short_name(mod)}\"]"
       end)
@@ -838,14 +832,12 @@ defmodule Archdo.Compiled.Diagram do
 
     # Left side: external callers
     caller_lines =
-      external_callers
-      |> Enum.flat_map(fn {caller, calls} ->
+      Enum.flat_map(external_callers, fn {caller, calls} ->
         caller_id = sanitize_id(AST.module_name(caller))
         caller_short = AST.short_name(caller)
 
         targets =
-          calls
-          |> Enum.map(fn {_, callee, fns, _} ->
+          Enum.map(calls, fn {_, callee, fns, _} ->
             callee_id = sanitize_id(AST.module_name(callee))
             fn_str = Enum.map_join(fns, ", ", fn {f, a} -> "#{f}/#{a}" end)
             {callee_id, fn_str}
@@ -904,8 +896,7 @@ defmodule Archdo.Compiled.Diagram do
 
     # Right side: external dependencies
     dep_lines =
-      external_deps
-      |> Enum.flat_map(fn {dep, calls} ->
+      Enum.flat_map(external_deps, fn {dep, calls} ->
         dep_id = sanitize_id(AST.module_name(dep))
         dep_short = AST.short_name(dep)
 
@@ -939,15 +930,13 @@ defmodule Archdo.Compiled.Diagram do
 
     # Style external callers as input terminals (blue)
     caller_style =
-      external_callers
-      |> Enum.map(fn {caller, _} ->
+      Enum.map(external_callers, fn {caller, _} ->
         "  style #{sanitize_id(AST.module_name(caller))} fill:#BBDEFB,stroke:#1565C0"
       end)
 
     # Style external deps as output terminals (orange)
     dep_style =
-      external_deps
-      |> Enum.map(fn {dep, _} ->
+      Enum.map(external_deps, fn {dep, _} ->
         "  style #{sanitize_id(AST.module_name(dep))} fill:#FFE0B2,stroke:#E65100"
       end)
 

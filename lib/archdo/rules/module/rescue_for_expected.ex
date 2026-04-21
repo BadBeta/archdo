@@ -20,7 +20,8 @@ defmodule Archdo.Rules.Module.RescueForExpected do
   end
 
   defp find_rescue_for_expected(file, ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:try, _, [[do: try_body, rescue: rescue_clauses]]} ->
         has_bang_in_try?(try_body) and catches_specific_exception?(rescue_clauses)
 

@@ -109,8 +109,7 @@ defmodule Mix.Tasks.Archdo do
 
   defp run_normal(opts, paths) do
     run_opts =
-      build_run_opts(opts)
-      |> Keyword.put(:show_all, Keyword.get(opts, :show_all, false))
+      Keyword.put(build_run_opts(opts), :show_all, Keyword.get(opts, :show_all, false))
 
     exit_status = Archdo.run_and_format(paths, run_opts)
     maybe_exit(exit_status)
@@ -125,8 +124,7 @@ defmodule Mix.Tasks.Archdo do
     functions = Keyword.get(opts, :functions, false)
     compiled = Keyword.get(opts, :compiled, false)
 
-    [format: format, ignore: ignore, boundaries: boundaries, tests: tests, functions: functions, compiled: compiled]
-    |> maybe_add(:only, only)
+    maybe_add([format: format, ignore: ignore, boundaries: boundaries, tests: tests, functions: functions, compiled: compiled], :only, only)
   end
 
   defp run_diagram(diagram_type, paths) do

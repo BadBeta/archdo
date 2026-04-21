@@ -30,22 +30,20 @@ defmodule Archdo.Rules.EventSourcing.ProjectorReadsExternal do
   defp find_external_reads(file, ast) do
     projects = find_project_calls(ast)
 
-    projects
-    |> Enum.flat_map(fn {_meta, body} ->
+    Enum.flat_map(projects, fn {_meta, body} ->
       find_http_calls(body, file) ++ find_nondeterministic(body, file)
     end)
   end
 
   defp find_project_calls(ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {:project, _, _} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {:project, meta, args} -> {meta, args} end)
+    end), fn {:project, meta, args} -> {meta, args} end)
   end
 
   defp find_nondeterministic(body, file) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       # DateTime.utc_now/0 — value changes on replay
       {{:., _, [{:__aliases__, _, [mod]}, func]}, _, _} ->
         mod in [:DateTime, :NaiveDateTime, :Date, :Time] and func in [:utc_now, :utc_today, :now]
@@ -60,8 +58,7 @@ defmodule Archdo.Rules.EventSourcing.ProjectorReadsExternal do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {_, meta, _} = node ->
+    end), fn {_, meta, _} = node ->
       desc =
         case node do
           {{:., _, [{:__aliases__, _, mod}, func]}, _, _} ->
@@ -120,14 +117,13 @@ defmodule Archdo.Rules.EventSourcing.ProjectorReadsExternal do
   end
 
   defp find_http_calls(body, file) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _, _} ->
         Module.concat(mod_parts) in [HTTPoison, Finch, Req, Tesla]
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
       call = "#{Enum.join(mod_parts, ".")}.#{func}"
 
       Diagnostic.warning("8.6",

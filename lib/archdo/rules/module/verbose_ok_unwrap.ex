@@ -27,7 +27,7 @@ defmodule Archdo.Rules.Module.VerboseOkUnwrap do
 
   # Detect: case expr do {:ok, val} -> val; {:error, _} -> nil end
   defp find_swallow_error_nil(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {:case, _, [_expr, clauses_kw]} ->
         clauses = extract_clauses(clauses_kw)
 
@@ -38,15 +38,14 @@ defmodule Archdo.Rules.Module.VerboseOkUnwrap do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {:case, meta, _} ->
+    end), fn {:case, meta, _} ->
       build_diagnostic(file, AST.line(meta), :swallow_error_nil)
     end)
   end
 
   # Detect: case expr do {:ok, val} -> val end (no error clause)
   defp find_single_ok_clause(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {:case, _, [_expr, clauses_kw]} ->
         clauses = extract_clauses(clauses_kw)
 
@@ -57,8 +56,7 @@ defmodule Archdo.Rules.Module.VerboseOkUnwrap do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {:case, meta, _} ->
+    end), fn {:case, meta, _} ->
       build_diagnostic(file, AST.line(meta), :single_ok_clause)
     end)
   end

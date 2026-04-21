@@ -21,13 +21,12 @@ defmodule Archdo.Rules.OTP.EtsNoHeir do
   end
 
   defp find_ets_without_heir(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {{:., _, [:ets, :new]}, _meta, [_name, opts]} when is_list(opts) ->
         not has_heir_option?(opts)
       _ ->
         false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       Diagnostic.info("5.28",
         title: "ETS table without :heir",
         message: ":ets.new is called inside a GenServer without configuring an :heir",

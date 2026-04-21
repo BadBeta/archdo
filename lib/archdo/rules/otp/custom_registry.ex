@@ -89,10 +89,8 @@ defmodule Archdo.Rules.OTP.CustomRegistry do
   defp stores_pids_in_state?(ast) do
     callbacks = AST.extract_callbacks(ast)
 
-    [:handle_call, :handle_cast, :handle_info]
-    |> Enum.any?(fn cb ->
-      (callbacks[cb] || [])
-      |> Enum.any?(fn {_, _, body} ->
+    Enum.any?([:handle_call, :handle_cast, :handle_info], fn cb ->
+      Enum.any?(callbacks[cb] || [], fn {_, _, body} ->
         body != nil and
           AST.contains?(body, fn
             {:pid, _, nil} -> true

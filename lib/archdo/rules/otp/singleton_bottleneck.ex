@@ -84,10 +84,8 @@ defmodule Archdo.Rules.OTP.SingletonBottleneck do
   defp has_map_state_with_id_lookup?(ast) do
     callbacks = AST.extract_callbacks(ast)
 
-    [:handle_call, :handle_cast]
-    |> Enum.any?(fn cb ->
-      (callbacks[cb] || [])
-      |> Enum.any?(fn {_, _, body} ->
+    Enum.any?([:handle_call, :handle_cast], fn cb ->
+      Enum.any?(callbacks[cb] || [], fn {_, _, body} ->
         body != nil and has_map_get_or_fetch?(body)
       end)
     end)

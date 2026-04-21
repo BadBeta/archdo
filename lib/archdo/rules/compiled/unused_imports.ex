@@ -29,8 +29,7 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
     # We detect this at the module-to-module level since we can't distinguish
     # import from alias in compiled beam data.
 
-    modules
-    |> Enum.flat_map(fn {caller_mod, _info} ->
+    Enum.flat_map(modules, fn {caller_mod, _info} ->
       caller_calls = Map.get(calls_by_module, caller_mod, [])
 
       # Group calls by callee module

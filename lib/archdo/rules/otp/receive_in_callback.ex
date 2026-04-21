@@ -20,10 +20,8 @@ defmodule Archdo.Rules.OTP.ReceiveInCallback do
       true ->
       callbacks = AST.extract_callbacks(ast)
 
-      @genserver_callbacks
-      |> Enum.flat_map(fn cb_name ->
-        (callbacks[cb_name] || [])
-        |> Enum.flat_map(fn {_meta, _args, body} ->
+      Enum.flat_map(@genserver_callbacks, fn cb_name ->
+        Enum.flat_map(callbacks[cb_name] || [], fn {_meta, _args, body} ->
           find_receives(file, body, cb_name)
         end)
       end)
@@ -33,11 +31,10 @@ defmodule Archdo.Rules.OTP.ReceiveInCallback do
   defp find_receives(_file, nil, _cb_name), do: []
 
   defp find_receives(file, body, cb_name) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {:receive, _meta, _} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {:receive, meta, _} ->
+    end), fn {:receive, meta, _} ->
       Diagnostic.error("5.11",
         title: "receive inside GenServer callback",
         message: "A receive block appears inside #{cb_name}",

@@ -22,8 +22,7 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
 
   @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
   def analyze_compiled(%Graph{modules: modules} = graph) do
-    modules
-    |> Enum.flat_map(fn {module, info} ->
+    Enum.flat_map(modules, fn {module, info} ->
       total_exports = length(info.exports)
 
       case total_exports >= @min_exports do

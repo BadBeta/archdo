@@ -180,8 +180,7 @@ defmodule Archdo.FunctionGraph do
   defp walk({:@, _, [{attr, _, _} | _]} = node, state)
        when attr in [:spec, :type, :typep, :opaque, :callback, :macrocallback] do
     # Walk children with in_spec flag so remote references aren't recorded as calls
-    walk_children(node, %{state | in_spec: true})
-    |> then(fn s -> %{s | in_spec: state.in_spec} end)
+    then(walk_children(node, %{state | in_spec: true}), fn s -> %{s | in_spec: state.in_spec} end)
   end
 
   # Remote function call: Module.fn(args) — skip if inside @spec/@type

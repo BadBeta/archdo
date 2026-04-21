@@ -24,8 +24,7 @@ defmodule Archdo.Rules.Module.NestingDepth do
   defp find_deep_nesting(file, ast) do
     fns = AST.extract_functions(ast, :all)
 
-    fns
-    |> Enum.flat_map(fn {name, arity, meta, _args, body} ->
+    Enum.flat_map(fns, fn {name, arity, meta, _args, body} ->
       max = max_nesting(body, 0)
 
       if max > @max_depth do

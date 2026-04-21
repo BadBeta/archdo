@@ -196,8 +196,7 @@ defmodule Archdo.Runner do
     config = Keyword.get_lazy(opts, :config, fn -> Config.load() end)
     graph_diagnostics = run_graph_rules(files, config, opts)
 
-    (per_file_diagnostics ++ graph_diagnostics)
-    |> sort_diagnostics()
+    sort_diagnostics(per_file_diagnostics ++ graph_diagnostics)
   end
 
   defp run_graph_rules(files, config, opts) do

@@ -21,10 +21,8 @@ defmodule Archdo.Rules.OTP.BlockingCallback do
       true ->
       callbacks = AST.extract_callbacks(ast)
 
-      [:handle_call, :handle_cast, :handle_info]
-      |> Enum.flat_map(fn cb_name ->
-        (callbacks[cb_name] || [])
-        |> Enum.flat_map(fn {_meta, _args, body} ->
+      Enum.flat_map([:handle_call, :handle_cast, :handle_info], fn cb_name ->
+        Enum.flat_map(callbacks[cb_name] || [], fn {_meta, _args, body} ->
           check_body(file, body, cb_name)
         end)
       end)
@@ -39,8 +37,7 @@ defmodule Archdo.Rules.OTP.BlockingCallback do
     repo_calls = find_heavy_repo_calls(body)
     sleep_calls = find_sleep_calls(body)
 
-    (http_calls ++ blocking_calls ++ repo_calls ++ sleep_calls)
-    |> Enum.map(fn {desc, line} ->
+    Enum.map(http_calls ++ blocking_calls ++ repo_calls ++ sleep_calls, fn {desc, line} ->
       Diagnostic.warning("5.9",
         title: "Blocking work inside GenServer callback",
         message: "#{desc} runs inside #{cb_name}",
@@ -92,20 +89,19 @@ defmodule Archdo.Rules.OTP.BlockingCallback do
   end
 
   defp find_http_calls(body) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
         mod_parts in @blocking_modules
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
       {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
     end)
   end
 
   defp find_blocking_func_calls(body) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
         Enum.any?(@blocking_funcs, fn {mod, funcs} ->
           mod_parts == mod and func in funcs
@@ -113,32 +109,29 @@ defmodule Archdo.Rules.OTP.BlockingCallback do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
       {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
     end)
   end
 
   defp find_heavy_repo_calls(body) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
         List.last(mod_parts) == :Repo and func in [:all, :stream, :aggregate]
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
       {"#{Module.concat(mod_parts)}.#{func} (potentially large result)", AST.line(meta)}
     end)
   end
 
   defp find_sleep_calls(body) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, _, _} -> true
       {{:., _, [:timer, :sleep]}, _, _} -> true
       _ -> false
-    end)
-    |> Enum.map(fn
+    end), fn
       {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, meta, _} ->
         {"Process.sleep", AST.line(meta)}
 

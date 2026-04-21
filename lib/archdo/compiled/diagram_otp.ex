@@ -61,8 +61,7 @@ defmodule Archdo.Compiled.DiagramOTP do
           |> MapSet.new()
 
         orphans =
-          topology
-          |> Enum.reject(fn p ->
+          Enum.reject(topology, fn p ->
             p.type == :supervisor or MapSet.member?(supervised_set, p.module)
           end)
 
@@ -119,8 +118,7 @@ defmodule Archdo.Compiled.DiagramOTP do
 
   defp layout_tree(roots, start_x, start_y) do
     {elements, total_w, total_h, _x_cursor} =
-      roots
-      |> Enum.reduce({[], 0, 0, start_x}, fn root, {elems, max_w, max_h, x} ->
+      Enum.reduce(roots, {[], 0, 0, start_x}, fn root, {elems, max_w, max_h, x} ->
         {node_elems, w, h} = layout_tree_node(root, x, start_y, 0)
         new_x = x + w + @child_gap_x * 2
         {elems ++ node_elems, max(max_w, new_x - start_x), max(max_h, h), new_x}
@@ -144,8 +142,7 @@ defmodule Archdo.Compiled.DiagramOTP do
     children_start_y = y + @sup_header + @sup_padding
 
     {child_elements, children_total_w, children_max_h, _x_cursor} =
-      children
-      |> Enum.reduce({[], 0, 0, children_start_x}, fn child, {elems, total_w, max_h, cx} ->
+      Enum.reduce(children, {[], 0, 0, children_start_x}, fn child, {elems, total_w, max_h, cx} ->
         {child_elems, cw, ch} = layout_tree_node(child, cx, children_start_y, depth + 1)
         new_cx = cx + cw + @child_gap_x
         {elems ++ child_elems, total_w + cw + @child_gap_x, max(max_h, ch), new_cx}
@@ -184,8 +181,7 @@ defmodule Archdo.Compiled.DiagramOTP do
     ]
 
     {elements, _x_cursor} =
-      orphans
-      |> Enum.reduce({[], start_x}, fn process, {elems, x} ->
+      Enum.reduce(orphans, {[], start_x}, fn process, {elems, x} ->
         box = render_process_box(process, x, start_y)
         {elems ++ box, x + @process_w + @child_gap_x}
       end)
@@ -255,38 +251,44 @@ defmodule Archdo.Compiled.DiagramOTP do
     ms = @mailbox_size
     mid = ms / 2
 
-    [
-      ~s[<g transform="translate(#{x},#{y})">],
-      ~s[<rect width="#{ms}" height="#{ms}" rx="2" fill="#{@mailbox_in}" opacity="0.15" stroke="#{@mailbox_in}" stroke-width="0.8"/>],
-      ~s[<path d="M 2 4 L #{mid} #{ms - 3} L #{ms - 2} 4" fill="none" stroke="#{@mailbox_in}" stroke-width="1.2" stroke-linecap="round"/>],
-      ~s[<line x1="2" y1="3" x2="#{ms - 2}" y2="3" stroke="#{@mailbox_in}" stroke-width="0.8"/>],
-      ~s[</g>]
-    ]
-    |> Enum.join("\n")
+    Enum.join(
+      [
+        ~s[<g transform="translate(#{x},#{y})">],
+        ~s[<rect width="#{ms}" height="#{ms}" rx="2" fill="#{@mailbox_in}" opacity="0.15" stroke="#{@mailbox_in}" stroke-width="0.8"/>],
+        ~s[<path d="M 2 4 L #{mid} #{ms - 3} L #{ms - 2} 4" fill="none" stroke="#{@mailbox_in}" stroke-width="1.2" stroke-linecap="round"/>],
+        ~s[<line x1="2" y1="3" x2="#{ms - 2}" y2="3" stroke="#{@mailbox_in}" stroke-width="0.8"/>],
+        ~s[</g>]
+      ],
+      "\n"
+    )
   end
 
   # Outbox (outgoing) — small envelope icon at bottom-right
   defp render_mailbox_out(x, y) do
     ms = @mailbox_size
 
-    [
-      ~s[<g transform="translate(#{x},#{y})">],
-      ~s[<rect width="#{ms}" height="#{ms}" rx="2" fill="#{@mailbox_out}" opacity="0.15" stroke="#{@mailbox_out}" stroke-width="0.8"/>],
-      ~s[<path d="M 2 #{ms - 4} L #{ms / 2} 3 L #{ms - 2} #{ms - 4}" fill="none" stroke="#{@mailbox_out}" stroke-width="1.2" stroke-linecap="round"/>],
-      ~s[<line x1="2" y1="#{ms - 3}" x2="#{ms - 2}" y2="#{ms - 3}" stroke="#{@mailbox_out}" stroke-width="0.8"/>],
-      ~s[</g>]
-    ]
-    |> Enum.join("\n")
+    Enum.join(
+      [
+        ~s[<g transform="translate(#{x},#{y})">],
+        ~s[<rect width="#{ms}" height="#{ms}" rx="2" fill="#{@mailbox_out}" opacity="0.15" stroke="#{@mailbox_out}" stroke-width="0.8"/>],
+        ~s[<path d="M 2 #{ms - 4} L #{ms / 2} 3 L #{ms - 2} #{ms - 4}" fill="none" stroke="#{@mailbox_out}" stroke-width="1.2" stroke-linecap="round"/>],
+        ~s[<line x1="2" y1="#{ms - 3}" x2="#{ms - 2}" y2="#{ms - 3}" stroke="#{@mailbox_out}" stroke-width="0.8"/>],
+        ~s[</g>]
+      ],
+      "\n"
+    )
   end
 
   defp render_badge(_x, _y, 0, _color), do: ""
 
   defp render_badge(x, y, count, color) do
-    [
-      ~s[<circle cx="#{x}" cy="#{y}" r="7" fill="#{color}" opacity="0.9"/>],
-      ~s[<text x="#{x}" y="#{y + 3.5}" text-anchor="middle" fill="#{@bg}" font-size="8" font-weight="700" font-family="monospace">#{count}</text>]
-    ]
-    |> Enum.join("\n")
+    Enum.join(
+      [
+        ~s[<circle cx="#{x}" cy="#{y}" r="7" fill="#{color}" opacity="0.9"/>],
+        ~s[<text x="#{x}" y="#{y + 3.5}" text-anchor="middle" fill="#{@bg}" font-size="8" font-weight="700" font-family="monospace">#{count}</text>]
+      ],
+      "\n"
+    )
   end
 
   defp render_legend(x, y) do
@@ -328,16 +330,14 @@ defmodule Archdo.Compiled.DiagramOTP do
 
     # Process boxes
     process_elements =
-      topology
-      |> Enum.flat_map(fn p ->
+      Enum.flat_map(topology, fn p ->
         {x, y} = Map.get(positions, p.module, {0, 0})
         render_process_box(p, x, y)
       end)
 
     # Message wires
     wire_elements =
-      topology
-      |> Enum.flat_map(fn p ->
+      Enum.flat_map(topology, fn p ->
         p.outgoing_messages
         |> Enum.filter(fn m -> m.to != :unknown and Map.has_key?(positions, m.to) end)
         |> Enum.flat_map(fn m ->

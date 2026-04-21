@@ -21,8 +21,7 @@ defmodule Archdo.Rules.Module.TypeDispatch do
     fns = AST.extract_functions(ast, :all)
 
     case_dispatch =
-      fns
-      |> Enum.flat_map(fn {name, arity, _meta, _args, body} ->
+      Enum.flat_map(fns, fn {name, arity, _meta, _args, body} ->
         find_atom_dispatch_cases(file, body, name, arity)
       end)
 
@@ -34,7 +33,7 @@ defmodule Archdo.Rules.Module.TypeDispatch do
   defp find_atom_dispatch_cases(_file, nil, _name, _arity), do: []
 
   defp find_atom_dispatch_cases(file, body, fn_name, fn_arity) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {:case, _meta, [_expr, [do: clauses]]} when is_list(clauses) ->
         # Count clauses that match on bare atoms (not :ok/:error/true/false)
         atom_clauses = count_atom_dispatch_clauses(clauses)
@@ -42,8 +41,7 @@ defmodule Archdo.Rules.Module.TypeDispatch do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {:case, meta, [_expr, [do: clauses]]} ->
+    end), fn {:case, meta, [_expr, [do: clauses]]} ->
       atom_count = count_atom_dispatch_clauses(clauses)
 
       Diagnostic.info("4.3",
@@ -98,8 +96,7 @@ defmodule Archdo.Rules.Module.TypeDispatch do
           {node, acc}
       end)
 
-    clauses_by_fn
-    |> Enum.flat_map(fn {{name, arity}, entries} ->
+    Enum.flat_map(clauses_by_fn, fn {{name, arity}, entries} ->
       entries = Enum.reverse(entries)
 
       distinct =

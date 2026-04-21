@@ -102,25 +102,23 @@ defmodule Archdo.Rules.EventSourcing.PureAggregateApply do
   defp find_side_effects(body) do
     # Check for known side-effect calls
     module_calls =
-      AST.find_all(body, fn
+      Enum.map(AST.find_all(body, fn
         {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _} ->
           Enum.any?(@side_effect_patterns, fn
             {mod, nil} -> List.last(mod_parts) in mod
             {mod, funcs} -> mod_parts == mod and func in funcs
           end)
         _ -> false
-      end)
-      |> Enum.map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+      end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
         {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
       end)
 
     # Check for send/2
     sends =
-      AST.find_all(body, fn
+      Enum.map(AST.find_all(body, fn
         {:send, _, [_, _]} -> true
         _ -> false
-      end)
-      |> Enum.map(fn {_, meta, _} -> {"send/2", AST.line(meta)} end)
+      end), fn {_, meta, _} -> {"send/2", AST.line(meta)} end)
 
     module_calls ++ sends
   end

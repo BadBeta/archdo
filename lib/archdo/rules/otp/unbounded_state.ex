@@ -48,8 +48,7 @@ defmodule Archdo.Rules.OTP.UnboundedState do
 
   defp any_callback_matches?(callbacks, cb_names, check_fn) do
     Enum.any?(cb_names, fn cb ->
-      (callbacks[cb] || [])
-      |> Enum.any?(fn {_, _, body} -> check_fn.(body) end)
+      Enum.any?(callbacks[cb] || [], fn {_, _, body} -> check_fn.(body) end)
     end)
   end
 

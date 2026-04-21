@@ -23,7 +23,8 @@ defmodule Archdo.Rules.Testing.RuntimeConfigForDi do
   # This is runtime dispatch — slow, not compile-time safe, and not testable with Mox.
   # The `compile_env/3` pattern puts the module into a module attribute at compile time.
   defp find_runtime_di(file, ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       # Pattern: Application.get_env(:my_app, :http_client).some_method(args)
       {{:., _, [{{:., _, [{:__aliases__, _, [:Application]}, :get_env]}, _, _}, _method]}, _, _} ->
         true

@@ -72,11 +72,10 @@ defmodule Archdo.Graph do
             end)
           end)
           |> Enum.map(fn target ->
-            Enum.find(root_modules, fn rm ->
+            AST.module_name(Enum.find(root_modules, fn rm ->
               rm_str = AST.module_name(rm)
               target == rm_str or String.starts_with?(target, rm_str <> ".")
-            end)
-            |> AST.module_name()
+            end))
           end)
           |> Enum.uniq()
 

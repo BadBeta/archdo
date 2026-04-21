@@ -17,21 +17,19 @@ defmodule Archdo.Rules.OTP.GlobalRegistration do
 
   defp find_global_name_option(file, ast) do
     # {:global, ...} in name: option
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {:global, _meta, _} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       global_diag(file, meta, :name_option)
     end)
   end
 
   defp find_global_register(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       {{:., _, [:global, :register_name]}, _meta, _args} -> true
       _ -> false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       global_diag(file, meta, :register_call)
     end)
   end

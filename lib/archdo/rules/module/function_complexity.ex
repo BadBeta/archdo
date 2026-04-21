@@ -23,8 +23,7 @@ defmodule Archdo.Rules.Module.FunctionComplexity do
 
     fns = AST.extract_functions(ast, :all)
 
-    fns
-    |> Enum.flat_map(fn {name, arity, meta, _args, body} ->
+    Enum.flat_map(fns, fn {name, arity, meta, _args, body} ->
       visibility = function_visibility(ast, name, arity)
       check_arity(file, name, arity, meta, visibility, is_internal) ++
         check_complexity(file, name, arity, meta, body)

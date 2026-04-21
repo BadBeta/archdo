@@ -24,8 +24,7 @@ defmodule Archdo.Mcp.ReviewHints do
       |> Enum.flat_map(&hints_for_finding/1)
       |> deduplicate()
 
-    (project_hints ++ finding_hints)
-    |> Enum.sort_by(& &1.priority)
+    Enum.sort_by(project_hints ++ finding_hints, & &1.priority)
   end
 
   # ──────────────────────────── project-level hints ────────────────────────────
@@ -602,7 +601,6 @@ defmodule Archdo.Mcp.ReviewHints do
   defp extract_clone_files(_), do: []
 
   defp deduplicate(hints) do
-    hints
-    |> Enum.uniq_by(fn h -> {h.category, h.files} end)
+    Enum.uniq_by(hints, fn h -> {h.category, h.files} end)
   end
 end

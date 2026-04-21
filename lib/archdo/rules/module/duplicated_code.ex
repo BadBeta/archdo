@@ -47,8 +47,7 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
       |> Enum.reject(fn {_hash, infos} -> only_in_same_file?(infos) end)
 
     # Build diagnostics
-    duplicates
-    |> Enum.flat_map(fn {_hash, infos} ->
+    Enum.flat_map(duplicates, fn {_hash, infos} ->
       [first | rest] = Enum.sort_by(infos, & &1.file)
       build_diagnostics(first, rest)
     end)
@@ -56,8 +55,7 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
 
   defp build_diagnostics(first, rest) do
     other_locations =
-      rest
-      |> Enum.map_join(", ", fn info -> "#{Path.basename(info.file)}:#{info.line}" end)
+      Enum.map_join(rest, ", ", fn info -> "#{Path.basename(info.file)}:#{info.line}" end)
 
     count = length(rest) + 1
 

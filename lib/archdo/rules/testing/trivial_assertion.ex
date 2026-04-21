@@ -19,7 +19,8 @@ defmodule Archdo.Rules.Testing.TrivialAssertion do
   end
 
   defp find_trivial_assertions(file, ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       # assert true
       {:assert, _, [true]} -> true
       {:assert, _, [{:__block__, _, [true]}]} -> true

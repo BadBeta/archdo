@@ -96,10 +96,8 @@ defmodule Archdo.Rules.OTP.UnnecessaryProcess do
   end
 
   defp no_state_mutation?(callbacks) do
-    [:handle_call, :handle_cast, :handle_info]
-    |> Enum.all?(fn cb_name ->
-      (callbacks[cb_name] || [])
-      |> Enum.all?(fn {_meta, _args, body} ->
+    Enum.all?([:handle_call, :handle_cast, :handle_info], fn cb_name ->
+      Enum.all?(callbacks[cb_name] || [], fn {_meta, _args, body} ->
         not mutates_state?(body)
       end)
     end)
@@ -122,10 +120,8 @@ defmodule Archdo.Rules.OTP.UnnecessaryProcess do
   end
 
   defp no_side_effects_in_callbacks?(callbacks) do
-    [:handle_call, :handle_cast, :handle_info]
-    |> Enum.all?(fn cb_name ->
-      (callbacks[cb_name] || [])
-      |> Enum.all?(fn {_meta, _args, body} ->
+    Enum.all?([:handle_call, :handle_cast, :handle_info], fn cb_name ->
+      Enum.all?(callbacks[cb_name] || [], fn {_meta, _args, body} ->
         not has_side_effects?(body)
       end)
     end)

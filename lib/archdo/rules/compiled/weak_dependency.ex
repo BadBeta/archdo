@@ -20,8 +20,7 @@ defmodule Archdo.Rules.Compiled.WeakDependency do
 
   @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
   def analyze_compiled(%Graph{modules: modules, calls_by_module: calls_by_module}) do
-    modules
-    |> Enum.flat_map(fn {caller_mod, _info} ->
+    Enum.flat_map(modules, fn {caller_mod, _info} ->
       caller_calls = Map.get(calls_by_module, caller_mod, [])
 
       calls_by_target =

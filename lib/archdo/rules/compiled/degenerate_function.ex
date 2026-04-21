@@ -36,8 +36,7 @@ defmodule Archdo.Rules.Compiled.DegenerateFunction do
   def analyze_compiled(_graph), do: []
 
   defp find_degenerate(mod, forms, exports) do
-    forms
-    |> Enum.flat_map(fn
+    Enum.flat_map(forms, fn
       {:function, _line, name, arity, clauses}
       when name not in [:__info__, :module_info, :__struct__, :__impl__, :__protocol__,
                          :__deriving__, :__using__, :__before_compile__, :__after_compile__,

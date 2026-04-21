@@ -40,11 +40,10 @@ defmodule Archdo.Rules.OTP.TaskAsyncWithoutAwait do
 
     if has_async? and not has_await? do
       # Find the async calls for line numbers
-      AST.find_all(body, fn
+      Enum.map(AST.find_all(body, fn
         {{:., _, [{:__aliases__, _, [:Task]}, :async]}, _, _} -> true
         _ -> false
-      end)
-      |> Enum.map(fn {_, meta, _} ->
+      end), fn {_, meta, _} ->
         Diagnostic.warning("5.22",
           title: "Task.async without Task.await",
           message: "Task.async is called but the function never awaits/yields the result",

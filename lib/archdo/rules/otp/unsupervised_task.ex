@@ -20,7 +20,7 @@ defmodule Archdo.Rules.OTP.UnsupervisedTask do
   end
 
   defp find_bare_task_start(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       # Task.start/1, Task.start_link/1
       {{:., _, [{:__aliases__, _, [:Task]}, func]}, _meta, _args}
       when func in [:start, :start_link] ->
@@ -28,8 +28,7 @@ defmodule Archdo.Rules.OTP.UnsupervisedTask do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, [:Task]}, func]}, meta, _} ->
+    end), fn {{:., _, [{:__aliases__, _, [:Task]}, func]}, meta, _} ->
       Diagnostic.info("5.23",
         title: "Bare Task.#{func} without supervisor",
         message: "Task.#{func}/1 used in production code instead of Task.Supervisor",

@@ -29,8 +29,7 @@ defmodule Archdo.Rules.Boundary.ParallelHierarchies do
       |> Enum.group_by(fn {file, _ast} -> base_name(file) end)
       |> Enum.filter(fn {_name, files} -> length(files) >= @min_thin_parallel end)
 
-    by_basename
-    |> Enum.flat_map(fn {base, files_with_ast} ->
+    Enum.flat_map(by_basename, fn {base, files_with_ast} ->
       directories =
         files_with_ast
         |> Enum.map(fn {f, _} -> directory(f) end)
@@ -39,8 +38,7 @@ defmodule Archdo.Rules.Boundary.ParallelHierarchies do
       # Only flag if files are spread across distinct parallel-style directories
       if length(directories) >= @min_thin_parallel and parallel_dirs?(directories) do
         thin_files =
-          files_with_ast
-          |> Enum.filter(fn {_file, ast} -> AST.ast_size(ast) < @thin_node_threshold end)
+          Enum.filter(files_with_ast, fn {_file, ast} -> AST.ast_size(ast) < @thin_node_threshold end)
 
         if length(thin_files) >= @min_thin_parallel do
           {first_file, _} = hd(thin_files)

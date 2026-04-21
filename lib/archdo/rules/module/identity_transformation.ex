@@ -30,7 +30,7 @@ defmodule Archdo.Rules.Module.IdentityTransformation do
   # --- Enum.map(_, fn x -> x end) or Enum.map(_, & &1) ---
 
   defp find_identity_map(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       # Enum.map(_, fn x -> x end)
       {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, [_, {:fn, _, [{:->, _, [[{var, _, ctx}], {var, _, ctx}]}]}]}
       when is_atom(var) and is_atom(ctx) ->
@@ -45,8 +45,7 @@ defmodule Archdo.Rules.Module.IdentityTransformation do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       build_diagnostic(file, AST.line(meta), :identity_map)
     end)
   end
@@ -54,7 +53,7 @@ defmodule Archdo.Rules.Module.IdentityTransformation do
   # --- Enum.filter(_, fn _ -> true end) ---
 
   defp find_always_true_filter(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       # Enum.filter(_, fn _ -> true end)
       {{:., _, [{:__aliases__, _, [:Enum]}, :filter]}, _, [_, {:fn, _, [{:->, _, [_, true]}]}]} ->
         true
@@ -65,8 +64,7 @@ defmodule Archdo.Rules.Module.IdentityTransformation do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       build_diagnostic(file, AST.line(meta), :always_true_filter)
     end)
   end
@@ -74,7 +72,7 @@ defmodule Archdo.Rules.Module.IdentityTransformation do
   # --- Enum.reject(_, fn _ -> false end) ---
 
   defp find_always_false_reject(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       # Enum.reject(_, fn _ -> false end)
       {{:., _, [{:__aliases__, _, [:Enum]}, :reject]}, _, [_, {:fn, _, [{:->, _, [_, false]}]}]} ->
         true
@@ -85,8 +83,7 @@ defmodule Archdo.Rules.Module.IdentityTransformation do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       build_diagnostic(file, AST.line(meta), :always_false_reject)
     end)
   end
@@ -94,7 +91,7 @@ defmodule Archdo.Rules.Module.IdentityTransformation do
   # --- List.flatten([single_item]) ---
 
   defp find_flatten_single(file, ast) do
-    AST.find_all(ast, fn
+    Enum.map(AST.find_all(ast, fn
       # List.flatten([single]) — a list literal with exactly one element
       # The list literal is wrapped in __block__ by the literal_encoder
       {{:., _, [{:__aliases__, _, [:List]}, :flatten]}, _, [{:__block__, _, [[_single]]}]} ->
@@ -106,8 +103,7 @@ defmodule Archdo.Rules.Module.IdentityTransformation do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    end), fn {_, meta, _} ->
       build_diagnostic(file, AST.line(meta), :flatten_single)
     end)
   end

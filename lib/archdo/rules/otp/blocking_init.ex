@@ -33,8 +33,7 @@ defmodule Archdo.Rules.OTP.BlockingInit do
       true ->
       callbacks = AST.extract_callbacks(ast)
 
-      callbacks[:init]
-      |> Enum.flat_map(fn {meta, _args, body} ->
+      Enum.flat_map(callbacks[:init], fn {meta, _args, body} ->
         check_init_body(file, body, AST.line(meta))
       end)
     end
@@ -46,8 +45,7 @@ defmodule Archdo.Rules.OTP.BlockingInit do
     blocking_calls = find_blocking_calls(body)
     repo_calls = find_repo_calls(body)
 
-    (blocking_calls ++ repo_calls)
-    |> Enum.map(fn {call_desc, line} ->
+    Enum.map(blocking_calls ++ repo_calls, fn {call_desc, line} ->
       Diagnostic.warning("5.8",
         title: "Blocking work in GenServer init/1",
         message: "#{call_desc} runs inside init/1",
@@ -94,7 +92,7 @@ defmodule Archdo.Rules.OTP.BlockingInit do
   end
 
   defp find_blocking_calls(body) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
         Enum.any?(@blocking_calls, fn
           {mod, nil} -> mod_parts == mod
@@ -106,8 +104,7 @@ defmodule Archdo.Rules.OTP.BlockingInit do
 
       _ ->
         false
-    end)
-    |> Enum.map(fn
+    end), fn
       {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
         {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
 
@@ -117,14 +114,13 @@ defmodule Archdo.Rules.OTP.BlockingInit do
   end
 
   defp find_repo_calls(body) do
-    AST.find_all(body, fn
+    Enum.map(AST.find_all(body, fn
       {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
         List.last(mod_parts) == :Repo
 
       _ ->
         false
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
       {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
     end)
   end

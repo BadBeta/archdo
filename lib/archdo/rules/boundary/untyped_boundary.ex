@@ -21,7 +21,8 @@ defmodule Archdo.Rules.Boundary.UntypedBoundary do
 
   defp find_untyped_specs(file, ast) do
     # Find @spec declarations with untyped returns
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:@, _, [{:spec, _, _}]} -> true
       _ -> false
     end)

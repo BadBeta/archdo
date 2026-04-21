@@ -152,7 +152,8 @@ defmodule Archdo.Rules.Module.RedundantGuardRecheck do
 
   # Walk the function body looking for is_* calls on variables we already know the type of
   defp find_redundant_checks_in_body(file, fn_line, body, guarantees) do
-    AST.find_all(body, fn
+    body
+    |> AST.find_all(fn
       {guard_fn, _, [{var, _, ctx}]}
       when is_atom(guard_fn) and is_atom(var) and is_atom(ctx) ->
         case {guard_to_type(guard_fn), Map.get(guarantees, var)} do

@@ -26,8 +26,7 @@ defmodule Archdo.Rules.Module.BooleanFlagArgs do
   defp find_flag_args(file, ast) do
     fns = AST.extract_functions(ast, :public)
 
-    fns
-    |> Enum.flat_map(fn {name, arity, meta, args, _body} ->
+    Enum.flat_map(fns, fn {name, arity, meta, args, _body} ->
       flags = collect_flag_args(args)
 
       Enum.map(flags, fn flag ->

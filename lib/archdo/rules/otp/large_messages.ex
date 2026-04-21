@@ -37,8 +37,7 @@ defmodule Archdo.Rules.OTP.LargeMessages do
         false
     end)
 
-    process_sends
-    |> Enum.map(fn {_, meta, _} ->
+    Enum.map(process_sends, fn {_, meta, _} ->
       Diagnostic.info("5.19",
         title: "conn sent to another process",
         message: "The Plug.Conn struct is captured/sent to another process",

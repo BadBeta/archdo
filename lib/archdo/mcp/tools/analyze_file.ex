@@ -45,8 +45,7 @@ defmodule Archdo.Mcp.Tools.AnalyzeFile do
          {:ok, content} <- fetch(args, "content"),
          {:ok, ast} <- parse(content, file) do
       opts =
-        [only: Helpers.list_or_nil(args["only"]), ignore: args["ignore"] || []]
-        |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+        Enum.reject([only: Helpers.list_or_nil(args["only"]), ignore: args["ignore"] || []], fn {_k, v} -> is_nil(v) end)
 
       enabled_rules = filter_rules(opts)
 

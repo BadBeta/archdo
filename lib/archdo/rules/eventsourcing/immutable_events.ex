@@ -91,7 +91,8 @@ defmodule Archdo.Rules.EventSourcing.ImmutableEvents do
 
   defp check_no_mutation(file, ast) do
     # Look for struct update syntax: %{event | field: value} outside upcasting
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:%, _, [_, {:%{}, _, [{:|, _, _}]}]} -> true
       _ -> false
     end)

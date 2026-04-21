@@ -30,8 +30,7 @@ defmodule Archdo.Rules.Module.PrimitiveObsession do
   defp find_primitive_obsession(file, ast) do
     fns = AST.extract_functions(ast, :public)
 
-    fns
-    |> Enum.flat_map(fn {name, arity, meta, args, _body} ->
+    Enum.flat_map(fns, fn {name, arity, meta, args, _body} ->
       typed_arg_names = collect_typed_arg_names(args)
 
       if length(typed_arg_names) >= @threshold do

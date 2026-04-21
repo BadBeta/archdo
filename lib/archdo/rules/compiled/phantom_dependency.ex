@@ -135,8 +135,7 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
   defp classify_reference(_caller_mod, target_mod, forms) do
     # Check if it's a behaviour declaration
     behaviours =
-      forms
-      |> Enum.flat_map(fn
+      Enum.flat_map(forms, fn
         {:attribute, _, :behaviour, bhv} when is_atom(bhv) -> [bhv]
         {:attribute, _, :behaviour, bhvs} when is_list(bhvs) -> bhvs
         _ -> []

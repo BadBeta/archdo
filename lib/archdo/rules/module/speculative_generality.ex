@@ -24,8 +24,7 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
         {Map.merge(behaviours, file_behaviours), merge_impls(impls, file_impls)}
       end)
 
-    behaviours
-    |> Enum.flat_map(fn {bhv, def_info} ->
+    Enum.flat_map(behaviours, fn {bhv, def_info} ->
       impl_files = Map.get(implementations, bhv, [])
       check_behaviour(bhv, def_info, impl_files)
     end)
@@ -33,11 +32,10 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
 
   defp scan_file(file, ast) do
     behaviours =
-      AST.find_all(ast, fn
+      case AST.find_all(ast, fn
         {:@, _, [{:callback, _, _}]} -> true
         _ -> false
-      end)
-      |> case do
+      end) do
         [] ->
           %{}
 

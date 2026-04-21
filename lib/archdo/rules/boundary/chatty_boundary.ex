@@ -31,8 +31,7 @@ defmodule Archdo.Rules.Boundary.ChattyBoundary do
 
   defp do_analyze(graph, contexts) do
     context_strs =
-      contexts
-      |> Enum.map(&AST.module_name/1)
+      Enum.map(contexts, &AST.module_name/1)
 
     # Count distinct call pairs between contexts
     cross_calls =
