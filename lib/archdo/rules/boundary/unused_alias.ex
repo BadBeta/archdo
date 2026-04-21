@@ -79,7 +79,15 @@ defmodule Archdo.Rules.Boundary.UnusedAlias do
   end
 
   defp extract_as_name(opts, parts) do
-    case Keyword.get(opts, :as) do
+    # Handle both bare :as and literal_encoder wrapped {:__block__, _, [:as]}
+    as_value =
+      Enum.find_value(opts, fn
+        {{:__block__, _, [:as]}, val} -> val
+        {:as, val} -> val
+        _ -> nil
+      end)
+
+    case as_value do
       {:__aliases__, _, [as_name]} -> atom_to_string(as_name)
       nil -> atom_to_string(List.last(parts))
       _ -> nil

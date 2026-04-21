@@ -46,10 +46,60 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
   end
 
   # --- Pattern 1b: acc ++ list in Enum.reduce — always O(n^2) ---
+  # Only checks reduce/reduce_while — in map/flat_map/filter, ++ joins
+  # local variables without a growing accumulator, which is fine.
+
+  @reduce_fns [:reduce, :reduce_while]
 
   defp find_concat_accumulator_in_reduce(ast, file) do
-    find_in_loops(ast, file, :concat_accumulator, fn
+    find_in_reduce_only(ast, file, :concat_accumulator, fn
       {:++, _, [{name, _, ctx}, _right]} when is_atom(name) and is_atom(ctx) -> true
+      _ -> false
+    end)
+  end
+
+  defp find_in_reduce_only(ast, file, kind, predicate) do
+    {_, diagnostics} =
+      Macro.prewalk(ast, [], fn
+        {{:., _, [{:__aliases__, _, [:Enum]}, func]}, _meta, args} = node, acc
+        when func in @reduce_fns and is_list(args) ->
+          new_diags =
+            args
+            |> Enum.filter(&callback?/1)
+            |> Enum.flat_map(fn callback ->
+              find_pattern_in_node(callback, file, kind, predicate)
+            end)
+
+          {node, new_diags ++ acc}
+
+        {:for, _meta, args} = node, acc when is_list(args) ->
+          case has_reduce_option?(args) do
+            true ->
+              do_block = extract_do_block(args)
+
+              new_diags =
+                case do_block do
+                  nil -> []
+                  body -> find_pattern_in_node(body, file, kind, predicate)
+                end
+
+              {node, new_diags ++ acc}
+
+            false ->
+              {node, acc}
+          end
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    diagnostics
+  end
+
+  defp has_reduce_option?(args) do
+    Enum.any?(args, fn
+      {:reduce, _} -> true
+      {{:__block__, _, [:reduce]}, _} -> true
       _ -> false
     end)
   end

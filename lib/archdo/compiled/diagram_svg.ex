@@ -235,10 +235,10 @@ defmodule Archdo.Compiled.DiagramSVG do
               ~s(<circle cx="#{elem(port, 0)}" cy="#{elem(port, 1)}" r="#{@port_radius}" fill="#{border_color}" stroke="#{@node_border}"/>)
             ]
 
-            {elems ++ box ++ port_circle, Map.put(ports, idx, port)}
+            {[port_circle, box | elems], Map.put(ports, idx, port)}
           end)
 
-        {elements, ports}
+        {List.flatten(Enum.reverse(elements)), ports}
     end
   end
 
