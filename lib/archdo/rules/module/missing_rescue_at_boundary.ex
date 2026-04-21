@@ -43,15 +43,17 @@ defmodule Archdo.Rules.Module.MissingRescueAtBoundary do
           false
       end)
 
-    # Check if the function body has a catch :exit wrapping these calls
+    # Check if the function body has a catch :exit wrapping these calls.
+    # Handles both try/catch blocks and function-level catch clauses.
+    # With literal_encoder, :catch becomes {:__block__, _, [:catch]} and
+    # :exit becomes {:__block__, _, [:exit]}.
     has_catch =
       AST.contains?(body, fn
         {:catch, clauses} when is_list(clauses) ->
-          Enum.any?(clauses, fn
-            {:->, _, [[:exit, _], _]} -> true
-            {:->, _, [[{:exit, _, _}], _]} -> true
-            _ -> false
-          end)
+          catch_has_exit?(clauses)
+
+        {{:__block__, _, [:catch]}, clauses} when is_list(clauses) ->
+          catch_has_exit?(clauses)
 
         _ ->
           false
@@ -64,6 +66,15 @@ defmodule Archdo.Rules.Module.MissingRescueAtBoundary do
     else
       []
     end
+  end
+
+  defp catch_has_exit?(clauses) do
+    Enum.any?(clauses, fn
+      {:->, _, [[:exit, _], _]} -> true
+      {:->, _, [[{:exit, _, _}], _]} -> true
+      {:->, _, [[{:__block__, _, [:exit]}, _], _]} -> true
+      _ -> false
+    end)
   end
 
   defp variable_pid?({:__MODULE__, _, _}), do: false
