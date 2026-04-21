@@ -90,7 +90,9 @@ defmodule Archdo do
     Archdo.Rules.Compiled.RepoBypass,
     Archdo.Rules.Compiled.DegenerateFunction,
     Archdo.Rules.Compiled.LookupTableCandidate,
-    Archdo.Rules.Compiled.ContextQuality
+    Archdo.Rules.Compiled.ContextQuality,
+    Archdo.Rules.Compiled.CircularContextDeps,
+    Archdo.Rules.Compiled.OrphanModule
   ]
 
   defp run_compiled_rules(paths, _opts) do

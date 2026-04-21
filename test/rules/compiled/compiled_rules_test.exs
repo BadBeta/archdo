@@ -23,7 +23,9 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     RepoBypass,
     DegenerateFunction,
     LookupTableCandidate,
-    ContextQuality
+    ContextQuality,
+    CircularContextDeps,
+    OrphanModule
   }
 
   setup_all do
@@ -111,6 +113,14 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     test "ContextQuality has correct id" do
       assert ContextQuality.id() == "1.23"
     end
+
+    test "CircularContextDeps has correct id" do
+      assert CircularContextDeps.id() == "1.24"
+    end
+
+    test "OrphanModule has correct id" do
+      assert OrphanModule.id() == "1.25"
+    end
   end
 
   # --- AST mode returns empty ---
@@ -136,7 +146,9 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
         RepoBypass,
         DegenerateFunction,
         LookupTableCandidate,
-        ContextQuality
+        ContextQuality,
+        CircularContextDeps,
+        OrphanModule
       ]
 
       Enum.each(rules, fn rule ->

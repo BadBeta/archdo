@@ -44,6 +44,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.OTP.BrutalKill,
     Archdo.Rules.OTP.EtsOwnershipLeak,
     Archdo.Rules.OTP.HardcodedCallTimeout,
+    Archdo.Rules.OTP.CallbackSprawl,
     # Module quality rules
     Archdo.Rules.Module.MissingModuledoc,
     Archdo.Rules.Module.MissingSpec,
@@ -91,6 +92,9 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.VerboseOkUnwrap,
     Archdo.Rules.Module.DeadPrivateFunction,
     Archdo.Rules.Module.SingleClauseWith,
+    Archdo.Rules.Module.LongParameterList,
+    Archdo.Rules.Module.NestedControlFlow,
+    Archdo.Rules.Module.BooleanBlindness,
     Archdo.Rules.Boundary.UnusedAlias,
     Archdo.Rules.Boundary.UntypedBoundary,
     # NIF rules
@@ -127,6 +131,10 @@ defmodule Archdo.Runner do
     Archdo.Rules.Testing.WeakAssertion,
     Archdo.Rules.Testing.MissingTestCleanup,
     Archdo.Rules.Testing.HardcodedTestData,
+    Archdo.Rules.Testing.MissingErrorPath,
+    Archdo.Rules.Testing.OverMocking,
+    Archdo.Rules.Testing.EmptyDescribe,
+    Archdo.Rules.Testing.UntestedModule,
     # Composition rules
     Archdo.Rules.Composition.ShallowUse,
     Archdo.Rules.Composition.NamespaceDepth,
