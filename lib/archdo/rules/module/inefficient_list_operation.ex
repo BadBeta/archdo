@@ -23,6 +23,7 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
   defp find_inefficient_ops(ast, file) do
     List.flatten([
       find_append_via_concat(ast, file),
+      find_concat_accumulator_in_reduce(ast, file),
       find_enum_at_zero(ast, file),
       find_list_last_in_loop(ast, file),
       find_reverse_then_hd(ast, file),
@@ -41,6 +42,15 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
       _ -> false
     end), fn {:++, meta, _} ->
       build_diagnostic(file, AST.line(meta), :append_via_concat)
+    end)
+  end
+
+  # --- Pattern 1b: acc ++ list in Enum.reduce — always O(n^2) ---
+
+  defp find_concat_accumulator_in_reduce(ast, file) do
+    find_in_loops(ast, file, :concat_accumulator, fn
+      {:++, _, [{name, _, ctx}, _right]} when is_atom(name) and is_atom(ctx) -> true
+      _ -> false
     end)
   end
 
@@ -234,6 +244,33 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
             "If building output, collect `[item | acc]` and pass directly to " <>
               "IO.iodata_to_binary/1 or IO functions that accept iodata.",
           applies_when: "Building string output from parts."
+        )
+      ],
+      file: file,
+      line: line
+    )
+  end
+
+  defp build_diagnostic(file, line, :concat_accumulator) do
+    Diagnostic.warning("6.50",
+      title: "List ++ in loop accumulator",
+      message: "`acc ++ list` inside a loop copies the accumulator every iteration — O(n^2)",
+      why:
+        "The ++ operator copies the entire left-hand list. When used as an accumulator " <>
+          "in Enum.reduce or similar, each iteration copies the growing result. " <>
+          "For 1000 items this means ~500,000 copy operations instead of 1000.",
+      alternatives: [
+        Fix.new(
+          summary: "Prepend and reverse",
+          detail:
+            "Replace `acc ++ items` with `Enum.reverse(items) ++ acc` or " <>
+              "`[item | acc]`, then `Enum.reverse(result)` after the loop.",
+          applies_when: "Order matters in the final result."
+        ),
+        Fix.new(
+          summary: "Use Enum.flat_map instead of reduce + ++",
+          detail: "`Enum.flat_map(items, &transform/1)` handles the common case.",
+          applies_when: "Each iteration produces a list to be concatenated."
         )
       ],
       file: file,

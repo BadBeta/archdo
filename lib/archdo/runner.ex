@@ -102,6 +102,9 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.MapKeysLength,
     Archdo.Rules.Module.RegexInLoop,
     Archdo.Rules.Module.InefficientListOperation,
+    Archdo.Rules.Module.CollectionPerf,
+    Archdo.Rules.Module.StringLengthCheck,
+    Archdo.Rules.Module.KeywordLookupInLoop,
     Archdo.Rules.Boundary.UnusedAlias,
     Archdo.Rules.Boundary.UntypedBoundary,
     # NIF rules
