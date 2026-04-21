@@ -35,8 +35,8 @@ defmodule Archdo.Rules.Boundary.GodContext do
         parts = String.split(rest, "/")
 
         case parts do
-          [_app, context | _rest] when context != "" ->
-            "lib/" <> Enum.at(parts, 0) <> "/" <> context
+          [app, context | _rest] when context != "" ->
+            "lib/" <> app <> "/" <> context
 
           _ ->
             nil

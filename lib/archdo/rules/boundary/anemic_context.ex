@@ -74,8 +74,8 @@ defmodule Archdo.Rules.Boundary.AnemicContext do
         parts = String.split(rest, "/")
 
         case parts do
-          [_app, context | rest_parts] when rest_parts != [] ->
-            "lib/" <> Enum.at(parts, 0) <> "/" <> context
+          [app, context | rest_parts] when rest_parts != [] ->
+            "lib/" <> app <> "/" <> context
 
           _ ->
             nil

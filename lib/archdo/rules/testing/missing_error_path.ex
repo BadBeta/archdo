@@ -30,8 +30,7 @@ defmodule Archdo.Rules.Testing.MissingErrorPath do
 
       true ->
         error_test_count =
-          test_blocks
-          |> Enum.count(fn {_name, _meta, body} -> has_error_pattern?(body) end)
+          Enum.count(test_blocks, fn {_name, _meta, body} -> has_error_pattern?(body) end)
 
         case error_test_count do
           0 -> [missing_error_path_diagnostic(file, ast, total)]

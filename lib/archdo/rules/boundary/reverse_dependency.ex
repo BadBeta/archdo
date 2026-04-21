@@ -74,7 +74,7 @@ defmodule Archdo.Rules.Boundary.ReverseDependency do
   end
 
   defp build_diagnostic(file, meta, parts, kind) do
-    module_name = parts |> Enum.map_join(".", &to_string/1)
+    module_name = Enum.map_join(parts, ".", &to_string/1)
 
     Diagnostic.warning("1.26",
       title: "Reverse dependency on web layer",

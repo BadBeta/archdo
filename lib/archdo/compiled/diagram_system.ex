@@ -418,21 +418,18 @@ defmodule Archdo.Compiled.DiagramSystem do
     ]
 
     # Spread nodes horizontally and track positions
+    # Pad modules to match renderers length so zip works
+    padded_modules = modules ++ List.duplicate(nil, max(0, length(node_renderers) - length(modules)))
+
     {node_elems, positions} =
       node_renderers
+      |> Enum.zip(padded_modules)
       |> Enum.with_index()
-      |> Enum.reduce({[], %{}}, fn {renderer, idx}, {elems, pos} ->
+      |> Enum.reduce({[], %{}}, fn {{renderer, mod}, idx}, {elems, pos} ->
         nx = x + @layer_padding + idx * (@node_w + @node_gap)
         ny = y + @layer_header + @layer_padding
 
         new_elems = renderer.(nx, ny)
-
-        # Track module position for wire routing
-        mod =
-          case Enum.at(modules, idx) do
-            nil -> nil
-            m -> m
-          end
 
         center_x = nx + @node_w / 2
         new_pos =
@@ -516,8 +513,8 @@ defmodule Archdo.Compiled.DiagramSystem do
       badge =
         case hidden_count > 0 do
           true ->
-            case Enum.at(Map.values(upper_positions), 0) do
-              {_cx, _ty, by} ->
+            case Map.values(upper_positions) do
+              [{_cx, _ty, by} | _] ->
                 [~s[<text x="#{@margin + 4}" y="#{by + 14}" fill="#{@dim}" font-size="8" font-family="monospace" opacity="0.6">+#{hidden_count} more</text>]]
 
               _ ->

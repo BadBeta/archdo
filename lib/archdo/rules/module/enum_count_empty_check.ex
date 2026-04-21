@@ -26,7 +26,8 @@ defmodule Archdo.Rules.Module.EnumCountEmptyCheck do
 
   # length(x) == 0, length(x) > 0, length(x) != 0
   defp find_length_checks(ast, file) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {op, _, [{:length, _, [_]}, zero]} when op in [:==, :!=, :>] ->
         zero_value?(zero)
 
@@ -43,7 +44,8 @@ defmodule Archdo.Rules.Module.EnumCountEmptyCheck do
 
   # Enum.count(x) == 0, Enum.count(x) > 0, Enum.count(x) != 0
   defp find_enum_count_checks(ast, file) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {op, _, [enum_count_call, zero]} when op in [:==, :!=, :>] ->
         enum_count?(enum_count_call) and zero_value?(zero)
 

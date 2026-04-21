@@ -87,9 +87,9 @@ defmodule Archdo.Formatter do
   defp severity_sort(:warning), do: 1
   defp severity_sort(:info), do: 2
 
-  defp format_severity_short(:error), do: IO.ANSI.format([:red, String.pad_trailing("error", 7)]) |> to_string()
-  defp format_severity_short(:warning), do: IO.ANSI.format([:yellow, String.pad_trailing("warn", 7)]) |> to_string()
-  defp format_severity_short(:info), do: IO.ANSI.format([:cyan, String.pad_trailing("info", 7)]) |> to_string()
+  defp format_severity_short(:error), do: to_string(IO.ANSI.format([:red, String.pad_trailing("error", 7)]))
+  defp format_severity_short(:warning), do: to_string(IO.ANSI.format([:yellow, String.pad_trailing("warn", 7)]))
+  defp format_severity_short(:info), do: to_string(IO.ANSI.format([:cyan, String.pad_trailing("info", 7)]))
 
   # ───────────────────────────────────────────── :text ─────────────────────────────────────────────
 

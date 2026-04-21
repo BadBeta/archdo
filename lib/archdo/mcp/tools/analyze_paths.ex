@@ -52,19 +52,23 @@ defmodule Archdo.Mcp.Tools.AnalyzePaths do
   end
 
   def call(args) when is_map(args) do
-    with {:ok, paths} <- fetch_paths(args) do
-      opts = build_opts(args)
-      files = Archdo.collect_files(paths)
+    case fetch_paths(args) do
+      {:ok, paths} ->
+        opts = build_opts(args)
+        files = Archdo.collect_files(paths)
 
-      diagnostics =
-        if Keyword.get(opts, :boundaries, true) do
-          Runner.analyze_with_graph(files, opts)
-        else
-          Runner.analyze(files, opts)
-        end
+        diagnostics =
+          if Keyword.get(opts, :boundaries, true) do
+            Runner.analyze_with_graph(files, opts)
+          else
+            Runner.analyze(files, opts)
+          end
 
-      filtered = Helpers.filter_severity(diagnostics, args["min_severity"])
-      {:ok, Encoder.encode_diagnostics(filtered)}
+        filtered = Helpers.filter_severity(diagnostics, args["min_severity"])
+        {:ok, Encoder.encode_diagnostics(filtered)}
+
+      {:error, _} = error ->
+        error
     end
   end
 

@@ -39,7 +39,8 @@ defmodule Archdo.Rules.Testing.OverMocking do
   end
 
   defp extract_test_blocks(ast) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:test, _meta, [_name | _]} -> true
       _ -> false
     end)

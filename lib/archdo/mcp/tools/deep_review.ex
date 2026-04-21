@@ -50,21 +50,22 @@ defmodule Archdo.Mcp.Tools.DeepReview do
   end
 
   def call(args) when is_map(args) do
-    with {:ok, paths} <- fetch_paths(args) do
-      opts = build_opts(args)
-      files = Archdo.collect_files(paths)
+    case fetch_paths(args) do
+      {:ok, paths} ->
+        opts = build_opts(args)
+        files = Archdo.collect_files(paths)
 
-      # Run static analysis (same as analyze_paths)
-      diagnostics = Runner.analyze_with_graph(files, opts)
-      filtered = Helpers.filter_severity(diagnostics, args["min_severity"])
+        # Run static analysis (same as analyze_paths)
+        diagnostics = Runner.analyze_with_graph(files, opts)
+        filtered = Helpers.filter_severity(diagnostics, args["min_severity"])
 
-      # Generate the review plan from the findings
-      review_plan = ReviewHints.generate(filtered, paths: paths)
+        # Generate the review plan from the findings
+        review_plan = ReviewHints.generate(filtered, paths: paths)
 
-      {:ok,
-       %{
-         diagnostics: Encoder.encode_diagnostics(filtered),
-         review_plan: format_review_plan(review_plan),
+        {:ok,
+         %{
+           diagnostics: Encoder.encode_diagnostics(filtered),
+           review_plan: format_review_plan(review_plan),
          instructions:
            "TWO-LAYER REVIEW. The `diagnostics` section is Layer 1 (static findings). " <>
              "The `review_plan` is Layer 2 (investigation + fixes). For each review_plan item: " <>
@@ -74,6 +75,9 @@ defmodule Archdo.Mcp.Tools.DeepReview do
              "the specific code pattern to use. If `example` is present, adapt it to the project. " <>
              "Prioritize by `priority` (1 = critical). Report what you found and what you fixed."
        }}
+
+      {:error, _} = error ->
+        error
     end
   end
 

@@ -27,7 +27,8 @@ defmodule Archdo.Rules.Module.MapKeysLength do
   # Map.keys(m) |> length() or Map.keys(m) |> Enum.count()
   # Map.values(m) |> length() or Map.values(m) |> Enum.count()
   defp find_piped_pattern(ast, file) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:|>, _, [map_keys_or_values_call, length_or_count_call]} ->
         map_keys_or_values?(map_keys_or_values_call) and
           length_or_count?(length_or_count_call)
@@ -44,7 +45,8 @@ defmodule Archdo.Rules.Module.MapKeysLength do
   # length(Map.keys(m)) or Enum.count(Map.keys(m))
   # length(Map.values(m)) or Enum.count(Map.values(m))
   defp find_wrapped_pattern(ast, file) do
-    AST.find_all(ast, fn
+    ast
+    |> AST.find_all(fn
       {:length, _, [inner]} ->
         map_keys_or_values?(inner)
 

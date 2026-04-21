@@ -101,6 +101,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.EnumCountEmptyCheck,
     Archdo.Rules.Module.MapKeysLength,
     Archdo.Rules.Module.RegexInLoop,
+    Archdo.Rules.Module.InefficientListOperation,
     Archdo.Rules.Boundary.UnusedAlias,
     Archdo.Rules.Boundary.UntypedBoundary,
     # NIF rules
