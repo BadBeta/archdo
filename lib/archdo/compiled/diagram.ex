@@ -151,7 +151,7 @@ defmodule Archdo.Compiled.Diagram do
     lines = [
       "graph TD",
       "",
-      "  #{sanitize_id(mod_name)}[\"#{AST.short_name(module)}<br/>CHANGED\"]",
+      "  #{sanitize_id(mod_name)}[\"#{AST.short_name(module)} · CHANGED\"]",
       "  style #{sanitize_id(mod_name)} fill:#F44336,color:#fff,stroke:#B71C1C",
       ""
     ]
@@ -245,7 +245,7 @@ defmodule Archdo.Compiled.Diagram do
     ctx_id = sanitize_id(ctx.context)
 
     header = [
-      "  subgraph #{ctx_id}[\"#{ctx.context}<br/>cohesion: #{ctx.cohesion} | coupling: #{ctx.coupling}\"]"
+      "  subgraph #{ctx_id}[\"#{ctx.context} · cohesion: #{ctx.cohesion} | coupling: #{ctx.coupling}\"]"
     ]
 
     # Show boundary module prominently, then a sample of internal modules
@@ -254,7 +254,7 @@ defmodule Archdo.Compiled.Diagram do
         nil -> []
         mod ->
           id = sanitize_id(AST.module_name(mod))
-          ["    #{id}([\"#{AST.short_name(mod)}<br/>BOUNDARY\"])"]
+          ["    #{id}([\"#{AST.short_name(mod)} · BOUNDARY\"])"]
       end
 
     internal =
@@ -293,7 +293,7 @@ defmodule Archdo.Compiled.Diagram do
         name = AST.short_name(mod)
 
         case mod == ctx.boundary_module do
-          true -> "    #{id}([\"#{name}<br/>BOUNDARY\"])"
+          true -> "    #{id}([\"#{name} · BOUNDARY\"])"
           false -> "    #{id}[\"#{name}\"]"
         end
       end)
@@ -717,7 +717,7 @@ defmodule Archdo.Compiled.Diagram do
         caller_id = sanitize_id(AST.module_name(entry.module))
         caller_short = AST.short_name(entry.module)
 
-        fns = Enum.map_join(entry.functions_called, "<br/>", fn {f, a} -> "#{f}/#{a}" end)
+        fns = Enum.map_join(entry.functions_called, ", ", fn {f, a} -> "#{f}/#{a}" end)
 
         [
           "  #{caller_id}[\"#{caller_short}\"] -->|\"#{fns}\"| #{mod_id}"
@@ -739,17 +739,17 @@ defmodule Archdo.Compiled.Diagram do
 
         "#{fn_info.name}/#{fn_info.arity}#{clause_tag} → #{return_tag}"
       end)
-      |> Enum.join("<br/>")
+      |> Enum.join(", ")
 
     more_exports =
       case length(exports) > 15 do
-        true -> "<br/>... +#{length(exports) - 15} more"
+        true -> ", ... +#{length(exports) - 15} more"
         false -> ""
       end
 
     module_lines = [
       "",
-      "  #{mod_id}[\"**#{mod_name}**<br/>─────────<br/>#{export_list}#{more_exports}\"]",
+      "  #{mod_id}[\"#{mod_name} · #{export_list}#{more_exports}\"]",
       ""
     ]
 
@@ -761,7 +761,7 @@ defmodule Archdo.Compiled.Diagram do
         dep_id = sanitize_id(AST.module_name(entry.module))
         dep_short = AST.short_name(entry.module)
 
-        fns = Enum.map_join(entry.functions_called, "<br/>", fn {f, a} -> "#{f}/#{a}" end)
+        fns = Enum.map_join(entry.functions_called, ", ", fn {f, a} -> "#{f}/#{a}" end)
 
         wire_style = wire_style_for(entry)
 
@@ -861,7 +861,7 @@ defmodule Archdo.Compiled.Diagram do
         nil -> []
         mod ->
           id = sanitize_id(AST.module_name(mod))
-          ["    #{id}{{\"#{AST.short_name(mod)}<br/>BOUNDARY\"}}"]
+          ["    #{id}{{\"#{AST.short_name(mod)} · BOUNDARY\"}}"]
       end
 
     internal_lines =
