@@ -1,8 +1,8 @@
 # Archdo — Architecture Rules Reference
 
-> **193 rules** across 11 categories. Generated from rule modules.
+> **200 rules** across 11 categories. Generated from rule modules.
 
-## 1. Boundaries & Architecture (24 rules)
+## 1. Boundaries & Architecture (30 rules)
 
 | Rule | Description |
 |------|-------------|
@@ -25,7 +25,13 @@
 | 1.25 | Orphan module — zero incoming and zero outgoing dependencies |
 | 1.26 | Domain modules must not reference web layer modules |
 | 1.27 | LiveView handle_event contains business logic — delegate to context modules |
+| 1.28 | Ecto.Query building in interface layer — queries belong in context modules |
+| 1.29 | Schema struct from another context used directly — access through owning context API |
 | 1.3 | No circular dependencies between contexts |
+| 1.30 | Direct GenServer.call to another context's process — use the context's public API |
+| 1.31 | Multiple schemas for the same database table — shared table ownership |
+| 1.32 | Module reads another context's Application config keys |
+| 1.33 | Multiple contexts access the same named ETS table directly — consider a shared API module |
 | 1.4 | No direct Repo access from interface layer |
 | 1.5 | Each Ecto schema has one owning context — no cross-context schema construction |
 | 1.6 | Cross-cutting concerns (Logger, Telemetry) belong at boundaries, not in domain |
@@ -200,7 +206,7 @@
 | 6.8 | Distance from main sequence — concrete/stable or abstract/unstable modules |
 | 6.9 | Bare rescue clauses that swallow errors silently |
 
-## 7. Test Architecture (24 rules)
+## 7. Test Architecture (25 rules)
 
 | Rule | Description |
 |------|-------------|
@@ -222,6 +228,7 @@
 | 7.25 | Source module has no corresponding test file |
 | 7.26 | Processes started in tests without start_supervised! will leak on crash |
 | 7.27 | Tests assert on GenServer internal state rather than observable behavior |
+| 7.28 | Context facade module has test file but exercises < 30% of public API |
 | 7.29 | Test patterns that commonly cause flakiness |
 | 7.3 | Every Mox.defmock must reference a behaviour module |
 | 7.4 | Test files should declare async: true when eligible |
