@@ -13,7 +13,8 @@ defmodule Archdo.Diagnostic do
           references: [String.t()],
           file: String.t(),
           line: non_neg_integer(),
-          context: map()
+          context: map(),
+          tags: [atom()]
         }
 
   @enforce_keys [:rule_id, :severity, :title, :message, :why, :file, :line]
@@ -27,6 +28,7 @@ defmodule Archdo.Diagnostic do
     alternatives: [],
     references: [],
     context: %{},
+    tags: [],
     line: 0
   ]
 

@@ -72,6 +72,7 @@ defmodule Archdo.Rules.Module.KeywordLookupInLoop do
           applies_when: "The keyword list doesn't change during the loop."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )

@@ -98,6 +98,7 @@ defmodule Archdo.Rules.Module.EnumCountEmptyCheck do
           applies_when: "Checking whether a collection is empty or non-empty."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )

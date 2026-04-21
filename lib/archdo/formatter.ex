@@ -44,23 +44,40 @@ defmodule Archdo.Formatter do
       diagnostics
       |> Enum.group_by(fn d -> {d.rule_id, d.severity, d.title} end)
       |> Enum.map(fn {{rule_id, severity, title}, diags} ->
-        %{rule_id: rule_id, severity: severity, title: title, count: length(diags)}
+        tags = diags |> List.first() |> Map.get(:tags, [])
+        %{rule_id: rule_id, severity: severity, title: title, count: length(diags), tags: tags}
       end)
       |> Enum.sort_by(fn r -> {severity_sort(r.severity), -r.count} end)
 
+    has_tags = Enum.any?(by_rule, fn r -> r.tags != [] end)
+
     # Markdown pipe table
-    IO.puts("| Sev     | Rule  | Count | Finding |")
-    IO.puts("|---------|-------|------:|---------|")
+    case has_tags do
+      true ->
+        IO.puts("| Sev     | Rule  | Count | Tag  | Finding |")
+        IO.puts("|---------|-------|------:|------|---------|")
+
+      false ->
+        IO.puts("| Sev     | Rule  | Count | Finding |")
+        IO.puts("|---------|-------|------:|---------|")
+    end
 
     Enum.each(by_rule, fn r ->
       sev = severity_label(r.severity)
+      tag_str = Enum.map_join(r.tags, ",", &Atom.to_string/1)
 
-      IO.puts(
+      base =
         "| " <> String.pad_trailing(sev, 7) <>
           " | " <> String.pad_trailing(r.rule_id, 5) <>
-          " | " <> String.pad_leading(Integer.to_string(r.count), 5) <>
-          " | " <> r.title <> " |"
-      )
+          " | " <> String.pad_leading(Integer.to_string(r.count), 5)
+
+      case has_tags do
+        true ->
+          IO.puts(base <> " | " <> String.pad_trailing(tag_str, 4) <> " | " <> r.title <> " |")
+
+        false ->
+          IO.puts(base <> " | " <> r.title <> " |")
+      end
     end)
 
     IO.puts("\n#{total} total across #{length(by_rule)} rules\n")
@@ -203,6 +220,7 @@ defmodule Archdo.Formatter do
       alternatives: Enum.map(d.alternatives, &fix_to_map/1),
       references: d.references,
       context: d.context,
+      tags: d.tags,
       file: AST.relative_path(d.file),
       line: d.line
     }

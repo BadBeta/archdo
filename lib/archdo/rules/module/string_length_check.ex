@@ -70,6 +70,7 @@ defmodule Archdo.Rules.Module.StringLengthCheck do
           applies_when: "Checking if a string is empty."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -90,6 +91,7 @@ defmodule Archdo.Rules.Module.StringLengthCheck do
           applies_when: "Checking if a string is non-empty."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )

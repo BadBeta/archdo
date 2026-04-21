@@ -105,6 +105,7 @@ defmodule Archdo.Rules.Module.MapKeysLength do
           applies_when: "You only need the count, not the actual keys or values list."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )

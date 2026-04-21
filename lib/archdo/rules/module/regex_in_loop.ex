@@ -137,6 +137,7 @@ defmodule Archdo.Rules.Module.RegexInLoop do
           applies_when: "Regex is used inside a loop, callback, or frequently-called function."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )

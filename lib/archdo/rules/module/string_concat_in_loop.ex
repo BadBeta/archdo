@@ -123,6 +123,7 @@ defmodule Archdo.Rules.Module.StringConcatInLoop do
           applies_when: "Building a string by accumulating with <> in any loop."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )

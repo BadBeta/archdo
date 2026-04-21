@@ -215,6 +215,7 @@ defmodule Archdo.Rules.Module.CollectionPerf do
           applies_when: "You only need to know if any/no elements match."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -241,6 +242,7 @@ defmodule Archdo.Rules.Module.CollectionPerf do
           applies_when: "The predicate and transform are tightly coupled."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -261,6 +263,7 @@ defmodule Archdo.Rules.Module.CollectionPerf do
           applies_when: "You only need the smallest or largest element."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -281,6 +284,7 @@ defmodule Archdo.Rules.Module.CollectionPerf do
           applies_when: "Always."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -303,6 +307,7 @@ defmodule Archdo.Rules.Module.CollectionPerf do
           applies_when: "The list being checked doesn't change during the loop."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )

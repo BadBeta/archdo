@@ -246,6 +246,7 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
           applies_when: "Building string output from parts."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -273,6 +274,7 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
           applies_when: "Each iteration produces a list to be concatenated."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -293,6 +295,7 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
           applies_when: "The collection is known to be a list."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -316,6 +319,7 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
           applies_when: "List.last/1 is called inside Enum callbacks or for comprehensions."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -337,6 +341,7 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
           applies_when: "Always — List.last/1 is clearer and avoids the intermediate list."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -359,6 +364,7 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
           applies_when: "Accumulating items where order matters."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -382,6 +388,7 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
           applies_when: "List.delete_at/2 is called inside Enum callbacks or for comprehensions."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
@@ -404,6 +411,7 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
           applies_when: "Enum.at/2 with a variable index inside Enum callbacks or for comprehensions."
         )
       ],
+      tags: [:perf],
       file: file,
       line: line
     )
