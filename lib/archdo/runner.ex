@@ -45,6 +45,8 @@ defmodule Archdo.Runner do
     Archdo.Rules.OTP.EtsOwnershipLeak,
     Archdo.Rules.OTP.HardcodedCallTimeout,
     Archdo.Rules.OTP.CallbackSprawl,
+    Archdo.Rules.OTP.AtomInHotPath,
+    Archdo.Rules.OTP.EtsWithoutCleanup,
     # Module quality rules
     Archdo.Rules.Module.MissingModuledoc,
     Archdo.Rules.Module.MissingSpec,
@@ -95,6 +97,10 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.LongParameterList,
     Archdo.Rules.Module.NestedControlFlow,
     Archdo.Rules.Module.BooleanBlindness,
+    Archdo.Rules.Module.StringConcatInLoop,
+    Archdo.Rules.Module.EnumCountEmptyCheck,
+    Archdo.Rules.Module.MapKeysLength,
+    Archdo.Rules.Module.RegexInLoop,
     Archdo.Rules.Boundary.UnusedAlias,
     Archdo.Rules.Boundary.UntypedBoundary,
     # NIF rules
@@ -135,6 +141,9 @@ defmodule Archdo.Runner do
     Archdo.Rules.Testing.OverMocking,
     Archdo.Rules.Testing.EmptyDescribe,
     Archdo.Rules.Testing.UntestedModule,
+    Archdo.Rules.Testing.ProcessLeak,
+    Archdo.Rules.Testing.AssertOnImplementation,
+    Archdo.Rules.Testing.FlakyTestIndicators,
     # Composition rules
     Archdo.Rules.Composition.ShallowUse,
     Archdo.Rules.Composition.NamespaceDepth,
@@ -144,7 +153,10 @@ defmodule Archdo.Runner do
     Archdo.Rules.Boundary.UnvalidatedParams,
     Archdo.Rules.Boundary.LogicInController,
     Archdo.Rules.Boundary.LargeLiveviewAssigns,
+    Archdo.Rules.Boundary.LogicInLiveview,
+    Archdo.Rules.Boundary.PreloadInLoop,
     Archdo.Rules.Boundary.PubsubWithoutHandler,
+    Archdo.Rules.Boundary.ReverseDependency,
     # Resilience rules
     Archdo.Rules.Module.UnprotectedExternalCall,
     Archdo.Rules.Module.UnboundedExternalCall

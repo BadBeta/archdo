@@ -11,7 +11,7 @@ defmodule Archdo do
 
   alias Archdo.{AST, Config, Diagnostic, Formatter, Freeze, FunctionGraph, Graph, Metrics, Runner}
   alias Archdo.Rules.Module.MainSequenceDistance
-  alias Archdo.Rules.Testing.{CoverageGap, TestMirrorsSource}
+  alias Archdo.Rules.Testing.{CoverageGap, MissingBoundaryTests, TestMirrorsSource}
 
   alias Archdo.Rules.Boundary.{
     AnemicContext,
@@ -146,7 +146,8 @@ defmodule Archdo do
     AdaptersWithoutBehaviour,
     SeamIntegrity,
     MissingTelemetry,
-    FatInterface
+    FatInterface,
+    MissingBoundaryTests
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).
