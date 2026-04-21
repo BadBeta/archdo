@@ -120,9 +120,8 @@ defmodule Archdo.Rules.Module.RedundantGuardRecheck do
   end
 
   defp extract_guards({:and, _, [left, right]}, acc) do
-    acc
-    |> extract_guards(left)
-    |> extract_guards(right)
+    acc = extract_guards(left, acc)
+    extract_guards(right, acc)
   end
 
   defp extract_guards({guard_fn, _, [{var, _, ctx}]}, acc)
