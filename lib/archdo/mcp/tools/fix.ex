@@ -111,9 +111,7 @@ defmodule Archdo.Mcp.Tools.Fix do
       original_line ->
         trimmed = String.trim(original_line)
         # Try to generate replacement
-        replacement =
-          trimmed
-          |> String.replace(~r/Enum\.at\(([^,]+),\s*0\)/, "hd(\\1)")
+        replacement = String.replace(trimmed, ~r/Enum\.at\(([^,]+),\s*0\)/, "hd(\\1)")
 
         case replacement == trimmed do
           true -> nil

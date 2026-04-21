@@ -50,13 +50,11 @@ defmodule Archdo.Rules.Boundary.SharedDbTable do
     case context do
       nil -> []
       ctx ->
-        AST.find_all(ast, fn
-          # schema "table_name" do ... end
+        Enum.map(AST.find_all(ast, fn
           {:schema, _, [table_name | _]} when is_binary(table_name) -> true
           {:schema, _, [{:__block__, _, [table_name]} | _]} when is_binary(table_name) -> true
           _ -> false
-        end)
-        |> Enum.map(fn {_, meta, [table_name | _]} ->
+        end), fn {_, meta, [table_name | _]} ->
           table = unwrap_table(table_name)
           {table, ctx, file, AST.line(meta)}
         end)

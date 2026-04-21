@@ -61,8 +61,10 @@ defmodule Archdo.FunctionGraph do
     {definitions, calls} =
       Enum.reduce(file_asts, {%{}, []}, fn {file, ast}, {defs, calls} ->
         {file_defs, file_calls} = analyze_file(file, ast)
-        {Map.merge(defs, file_defs), file_calls ++ calls}
+        {Map.merge(defs, file_defs), [file_calls | calls]}
       end)
+
+    calls = List.flatten(calls)
 
     calls_by_target =
       Enum.group_by(calls, fn call ->

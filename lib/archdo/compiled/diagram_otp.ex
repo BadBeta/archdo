@@ -121,10 +121,10 @@ defmodule Archdo.Compiled.DiagramOTP do
       Enum.reduce(roots, {[], 0, 0, start_x}, fn root, {elems, max_w, max_h, x} ->
         {node_elems, w, h} = layout_tree_node(root, x, start_y, 0)
         new_x = x + w + @child_gap_x * 2
-        {elems ++ node_elems, max(max_w, new_x - start_x), max(max_h, h), new_x}
+        {[node_elems | elems], max(max_w, new_x - start_x), max(max_h, h), new_x}
       end)
 
-    {elements, total_w, total_h}
+    {List.flatten(Enum.reverse(elements)), total_w, total_h}
   end
 
   defp layout_tree_node(%{process: process, children: []}, x, y, _depth) do
@@ -145,8 +145,10 @@ defmodule Archdo.Compiled.DiagramOTP do
       Enum.reduce(children, {[], 0, 0, children_start_x}, fn child, {elems, total_w, max_h, cx} ->
         {child_elems, cw, ch} = layout_tree_node(child, cx, children_start_y, depth + 1)
         new_cx = cx + cw + @child_gap_x
-        {elems ++ child_elems, total_w + cw + @child_gap_x, max(max_h, ch), new_cx}
+        {[child_elems | elems], total_w + cw + @child_gap_x, max(max_h, ch), new_cx}
       end)
+
+    child_elements = List.flatten(Enum.reverse(child_elements))
 
     # Frame dimensions
     frame_w = max(children_total_w + @sup_padding, @process_w + @sup_padding * 2)
@@ -183,10 +185,10 @@ defmodule Archdo.Compiled.DiagramOTP do
     {elements, _x_cursor} =
       Enum.reduce(orphans, {[], start_x}, fn process, {elems, x} ->
         box = render_process_box(process, x, start_y)
-        {elems ++ box, x + @process_w + @child_gap_x}
+        {[box | elems], x + @process_w + @child_gap_x}
       end)
 
-    {label ++ elements, @process_h + 30}
+    {label ++ List.flatten(Enum.reverse(elements)), @process_h + 30}
   end
 
   defp layout_messages(topology, _start_x, _start_y) do

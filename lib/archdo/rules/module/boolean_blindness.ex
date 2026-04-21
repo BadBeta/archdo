@@ -70,7 +70,7 @@ defmodule Archdo.Rules.Module.BooleanBlindness do
   end
 
   defp collect_returns([{_key, body} | rest]) when rest != [] do
-    collect_returns(body) ++ collect_returns(rest)
+    Enum.flat_map([body | Keyword.values(rest)], &collect_returns/1)
   end
 
   defp collect_returns({:__block__, _, exprs}) when is_list(exprs) do

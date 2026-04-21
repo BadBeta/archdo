@@ -438,10 +438,10 @@ defmodule Archdo.Compiled.DiagramSystem do
             _ -> Map.put(pos, mod, {center_x, ny, ny + @node_h})
           end
 
-        {elems ++ new_elems, new_pos}
+        {[new_elems | elems], new_pos}
       end)
 
-    {frame ++ node_elems, y + height, positions}
+    {frame ++ List.flatten(Enum.reverse(node_elems)), y + height, positions}
   end
 
   # Tunnel size
