@@ -148,7 +148,8 @@ defmodule Archdo do
     MissingTelemetry,
     FatInterface,
     MissingBoundaryTests,
-    Archdo.Rules.Boundary.SharedDbTable
+    Archdo.Rules.Boundary.SharedDbTable,
+    Archdo.Rules.Boundary.SharedEtsTable
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).
