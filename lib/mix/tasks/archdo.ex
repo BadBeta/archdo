@@ -8,7 +8,7 @@ defmodule Mix.Tasks.Archdo do
 
   ## Options
 
-    * `--format` - Output format: `text` (default), `json`, `compact`, `llm`
+    * `--format` - Output format: `summary` (default), `text`, `json`, `compact`, `llm`
     * `--only` - Comma-separated rule IDs to check (e.g., `--only 5.11,5.12`)
     * `--ignore` - Comma-separated rule IDs to skip
     * `--paths` - Comma-separated paths to check (default: `lib`)
@@ -116,7 +116,7 @@ defmodule Mix.Tasks.Archdo do
   end
 
   defp build_run_opts(opts) do
-    format = parse_format(Keyword.get(opts, :format, "text"))
+    format = parse_format(Keyword.get(opts, :format, "summary"))
     only = parse_nullable_list(Keyword.get(opts, :only))
     ignore = parse_nullable_list(Keyword.get(opts, :ignore)) || []
     boundaries = Keyword.get(opts, :boundaries, false)
@@ -214,6 +214,7 @@ defmodule Mix.Tasks.Archdo do
     end
   end
 
+  defp parse_format("summary"), do: :summary
   defp parse_format("text"), do: :text
   defp parse_format("json"), do: :json
   defp parse_format("compact"), do: :compact

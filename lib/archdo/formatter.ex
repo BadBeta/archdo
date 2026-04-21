@@ -10,7 +10,8 @@ defmodule Archdo.Formatter do
   """
   @spec format([Archdo.Diagnostic.t()], keyword()) :: non_neg_integer()
   def format(diagnostics, opts \\ []) do
-    case Keyword.get(opts, :format, :text) do
+    case Keyword.get(opts, :format, :summary) do
+      :summary -> format_summary(diagnostics)
       :text -> format_text(diagnostics)
       :json -> format_json(diagnostics)
       :compact -> format_compact(diagnostics)
@@ -18,7 +19,7 @@ defmodule Archdo.Formatter do
     end
   end
 
-  # ───────────────────────────────────────────── :text ─────────────────────────────────────────────
+  # ──────────────────────────────────────────── :summary ───────────────────────────────────────────
 
   @llm_instruction """
   [Archdo] To evaluate these findings, load the Elixir skill (/elixir) and consult:
@@ -27,6 +28,70 @@ defmodule Archdo.Formatter do
     Error handling (6.9-6.11) → language-patterns.md | Event sourcing (8.x) → event-sourcing skill
   Not every finding needs fixing — use the skill's domain knowledge to distinguish real issues from intentional trade-offs.
   """
+
+  defp format_summary([]) do
+    IO.puts("\nArchdo — no issues found.\n")
+    0
+  end
+
+  defp format_summary(diagnostics) do
+    {errors, warnings, infos} = counts(diagnostics)
+    total = errors + warnings + infos
+
+    IO.puts("\nArchdo — #{total} findings (#{errors} errors, #{warnings} warnings, #{infos} info)\n")
+
+    # Group by rule, count, sort by severity then count
+    by_rule =
+      diagnostics
+      |> Enum.group_by(fn d -> {d.rule_id, d.severity, d.title} end)
+      |> Enum.map(fn {{rule_id, severity, title}, diags} ->
+        %{rule_id: rule_id, severity: severity, title: title, count: length(diags)}
+      end)
+      |> Enum.sort_by(fn r -> {severity_sort(r.severity), -r.count} end)
+
+    # Calculate column widths
+    sev_width = 7
+    rule_width = 6
+    count_width = 5
+
+    # Header
+    IO.puts(
+      String.pad_trailing("Sev", sev_width) <>
+        String.pad_trailing("Rule", rule_width) <>
+        String.pad_leading("Count", count_width) <>
+        "  Finding"
+    )
+
+    IO.puts(String.duplicate("─", 80))
+
+    # Rows
+    Enum.each(by_rule, fn r ->
+      sev_str = format_severity_short(r.severity)
+
+      IO.puts(
+        sev_str <>
+          String.pad_trailing(r.rule_id, rule_width) <>
+          String.pad_leading(Integer.to_string(r.count), count_width) <>
+          "  #{r.title}"
+      )
+    end)
+
+    IO.puts(String.duplicate("─", 80))
+    IO.puts("#{total} total across #{length(by_rule)} rules\n")
+    IO.puts(@llm_instruction)
+
+    exit_code(errors, warnings)
+  end
+
+  defp severity_sort(:error), do: 0
+  defp severity_sort(:warning), do: 1
+  defp severity_sort(:info), do: 2
+
+  defp format_severity_short(:error), do: IO.ANSI.format([:red, String.pad_trailing("error", 7)]) |> to_string()
+  defp format_severity_short(:warning), do: IO.ANSI.format([:yellow, String.pad_trailing("warn", 7)]) |> to_string()
+  defp format_severity_short(:info), do: IO.ANSI.format([:cyan, String.pad_trailing("info", 7)]) |> to_string()
+
+  # ───────────────────────────────────────────── :text ─────────────────────────────────────────────
 
   defp format_text([]) do
     IO.puts("\nArchdo — no issues found.\n")
