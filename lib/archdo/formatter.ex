@@ -19,7 +19,7 @@ defmodule Archdo.Formatter do
     end
   end
 
-  # ──────────────────────────────────────────── :summary ───────────────────────────────────────────
+  # ───────────────────────────────────��──────── :summary ───────────────────────────────────────────
 
   @llm_instruction """
   [Archdo] To evaluate these findings, load the Elixir skill (/elixir) and consult:
@@ -40,7 +40,6 @@ defmodule Archdo.Formatter do
 
     IO.puts("\nArchdo — #{total} findings (#{errors} errors, #{warnings} warnings, #{infos} info)\n")
 
-    # Group by rule, count, sort by severity then count
     by_rule =
       diagnostics
       |> Enum.group_by(fn d -> {d.rule_id, d.severity, d.title} end)
@@ -49,33 +48,21 @@ defmodule Archdo.Formatter do
       end)
       |> Enum.sort_by(fn r -> {severity_sort(r.severity), -r.count} end)
 
-    # Dynamic column widths
-    rule_max = Enum.max_by(by_rule, fn r -> byte_size(r.rule_id) end).rule_id |> byte_size()
-    rule_w = max(rule_max, 4) + 1
-    title_max = Enum.max_by(by_rule, fn r -> byte_size(r.title) end).title |> byte_size()
-    title_w = min(title_max, 60)
-    # Box-drawing table
-    top    = "┌" <> String.duplicate("─", 9) <> "┬" <> String.duplicate("─", rule_w + 1) <> "┬" <> String.duplicate("─", 7) <> "┬" <> String.duplicate("─", title_w + 2) <> "┐"
-    mid    = "├" <> String.duplicate("��", 9) <> "┼" <> String.duplicate("─", rule_w + 1) <> "┼" <> String.duplicate("─", 7) <> "┼" <> String.duplicate("─", title_w + 2) <> "┤"
-    bottom = "└" <> String.duplicate("─", 9) <> "┴" <> String.duplicate("─", rule_w + 1) <> "┴" <> String.duplicate("─", 7) <> "┴" <> String.duplicate("─", title_w + 2) <> "┘"
-
-    IO.puts(top)
-    IO.puts("│ " <> String.pad_trailing("Sev", 7) <> " │ " <> String.pad_trailing("Rule", rule_w) <> "��� " <> String.pad_trailing("Count", 5) <> " │ " <> String.pad_trailing("Finding", title_w) <> " │")
-    IO.puts(mid)
+    # Markdown pipe table
+    IO.puts("| Sev     | Rule  | Count | Finding |")
+    IO.puts("|---------|-------|------:|---------|")
 
     Enum.each(by_rule, fn r ->
-      sev_str = format_severity_short(r.severity)
-      title = String.slice(r.title, 0, title_w)
+      sev = severity_label(r.severity)
 
       IO.puts(
-        "│ " <> sev_str <> " │ " <>
-          String.pad_trailing(r.rule_id, rule_w) <> "│ " <>
-          String.pad_leading(Integer.to_string(r.count), 5) <> " │ " <>
-          String.pad_trailing(title, title_w) <> " │"
+        "| " <> String.pad_trailing(sev, 7) <>
+          " | " <> String.pad_trailing(r.rule_id, 5) <>
+          " | " <> String.pad_leading(Integer.to_string(r.count), 5) <>
+          " | " <> r.title <> " |"
       )
     end)
 
-    IO.puts(bottom)
     IO.puts("\n#{total} total across #{length(by_rule)} rules\n")
     IO.puts(@llm_instruction)
 
@@ -86,9 +73,9 @@ defmodule Archdo.Formatter do
   defp severity_sort(:warning), do: 1
   defp severity_sort(:info), do: 2
 
-  defp format_severity_short(:error), do: to_string(IO.ANSI.format([:red, String.pad_trailing("error", 7)]))
-  defp format_severity_short(:warning), do: to_string(IO.ANSI.format([:yellow, String.pad_trailing("warn", 7)]))
-  defp format_severity_short(:info), do: to_string(IO.ANSI.format([:cyan, String.pad_trailing("info", 7)]))
+  defp severity_label(:error), do: "error"
+  defp severity_label(:warning), do: "warn"
+  defp severity_label(:info), do: "info"
 
   # ───────────────────────────────────────────── :text ─────────────────────────────────────────────
 
