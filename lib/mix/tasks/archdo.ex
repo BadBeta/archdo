@@ -544,22 +544,26 @@ defmodule Mix.Tasks.Archdo do
 
   defp apply_single_fix(_, _), do: :skip
 
-  # SAFETY: skip when input contains assignment (=) — rewriting
-  # `x = foo() |> bar()` to `bar(x = foo())` changes semantics.
   defp rewrite_single_pipe(line) do
     case Regex.run(~r/^(.+?)\s*\|>\s*(.+)$/, line) do
       [_, input, call] ->
         input = String.trim(input)
 
-        case String.contains?(input, " = ") or String.match?(input, ~r/^[a-z_]\w*\s*=/) do
-          true -> nil
-          false ->
-            rewrite_pipe_call_cli(input, call)
+        case safe_pipe_rewrite?(input, line) do
+          true -> rewrite_pipe_call_cli(input, call)
+          false -> nil
         end
 
       _ ->
         nil
     end
+  end
+
+  defp safe_pipe_rewrite?(input, _line) do
+    String.match?(input, ~r/^[a-z_]\w*$/) or
+      String.match?(input, ~r/^[a-z_]\w*\(.*\)$/) or
+      String.match?(input, ~r/^[A-Z]\w*(?:\.[A-Z]\w*)*\.[a-z_]\w*\(.*\)$/) or
+      String.match?(input, ~r/^\[.*\]$/)
   end
 
   defp rewrite_pipe_call_cli(input, call) do

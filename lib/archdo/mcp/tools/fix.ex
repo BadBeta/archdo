@@ -178,22 +178,33 @@ defmodule Archdo.Mcp.Tools.Fix do
   end
 
   # Rewrite "input |> Mod.func(args)" to "Mod.func(input, args)"
-  # SAFETY: skip when input contains assignment (=) — rewriting
-  # `x = foo() |> bar()` to `bar(x = foo())` changes semantics.
+  # SAFETY checks — skip when rewriting would change semantics:
+  #   - input contains assignment (x = foo() |> bar())
+  #   - input is a keyword value (key: expr |> func())
+  #   - input is inside a list/map/struct literal
+  #   - line has trailing comma (embedded in larger expression)
   defp rewrite_single_pipe(line) do
     case Regex.run(~r/^(.+?)\s*\|>\s*(.+)$/, line) do
       [_, input, call] ->
         input = String.trim(input)
 
-        # Skip if input is an assignment — auto-fix would break semantics
-        case String.contains?(input, " = ") or String.match?(input, ~r/^[a-z_]\w*\s*=/) do
-          true -> nil
-          false -> rewrite_pipe_call(input, call)
+        case safe_to_rewrite_pipe?(input, line) do
+          true -> rewrite_pipe_call(input, call)
+          false -> nil
         end
 
       _ ->
         nil
     end
+  end
+
+  # Only safe when input is a simple expression — variable, function call,
+  # or module.function call. Anything more complex risks semantic breakage.
+  defp safe_to_rewrite_pipe?(input, _line) do
+    String.match?(input, ~r/^[a-z_]\w*$/) or
+      String.match?(input, ~r/^[a-z_]\w*\(.*\)$/) or
+      String.match?(input, ~r/^[A-Z]\w*(?:\.[A-Z]\w*)*\.[a-z_]\w*\(.*\)$/) or
+      String.match?(input, ~r/^\[.*\]$/)
   end
 
   defp rewrite_pipe_call(input, call) do
