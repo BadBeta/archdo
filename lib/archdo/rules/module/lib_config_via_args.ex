@@ -8,7 +8,7 @@ defmodule Archdo.Rules.Module.LibConfigViaArgs do
   def id, do: "3.3"
 
   @impl true
-  def description, do: "Libraries must accept configuration as arguments, not Application.get_env"
+  def description, do: "Scattered Application.get_env calls — centralize configuration in a Config module"
 
   @impl true
   def analyze(file, ast, _opts) do

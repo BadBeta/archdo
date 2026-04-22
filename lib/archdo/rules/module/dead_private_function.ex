@@ -58,13 +58,61 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
       String.starts_with?(name_str, "sigil_")
   end
 
-  # Collect all function calls from function bodies only (not definition heads).
-  # We extract all function bodies first, then walk each body for bare calls.
+  # Collect all function calls from function bodies and HEEx templates.
   defp collect_calls(ast) do
     all_fns = AST.extract_functions(ast, :all)
 
-    Enum.reduce(all_fns, MapSet.new(), fn {_name, _arity, _meta, _args, body}, acc ->
-      collect_calls_in_body(body, acc)
+    body_calls =
+      Enum.reduce(all_fns, MapSet.new(), fn {_name, _arity, _meta, _args, body}, acc ->
+        collect_calls_in_body(body, acc)
+      end)
+
+    # Also scan ~H sigils for function references (Phoenix HEEx templates)
+    heex_calls = collect_heex_calls(ast)
+
+    MapSet.union(body_calls, heex_calls)
+  end
+
+  # Scan ~H"""...""" sigil bodies for function name references.
+  # HEEx templates call private functions like `polyline(@points, ...)` or
+  # `format_uptime()` which appear as bare text inside the template string.
+  defp collect_heex_calls(ast) do
+    {_, calls} =
+      Macro.prewalk(ast, MapSet.new(), fn
+        # ~H sigil: {:sigil_H, _, [{:<<>>, _, [string]}, []]}
+        {:sigil_H, _, [{:<<>>, _, parts}, _]} = node, acc ->
+          text = extract_sigil_text(parts)
+          refs = extract_function_refs_from_heex(text)
+          {node, MapSet.union(acc, refs)}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    calls
+  end
+
+  defp extract_sigil_text(parts) do
+    Enum.map_join(parts, fn
+      s when is_binary(s) -> s
+      {:__block__, _, [s]} when is_binary(s) -> s
+      _ -> ""
+    end)
+  end
+
+  # Find function-call-like patterns in HEEx text: `name(` or `name(`
+  defp extract_function_refs_from_heex(text) do
+    Regex.scan(~r/\b([a-z_][a-z0-9_]*[!?]?)\s*\(/, text)
+    |> Enum.reduce(MapSet.new(), fn
+      [_, name] ->
+        atom = String.to_atom(name)
+        # We don't know the exact arity from HEEx, so mark as referenced
+        # with arities 0-6 to avoid false positives
+        Enum.reduce(0..6, MapSet.new(), fn arity, set ->
+          MapSet.put(set, {atom, arity})
+        end)
+      _ ->
+        MapSet.new()
     end)
   end
 

@@ -70,6 +70,7 @@ defmodule Mix.Tasks.Archdo do
           explain: :string,
           init: :boolean,
           fix: :boolean,
+          dry_run: :boolean,
           boundaries: :boolean,
           tests: :boolean,
           functions: :boolean,
@@ -396,6 +397,7 @@ defmodule Mix.Tasks.Archdo do
   # --- --fix ---
 
   defp run_fix(opts, paths) do
+    dry_run = Keyword.get(opts, :dry_run, false)
     run_opts = build_run_opts(opts)
     files = Archdo.collect_files(paths)
     diagnostics = Archdo.Runner.analyze(files, run_opts)
@@ -409,15 +411,25 @@ defmodule Mix.Tasks.Archdo do
       _ ->
         IO.puts("\nArchdo — #{length(fixable)} auto-fixable findings\n")
 
-        fixed_count =
-          fixable
-          |> Enum.group_by(& &1.file)
-          |> Enum.reduce(0, fn {file, file_diags}, count ->
-            applied = apply_fixes(file, file_diags)
-            count + applied
-          end)
+        case dry_run do
+          true ->
+            Enum.each(fixable, fn d ->
+              IO.puts("  [#{d.rule_id}] #{Archdo.AST.relative_path(d.file)}:#{d.line} — #{d.title}")
+            end)
 
-        IO.puts("Applied #{fixed_count} fixes. Run `mix format` to clean up formatting.\n")
+            IO.puts("\nDry run — #{length(fixable)} fixes would be applied. Use --fix without --dry-run to apply.\n")
+
+          false ->
+            fixed_count =
+              fixable
+              |> Enum.group_by(& &1.file)
+              |> Enum.reduce(0, fn {file, file_diags}, count ->
+                applied = apply_fixes(file, file_diags)
+                count + applied
+              end)
+
+            IO.puts("Applied #{fixed_count} fixes. Run `mix format` to clean up formatting.\n")
+        end
     end
   end
 

@@ -254,10 +254,29 @@ defmodule Archdo.Runner do
   defp analyze_file(file, rules, opts) do
     case AST.parse_file(file) do
       {:ok, ast} ->
-        Enum.flat_map(rules, &safe_analyze(&1, file, ast, opts))
+        diagnostics = Enum.flat_map(rules, &safe_analyze(&1, file, ast, opts))
+        filter_suppressed(diagnostics, file)
 
       {:error, _reason} ->
         []
+    end
+  end
+
+  # Filter out diagnostics suppressed by `# archdo:allow RULE_ID` comments
+  # on the line immediately before the finding.
+  defp filter_suppressed(diagnostics, file) do
+    case File.read(file) do
+      {:ok, content} ->
+        lines = String.split(content, "\n")
+
+        Enum.reject(diagnostics, fn d ->
+          prev_line = Enum.at(lines, max(d.line - 2, 0), "")
+          String.contains?(prev_line, "archdo:allow") and
+            (String.contains?(prev_line, d.rule_id) or String.contains?(prev_line, "all"))
+        end)
+
+      {:error, _} ->
+        diagnostics
     end
   end
 
