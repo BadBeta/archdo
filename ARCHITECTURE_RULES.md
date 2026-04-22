@@ -1,16 +1,16 @@
 # Archdo — Architectural Quality Rules for Elixir
 
-> 166 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, **test quality**, and **compiled beam analysis** — the gap none of them cover.
+> 200 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, **test quality**, and **compiled beam analysis** — the gap none of them cover.
 
 ## Contents
 
-1. [Boundary Integrity](#1-boundary-integrity) — 24 rules (1.1–1.23)
-2. [Public API Quality](#2-public-api-quality) — 3 rules (2.1–2.3)
-3. [Single Source of Truth](#3-single-source-of-truth) — 6 rules (3.1–3.6)
-4. [Coupling & Abstraction](#4-coupling--abstraction) — 26 rules (4.1–4.26)
-5. [OTP Process Architecture](#5-otp-process-architecture) — 40 rules (5.1–5.42)
-6. [Module Quality](#6-module-quality) — 31 rules (6.1–6.32)
-7. [Test Architecture](#7-test-architecture) — 19 rules (7.1–7.21)
+1. [Boundary Integrity](#1-boundary-integrity) — 29 rules (1.1–1.33)
+2. [Public API Quality](#2-public-api-quality) — 2 rules (2.1–2.2)
+3. [Single Source of Truth](#3-single-source-of-truth) — 5 rules (3.1–3.5)
+4. [Coupling & Abstraction](#4-coupling--abstraction) — 30 rules (4.1–4.30)
+5. [OTP Process Architecture](#5-otp-process-architecture) — 43 rules (5.1–5.45)
+6. [Module Quality](#6-module-quality) — 53 rules (6.1–6.53)
+7. [Test Architecture](#7-test-architecture) — 24 rules (7.1–7.29)
 8. [Event Sourcing](#8-event-sourcing-architecture) — 8 rules (8.1–8.8)
 9. [State Machine](#9-state-machine-architecture) — 3 rules (9.1–9.3)
 10. [Composition](#10-composition-and-extensibility) — 2 rules (10.1–10.2)
@@ -260,6 +260,105 @@ Non-context module calls Repo functions directly instead of going through the ow
 - **Check:** Find all calls to Repo.get/insert/update/delete/all from non-context modules. Context modules are identified as top-level domain modules.
 - **Tolerate:** Migration modules, context-internal submodules explicitly delegated by the context.
 - **Severity:** `warning`
+
+### 1.23 Context Boundary Quality *(compiled)*
+
+Measures cohesion, coupling, and encapsulation of automatically discovered contexts.
+
+- **Why:** High-quality boundaries have high internal cohesion (modules within the context call each other), low external coupling (few cross-boundary calls), and clear encapsulation (calls go through boundary modules, not internals). Compiled data provides ground-truth call counts. (Bounded Context, Modularity)
+- **Check:** Discover contexts from namespace clustering, compute cohesion ratio (internal calls / total calls), coupling ratio (cross-boundary calls / total), and leak ratio (calls bypassing the boundary module).
+- **Tolerate:** Small contexts with fewer than 3 modules. Shared infrastructure contexts.
+- **Severity:** `info`
+
+### 1.24 Circular Context Dependencies *(compiled)*
+
+Context A depends on Context B which depends on Context A.
+
+- **Why:** Circular dependencies between bounded contexts prevent independent deployment, testing, and reasoning. They indicate the contexts are not properly separated — either the boundary is wrong or shared logic needs extraction. (Acyclic Dependencies Principle)
+- **Check:** Build context-level adjacency map from compiled call graph, detect cycles via DFS.
+- **Tolerate:** Circular dependencies through shared infrastructure (e.g., both contexts using Repo).
+- **Severity:** `warning`
+
+### 1.25 Orphan Module *(compiled)*
+
+Module has zero incoming AND zero outgoing dependencies within the project.
+
+- **Why:** A completely disconnected module is either dead code, a missing integration, or a standalone utility that should be in a separate package. (Dead Code, Cohesion)
+- **Check:** Check `module_dependencies` and `module_dependents` from compiled graph — both empty.
+- **Tolerate:** Behaviour definitions (they're implemented, not called). Application entry points. Test support modules.
+- **Severity:** `info`
+
+### 1.26 Reverse Dependency — Domain References Web Layer
+
+Domain module imports, aliases, or calls a web-layer module.
+
+- **Why:** Domain modules must be framework-agnostic. When domain code depends on controllers, LiveView, or router helpers, it can't be reused outside the web context, tested without the framework, or extracted into a library. (Dependency Inversion)
+- **Check:** Walk AST for aliases/imports/calls containing `Web` in the module path. Skip web-layer files (`*_web.ex`, `*_web/`).
+- **Tolerate:** None — this is always wrong.
+- **Severity:** `warning`
+
+### 1.27 Business Logic in LiveView handle_event
+
+LiveView `handle_event` callback contains business logic instead of delegation.
+
+- **Why:** `handle_event` should translate user input, delegate to a context module, and assign the result to the socket. Business logic in handle_event can't be tested without mounting a LiveView, is duplicated across similar LiveViews, and couples the UI to the domain. (Thin Controller)
+- **Check:** Count AST nodes in `handle_event` bodies excluding assign calls. Flag when > 10 non-assign nodes.
+- **Tolerate:** Simple form handling where the logic IS the assignment. LiveViews that are the context (no backend).
+- **Severity:** `info`
+
+### 1.28 Ecto.Query in Interface Layer
+
+Controllers, LiveViews, or channels build Ecto queries directly.
+
+- **Why:** Query building in the interface layer bypasses context boundaries. Queries get duplicated across controllers, the context can't enforce business rules, and schema changes require updating the web layer. (Boundary Encapsulation)
+- **Check:** Find `import Ecto.Query`, `from(...)`, or `Ecto.Query.*` calls in controller/LiveView/channel files.
+- **Tolerate:** None — queries always belong in context modules.
+- **Severity:** `warning`
+
+### 1.29 Cross-Context Schema Access
+
+Module constructs or pattern-matches a struct from another context.
+
+- **Why:** Directly using `%OtherContext.Schema{}` creates invisible coupling. If the schema changes fields, every cross-context usage breaks. Access data through the owning context's public API instead. (Data Encapsulation)
+- **Check:** Find `{:%, _, [{:__aliases__, _, aliases}, ...]}` where the context prefix differs from the current file's context.
+- **Tolerate:** Shared data-carrier structs explicitly designed for cross-boundary use. Test fixtures.
+- **Severity:** `info`
+
+### 1.30 Direct GenServer.call Across Context Boundary
+
+Module calls `GenServer.call/cast` to another context's process by name.
+
+- **Why:** Calling another context's GenServer directly bypasses its public API. The caller becomes coupled to the process name, message format, and internal state shape. (Process Encapsulation)
+- **Check:** Find `GenServer.call/cast` with a module-path target from a different context.
+- **Tolerate:** Infrastructure processes (PubSub, Registry) that are shared by design.
+- **Severity:** `info`
+
+### 1.31 Shared Database Table Across Contexts
+
+Multiple contexts define Ecto schemas for the same database table.
+
+- **Why:** When two contexts both define schemas for the same table, neither truly owns the data. Changes to the table structure require coordinating across context boundaries — invisible coupling through the database. (Data Ownership)
+- **Check:** Project-level: collect `schema "table_name"` calls, group by table, flag tables with schemas in multiple contexts.
+- **Tolerate:** Read-only view schemas. Intentionally shared reference data tables.
+- **Severity:** `warning`
+
+### 1.32 Cross-Context Application Config Read
+
+Module reads Application config for another context's module.
+
+- **Why:** Reading another context's configuration creates hidden coupling. Each context should own its own configuration and expose what others need through its public API. (Configuration Encapsulation)
+- **Check:** Find `Application.get_env/fetch_env/compile_env` with a module path from a different context.
+- **Tolerate:** Shared infrastructure config (Repo URL, endpoint config).
+- **Severity:** `info`
+
+### 1.33 Shared ETS Table Across Contexts
+
+Multiple contexts access the same named ETS table directly.
+
+- **Why:** Named ETS tables shared between contexts create coupling through shared mutable state. Changes to the table structure, key format, or access patterns in one context silently break the other. (State Encapsulation)
+- **Check:** Project-level: collect `:ets.lookup/insert/delete` calls with atom table names, group by context, flag tables accessed from multiple contexts.
+- **Tolerate:** Dedicated shared cache modules with a typed public API. Registry tables.
+- **Severity:** `info`
 
 ---
 
@@ -586,6 +685,42 @@ Module references another module (in struct patterns, type specs, attributes) bu
 - **Why:** After compilation, a module references another (e.g., pattern matches on `%Module{}`) but makes zero function calls to it. This may be a leftover from a refactor, an unused alias, or a compile-time-only dependency. Phantom dependencies add noise to the dependency graph and may trigger unnecessary recompilation. (Minimal Dependencies)
 - **Check:** Extract all Elixir module atoms from beam abstract code. Compare against modules with actual function calls. Report the difference, classified by reference type (struct, attribute, general).
 - **Tolerate:** `@behaviour` declarations (compile-time contracts by design), compile-time macro providers.
+- **Severity:** `info`
+
+**4.27 Unused Alias**
+
+Alias is declared but the short name is never referenced.
+
+- **Why:** An unused alias adds noise to the module header and suggests a dependency that doesn't exist. It may be a leftover from a refactoring that removed the code using it. (Minimal Dependencies, Clarity)
+- **Check:** Extract all simple alias declarations, count references to each short name in `{:__aliases__, _, [first | _]}` nodes. Flag when zero references.
+- **Tolerate:** `alias Foo.{Bar, Baz}` multi-alias syntax (harder to track). `alias Foo, as: Bar` where `Bar` is used.
+- **Severity:** `info`
+
+**4.28 N+1 Preload in Loop**
+
+`Repo.preload/get/one/all` inside Enum callbacks or `for` comprehensions.
+
+- **Why:** Calling Repo inside a loop executes one query per iteration — the classic N+1 problem. For 100 items, this is 101 queries instead of 2. Use `Repo.preload(list, :assoc)` to batch. (Performance, Database)
+- **Check:** Find `Repo.preload/get/one/all` calls inside `Enum.map/each/flat_map` callbacks and `for` comprehension bodies.
+- **Tolerate:** `Repo.preload` outside loops. Streams that batch internally.
+- **Severity:** `warning`
+
+**4.29 Dev Dependency Without `only:` Option**
+
+Well-known dev/test package missing `only: [:dev, :test]` — will be included in production releases.
+
+- **Why:** Dependencies without `only: :dev` are compiled into production releases. Dev tools like Credo, Dialyxir, and ExDoc add unnecessary code, increase release size, and may expose dev-only functionality. (Release Hygiene)
+- **Check:** Scan `mix.exs` deps for known dev-only packages (credo, dialyxir, ex_doc, mox, etc.) without `only:` option.
+- **Tolerate:** `:esbuild` and `:tailwind` (Phoenix 1.8+ deliberately omits `only:` for asset build).
+- **Severity:** `warning`
+
+**4.30 Umbrella Dependency Inconsistency**
+
+Umbrella child dep with `in_umbrella: true, runtime: false` but no `only:` restriction.
+
+- **Why:** `runtime: false` without `only:` means the dependency is compiled in all environments but never started. This may be intentional (compile-time types/macros) or a misconfiguration. (Dependency Hygiene)
+- **Check:** Find deps with both `in_umbrella: true` and `runtime: false` but no `only:` option.
+- **Tolerate:** Compile-time-only dependencies (type definitions, macros).
 - **Severity:** `info`
 
 ---
@@ -964,6 +1099,33 @@ Sequential collection processing with I/O in the callback — candidate for `Tas
 - **Tolerate:** Test files, callbacks that must run in order, rate-limited external services, already-parallel code (Task.async_stream).
 - **Severity:** `info`
 
+**5.43 GenServer Callback Sprawl**
+
+GenServer with too many distinct `handle_call`/`handle_cast`/`handle_info` message patterns.
+
+- **Why:** A GenServer handling 10+ distinct message types is doing too many things. It's hard to understand which messages it handles, test each message path, and reason about state transitions. Consider splitting into focused processes or extracting message handlers into modules. (Single Responsibility)
+- **Check:** Count distinct first-argument patterns across all `handle_call`/`handle_cast`/`handle_info` clauses. Threshold: 10.
+- **Tolerate:** Node/connection managers that legitimately proxy many operations to a single resource (e.g., a NIF handle).
+- **Severity:** `warning`
+
+**5.44 String.to_atom in Hot Path**
+
+`String.to_atom/1` called inside GenServer callbacks or Enum callbacks.
+
+- **Why:** The atom table is finite (~1M entries by default) and atoms are never garbage collected. `String.to_atom` in a callback that runs per-request or per-item risks exhausting the table, crashing the entire VM. Use `String.to_existing_atom/1` or explicit atom mapping. (Runtime Safety)
+- **Check:** Find `String.to_atom/1` inside `handle_call/cast/info` callbacks and `Enum.map/filter/reduce/each` callbacks.
+- **Tolerate:** `String.to_existing_atom` (safe). Compile-time atom creation (module attributes).
+- **Severity:** `warning`
+
+**5.45 Named ETS Table Without Cleanup**
+
+`:ets.new` with `:named_table` in a module that has no `terminate/2` callback or `:ets.delete` call.
+
+- **Why:** Named ETS tables are global resources. If the owning process restarts (supervisor restart), the new process can't create the same named table because the old one still exists — crash loop. `terminate/2` with `:ets.delete` ensures cleanup on graceful shutdown. (Resource Management)
+- **Check:** Find `:ets.new` with `:named_table` option, check for `terminate/2` or `:ets.delete` in the same module.
+- **Tolerate:** Tables created in Application.start (owned by the application, not a process). Tables with `:heir` option set.
+- **Severity:** `info`
+
 ---
 
 ## 6. Module Quality
@@ -1264,6 +1426,190 @@ try/rescue block buried inside an anonymous function, Enum callback, or Task cal
 - **Tolerate:** try/rescue in named private functions — this IS the correct pattern. The rule specifically targets the anonymous/inline form.
 - **Severity:** `info`
 
+### 6F. Code Slop & Simplification
+
+**6.33 LLM-Generated Code Slop**
+
+Detects five patterns of unnecessarily verbose code typically generated by LLMs: `@doc` on private functions, trivial delegation wrappers, redundant boolean comparisons (`== true`), empty doc strings, and single-step pipelines.
+
+- **Why:** LLMs produce code that compiles but is verbose, over-abstracted, or uses non-idiomatic patterns. These patterns clutter the codebase and signal code that wasn't reviewed by an experienced Elixir developer. (Code Quality, Idiomatic Elixir)
+- **Check:** Five sub-checks: `@doc` before `defp`, `defp foo(x), do: Bar.foo(x)` trivial wrapper, `x == true`/`x == false`, empty `@doc ""`, single `|>` pipe.
+- **Tolerate:** `defdelegate` (intentional public delegation). Multi-step pipelines (2+ pipes are idiomatic).
+- **Severity:** `info`
+
+**6.34 Dead Private Function**
+
+Private function is never called within its module.
+
+- **Why:** A `defp` that is never called is dead code — cognitive load, increased module size, and a possible missing call (typo or refactoring leftover). (Dead Code)
+- **Check:** Extract all private function definitions, collect all bare calls and function captures (`&func/N`) from function bodies, flag definitions with no matching calls. Scans `~H` sigils for HEEx template function references.
+- **Tolerate:** Functions named `__*__` (compiler-generated). `sigil_*` functions. Metaprogrammed function names (`unquote`).
+- **Severity:** `warning`
+
+**6.35 Unreachable Clause**
+
+Catch-all clause (`_` or bare variable) appears before more specific clauses in a `case` expression.
+
+- **Why:** A catch-all that isn't the last clause makes everything below it unreachable — dead code that looks like it's handling something. (Dead Code, Correctness)
+- **Check:** Walk `case` expressions, find catch-all patterns before the last clause. Also check `cond` where `true ->` appears before the last clause.
+- **Tolerate:** Pattern matching with guards (the catch-all may have a guard that makes it non-exhaustive).
+- **Severity:** `warning`
+
+**6.36 Redundant Guard Recheck**
+
+Function body re-checks a type that's already guaranteed by the pattern match or guard.
+
+- **Why:** When a function head matches `%{} = x`, calling `is_map(x)` in the body is redundant — the pattern already guarantees the type. (Dead Code, Clarity)
+- **Check:** Extract type guarantees from patterns (`%{}` → map, `[_ | _]` → list, `<<>>` → binary) and guards (`when is_map(x)`), then walk body for redundant `is_*` checks on guaranteed variables.
+- **Tolerate:** Guards on struct fields that add narrower constraints.
+- **Severity:** `info`
+
+**6.38 Identity Transformation**
+
+No-op function call that returns its input unchanged.
+
+- **Why:** `Enum.map(list, fn x -> x end)` or `Enum.filter(list, fn _ -> true end)` are identity operations that waste CPU cycles and obscure intent. (Dead Code, Performance)
+- **Check:** Detect `Enum.map(_, fn x -> x end)`, `Enum.map(_, & &1)`, `Enum.filter(_, fn _ -> true end)`, `Enum.reject(_, fn _ -> false end)`.
+- **Tolerate:** None — these are always removable.
+- **Severity:** `info`
+
+**6.39 Defensive Nil Return**
+
+`case` expression with 3+ clauses where the last is `_ -> nil`.
+
+- **Why:** A catch-all returning bare `nil` is a silent swallowing pattern — unexpected values disappear instead of crashing visibly. Usually indicates the developer wasn't sure what all the possible values are. (Error Handling, Fail Fast)
+- **Check:** Flag `case` with 3+ clauses where the last clause is `_ -> nil`.
+- **Tolerate:** 2-clause case (the catch-all IS the logic). `_ -> :error` or `_ -> {:error, _}` (meaningful error handling).
+- **Severity:** `info`
+
+**6.40 Verbose Ok/Error Unwrap**
+
+`case` that matches `{:ok, val} -> val; {:error, _} -> nil` — swallows the error and returns nil.
+
+- **Why:** This pattern silently discards the error reason. The caller gets `nil` with no way to know WHY it failed. Use `with` for chaining or propagate the error. (Error Handling Visibility)
+- **Check:** Detect `case` with exactly `{:ok, val} -> val` and `{:error, _} -> nil` clauses.
+- **Tolerate:** Functions documented as returning `nil` on failure (e.g., cache lookups).
+- **Severity:** `info`
+
+**6.41 Single-Clause With**
+
+`with` expression with only one `<-` clause.
+
+- **Why:** `with` is designed for chaining 2+ failable operations. A single-clause `with` is just a verbose `case`. The `case` is more explicit about what happens for each branch. (Idiomatic Elixir, Clarity)
+- **Check:** Count `{:<-, _, _}` clauses in `with` expressions. Flag when exactly 1.
+- **Tolerate:** None — single-clause `with` is always replaceable by `case`.
+- **Severity:** `info`
+
+**6.42 Constant Expression**
+
+Conditional with a constant/literal condition (`if true`, `if false`, `cond` with `true` as first clause).
+
+- **Why:** A constant condition means one branch is always taken — the other is dead code. Usually a debugging leftover or a feature flag that was never removed. (Dead Code)
+- **Check:** Detect `if true/false`, `cond` where `true ->` is the first clause with more clauses after it.
+- **Tolerate:** `cond do ... true -> default end` as the LAST clause (idiomatic default).
+- **Severity:** `info`
+
+**6.43 Long Parameter List**
+
+Public function with 5+ parameters.
+
+- **Why:** Functions with many parameters are hard to call correctly — callers must remember the order and meaning of each argument. Use a map, keyword list, or struct to group related parameters. (Usability, Readability)
+- **Check:** Count arity of public functions. 5+ = info, 7+ = warning.
+- **Tolerate:** NIF interfaces (arity dictated by the native function). Framework callbacks.
+- **Severity:** `info` (5+), `warning` (7+)
+
+**6.44 Nested Control Flow**
+
+`with` inside `with`, or 3+ levels of nested `case`/`cond`/`if`/`with`.
+
+- **Why:** Deeply nested control flow is hard to follow and test. Each nesting level adds a branch the reader must track. Extract named functions to flatten the structure. (Readability, Testability)
+- **Check:** Walk function bodies tracking nesting depth of `case/with/cond/if`. Flag `with` inside another control construct, or 3+ levels.
+- **Tolerate:** Pattern matching in function heads (nesting there is fine).
+- **Severity:** `info`
+
+**6.45 Boolean Blindness**
+
+Public non-predicate function returns bare `true`/`false` for a failable operation.
+
+- **Why:** Functions named `validate`, `check`, `verify`, `authorize` that return bare booleans prevent callers from knowing WHY the operation failed. Returning `{:ok, _}/{:error, reason}` communicates the failure mode. (Error Handling, API Design)
+- **Check:** Find public functions whose name starts with `validate/check/verify/authorize/authenticate/confirm/ensure`, does not end with `?`, and returns only `true`/`false`.
+- **Tolerate:** Predicate functions (`?` suffix). Functions that genuinely have boolean semantics.
+- **Severity:** `info`
+
+### 6G. Performance Traps
+
+**6.46 String Concatenation in Loop**
+
+`<>` string concatenation inside `Enum.reduce` or `for` comprehension with string accumulator — O(n²).
+
+- **Why:** Each `<>` concatenation copies the entire accumulated string. For a list of n items this is O(n²). Build an IO list instead: collect `[part | acc]` and call `IO.iodata_to_binary/1` once at the end. (Performance)
+- **Check:** Find `Enum.reduce(_, "", fn ...)` with `<>` in the callback body. Also `for ... reduce: ""` with `<>`.
+- **Tolerate:** Small known-size inputs (< 10 items). String interpolation (`#{}`) which is optimized by the compiler.
+- **Severity:** `warning`
+
+**6.47 Collection Empty Check via length/1**
+
+`length(list) == 0`, `length(list) > 0`, `Enum.count(list) == 0` — traverses the entire collection to check emptiness.
+
+- **Why:** `length/1` and `Enum.count/1` are O(n) — they traverse the entire list. Checking emptiness is O(1) with pattern matching: `match?([_ | _], list)` for non-empty, `match?([], list)` for empty. (Performance)
+- **Check:** Detect `length(x) == 0`, `length(x) > 0`, `Enum.count(x) == 0`, `Enum.count(x) != 0`.
+- **Tolerate:** `length(x) > N` where N > 0 (genuinely need the count). `Enum.count(x, fun)` without comparison.
+- **Severity:** `info`
+
+**6.48 Map.keys/values |> length()**
+
+`Map.keys(m) |> length()` or `length(Map.keys(m))` — O(n) when `map_size/1` is O(1).
+
+- **Why:** `Map.keys/1` materializes all keys into a list (O(n) time and memory), then `length/1` traverses it (another O(n)). `map_size/1` returns the count in O(1) from the map's internal metadata. (Performance)
+- **Check:** Detect `Map.keys/values |> length`, `length(Map.keys/values(...))`, `Enum.count(Map.keys/values(...))`.
+- **Tolerate:** When the actual keys/values list is needed (not just the count).
+- **Severity:** `info`
+
+**6.49 Regex Literal in Hot Path**
+
+`~r/pattern/` inside Enum callbacks or GenServer callbacks.
+
+- **Why:** Regex sigils in function bodies may be recompiled each call. Hoisting to a module attribute (`@pattern ~r/.../ `) compiles once at compile time. (Performance)
+- **Check:** Find `{:sigil_r, _, _}` inside Enum callback functions and GenServer `handle_call/cast/info` bodies.
+- **Tolerate:** Module-level `@attr ~r/.../` (already compiled once). Infrequently-called functions.
+- **Severity:** `info`
+
+**6.50 Inefficient List Operation**
+
+Operations that ignore Elixir's linked-list O(n) characteristics.
+
+- **Why:** Elixir lists are singly-linked — head access is O(1) but append, random access, and last-element access are O(n). Seven sub-checks: `list ++ [item]` (append), `acc ++ list` in reduce (growing accumulator), `Enum.at(list, 0)` (use `hd`), `List.last` in loop, `Enum.reverse |> hd` (use `List.last`), `List.insert_at(list, -1, item)` (hidden append), `Enum.at(list, variable)` in loop (random access), `List.delete_at` in loop. (Performance, Data Structure Awareness)
+- **Check:** Pattern-match AST for each sub-check. `++` accumulator only checked in `Enum.reduce/reduce_while` (not in `flat_map`/`map` where it joins local variables).
+- **Tolerate:** Small known-size lists. AST traversal on fixed-structure nodes.
+- **Severity:** `warning` (append/accumulator), `info` (others)
+
+**6.51 Collection Traversal Waste**
+
+Collection operations with more efficient alternatives.
+
+- **Why:** Five sub-checks: `Enum.count(list, fun) > 0` should be `Enum.any?` (short-circuits), `Enum.filter |> Enum.map` should be a `for` comprehension (two passes → one), `Enum.sort |> hd` should be `Enum.min` (O(n log n) → O(n)), `Enum.reverse(Enum.reverse(x))` is identity (pure waste), `Enum.member?` on list in loop should use MapSet (O(n) → O(1) per lookup). (Performance)
+- **Check:** AST pattern matching for each sub-check. Pipe detection handles both 2-step and 3-step pipe forms.
+- **Tolerate:** `Enum.count` without comparison (genuinely need the count). `Enum.sort` followed by `Enum.take(n)` where n > 1.
+- **Severity:** `warning` (Enum.member? in loop), `info` (others)
+
+**6.52 String.length for Empty/Size Check**
+
+`String.length(s) == 0` or `String.length(s) > 0` — O(n) grapheme traversal for an O(1) check.
+
+- **Why:** `String.length/1` counts Unicode graphemes by traversing the entire string. Checking `s == ""` is O(1). `byte_size(s) == 0` is also O(1) and works in guards. (Performance)
+- **Check:** Detect `String.length(s) == 0`, `String.length(s) > 0`, `String.length(s) != 0`.
+- **Tolerate:** `String.length(s) > N` where N > 0 (genuinely need grapheme count).
+- **Severity:** `info`
+
+**6.53 Keyword Lookup in Loop**
+
+`Keyword.get/fetch` inside Enum callbacks — O(n) per lookup.
+
+- **Why:** Keyword lists are stored as `[{key, value}]` tuples. `Keyword.get` scans linearly. Inside a loop of m iterations with a keyword list of n entries, this is O(m*n). Convert to Map once (O(n)) then use `Map.get` (O(log n)). (Performance)
+- **Check:** Find `Keyword.get/fetch/fetch!/has_key?/get_lazy` inside Enum callback functions.
+- **Tolerate:** `Keyword.get` outside loops. Small keyword lists (< 5 entries).
+- **Severity:** `info`
+
 ---
 
 ## 7. Test Architecture
@@ -1437,6 +1783,78 @@ Public function only called from test modules — never from production code.
 - **Why:** A public function exercised only by tests suggests the test is reaching into implementation details rather than testing through the public API. Consider making the function `defp` and testing the behaviour through the module's public interface. (Test Architecture, Encapsulation)
 - **Check:** Build compiled call graph. Find exported functions where all callers are test modules (modules ending in `Test`, `DataCase`, `ConnCase`, etc.). Exclude framework functions.
 - **Tolerate:** Test helper functions intentionally public, functions called dynamically.
+- **Severity:** `info`
+
+**7.22 Missing Error Path Tests**
+
+Test module with 5+ tests but no assertions exercising error paths.
+
+- **Why:** Testing only the happy path leaves failure modes unverified. Error-producing functions have `{:error, _}` branches that need explicit testing — these are where production bugs hide. (Test Coverage, Error Handling)
+- **Check:** Only analyze test files. Count total `test` blocks, count blocks containing `{:error` patterns in assertions. Flag when 5+ tests and 0 error-path assertions.
+- **Tolerate:** Test modules for pure data-transformation code that genuinely has no error paths.
+- **Severity:** `info`
+
+**7.23 Over-Mocking**
+
+Tests with 4+ `Mox.expect` calls or 3+ `Mox.stub` calls in a single test.
+
+- **Why:** Many expectations in one test indicate the test is testing the mocking setup, not the actual behaviour. The test becomes fragile — any change to any mock breaks it. Consider testing through fewer, more meaningful boundaries. (Test Quality, Fragility)
+- **Check:** Count `expect()` and `stub()` calls inside each `test` block.
+- **Tolerate:** Integration tests that legitimately coordinate multiple external services.
+- **Severity:** `info`
+
+**7.24 Empty Describe Block**
+
+`describe` block containing no `test` blocks.
+
+- **Why:** An empty describe is dead scaffolding — visual noise that signals intended but unwritten tests. It's a blind spot in the test suite. (Test Coverage, Dead Code)
+- **Check:** Find `describe` nodes, check if body contains any `test` nodes.
+- **Tolerate:** Describe blocks with only `setup` (the setup is used by nested describes).
+- **Severity:** `info`
+
+**7.25 Untested Module**
+
+Source module has no corresponding test file.
+
+- **Why:** A module with no test file at all has zero automated verification. While some modules are legitimately untested (supervisors, application modules, generated code), most should have at least basic test coverage. (Test Coverage)
+- **Check:** For each source file, compute expected test path (`lib/app/foo.ex` → `test/app/foo_test.exs`), check existence.
+- **Tolerate:** `@moduledoc false` internal modules, config files, migrations, generated code, routers, endpoints.
+- **Severity:** `info`
+
+**7.26 Process Leak in Tests**
+
+`GenServer.start_link` or `start_link` in test files without `start_supervised!`.
+
+- **Why:** Processes started directly will leak if the test crashes. `start_supervised!` ensures the ExUnit supervisor stops the process after the test, preventing state pollution between tests. (Test Isolation)
+- **Check:** Find `start_link` calls in test files that aren't wrapped in `start_supervised!`.
+- **Tolerate:** Integration tests with explicit cleanup in `on_exit/1`.
+- **Severity:** `info`
+
+**7.27 Assert on Implementation Detail**
+
+Tests use `:sys.get_state` or `Agent.get(pid, & &1)` to inspect internal process state.
+
+- **Why:** Asserting on GenServer internal state couples the test to the implementation. If the state structure changes, the test breaks even though the behaviour is correct. Test observable behaviour through the public API instead. (Test Quality, Encapsulation)
+- **Check:** Find `:sys.get_state` and `Agent.get(pid, & &1)` calls in test files.
+- **Tolerate:** Debugging helpers, tests explicitly verifying internal state for infrastructure modules.
+- **Severity:** `info`
+
+**7.28 Missing Boundary Tests**
+
+Context facade module has a test file but exercises fewer than 30% of its public API.
+
+- **Why:** A context with 10 public functions but only 2-3 tested has significant coverage gaps at the boundary layer — the most important layer to test. (Test Coverage, Boundary Quality)
+- **Check:** Project-level: for context facades (files with corresponding directories), count public functions and count function names appearing in the test file. Flag when < 30% coverage and 8+ public functions.
+- **Tolerate:** Modules with fewer than 8 public functions. Modules tested through integration tests.
+- **Severity:** `info`
+
+**7.29 Flaky Test Indicators**
+
+Test patterns that commonly cause intermittent failures.
+
+- **Why:** `assert_receive` without explicit timeout uses 100ms default (too short for async work), `:rand.uniform`/`Enum.random` without seed creates non-deterministic tests, `DateTime.utc_now` in assertions creates timing-dependent tests. (Test Reliability)
+- **Check:** Find `assert_receive` with 1 arg (no timeout), `:rand.uniform`/`Enum.random`, `DateTime.utc_now`/`System.monotonic_time` in test files.
+- **Tolerate:** `assert_receive` with explicit timeout. Seeded random in property tests.
 - **Severity:** `info`
 
 ---
@@ -1614,17 +2032,18 @@ Choose Port when safety matters more than NIF latency. Ports run in a separate O
 
 | Category | Count | Rule IDs |
 |----------|-------|----------|
-| Boundaries | 30 | 1.1–1.23, 2.1–2.3, 4.5–4.8, 4.11, 4.17 |
-| Single Source of Truth | 6 | 3.1–3.6 |
-| Coupling & Abstraction | 26 | 4.1–4.4, 4.9–4.10, 4.12–4.16, 4.18–4.26 |
-| OTP Process Architecture | 40 | 5.1–5.42 |
-| Module Quality | 31 | 6.1–6.32 |
-| Test Architecture | 19 | 7.1–7.21 |
+| Boundaries | 29 | 1.1–1.33 |
+| Public API | 2 | 2.1–2.2 |
+| Single Source of Truth | 5 | 3.1–3.5 |
+| Coupling & Abstraction | 30 | 4.1–4.30 |
+| OTP Process Architecture | 43 | 5.1–5.45 |
+| Module Quality | 53 | 6.1–6.53 |
+| Test Architecture | 24 | 7.1–7.29 |
 | Event Sourcing | 8 | 8.1–8.8 |
 | State Machine | 3 | 9.1–9.3 |
 | Composition | 2 | 10.1–10.2 |
 | Native Interop | 4 | 11.1–11.4 |
-| **Total** | **166** | |
+| **Total** | **200** | |
 
 Rules marked *(compiled)* require the `--compiled` flag and work by analyzing beam files after `mix compile`. They see ground-truth dependencies after macro expansion — no AST guessing.
 
