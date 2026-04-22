@@ -164,8 +164,17 @@ defmodule Mix.Tasks.Archdo do
 
     case Archdo.Compiled.analyze(project_root) do
       {:ok, graph} ->
-        mermaid = generate_diagram(graph, diagram_type)
-        IO.puts(mermaid)
+        case diagram_type do
+          "interactive" ->
+            html = Archdo.Compiled.DiagramInteractive.generate(graph)
+            File.write!("archdo_interactive.html", html)
+            IO.puts("Interactive diagram written to archdo_interactive.html")
+            System.cmd("xdg-open", ["archdo_interactive.html"], stderr_to_stdout: true)
+
+          _ ->
+            mermaid = generate_diagram(graph, diagram_type)
+            IO.puts(mermaid)
+        end
 
       {:error, reason} ->
         IO.puts(:standard_error, "[archdo] diagram: #{reason}")
