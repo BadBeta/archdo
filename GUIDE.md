@@ -756,15 +756,13 @@ defmodule Archdo.Rules.SomeCategory.SomeRule do
 
   @impl true
   def analyze(file, ast, _opts) do
-    # 1. Decide whether the rule applies to this file at all.
-    if not relevant?(ast) do
-      []
-    else
-      # 2. Find offending patterns in the AST.
-      offenses = find_offenses(ast)
-
-      # 3. Build a Diagnostic per offense, with full title/why/alternatives.
-      Enum.map(offenses, &build_diagnostic(file, &1))
+    case relevant?(ast) do
+      false -> []
+      true ->
+        # Find offending patterns in the AST, build a Diagnostic per offense.
+        ast
+        |> find_offenses()
+        |> Enum.map(&build_diagnostic(file, &1))
     end
   end
 

@@ -36,26 +36,29 @@ defmodule Archdo.Rules.Module.UnboundedRecursion do
         body != nil and AST.has_self_call?(body, name, arity)
       end)
 
-    if not is_recursive do
-      []
-    else
-      is_tail_recursive = all_tail_calls?(clauses, name, arity)
-      has_depth_param = has_depth_guard?(clauses)
-      has_size_base = has_finite_base_case?(clauses)
-      is_tree_walk = looks_like_tree_walk?(clauses)
-
-      # Non-tail + no depth guard + not a simple list pattern = risky
-      if not is_tail_recursive and not has_depth_param and not has_size_base and
-           not is_tree_walk do
-        meta =
-          clauses
-          |> Enum.map(fn {_, _, m, _, _} -> m end)
-          |> List.first([])
-
-        [build_diagnostic(file, name, arity, meta)]
-      else
+    case is_recursive do
+      false ->
         []
-      end
+
+      true ->
+        is_tail_recursive = all_tail_calls?(clauses, name, arity)
+        has_depth_param = has_depth_guard?(clauses)
+        has_size_base = has_finite_base_case?(clauses)
+        is_tree_walk = looks_like_tree_walk?(clauses)
+
+        # Non-tail + no depth guard + not a simple list pattern = risky
+        case is_tail_recursive or has_depth_param or has_size_base or is_tree_walk do
+          true ->
+            []
+
+          false ->
+            meta =
+              clauses
+              |> Enum.map(fn {_, _, m, _, _} -> m end)
+              |> List.first([])
+
+            [build_diagnostic(file, name, arity, meta)]
+        end
     end
   end
 

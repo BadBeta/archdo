@@ -37,11 +37,15 @@ defmodule Archdo.Rules.OTP.MissingHandleInfo do
         _ -> false
       end)
 
-    if not has_handle_info and not is_statem do
-      module_name = AST.extract_module_name(ast)
+    case has_handle_info or is_statem do
+      true ->
+        []
 
-      [
-        Diagnostic.info("5.37",
+      false ->
+        module_name = AST.extract_module_name(ast)
+
+        [
+          Diagnostic.info("5.37",
           title: "GenServer without handle_info",
           message: "#{module_name} uses GenServer but defines no handle_info/2 clauses",
           why:
@@ -75,9 +79,7 @@ defmodule Archdo.Rules.OTP.MissingHandleInfo do
           file: file,
           line: 1
         )
-      ]
-    else
-      []
+        ]
     end
   end
 end

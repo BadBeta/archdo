@@ -37,27 +37,29 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
         body != nil and AST.has_self_call?(body, name, arity)
       end)
 
-    if not is_recursive do
-      []
-    else
-      breakers =
-        Enum.flat_map(clauses, fn
-          {_, _, _, _, nil} -> []
-          {_, _, _, _, body} -> find_tco_breakers(body, name, arity)
-        end)
+    case is_recursive do
+      false ->
+        []
 
-      case breakers do
-        [] ->
-          []
+      true ->
+        breakers =
+          Enum.flat_map(clauses, fn
+            {_, _, _, _, nil} -> []
+            {_, _, _, _, body} -> find_tco_breakers(body, name, arity)
+          end)
 
-        [first_breaker | _] ->
-          meta =
-            clauses
-            |> Enum.map(fn {_, _, m, _, _} -> m end)
-            |> List.first([])
+        case breakers do
+          [] ->
+            []
 
-          [build_diagnostic(file, name, arity, meta, first_breaker)]
-      end
+          [first_breaker | _] ->
+            meta =
+              clauses
+              |> Enum.map(fn {_, _, m, _, _} -> m end)
+              |> List.first([])
+
+            [build_diagnostic(file, name, arity, meta, first_breaker)]
+        end
     end
   end
 
