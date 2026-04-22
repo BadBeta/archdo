@@ -1306,25 +1306,25 @@ Rescue catches one exception type but raises a different one — original stackt
 
 Recursive function where the call is not in tail position — risks stack overflow on large input.
 
-- **Why:** Tail-call optimization (TCO) reuses the stack frame when the recursive call is the last expression — constant memory regardless of depth. A tail-recursive function with an accumulator is equivalent to a while loop in imperative languages — it can run indefinitely without growing the stack. When the call is NOT last (e.g., `[head | recurse(tail)]` — the cons operation happens after the recursive return), each call adds a stack frame. On large input, this overflows the stack. (Stack Safety, Elixir Skill: "Operations after the call break TCO")
+- **Why:** Tail-call optimization (TCO) reuses the stack frame when the recursive call is the last expression — constant memory regardless of depth. A tail-recursive function runs in constant memory — it can loop indefinitely without growing the stack. This is the BEAM's fundamental mechanism for process main loops, state machines, iterative algorithms, and any repeated execution. When the call is NOT last (e.g., `[head | recurse(tail)]` — the cons operation happens after the recursive return), each call adds a stack frame. On large input, this overflows the stack. (Stack Safety, Elixir Skill: "Operations after the call break TCO")
 - **Check:** Flag recursive functions where the self-call appears inside a cons `[_ | recurse(_)]`, append `_ ++ recurse(_)`, or arithmetic `_ + recurse(_)`.
-- **Tolerate:** Tree traversal (inherently non-tail but bounded by tree depth, not list length). Tail-recursive functions acting as while loops (e.g., `poll_loop/2`, `retry_loop/3`) — these are correct and intentional.
+- **Tolerate:** Tree traversal (inherently non-tail but bounded by tree depth, not list length). Tail-recursive process loops, state machines, and iterative algorithms (e.g., `poll_loop/2`, `retry_loop/3`, GenServer-style receive loops) — these are correct and fundamental BEAM patterns.
 - **Severity:** `info`
 
 #### 6.21 Unnecessary Manual List Recursion
 
 `[head | tail]` + `[]` base case pattern where Enum functions would suffice.
 
-- **Why:** Elixir's Enum module handles list iteration with `map`, `reduce`, `filter`, `flat_map`, and 50+ other functions. Manual recursion with `[head | tail]` for simple collection processing is more code, harder to read, and easy to get wrong (non-tail position, missing base case). Use Enum for collection processing. Use recursion for: (a) tail-recursive while loops — `receive`/`send` loops, retry loops, polling loops — where the function loops until a condition is met, not over a collection; (b) tree/graph traversal; (c) early termination with complex multi-accumulator state; (d) `Stream.unfold` or `Stream.resource` alternatives. Tail-recursive loops are the BEAM's equivalent of while loops — they run in constant memory via TCO and are a fundamental Erlang/Elixir pattern. (Idiomatic Elixir, Elixir Skill Rule 6)
+- **Why:** Elixir's Enum module handles list iteration with `map`, `reduce`, `filter`, `flat_map`, and 50+ other functions. Manual recursion with `[head | tail]` for simple collection processing is more code, harder to read, and easy to get wrong (non-tail position, missing base case). Use Enum for collection processing. Use recursion for: (a) tail-recursive process loops, state machines, and iterative algorithms — `receive` loops, retry loops, convergence — where the function continues until a condition is met; (b) tree/graph traversal; (c) early termination with complex multi-accumulator state; (d) `Stream.unfold` or `Stream.resource` alternatives. Tail-recursive functions are the BEAM's fundamental mechanism for all repeated execution — process loops, state machines, iterative algorithms, and stream processing. They run in constant memory via TCO. (Idiomatic Elixir, Elixir Skill Rule 6)
 - **Check:** Flag multi-clause functions where one clause matches `[head | tail]` and calls itself with tail, and another clause matches `[]` as the base case.
-- **Tolerate:** Tree/graph traversal (recursion IS the right tool), multi-accumulator patterns, functions that need early termination with complex conditions, **tail-recursive while loops** (retry, poll, receive loops — these are correct BEAM patterns, not unnecessary recursion).
+- **Tolerate:** Tree/graph traversal (recursion IS the right tool), multi-accumulator patterns, functions that need early termination with complex conditions, **tail-recursive loops** (process loops, state machines, retry/poll/receive patterns — these are correct BEAM patterns, not unnecessary recursion).
 - **Severity:** `info`
 
 #### 6.22 Broken Tail-Call Optimization
 
 Recursive function appears tail-recursive but TCO is silently defeated by surrounding code.
 
-- **Why:** Tail-recursive functions are the BEAM's while loops — they run in constant stack space via TCO. Three patterns break TCO without changing the apparent structure:
+- **Why:** Tail-recursive functions are the BEAM's fundamental looping and continuation mechanism — used for process main loops, state machines, iterative computation, stream processing, and any repeated execution — they run in constant stack space via TCO. Three patterns break TCO without changing the apparent structure:
   1. `try/rescue/catch` wrapping the recursive call — the BEAM must keep the stack frame to unwind on exception
   2. Pipe after the call — `recurse(t, acc) |> IO.inspect()` runs the pipe operation after return
   3. Binary operation after the call — `recurse(t, acc) <> suffix` runs concatenation after return
@@ -1338,7 +1338,7 @@ Recursive function appears tail-recursive but TCO is silently defeated by surrou
 
 Recursive function without depth guard or finite base case — stack overflow risk on large/malicious input.
 
-- **Why:** Non-tail recursive functions consume one stack frame per call (unlike tail-recursive while loops which run in constant space via TCO). Without a depth guard (e.g., `when depth < @max_depth`) or a guaranteed finite base case (matching `[]` or `0`), the recursion depth depends entirely on the input. If the input comes from outside the system (user data, API response, file content), a malicious or malformed input can crash the process with a stack overflow. (Input Safety, Defensive Programming)
+- **Why:** Non-tail recursive functions consume one stack frame per call (unlike tail-recursive functions which run in constant space via TCO). Without a depth guard (e.g., `when depth < @max_depth`) or a guaranteed finite base case (matching `[]` or `0`), the recursion depth depends entirely on the input. If the input comes from outside the system (user data, API response, file content), a malicious or malformed input can crash the process with a stack overflow. (Input Safety, Defensive Programming)
 - **Check:** Flag non-tail recursive functions that lack: (1) a finite base case matching `[]` or `0`, (2) a depth guard parameter with numeric comparison, (3) struct pattern matching (tree walk — bounded by known structure). Only applies to functions that ARE recursive and NOT tail-recursive.
 - **Tolerate:** Tail-recursive functions (safe at any depth), list recursion with `[]` base case (bounded by input length), tree walks with struct patterns.
 - **Severity:** `info`
