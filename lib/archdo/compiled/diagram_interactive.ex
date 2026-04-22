@@ -164,12 +164,22 @@ defmodule Archdo.Compiled.DiagramInteractive do
     .port-dot.unconnected { fill: #555; stroke: #333; }
 
     /* Wire styles */
-    .wire { fill: none; stroke-width: 1.5; opacity: 0.6; }
-    .wire:hover { opacity: 1; stroke-width: 2.5; }
-    .wire.ok-error { stroke: #4CAF50; }
-    .wire.data { stroke: #42A5F5; }
-    .wire.otp { stroke: #AB47BC; }
+    .wire { fill: none; stroke-width: 1.5; opacity: 0.35; }
+    .wire:hover { opacity: 0.8; stroke-width: 2.5; }
     .wire.default { stroke: #78909C; }
+
+    /* Highlighted wires (on top of everything) */
+    .wire-highlight { fill: none; stroke-width: 3; opacity: 1; pointer-events: none; }
+    .wire-highlight.outgoing { stroke: #FF9800; }
+    .wire-highlight.incoming { stroke: #4CAF50; }
+
+    /* Dimmed state when a node is selected */
+    .dimmed .node-frame { opacity: 0.15; }
+    .dimmed .wire { opacity: 0.05; }
+    .dimmed .context-bg { opacity: 0.3; }
+    .dimmed .node-frame.highlighted { opacity: 1; }
+    .dimmed .node-frame.selected { opacity: 1; }
+    .node-frame.selected .node-bg { stroke: #FFD54F; stroke-width: 3; filter: brightness(1.3); }
 
     /* Bridge for wire crossings */
     .bridge { fill: #1a1a2e; stroke: none; }
@@ -208,6 +218,12 @@ defmodule Archdo.Compiled.DiagramInteractive do
       position: fixed; left: 20px; bottom: 20px; color: #666; font-size: 11px;
     }
     #controls kbd { background: #333; padding: 1px 5px; border-radius: 3px; color: #aaa; }
+    #zoom-fit {
+      position: fixed; left: 20px; top: 20px; background: #2a2a4a; border: 1px solid #444;
+      color: #ccc; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: inherit;
+    }
+    #zoom-fit:hover { background: #3a3a5a; color: #fff; }
 
     /* Layer colors */
     .layer-interface .node-bg { fill: #1a237e; stroke: #3949ab; }
@@ -228,22 +244,24 @@ defmodule Archdo.Compiled.DiagramInteractive do
       </svg>
     </div>
 
+    <button id="zoom-fit" onclick="zoomToFit()">&#x2922; Fit All</button>
+
     <div id="detail-panel">
       <span class="close" onclick="closeDetail()">&times;</span>
       <div id="detail-content"></div>
     </div>
 
     <div id="controls">
-      <kbd>Scroll</kbd> zoom &nbsp; <kbd>Drag</kbd> pan &nbsp; <kbd>Click</kbd> module details &nbsp; <kbd>Esc</kbd> close panel
+      <kbd>Scroll</kbd> zoom &nbsp; <kbd>Drag</kbd> pan &nbsp; <kbd>Click</kbd> select + highlight wires &nbsp; <kbd>F</kbd> fit all &nbsp; <kbd>Esc</kbd> deselect
     </div>
 
     <script>
     const DATA = #{graph_json};
 
     // --- Layout Engine ---
-    const NODE_W = 180, NODE_H_BASE = 40, PORT_H = 14, PORT_R = 4;
-    const MARGIN = 60, COL_GAP = 100, ROW_GAP = 30;
-    const CONTEXT_PAD = 20;
+    const NODE_W = 200, NODE_H_BASE = 44, PORT_H = 16, PORT_R = 4;
+    const MARGIN = 80, COL_GAP = 180, ROW_GAP = 50;
+    const CONTEXT_PAD = 30;
 
     function layout(data) {
       const nodes = new Map();
@@ -318,7 +336,7 @@ defmodule Archdo.Compiled.DiagramInteractive do
         vp.appendChild(g);
       });
 
-      // Draw wires first (behind nodes)
+      // Draw wires (behind nodes)
       const wireGroup = svgEl('g', { id: 'wires' });
       DATA.edges.forEach(edge => {
         const fromNode = nodes.get(edge.from);
@@ -330,8 +348,8 @@ defmodule Archdo.Compiled.DiagramInteractive do
         const x2 = toNode.x;
         const y2 = toNode.y + toNode.h / 2;
 
-        const midX = (x1 + x2) / 2;
-        const path = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+        const dx = Math.abs(x2 - x1) * 0.5;
+        const path = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 
         const wire = svgEl('path', {
           d: path, class: 'wire default',
@@ -342,6 +360,10 @@ defmodule Archdo.Compiled.DiagramInteractive do
         wireGroup.appendChild(wire);
       });
       vp.appendChild(wireGroup);
+
+      // Highlight overlay group (rendered on top of everything)
+      const highlightGroup = svgEl('g', { id: 'wire-highlights' });
+      vp.appendChild(highlightGroup);
 
       // Draw nodes
       nodes.forEach((n, id) => {
@@ -371,7 +393,11 @@ defmodule Archdo.Compiled.DiagramInteractive do
           g.appendChild(label);
         });
 
-        g.addEventListener('click', () => showDetail(n));
+        g.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectNode(n, id, nodes);
+          showDetail(n);
+        });
         vp.appendChild(g);
       });
     }
@@ -446,6 +472,88 @@ defmodule Archdo.Compiled.DiagramInteractive do
       svg.style.cursor = 'default';
     });
 
+    // --- Node Selection & Wire Highlighting ---
+    let selectedNodeId = null;
+
+    function selectNode(node, nodeId, allNodes) {
+      clearSelection();
+      selectedNodeId = nodeId;
+
+      const vp = document.getElementById('viewport');
+      vp.classList.add('dimmed');
+
+      // Mark selected node
+      const selectedEl = document.querySelector(`[data-id="${nodeId}"]`);
+      if (selectedEl) selectedEl.classList.add('selected');
+
+      // Find connected nodes and highlight wires
+      const connectedIds = new Set([nodeId]);
+      const highlightGroup = document.getElementById('wire-highlights');
+
+      document.querySelectorAll('.wire').forEach(wire => {
+        const from = wire.getAttribute('data-from');
+        const to = wire.getAttribute('data-to');
+
+        if (from === nodeId || to === nodeId) {
+          // Clone wire path to highlight group (renders on top)
+          const hl = wire.cloneNode();
+          hl.removeAttribute('class');
+          hl.classList.add('wire-highlight');
+          hl.classList.add(from === nodeId ? 'outgoing' : 'incoming');
+          hl.removeAttribute('marker-end');
+          highlightGroup.appendChild(hl);
+
+          connectedIds.add(from);
+          connectedIds.add(to);
+        }
+      });
+
+      // Un-dim connected nodes
+      connectedIds.forEach(id => {
+        const el = document.querySelector(`[data-id="${id}"]`);
+        if (el) el.classList.add('highlighted');
+      });
+    }
+
+    function clearSelection() {
+      selectedNodeId = null;
+      const vp = document.getElementById('viewport');
+      vp.classList.remove('dimmed');
+
+      document.querySelectorAll('.selected, .highlighted').forEach(el => {
+        el.classList.remove('selected', 'highlighted');
+      });
+
+      const hlGroup = document.getElementById('wire-highlights');
+      if (hlGroup) hlGroup.innerHTML = '';
+    }
+
+    // Click on background clears selection
+    document.getElementById('diagram').addEventListener('click', (e) => {
+      if (!e.target.closest('.node-frame')) {
+        clearSelection();
+      }
+    });
+
+    // --- Zoom to Fit ---
+    function zoomToFit() {
+      const screenW = window.innerWidth;
+      const screenH = window.innerHeight;
+      const contentW = layoutData.totalW + 100;
+      const contentH = computeContentHeight(layoutData) + 100;
+
+      zoom = Math.min(screenW / contentW, screenH / contentH) * 0.9;
+      viewX = (screenW - contentW * zoom) / 2;
+      viewY = (screenH - contentH * zoom) / 2;
+      updateTransform();
+    }
+
+    function computeContentHeight(ld) {
+      let maxY = 0;
+      ld.nodes.forEach(n => { maxY = Math.max(maxY, n.y + n.h); });
+      return maxY;
+    }
+
     // --- Detail Panel ---
     function showDetail(node) {
       const panel = document.getElementById('detail-panel');
@@ -483,10 +591,12 @@ defmodule Archdo.Compiled.DiagramInteractive do
 
     function closeDetail() {
       document.getElementById('detail-panel').style.display = 'none';
+      clearSelection();
     }
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') closeDetail();
+      if (e.key === 'f' || e.key === 'F') zoomToFit();
     });
 
     // --- Init ---
@@ -495,10 +605,8 @@ defmodule Archdo.Compiled.DiagramInteractive do
     svgEl2.setAttribute('viewBox', `0 0 ${layoutData.totalW + 100} ${layoutData.totalH}`);
     render(layoutData);
 
-    // Fit to screen
-    const screenW = window.innerWidth;
-    zoom = Math.min(1, screenW / (layoutData.totalW + 200));
-    updateTransform();
+    // Initial fit to screen
+    zoomToFit();
     </script>
     </body>
     </html>
