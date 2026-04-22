@@ -12,7 +12,7 @@ Rule 6.33 detects five patterns of unnecessarily verbose code typically generate
 
 | Category | Rules | Examples |
 |----------|-------|----------|
-| **Boundaries & Architecture** | 24 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params, reverse dependencies, LiveView logic, N+1 preload, dev dep hygiene, compiled: cross-boundary calls, blast radius, orphan modules |
+| **Boundaries & Architecture** | 29 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params, reverse dependencies, query in interface, cross-context schema/process/config coupling, shared DB/ETS tables, LiveView logic, N+1 preload, dev dep hygiene, compiled: cross-boundary calls, blast radius, orphan modules |
 | **Public API** | 2 | Missing @moduledoc, missing @spec |
 | **Single Source of Truth** | 5 | Type-2/3 clones, scattered config, reinvented enumerable |
 | **Coupling & Abstraction** | 28 | Behaviour size, broad imports, unused deps/aliases, mockability, feature envy, speculative generality, missing telemetry, N+1 queries, compiled: unused imports, weak deps, phantom deps |
@@ -23,50 +23,6 @@ Rule 6.33 detects five patterns of unnecessarily verbose code typically generate
 | **State machines** | 3 | Unreachable states, terminal state integrity, implicit boolean state |
 | **Composition** | 2 | Deep `use` chains, excessive namespace depth |
 | **NIF safety** | 4 | Panic-inducing Rust patterns, scheduler misuse, missing behaviour wrapping |
-
-## Dependencies
-
-- **Jason** — JSON encoding for MCP and output formats
-- **JSV** — JSON Schema validation at MCP boundary (tool input validation)
-
-## Quick start
-
-### As a Mix dependency
-
-```elixir
-# mix.exs
-def deps do
-  [{:archdo, github: "BadBeta/archdo", only: [:dev, :test], runtime: false}]
-end
-```
-
-```bash
-mix archdo                              # scan lib/ (summary table output)
-mix archdo --format compact             # one-line-per-finding
-mix archdo --format html                # standalone HTML report
-mix archdo --format sarif               # GitHub Code Scanning integration
-mix archdo --paths lib/my_app/accounts  # scan specific paths
-mix archdo --only 4.17,6.12             # run specific rules
-mix archdo --since main                 # only files changed since git ref (PR review)
-mix archdo --fix                        # auto-apply mechanical fixes
-mix archdo --explain 6.50               # explain a rule
-mix archdo --init                       # generate .archdo.exs config
-mix archdo --watch                      # re-run on file changes
-mix archdo --boundaries                 # cross-module dependency analysis
-mix archdo --functions                  # function-level graph analysis
-mix archdo --compiled                   # compiled beam analysis (dead code, blast radius)
-mix archdo --coverage                   # test coverage gap matrix
-mix archdo --metrics                    # Martin package metrics matrix
-```
-
-### Scan any project without installing
-
-You can also scan external projects from an Archdo checkout:
-
-```bash
-cd /path/to/archdo
-mix archdo --paths /path/to/other_project/lib --format compact
-```
 
 ## Using with Claude Code (recommended)
 
@@ -102,7 +58,7 @@ Claude will:
 
 The Elixir skill's subskills contain the specialized knowledge that makes Layer 2 work — OTP process patterns, architecture decision frameworks, Ecto conventions, error handling idioms, and more. Always use `/elixir` to ensure the skill is loaded before reviewing findings.
 
-### MCP server (optional, for deeper integration)
+### MCP server (for deeper LLM integration)
 
 For projects that want Archdo available as an MCP tool:
 
@@ -119,6 +75,56 @@ For projects that want Archdo available as an MCP tool:
 ```
 
 This exposes 12 tools: `archdo_analyze_paths`, `archdo_analyze_file`, `archdo_deep_review`, `archdo_list_rules`, `archdo_explain_rule`, `archdo_health`, `archdo_diff`, `archdo_diagram`, `archdo_perf_audit`, `archdo_suggest`, `archdo_explain_finding`, `archdo_fix`. Tool inputs are validated against their JSON Schema definitions using JSV.
+
+## Quick start
+
+### As a Mix dependency
+
+```elixir
+# mix.exs
+def deps do
+  [{:archdo, github: "BadBeta/archdo", only: [:dev, :test], runtime: false}]
+end
+```
+
+```bash
+mix archdo                              # scan lib/ (summary table, boundaries + functions enabled)
+mix archdo --format compact             # one-line-per-finding
+mix archdo --format html                # standalone HTML report
+mix archdo --format sarif               # GitHub Code Scanning integration
+mix archdo --paths lib/my_app/accounts  # scan specific paths
+mix archdo --only 4.17,6.12             # run specific rules
+mix archdo --since main                 # only files changed since git ref (PR review)
+mix archdo --explain 6.50               # explain a rule
+mix archdo --init                       # generate .archdo.exs config
+mix archdo --watch                      # re-run on file changes
+mix archdo --compiled                   # compiled beam analysis (dead code, blast radius)
+mix archdo --coverage                   # test coverage gap matrix
+mix archdo --metrics                    # Martin package metrics matrix
+```
+
+### Scan any project without installing
+
+You can also scan external projects from an Archdo checkout:
+
+```bash
+cd /path/to/archdo
+mix archdo --paths /path/to/other_project/lib
+```
+
+### Suppress specific findings
+
+Add a comment on the line above the finding:
+
+```elixir
+# archdo:allow 3.1
+defp subscribe, do: Phoenix.PubSub.subscribe(MyApp.PubSub, @topic)
+```
+
+## Dependencies
+
+- **Jason** — JSON encoding for MCP and output formats
+- **JSV** — JSON Schema validation at MCP boundary (tool input validation)
 
 ## Output formats
 
@@ -143,11 +149,27 @@ mix archdo                   # only new violations shown
 mix archdo --freeze-stats    # track progress
 ```
 
+## Auto-fix (experimental)
+
+Archdo can auto-fix some mechanical findings. This feature is **experimental** — it defaults to dry-run mode to prevent accidental code breakage.
+
+```bash
+mix archdo --fix                    # preview fixable findings (dry-run)
+mix archdo --fix --no-dry-run       # apply fixes (use with caution)
+```
+
+Currently auto-fixable:
+- **Unused aliases** (4.27) — removes the alias line
+- **Single-step pipelines** (6.33) — `list |> Enum.sort()` → `Enum.sort(list)` (safe patterns only)
+- **Single-clause with** (6.41) — inline `with` → `case` (inline form only)
+- **Enum.at(list, 0)** (6.50) → `hd(list)`
+
+The auto-fix skips complex expressions (assignments, keyword values, case clauses) to avoid semantic breakage. Always review changes and run tests after applying.
+
 ## Documentation
 
 - **[GUIDE.md](GUIDE.md)** — comprehensive user guide
-- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all rules documented
-- **[DESIGN.md](DESIGN.md)** — design philosophy and architecture
+- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 200 rules documented
 
 ## License
 
