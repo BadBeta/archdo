@@ -15,7 +15,7 @@ defmodule Mix.Tasks.Archdo do
     * `--since` - Only analyze files changed since this git ref (e.g., `--since main`)
     * `--explain` - Explain a rule by ID (e.g., `--explain 6.50`)
     * `--init` - Generate a `.archdo.exs` config file with detected project defaults
-    * `--fix` - Auto-apply mechanical fixes (unused aliases, single-clause with, etc.)
+    * `--fix` - [EXPERIMENTAL] Auto-apply mechanical fixes. Use `--fix --dry-run` to preview first.
     * `--boundaries` - Cross-file boundary/graph rules (default: true). Disable with `--no-boundaries`.
     * `--tests` - Project-level test architecture checks (default: false).
     * `--functions` - Function-level graph analysis (default: true). Disable with `--no-functions`.
@@ -397,7 +397,9 @@ defmodule Mix.Tasks.Archdo do
   # --- --fix ---
 
   defp run_fix(opts, paths) do
-    dry_run = Keyword.get(opts, :dry_run, false)
+    dry_run = Keyword.get(opts, :dry_run, true)
+
+    IO.puts(:standard_error, "[archdo] --fix is experimental. Use --fix --no-dry-run to apply changes.")
     run_opts = build_run_opts(opts)
     files = Archdo.collect_files(paths)
     diagnostics = Archdo.Runner.analyze(files, run_opts)
