@@ -10,12 +10,15 @@ defmodule Archdo.Rules.Boundary.DevDepInProd do
   @impl true
   def description, do: "Dev/test dependency missing `only:` option — will be included in production releases"
 
-  # Well-known dev/test-only packages that should never ship to prod
+  # Well-known dev/test-only packages that should never ship to prod.
+  # NOTE: :esbuild and :tailwind are excluded — Phoenix 1.8+ deliberately
+  # uses `runtime: Mix.env() == :dev` without `only:` because
+  # `mix assets.deploy` runs with MIX_ENV=prod.
   @dev_only_deps [
     :credo, :dialyxir, :ex_doc, :excoveralls, :mix_test_watch, :mix_audit,
     :sobelow, :doctor, :ex_check, :stream_data, :benchee, :mox, :mimic,
     :hammox, :bypass, :mock, :ex_machina, :faker, :floki, :wallaby,
-    :phoenix_live_reload, :esbuild, :tailwind, :dart_sass
+    :phoenix_live_reload, :dart_sass
   ]
 
   @impl true

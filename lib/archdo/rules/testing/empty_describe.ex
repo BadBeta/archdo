@@ -47,10 +47,16 @@ defmodule Archdo.Rules.Testing.EmptyDescribe do
     end)
   end
 
+  defp unwrap_string({:__block__, _, [s]}) when is_binary(s), do: s
+  defp unwrap_string(s) when is_binary(s), do: s
+  defp unwrap_string(other), do: Macro.to_string(other)
+
   defp empty_describe_diagnostic(file, meta, name) do
+    name_str = unwrap_string(name)
+
     Diagnostic.info("7.24",
       title: "Empty describe block",
-      message: "describe \"#{name}\" contains no test cases",
+      message: "describe \"#{name_str}\" contains no test cases",
       why:
         "An empty describe block is dead scaffolding. It adds visual noise to the test file " <>
           "without contributing any coverage. It often signals that someone intended to write tests " <>
@@ -72,7 +78,7 @@ defmodule Archdo.Rules.Testing.EmptyDescribe do
         )
       ],
       references: ["ARCHITECTURE_RULES.md#7.24"],
-      context: %{describe_name: name},
+      context: %{describe_name: name_str},
       file: file,
       line: AST.line(meta)
     )

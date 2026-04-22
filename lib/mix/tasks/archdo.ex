@@ -532,30 +532,40 @@ defmodule Mix.Tasks.Archdo do
 
   defp apply_single_fix(_, _), do: :skip
 
+  # SAFETY: skip when input contains assignment (=) — rewriting
+  # `x = foo() |> bar()` to `bar(x = foo())` changes semantics.
   defp rewrite_single_pipe(line) do
     case Regex.run(~r/^(.+?)\s*\|>\s*(.+)$/, line) do
       [_, input, call] ->
         input = String.trim(input)
 
-        case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)\((.*)\)$/s, call) do
-          [_, func_name, existing_args] ->
-            new_args =
-              case String.trim(existing_args) do
-                "" -> input
-                args -> "#{input}, #{args}"
-              end
-
-            "#{func_name}(#{new_args})"
-
-          _ ->
-            case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/, String.trim(call)) do
-              [_, func_name] -> "#{func_name}(#{input})"
-              _ -> nil
-            end
+        case String.contains?(input, " = ") or String.match?(input, ~r/^[a-z_]\w*\s*=/) do
+          true -> nil
+          false ->
+            rewrite_pipe_call_cli(input, call)
         end
 
       _ ->
         nil
+    end
+  end
+
+  defp rewrite_pipe_call_cli(input, call) do
+    case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)\((.*)\)$/s, call) do
+      [_, func_name, existing_args] ->
+        new_args =
+          case String.trim(existing_args) do
+            "" -> input
+            args -> "#{input}, #{args}"
+          end
+
+        "#{func_name}(#{new_args})"
+
+      _ ->
+        case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/, String.trim(call)) do
+          [_, func_name] -> "#{func_name}(#{input})"
+          _ -> nil
+        end
     end
   end
 

@@ -20,7 +20,9 @@ defmodule Archdo.Rules.Boundary.ReverseDependency do
     end
   end
 
-  defp web_file?(file), do: String.contains?(file, "_web/")
+  defp web_file?(file) do
+    String.contains?(file, "_web/") or String.ends_with?(file, "_web.ex")
+  end
 
   defp domain_file?(file) do
     (String.contains?(file, "/lib/") or String.starts_with?(file, "lib/")) and
