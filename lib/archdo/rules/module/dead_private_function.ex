@@ -104,15 +104,14 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
   defp extract_function_refs_from_heex(text) do
     Regex.scan(~r/\b([a-z_][a-z0-9_]*[!?]?)\s*\(/, text)
     |> Enum.reduce(MapSet.new(), fn
-      [_, name] ->
+      [_, name], acc ->
         atom = String.to_atom(name)
-        # We don't know the exact arity from HEEx, so mark as referenced
-        # with arities 0-6 to avoid false positives
-        Enum.reduce(0..6, MapSet.new(), fn arity, set ->
+        Enum.reduce(0..6, acc, fn arity, set ->
           MapSet.put(set, {atom, arity})
         end)
-      _ ->
-        MapSet.new()
+
+      _, acc ->
+        acc
     end)
   end
 
