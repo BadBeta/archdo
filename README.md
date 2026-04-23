@@ -2,7 +2,7 @@
 
 Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, boundary enforcement, and some LLM code slop.
 
-**200 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+**203 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
 
 ### LLM slop detection
 
@@ -17,7 +17,7 @@ Rule 6.33 detects five patterns of unnecessarily verbose code typically generate
 | **Single Source of Truth** | 5 | Type-2/3 clones, scattered config, reinvented enumerable |
 | **Coupling & Abstraction** | 28 | Behaviour size, broad imports, unused deps/aliases, mockability, feature envy, speculative generality, missing telemetry, N+1 queries, compiled: unused imports, weak deps, phantom deps |
 | **OTP discipline** | 43 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock, callback sprawl, atom exhaustion, ETS cleanup, sequential-where-parallel |
-| **Module quality** | 50 | Complexity, error handling (7 rules), recursion (4 rules), **LLM slop detection** (5 sub-checks), dead functions, **performance traps** (8 rules: string concat, list ops, collection waste, regex, keyword lookup), nested control flow, boolean blindness, stub detection |
+| **Module quality** | 53 | Complexity, error handling (7 rules), recursion (4 rules), **LLM slop detection** (5 sub-checks), dead functions, **performance traps** (8 rules: string concat, list ops, collection waste, regex, keyword lookup), nested control flow, boolean blindness, stub detection, **shadowed clauses**, **over-eager evaluation** (6 sub-checks), **sensitive data exposure** (6 sub-checks) |
 | **Testing** | 24 | Coverage gaps, over-mocking, empty describe, missing error paths, untested modules, process leaks, flaky indicators, assert on implementation, compiled: test-only public |
 | **Event sourcing** | 8 | Aggregate purity, projection isolation, event immutability, command/event naming |
 | **State machines** | 3 | Unreachable states, terminal state integrity, implicit boolean state |

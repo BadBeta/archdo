@@ -701,7 +701,7 @@ Alias is declared but the short name is never referenced.
 `Repo.preload/get/one/all` inside Enum callbacks or `for` comprehensions.
 
 - **Why:** Calling Repo inside a loop executes one query per iteration — the classic N+1 problem. For 100 items, this is 101 queries instead of 2. Use `Repo.preload(list, :assoc)` to batch. (Performance, Database)
-- **Check:** Find `Repo.preload/get/one/all` calls inside `Enum.map/each/flat_map` callbacks and `for` comprehension bodies.
+- **Check:** Find `Repo.preload/get/one/all` calls inside all loop constructs: Enum, Stream, `:lists`, `for`, `receive`, `Task.async_stream`, and recursive function bodies.
 - **Tolerate:** `Repo.preload` outside loops. Streams that batch internally.
 - **Severity:** `warning`
 
@@ -1113,7 +1113,7 @@ GenServer with too many distinct `handle_call`/`handle_cast`/`handle_info` messa
 `String.to_atom/1` called inside GenServer callbacks or Enum callbacks.
 
 - **Why:** The atom table is finite (~1M entries by default) and atoms are never garbage collected. `String.to_atom` in a callback that runs per-request or per-item risks exhausting the table, crashing the entire VM. Use `String.to_existing_atom/1` or explicit atom mapping. (Runtime Safety)
-- **Check:** Find `String.to_atom/1` inside `handle_call/cast/info` callbacks and `Enum.map/filter/reduce/each` callbacks.
+- **Check:** Find `String.to_atom/1` inside all loop constructs (Enum, Stream, `:lists`, `for`, `receive`, `Task.async_stream`), GenServer callbacks (`handle_call/cast/info/continue`), and recursive function bodies.
 - **Tolerate:** `String.to_existing_atom` (safe). Compile-time atom creation (module attributes).
 - **Severity:** `warning`
 
@@ -1543,7 +1543,7 @@ Public non-predicate function returns bare `true`/`false` for a failable operati
 `<>` string concatenation inside `Enum.reduce` or `for` comprehension with string accumulator — O(n²).
 
 - **Why:** Each `<>` concatenation copies the entire accumulated string. For a list of n items this is O(n²). Build an IO list instead: collect `[part | acc]` and call `IO.iodata_to_binary/1` once at the end. (Performance)
-- **Check:** Find `Enum.reduce(_, "", fn ...)` with `<>` in the callback body. Also `for ... reduce: ""` with `<>`.
+- **Check:** Find reduce with string init and `<>` in callback body — covers `Enum.reduce`, `Stream.transform`, `:lists.foldl/foldr`, and `for ... reduce: ""`. Also flags `<>` concatenation in GenServer callbacks and recursive functions.
 - **Tolerate:** Small known-size inputs (< 10 items). String interpolation (`#{}`) which is optimized by the compiler.
 - **Severity:** `warning`
 
@@ -1570,7 +1570,7 @@ Public non-predicate function returns bare `true`/`false` for a failable operati
 `~r/pattern/` inside Enum callbacks or GenServer callbacks.
 
 - **Why:** Regex sigils in function bodies may be recompiled each call. Hoisting to a module attribute (`@pattern ~r/.../ `) compiles once at compile time. (Performance)
-- **Check:** Find `{:sigil_r, _, _}` inside Enum callback functions and GenServer `handle_call/cast/info` bodies.
+- **Check:** Find `{:sigil_r, _, _}` inside all loop constructs (Enum, Stream, :lists, for, receive, Task.async_stream), GenServer callbacks, and recursive function bodies.
 - **Tolerate:** Module-level `@attr ~r/.../` (already compiled once). Infrequently-called functions.
 - **Severity:** `info`
 
@@ -1606,9 +1606,42 @@ Collection operations with more efficient alternatives.
 `Keyword.get/fetch` inside Enum callbacks — O(n) per lookup.
 
 - **Why:** Keyword lists are stored as `[{key, value}]` tuples. `Keyword.get` scans linearly. Inside a loop of m iterations with a keyword list of n entries, this is O(m*n). Convert to Map once (O(n)) then use `Map.get` (O(log n)). (Performance)
-- **Check:** Find `Keyword.get/fetch/fetch!/has_key?/get_lazy` inside Enum callback functions.
+- **Check:** Find `Keyword.get/fetch/fetch!/has_key?/get_lazy` inside all loop constructs: Enum (28 functions), Stream (17 functions), `:lists` (17 functions), `for` comprehensions, `receive` blocks, `Task.async_stream`, GenServer callbacks, and recursive function bodies.
 - **Tolerate:** `Keyword.get` outside loops. Small keyword lists (< 5 entries).
 - **Severity:** `info`
+
+### 6H. Pattern Matching Quality
+
+**6.54 Shadowed Clause**
+
+A broader pattern appears before a more specific pattern in function heads or case clauses, making the specific clause unreachable.
+
+- **Why:** Elixir matches clauses top-to-bottom. When an earlier clause's pattern is a superset of a later clause's pattern, the later clause is dead code — it can never execute. Unlike 6.35 (catch-all before last), this rule detects subtler shadowing: `%{}` before `%{key: _}`, `{:ok, _}` before `{:ok, %User{}}`, or map with fewer key constraints before map with more. These are usually clause ordering bugs, not intentional fallbacks. (Correctness, Dead Code)
+- **Check:** For multi-clause functions: group clauses by {name, arity}, compare each pair for pattern subsumption — catch-all variables, empty map before keyed/struct, tagged tuples with broader values, maps with fewer keys. For case expressions: same pairwise subsumption check. Guard-aware: clauses with guards are not considered catch-alls (the guard narrows the match). Disjoint type guards (e.g., `is_binary` vs `is_list`) are recognized as non-overlapping. Clauses >50 lines apart are skipped (likely compile-time branches). Variable reuse across params (`def f(x, x)`) is recognized as an equality constraint, not a catch-all.
+- **Tolerate:** Guarded clauses (guards narrow the match). Different literal atoms/integers in the same position. Clauses in different compile-time branches (`if Code.ensure_loaded?(...) do ... else ... end`).
+- **Severity:** `warning`
+
+### 6I. Eager Evaluation
+
+**6.55 Over-Eager Evaluation**
+
+Computing more than needed — transforming entire collections when only a subset is used.
+
+- **Why:** Six sub-checks that catch unnecessary work: (1) `Enum.map |> Enum.take(n)` transforms all elements then discards most, (2) `Enum.map |> hd` transforms all to use one, (3) `Enum.to_list |> Enum.filter` materializes a stream defeating lazy evaluation, (4) `Enum.map |> length/Enum.count` builds a mapped list then discards it (map doesn't change count), (5) `Repo.all |> length` loads all rows from DB to count them (use `Repo.aggregate(:count)`), (6) `Enum.map |> Enum.find` transforms all elements to find one. (Performance, Resource Waste)
+- **Check:** AST pattern matching for pipe chains and nested calls. Detects both `a |> b |> c` pipe form and `c(b(a))` nested form. For Repo.all, matches any module ending in `Repo`.
+- **Tolerate:** When the full mapped list is also used elsewhere (not just counted/taken). Stream pipelines that correctly terminate lazily.
+- **Severity:** `info` (most), `warning` (Repo.all |> length — database round-trip waste)
+
+### 6J. Information Exposure
+
+**6.56 Sensitive Data Exposure**
+
+Sensitive data (passwords, tokens, API keys) may be exposed through logs, encoders, error messages, or crash reports.
+
+- **Why:** Six sub-checks: (1) Struct with sensitive-named fields (password, token, secret, api_key, etc.) but no `@derive {Inspect, only: [...]}` — crash reports and `IO.inspect` will expose them, (2) `@derive Jason.Encoder` without `:only` on a struct with sensitive fields — API responses include passwords, (3) `IO.inspect`/`inspect()` called on variables named `password`, `credentials`, `token`, `secret`, (4) `Logger` calls that interpolate sensitive-named variables, (5) hardcoded strings that match known API key formats (`sk_live_*`, `ghp_*`, `xoxb-*`, `AKIA*`, `eyJ*`) or module attributes with sensitive names containing string values, (6) `raise` messages interpolating sensitive variables. (Security, Compliance, OWASP)
+- **Check:** Field name matching against a curated list of 30+ sensitive field names. String prefix matching for known API key formats. Variable name heuristics for log/raise interpolation. `@derive` analysis for both Inspect and Jason.Encoder protocols.
+- **Tolerate:** Test files (test fixtures may contain fake credentials). Structs with `@derive {Inspect, only: [...]}` already configured. Short strings matching prefixes (< 12 chars — likely pattern constants, not real keys).
+- **Severity:** `warning` (hardcoded secrets, overbroad Jason.Encoder), `info` (missing Inspect derive, logger/raise interpolation)
 
 ---
 

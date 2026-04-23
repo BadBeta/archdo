@@ -8,7 +8,7 @@
 
 1. [What Archdo is and why](#1-what-archdo-is-and-why)
 2. [Installation](#2-installation)
-3. [The 200 rules at a glance](#3-the-193-rules-at-a-glance)
+3. [The 203 rules at a glance](#3-the-193-rules-at-a-glance)
 4. [The diagnostic shape](#4-the-diagnostic-shape)
 5. [Output formats](#5-output-formats)
 6. [CLI reference](#6-cli-reference)
@@ -74,9 +74,9 @@ Archdo needs `Jason` (JSON encoding) and `JSV` (JSON Schema validation for MCP t
 
 ---
 
-## 3. The 200 rules at a glance
+## 3. The 203 rules at a glance
 
-Archdo currently ships **200 rules in 11 categories** (including 21 compiled-analysis rules, 8 performance rules, and 5 LLM slop detectors). Full text for every rule is in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md).
+Archdo currently ships **203 rules in 11 categories** (including 21 compiled-analysis rules, 8 performance rules, and 5 LLM slop detectors). Full text for every rule is in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md).
 
 | #   | Category                         | Rules    | Severity mix          | What it catches                                                                  |
 |-----|----------------------------------|----------|-----------------------|----------------------------------------------------------------------------------|
@@ -85,7 +85,7 @@ Archdo currently ships **200 rules in 11 categories** (including 21 compiled-ana
 | 3   | Single Source of Truth           | 5        | warning / info        | Type-2 clones, scattered config, library config via `Application.get_env`, Type-3 similar code, reinvented enumerable, duplicated validation across layers |
 | 4   | Coupling & Abstraction           | 28       | warning / info        | Behaviour size, single-impl protocols, type-dispatching case, external deps without behaviour, broad imports, unused deps, god contexts, mockability score, feature envy, speculative generality, parallel hierarchies, primitive obsession, mixed concerns, natural seams, hand-rolled pubsub, adapters without behaviour, unbounded external calls, missing telemetry, unprotected bang calls, **compiled**: unused imports, weak dependency, protocol completeness, internal module leak, phantom dependency |
 | 5   | OTP Process Architecture         | 43       | error / warning / info | Unsupervised processes, GenServer hygiene, blocking init/callbacks, supervision tree shape, restart strategies, Task discipline, ETS patterns, process-naming safety, bottlenecks, tracing safety, GenStage backpressure, stale PIDs, deadlock detection, missing handle_info, brutal kill, ETS ownership leak, hardcoded timeouts, sequential-where-parallel, **callback sprawl** |
-| 6   | Module Quality                   | 50       | error / warning / info | Module cohesion, function complexity & arity, struct field count, file length, function fan-out, boolean flag args, pretentious names, distance from main sequence, error handling (7 rules), nesting depth, if/else dispatch, recursion (4 rules), stub functions, buried try/rescue, **LLM slop detection** (5 sub-checks), dead private functions, unreachable clauses, constant expressions, defensive nil returns, identity transformations, verbose ok/error unwrap, single-clause with, redundant guard rechecks, long parameter lists, nested control flow, boolean blindness, **compiled**: dead code, transitive dead code, API surface weight, non-exhaustive API, inconsistent return shapes, degenerate functions, lookup table candidates |
+| 6   | Module Quality                   | 53       | error / warning / info | Module cohesion, function complexity & arity, struct field count, file length, function fan-out, boolean flag args, pretentious names, distance from main sequence, error handling (7 rules), nesting depth, if/else dispatch, recursion (4 rules), stub functions, buried try/rescue, **LLM slop detection** (5 sub-checks), dead private functions, unreachable clauses, constant expressions, defensive nil returns, identity transformations, verbose ok/error unwrap, single-clause with, redundant guard rechecks, long parameter lists, nested control flow, boolean blindness, **shadowed clauses** (pattern subsumption), **over-eager evaluation** (6 sub-checks), **sensitive data exposure** (6 sub-checks), **compiled**: dead code, transitive dead code, API surface weight, non-exhaustive API, inconsistent return shapes, degenerate functions, lookup table candidates |
 | 7   | Test Architecture                | 24       | warning / info        | Test mirrors source, Repo in tests, mocks need behaviours, async eligibility, sleep in tests, test naming, no/trivial assertions, long setup/test bodies, Mox verification, coverage gap, mocking own modules, runtime DI, generic test names, weak assertions, missing cleanup, hardcoded test data, **over-mocking**, **empty describe blocks**, **missing error path tests**, **untested modules**, **compiled**: test-only public functions |
 | 8   | Event Sourcing                   | 8        | error / warning / info | Command/event naming, **pure aggregate apply/2**, immutable events, shared projections, events need `Jason.Encoder`, projector reads external/non-deterministic, process manager reads projection, aggregates without Commanded behaviour |
 | 9   | State Machine                    | 3        | warning / info        | Unreachable states, terminal state integrity, implicit state via boolean flags |
@@ -945,7 +945,7 @@ Archdo parses every file with `Code.string_to_quoted/2`, which can intern atoms.
 
 ## 13. Where to read next
 
-- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 200 rules listed by category with descriptions. Auto-generated from rule modules.
+- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 203 rules listed by category with descriptions. Auto-generated from rule modules.
 - **[README.md](README.md)** — quick intro, installation, and feature overview.
 
 ---
