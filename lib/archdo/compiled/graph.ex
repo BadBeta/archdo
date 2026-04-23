@@ -846,7 +846,7 @@ defmodule Archdo.Compiled.Graph do
     |> Enum.map(fn path ->
       path
       |> Path.basename(".beam")
-      |> String.to_existing_atom()
+      |> String.to_atom()
     end)
     |> Enum.filter(fn mod ->
       case Code.ensure_loaded(mod) do

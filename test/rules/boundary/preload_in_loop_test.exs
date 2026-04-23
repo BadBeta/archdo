@@ -18,7 +18,7 @@ defmodule Archdo.Rules.Boundary.PreloadInLoopTest do
       diags = assert_flagged(PreloadInLoop, code, file: "lib/my_app/orders.ex")
       assert hd(diags).rule_id == "4.28"
       assert hd(diags).severity == :warning
-      assert hd(diags).message =~ "Enum.map"
+      assert hd(diags).message =~ "loop"
     end
 
     test "flags Repo.get inside Enum.each" do
@@ -34,7 +34,7 @@ defmodule Archdo.Rules.Boundary.PreloadInLoopTest do
       """
 
       diags = assert_flagged(PreloadInLoop, code, file: "lib/my_app/notifications.ex")
-      assert hd(diags).message =~ "Enum.each"
+      assert hd(diags).message =~ "loop"
     end
 
     test "flags Repo.one inside for comprehension" do
@@ -51,7 +51,7 @@ defmodule Archdo.Rules.Boundary.PreloadInLoopTest do
       """
 
       diags = assert_flagged(PreloadInLoop, code, file: "lib/my_app/reports.ex")
-      assert hd(diags).message =~ "for comprehension"
+      assert hd(diags).message =~ "loop"
     end
 
     test "allows Repo.preload outside loop" do

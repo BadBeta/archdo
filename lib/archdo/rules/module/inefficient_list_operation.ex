@@ -3,8 +3,7 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
-
-  @enum_loop_fns [:map, :each, :reduce, :flat_map, :filter, :reject, :any?, :find, :map_reduce]
+  alias Archdo.Rules.Helpers.LoopDetection
 
   @impl true
   def id, do: "6.50"
@@ -61,13 +60,29 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
   defp find_in_reduce_only(ast, file, kind, predicate) do
     {_, diagnostics} =
       Macro.prewalk(ast, [], fn
-        {{:., _, [{:__aliases__, _, [:Enum]}, func]}, _meta, args} = node, acc
-        when func in @reduce_fns and is_list(args) ->
+        {{:., _, [{:__aliases__, _, mod}, func]}, _meta, args} = node, acc
+        when func in @reduce_fns and mod in [[:Enum], [:Stream]] and is_list(args) ->
           new_diags =
             args
-            |> Enum.filter(&callback?/1)
+            |> Enum.filter(fn {:fn, _, _} -> true; {:&, _, _} -> true; _ -> false end)
             |> Enum.flat_map(fn callback ->
-              find_pattern_in_node(callback, file, kind, predicate)
+              Enum.map(AST.find_all(callback, predicate), fn {_, meta, _} ->
+                build_diagnostic(file, AST.line(meta), kind)
+              end)
+            end)
+
+          {node, new_diags ++ acc}
+
+        # :lists.foldl/foldr are reduce equivalents
+        {{:., _, [:lists, fold_fn]}, _meta, args} = node, acc
+        when fold_fn in [:foldl, :foldr] and is_list(args) ->
+          new_diags =
+            args
+            |> Enum.filter(fn {:fn, _, _} -> true; {:&, _, _} -> true; _ -> false end)
+            |> Enum.flat_map(fn callback ->
+              Enum.map(AST.find_all(callback, predicate), fn {_, meta, _} ->
+                build_diagnostic(file, AST.line(meta), kind)
+              end)
             end)
 
           {node, new_diags ++ acc}
@@ -75,12 +90,20 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
         {:for, _meta, args} = node, acc when is_list(args) ->
           case has_reduce_option?(args) do
             true ->
-              do_block = extract_do_block(args)
+              do_block =
+                Enum.find_value(args, fn
+                  [do: body] -> body
+                  {:do, body} -> body
+                  _ -> nil
+                end)
 
               new_diags =
                 case do_block do
                   nil -> []
-                  body -> find_pattern_in_node(body, file, kind, predicate)
+                  body ->
+                    Enum.map(AST.find_all(body, predicate), fn {_, meta, _} ->
+                      build_diagnostic(file, AST.line(meta), kind)
+                    end)
                 end
 
               {node, new_diags ++ acc}
@@ -211,63 +234,12 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
   defp neg_one?({:-, _, [{:__block__, _, [1]}]}), do: true
   defp neg_one?(_), do: false
 
-  # --- Loop detection helper ---
-  # Walks the AST, sets a flag when inside an Enum callback or for comprehension,
-  # then checks the predicate only when inside a loop.
+  # --- Loop detection — delegates to shared LoopDetection helper ---
+  # Covers Enum, Stream, :lists, for, receive, Task.async_stream.
 
   defp find_in_loops(ast, file, kind, predicate) do
-    {_, diagnostics} =
-      Macro.prewalk(ast, [], fn
-        # Enum.<loop_fn>(_, fn ... end) — check callback body for pattern
-        # Skip AST-traversal functions (Macro.prewalk, AST.find_all, etc.) —
-        # their callbacks operate on fixed-structure AST nodes, not user-sized data.
-        {{:., _, [{:__aliases__, _, [:Enum]}, func]}, _meta, args} = node, acc
-        when func in @enum_loop_fns and is_list(args) ->
-          new_diags =
-            args
-            |> Enum.filter(&callback?/1)
-            |> Enum.flat_map(fn callback ->
-              find_pattern_in_node(callback, file, kind, predicate)
-            end)
-
-          # Don't descend — we already searched the callbacks
-          {node, new_diags ++ acc}
-
-        # for comprehension — check do block for pattern
-        {:for, _meta, args} = node, acc when is_list(args) ->
-          do_block = extract_do_block(args)
-
-          new_diags =
-            case do_block do
-              nil -> []
-              body -> find_pattern_in_node(body, file, kind, predicate)
-            end
-
-          {node, new_diags ++ acc}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    diagnostics
-  end
-
-  defp find_pattern_in_node(node, file, kind, predicate) do
-    Enum.map(AST.find_all(node, predicate), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), kind)
-    end)
-  end
-
-  defp callback?({:fn, _, _}), do: true
-  defp callback?({:&, _, _}), do: true
-  defp callback?(_), do: false
-
-  defp extract_do_block(args) do
-    Enum.find_value(args, fn
-      [do: body] -> body
-      {:do, body} -> body
-      _ -> nil
-    end)
+    LoopDetection.find_in_loops(ast, predicate)
+    |> Enum.map(fn {_, meta} -> build_diagnostic(file, AST.line(meta), kind) end)
   end
 
   # --- Diagnostics ---

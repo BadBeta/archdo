@@ -5,8 +5,11 @@ defmodule Archdo.Compiled.DiagramInteractive do
   alias Archdo.Compiled.Graph
 
   @doc """
-  Generate an interactive HTML file with LabVIEW-style architecture visualization.
-  The file is self-contained — no external dependencies, opens in any browser.
+  Generate an interactive HTML file with two-level architecture visualization.
+
+  Overview level: contexts as boxes with aggregated ports, context-to-context wires.
+  Detail level: click a context to zoom in and see individual modules and wires.
+  Boundary-crossing connections are highlighted in red.
   """
   def generate(%Graph{} = graph) do
     contexts = Graph.discover_contexts(graph)
@@ -16,14 +19,17 @@ defmodule Archdo.Compiled.DiagramInteractive do
   end
 
   defp build_graph_json(graph, contexts) do
-    nodes = build_nodes(graph, contexts)
-    edges = build_edges(graph, nodes)
+    membership = Graph.build_context_membership(contexts)
+    nodes = build_nodes(graph, membership)
+    edges = build_edges(graph, nodes, membership)
     context_groups = build_context_groups(contexts)
+    context_edges = build_context_edges(edges, nodes)
 
     Jason.encode!(%{
       nodes: nodes,
       edges: edges,
-      contexts: context_groups
+      contexts: context_groups,
+      contextEdges: context_edges
     })
   end
 
@@ -37,9 +43,7 @@ defmodule Archdo.Compiled.DiagramInteractive do
     end
   end
 
-  defp build_nodes(graph, contexts) do
-    membership = Graph.build_context_membership(contexts)
-
+  defp build_nodes(graph, membership) do
     graph.modules
     |> Enum.filter(fn {mod, _} -> elixir_module?(mod) end)
     |> Enum.map(fn {mod, info} ->
@@ -47,17 +51,17 @@ defmodule Archdo.Compiled.DiagramInteractive do
       short = safe_short_name(mod)
       ctx = Map.get(membership, mod, "Uncategorized")
 
-      # Build input ports (functions called BY this module from others)
       deps = Graph.module_dependencies(graph, mod)
+
       inputs =
         deps
         |> Enum.take(12)
         |> Enum.map(fn dep_mod ->
           dep_name = safe_short_name(dep_mod)
-          %{name: dep_name, module: AST.module_name(dep_mod), type: "dependency"}
+          dep_ctx = Map.get(membership, dep_mod, "Uncategorized")
+          %{name: dep_name, module: AST.module_name(dep_mod), type: "dependency", context: dep_ctx}
         end)
 
-      # Build output ports (this module's exports called by others)
       exports =
         info.exports
         |> Enum.reject(fn {name, _} ->
@@ -73,6 +77,13 @@ defmodule Archdo.Compiled.DiagramInteractive do
 
       layer = classify_layer(mod_name, info)
 
+      # Is this the boundary module for its context? (same name as context)
+      is_boundary =
+        mod
+        |> Module.split()
+        |> Enum.join(".")
+        == ctx
+
       %{
         id: mod_name,
         short: short,
@@ -81,13 +92,15 @@ defmodule Archdo.Compiled.DiagramInteractive do
         inputs: inputs,
         outputs: exports,
         behaviours: Enum.map(info.behaviours, &AST.module_name/1),
-        struct_fields: info.struct_fields
+        struct_fields: info.struct_fields,
+        is_boundary: is_boundary
       }
     end)
   end
 
-  defp build_edges(graph, nodes) do
+  defp build_edges(graph, nodes, _membership) do
     node_ids = MapSet.new(Enum.map(nodes, & &1.id))
+    node_ctx = Map.new(nodes, fn n -> {n.id, n.context} end)
 
     graph.calls
     |> Enum.map(fn call ->
@@ -96,11 +109,28 @@ defmodule Archdo.Compiled.DiagramInteractive do
       {_, caller_fn, caller_arity} = call.caller
       {_, callee_fn, callee_arity} = call.callee
 
+      from_ctx = Map.get(node_ctx, caller_mod)
+      to_ctx = Map.get(node_ctx, callee_mod)
+      crosses_boundary = from_ctx != nil and to_ctx != nil and from_ctx != to_ctx
+
+      # Check if this bypasses the boundary module (callee is internal, not boundary)
+      callee_node = Enum.find(nodes, fn n -> n.id == callee_mod end)
+
+      bypasses_boundary =
+        case {crosses_boundary, callee_node} do
+          {true, %{is_boundary: false}} -> true
+          _ -> false
+        end
+
       %{
         from: caller_mod,
         to: callee_mod,
         from_port: "#{caller_fn}/#{caller_arity}",
-        to_port: "#{callee_fn}/#{callee_arity}"
+        to_port: "#{callee_fn}/#{callee_arity}",
+        from_context: from_ctx,
+        to_context: to_ctx,
+        crosses_boundary: crosses_boundary,
+        bypasses_boundary: bypasses_boundary
       }
     end)
     |> Enum.filter(fn e -> e.from in node_ids and e.to in node_ids and e.from != e.to end)
@@ -113,7 +143,32 @@ defmodule Archdo.Compiled.DiagramInteractive do
         name: ctx.context,
         members: Enum.map(ctx.members, &AST.module_name/1),
         cohesion: ctx.cohesion,
-        coupling: ctx.coupling
+        coupling: ctx.coupling,
+        incoming_calls: ctx.incoming_calls,
+        outgoing_calls: ctx.outgoing_calls,
+        internal_calls: ctx.internal_calls,
+        leak_calls: ctx.leak_calls,
+        boundary_module:
+          case ctx.boundary_module do
+            nil -> nil
+            mod -> AST.module_name(mod)
+          end
+      }
+    end)
+  end
+
+  defp build_context_edges(edges, _nodes) do
+    # Keep individual wires with port info for port-level routing
+    edges
+    |> Enum.filter(fn e -> e.crosses_boundary end)
+    |> Enum.uniq_by(fn e -> {e.from_context, e.to_context, e.from_port, e.to_port} end)
+    |> Enum.map(fn e ->
+      %{
+        from: e.from_context,
+        to: e.to_context,
+        from_port: e.from_port,
+        to_port: e.to_port,
+        bypasses_boundary: e.bypasses_boundary
       }
     end)
   end
@@ -147,171 +202,493 @@ defmodule Archdo.Compiled.DiagramInteractive do
     <meta charset="utf-8">
     <title>Archdo — Interactive Architecture Diagram</title>
     <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #1a1a2e; overflow: hidden; font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; }
-    #canvas { width: 100vw; height: 100vh; }
-    svg { width: 100%; height: 100%; }
-
-    /* Module node styles */
-    .node-frame { cursor: pointer; }
-    .node-frame:hover .node-bg { filter: brightness(1.2); }
-    .node-bg { rx: 6; ry: 6; }
-    .node-title { font-size: 11px; font-weight: 600; fill: #fff; }
-    .port-label { font-size: 8px; fill: #a0a0b0; }
-    .port-dot { r: 4; stroke-width: 1.5; }
-    .port-dot.input { fill: #4CAF50; stroke: #2E7D32; }
-    .port-dot.output { fill: #FF9800; stroke: #E65100; }
-    .port-dot.unconnected { fill: #555; stroke: #333; }
-
-    /* Wire styles */
-    .wire { fill: none; stroke-width: 1.5; opacity: 0.35; }
-    .wire:hover { opacity: 0.8; stroke-width: 2.5; }
-    .wire.default { stroke: #78909C; }
-
-    /* Highlighted wires (on top of everything) */
-    .wire-highlight { fill: none; stroke-width: 3; opacity: 1; pointer-events: none; }
-    .wire-highlight.outgoing { stroke: #FF9800; }
-    .wire-highlight.incoming { stroke: #4CAF50; }
-
-    /* Dimmed state when a node is selected */
-    .dimmed .node-frame { opacity: 0.15; }
-    .dimmed .wire { opacity: 0.05; }
-    .dimmed .context-bg { opacity: 0.3; }
-    .dimmed .node-frame.highlighted { opacity: 1; }
-    .dimmed .node-frame.selected { opacity: 1; }
-    .node-frame.selected .node-bg { stroke: #FFD54F; stroke-width: 3; filter: brightness(1.3); }
-
-    /* Bridge for wire crossings */
-    .bridge { fill: #1a1a2e; stroke: none; }
-
-    /* Context group */
-    .context-bg { fill: rgba(255,255,255,0.03); stroke: rgba(255,255,255,0.08); stroke-width: 1; rx: 12; }
-    .context-label { font-size: 13px; fill: rgba(255,255,255,0.4); font-weight: 300; }
-
-    /* Layer labels */
-    .layer-label { font-size: 10px; fill: rgba(255,255,255,0.2); letter-spacing: 2px; text-transform: uppercase; }
-
-    /* Detail panel */
-    #detail-panel {
-      position: fixed; right: 20px; top: 20px; width: 350px;
-      background: #16213e; border: 1px solid #333; border-radius: 8px;
-      padding: 16px; color: #e0e0e0; font-size: 12px;
-      display: none; max-height: 80vh; overflow-y: auto;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    }
-    #detail-panel h2 { font-size: 16px; color: #fff; margin-bottom: 8px; }
-    #detail-panel h3 { font-size: 12px; color: #888; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: 1px; }
-    #detail-panel .port-list { list-style: none; }
-    #detail-panel .port-list li { padding: 2px 0; font-size: 11px; }
-    #detail-panel .port-list li .connected { color: #4CAF50; }
-    #detail-panel .port-list li .unconnected { color: #555; }
-    #detail-panel .close { position: absolute; top: 8px; right: 12px; cursor: pointer; color: #666; font-size: 18px; }
-    #detail-panel .close:hover { color: #fff; }
-    #detail-panel .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px; }
-    #detail-panel .badge.interface { background: #1565C0; }
-    #detail-panel .badge.domain { background: #2E7D32; }
-    #detail-panel .badge.infrastructure { background: #BF360C; }
-    #detail-panel .badge.otp { background: #6A1B9A; }
-
-    /* Controls */
-    #controls {
-      position: fixed; left: 20px; bottom: 20px; color: #666; font-size: 11px;
-    }
-    #controls kbd { background: #333; padding: 1px 5px; border-radius: 3px; color: #aaa; }
-    #zoom-fit {
-      position: fixed; left: 20px; top: 20px; background: #2a2a4a; border: 1px solid #444;
-      color: #ccc; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 12px;
-      font-family: inherit;
-    }
-    #zoom-fit:hover { background: #3a3a5a; color: #fff; }
-
-    /* Layer colors */
-    .layer-interface .node-bg { fill: #1a237e; stroke: #3949ab; }
-    .layer-domain .node-bg { fill: #1b3a1b; stroke: #388E3C; }
-    .layer-infrastructure .node-bg { fill: #3e1a1a; stroke: #c62828; }
-    .layer-otp .node-bg { fill: #2a1a3e; stroke: #7B1FA2; }
+    #{css()}
     </style>
     </head>
     <body>
     <div id="canvas">
       <svg id="diagram" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-            <polygon points="0 0, 8 3, 0 6" fill="#78909C" opacity="0.5"/>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#90A4AE" opacity="0.6"/>
+          </marker>
+          <marker id="arrow-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#E53935" opacity="0.7"/>
           </marker>
         </defs>
         <g id="viewport"></g>
       </svg>
     </div>
 
-    <button id="zoom-fit" onclick="zoomToFit()">&#x2922; Fit All</button>
+    <div id="toolbar">
+      <button id="btn-fit" onclick="zoomToFit()">&#x2922; Fit All</button>
+      <button id="btn-back" onclick="showOverview()" style="display:none">&#x2190; Overview</button>
+      <span id="view-label">Overview</span>
+    </div>
 
-    <div id="detail-panel">
-      <span class="close" onclick="closeDetail()">&times;</span>
-      <div id="detail-content"></div>
+    <div id="info-panel">
+      <div id="info-content">
+        <div id="info-hint">Click a context or module to see details</div>
+      </div>
     </div>
 
     <div id="controls">
-      <kbd>Scroll</kbd> zoom &nbsp; <kbd>Drag</kbd> pan &nbsp; <kbd>Click</kbd> select + highlight wires &nbsp; <kbd>F</kbd> fit all &nbsp; <kbd>Esc</kbd> deselect
+      <kbd>Scroll</kbd> zoom &nbsp; <kbd>Drag</kbd> pan &nbsp;
+      <kbd>Click</kbd> context to zoom in &nbsp; <kbd>F</kbd> fit all &nbsp;
+      <kbd>Esc</kbd> back / deselect
     </div>
 
     <script>
     const DATA = #{graph_json};
+    #{javascript()}
+    </script>
+    </body>
+    </html>
+    """
+  end
 
-    // --- Layout Engine ---
-    const NODE_W = 200, NODE_H_BASE = 44, PORT_H = 16, PORT_R = 4;
-    const MARGIN = 80, COL_GAP = 180, ROW_GAP = 50;
-    const CONTEXT_PAD = 30;
+  defp css do
+    ~S"""
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #f5f6fa; overflow: hidden;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: #333;
+    }
+    #canvas { width: 100vw; height: 100vh; }
+    svg { width: 100%; height: 100%; }
 
-    function layout(data) {
-      const nodes = new Map();
-      const contextGroups = new Map();
+    /* --- Context boxes (overview) --- */
+    .ctx-frame { cursor: pointer; }
+    .ctx-frame:hover .ctx-bg { filter: brightness(0.96); }
+    .ctx-bg { rx: 12; ry: 12; stroke-width: 2; }
+    .ctx-bg.normal { fill: #fff; stroke: #cfd8dc; }
+    .ctx-bg.has-leak { fill: #fff5f5; stroke: #ef9a9a; }
+    .ctx-title { font-size: 14px; font-weight: 700; fill: #263238; }
+    .ctx-subtitle { font-size: 10px; fill: #78909c; }
+    .ctx-stats { font-size: 9px; fill: #90a4ae; }
 
-      // Group by context
-      data.nodes.forEach(n => {
-        if (!contextGroups.has(n.context)) contextGroups.set(n.context, []);
-        contextGroups.get(n.context).push(n);
+    /* Ports on context and module boxes */
+    .port-dot { stroke-width: 1.5; }
+    .port-dot.in { fill: #66BB6A; stroke: #43A047; }
+    .port-dot.out { fill: #42A5F5; stroke: #1E88E5; }
+    .port-dot.unconnected { fill: #ccc; stroke: #aaa; }
+    .port-label { font-size: 7.5px; fill: #78909c; }
+
+    /* --- Module nodes (detail view) --- */
+    .node-frame { cursor: pointer; }
+    .node-frame:hover .node-bg { filter: brightness(0.96); }
+    .node-bg { rx: 6; ry: 6; }
+    .node-title { font-size: 11px; font-weight: 600; }
+    .node-title.boundary { fill: #1565C0; }
+    .node-title.internal { fill: #37474F; }
+
+    /* Layer colors */
+    .layer-interface .node-bg { fill: #E3F2FD; stroke: #64B5F6; }
+    .layer-domain .node-bg { fill: #E8F5E9; stroke: #81C784; }
+    .layer-infrastructure .node-bg { fill: #FBE9E7; stroke: #EF9A9A; }
+    .layer-otp .node-bg { fill: #F3E5F5; stroke: #CE93D8; }
+
+    /* --- Wires --- */
+    .wire { fill: none; stroke-width: 1.5; opacity: 0.35; }
+    .wire:hover { opacity: 0.7; stroke-width: 2.5; }
+    .wire.normal { stroke: #78909C; }
+    .wire.cross-boundary { stroke: #78909C; stroke-dasharray: 6 3; }
+    .wire.bypass { stroke: #E53935; stroke-width: 2; opacity: 0.65; }
+
+    /* Highlighted wires */
+    .wire-highlight { fill: none; stroke-width: 3; opacity: 1; pointer-events: none; }
+    .wire-highlight.outgoing { stroke: #42A5F5; }
+    .wire-highlight.incoming { stroke: #66BB6A; }
+    .wire-highlight.violation { stroke: #E53935; }
+
+    /* Dimmed state */
+    .dimmed .ctx-frame { opacity: 0.12; }
+    .dimmed .node-frame { opacity: 0.12; }
+    .dimmed .wire { opacity: 0.04; }
+    .dimmed .ctx-frame.highlighted,
+    .dimmed .node-frame.highlighted { opacity: 1; }
+    .dimmed .ctx-frame.selected,
+    .dimmed .node-frame.selected { opacity: 1; }
+    .ctx-frame.selected .ctx-bg { stroke: #FFA726; stroke-width: 3; }
+    .node-frame.selected .node-bg { stroke: #FFA726; stroke-width: 3; }
+
+    /* --- Info sidebar (always present on right) --- */
+    #info-panel {
+      position: fixed; right: 0; top: 0; width: 320px; height: 100vh;
+      background: #fff; border-left: 1px solid #e0e0e0;
+      padding: 16px; font-size: 12px; overflow-y: auto;
+      box-shadow: -2px 0 12px rgba(0,0,0,0.04);
+    }
+    #info-panel h2 { font-size: 15px; color: #263238; margin-bottom: 6px; }
+    #info-panel h3 {
+      font-size: 10px; color: #90a4ae; margin: 12px 0 3px;
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    #info-panel .port-list { list-style: none; padding: 0; }
+    #info-panel .port-list li { padding: 2px 0; font-size: 11px; color: #546e7a; }
+    #info-panel .badge {
+      display: inline-block; padding: 1px 8px; border-radius: 10px;
+      font-size: 9px; margin-left: 4px; color: #fff; font-weight: 600;
+    }
+    #info-panel .badge.interface { background: #42A5F5; }
+    #info-panel .badge.domain { background: #66BB6A; }
+    #info-panel .badge.infrastructure { background: #EF5350; }
+    #info-panel .badge.otp { background: #AB47BC; }
+    .stat-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
+    .stat-label { color: #90a4ae; }
+    .stat-value { color: #37474F; font-weight: 600; }
+    .stat-value.warn { color: #E53935; }
+    .member-list { list-style: none; padding: 0; }
+    .member-list li { padding: 2px 0; font-size: 10px; color: #546e7a; cursor: default; }
+    .member-list li .boundary-tag { color: #1565C0; font-weight: 600; font-size: 9px; margin-left: 4px; }
+    #info-hint { color: #bbb; font-size: 12px; margin-top: 40px; text-align: center; }
+
+    /* --- Toolbar --- */
+    #toolbar {
+      position: fixed; left: 20px; top: 20px; display: flex; gap: 8px; align-items: center; z-index: 10;
+    }
+    #toolbar button {
+      background: #fff; border: 1px solid #cfd8dc; color: #37474F;
+      padding: 8px 14px; border-radius: 8px; cursor: pointer;
+      font-size: 12px; font-family: inherit; font-weight: 500;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    #toolbar button:hover { background: #f0f0f0; border-color: #90a4ae; }
+    #view-label { font-size: 13px; color: #78909c; font-weight: 500; margin-left: 8px; }
+
+    /* --- Controls --- */
+    #controls {
+      position: fixed; left: 20px; bottom: 20px; color: #90a4ae; font-size: 11px; z-index: 10;
+    }
+    #controls kbd {
+      background: #e8eaf0; padding: 1px 5px; border-radius: 3px;
+      color: #546e7a; font-size: 10px;
+    }
+    """
+  end
+
+  defp javascript do
+    ~S"""
+    // ================================================================
+    // DATA INDEXES
+    // ================================================================
+    const nodeMap = new Map(DATA.nodes.map(n => [n.id, n]));
+    const ctxMap = new Map(DATA.contexts.map(c => [c.name, c]));
+    const PANEL_W = 320;
+
+    // ================================================================
+    // STATE
+    // ================================================================
+    let currentView = 'overview';
+    let currentContext = null;
+    let viewX = 0, viewY = 0, zoom = 1;
+    let dragging = false, lastX, lastY;
+
+    // ================================================================
+    // SVG HELPERS
+    // ================================================================
+    function se(tag, attrs = {}) {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+      return el;
+    }
+    function sr(x, y, w, h, cls) { return se('rect', { x, y, width: w, height: h, class: cls }); }
+    function st(x, y, text, cls) { const el = se('text', { x, y, class: cls }); el.textContent = text; return el; }
+    function sc(cx, cy, r, cls) { return se('circle', { cx, cy, r, class: cls }); }
+
+    // ================================================================
+    // LAYERED LAYOUT — cycle-breaking + longest-path column assignment
+    // Ensures maximum left-to-right flow, even with cycles.
+    // ================================================================
+    function topoColumns(ids, edges) {
+      const idSet = new Set(ids);
+
+      // 1. Build adjacency from edges, filtering to known ids
+      const fwd = new Map();  // id → Set of targets
+      const edgeCount = new Map(); // "from→to" → count (for cycle-breaking heuristic)
+      ids.forEach(id => fwd.set(id, new Set()));
+      edges.forEach(({from, to}) => {
+        if (idSet.has(from) && idSet.has(to) && from !== to) {
+          fwd.get(from).add(to);
+          const key = from + '\0' + to;
+          edgeCount.set(key, (edgeCount.get(key) || 0) + 1);
+        }
       });
 
-      // Layout contexts in columns
-      let cx = MARGIN;
-      const contextPositions = [];
+      // 2. DFS cycle-breaking: identify back-edges and reverse the lighter direction
+      //    This makes the graph acyclic so Kahn's covers all nodes.
+      const WHITE = 0, GRAY = 1, BLACK = 2;
+      const color = new Map();
+      ids.forEach(id => color.set(id, WHITE));
+      const backEdges = []; // [from, to] pairs to reverse
 
-      contextGroups.forEach((members, ctxName) => {
-        let cy = MARGIN + 30;  // Leave room for context label
-        const ctxX = cx;
-        let maxW = 0;
+      function dfs(u) {
+        color.set(u, GRAY);
+        for (const v of fwd.get(u)) {
+          if (color.get(v) === GRAY) {
+            // Back-edge found: u→v creates a cycle. Reverse the lighter direction.
+            const fwdKey = u + '\0' + v;
+            const revKey = v + '\0' + u;
+            const fwdCount = edgeCount.get(fwdKey) || 0;
+            const revCount = edgeCount.get(revKey) || 0;
+            // Reverse the direction with fewer calls (keep the dominant flow)
+            if (fwdCount <= revCount) {
+              backEdges.push([u, v]);
+            } else {
+              backEdges.push([v, u]);
+            }
+          } else if (color.get(v) === WHITE) {
+            dfs(v);
+          }
+        }
+        color.set(u, BLACK);
+      }
+      ids.forEach(id => { if (color.get(id) === WHITE) dfs(id); });
 
-        members.forEach(n => {
-          const nPorts = Math.max(n.inputs.length, n.outputs.length, 1);
-          const h = NODE_H_BASE + nPorts * PORT_H;
-          const w = NODE_W;
+      // Apply reversals to get a DAG
+      backEdges.forEach(([from, to]) => {
+        fwd.get(from).delete(to);
+        fwd.get(to).add(from);
+      });
 
-          nodes.set(n.id, {
-            ...n, x: cx + CONTEXT_PAD, y: cy, w, h,
-            inputPorts: buildPorts(n.inputs, cx + CONTEXT_PAD, cy, h, 'input', w),
-            outputPorts: buildPorts(n.outputs, cx + CONTEXT_PAD, cy, h, 'output', w)
-          });
+      // 3. Kahn's BFS on the now-acyclic graph — longest-path layering
+      const inDeg = new Map();
+      ids.forEach(id => inDeg.set(id, 0));
+      ids.forEach(id => {
+        for (const t of fwd.get(id)) {
+          inDeg.set(t, inDeg.get(t) + 1);
+        }
+      });
 
-          cy += h + ROW_GAP;
-          maxW = Math.max(maxW, w);
+      const columns = new Map();
+      let queue = ids.filter(id => inDeg.get(id) === 0);
+      let col = 0;
+      const visited = new Set();
+
+      while (queue.length > 0) {
+        const next = [];
+        queue.forEach(id => { columns.set(id, col); visited.add(id); });
+        queue.forEach(id => {
+          for (const t of fwd.get(id)) {
+            inDeg.set(t, inDeg.get(t) - 1);
+            if (inDeg.get(t) === 0 && !visited.has(t)) next.push(t);
+          }
         });
+        queue = next;
+        col++;
+      }
 
-        const ctxW = maxW + CONTEXT_PAD * 2;
-        const ctxH = cy - MARGIN - 30 + CONTEXT_PAD;
-        contextPositions.push({ name: ctxName, x: ctxX, y: MARGIN, w: ctxW, h: ctxH });
+      // 4. Safety net: any still-unvisited node (shouldn't happen after cycle-breaking)
+      ids.forEach(id => { if (!columns.has(id)) columns.set(id, col); });
 
-        cx += ctxW + COL_GAP;
+      // 5. Optional: push nodes right to their latest valid column
+      //    (longest incoming path, not earliest). This clusters consumers
+      //    closer to their producers and shortens wire lengths.
+      const maxCol = col;
+      const rev = new Map(); // id → Set of predecessors
+      ids.forEach(id => rev.set(id, new Set()));
+      ids.forEach(id => {
+        for (const t of fwd.get(id)) rev.get(t).add(id);
       });
 
-      return { nodes, contextPositions, totalW: cx, totalH: 4000 };
+      // For each node, its column must be > max(predecessor columns).
+      // Walk in topological order and push to max(pred) + 1.
+      // Then walk reverse to pull nodes left if they have no successors at their level.
+      const topoOrder = [...columns.entries()].sort((a, b) => a[1] - b[1]).map(e => e[0]);
+      topoOrder.forEach(id => {
+        let maxPred = -1;
+        for (const p of rev.get(id)) {
+          const pc = columns.get(p);
+          if (pc !== undefined && pc > maxPred) maxPred = pc;
+        }
+        if (maxPred >= 0) columns.set(id, maxPred + 1);
+      });
+
+      return columns;
     }
 
-    function buildPorts(ports, nx, ny, nh, type, nw) {
-      if (ports.length === 0) return [];
+    // ================================================================
+    // OVERVIEW LAYOUT — topological column ordering
+    // ================================================================
+    const CTX_W = 240, CTX_HEADER = 50, CTX_PORT_SP = 16, CTX_COL_GAP = 160, CTX_ROW_GAP = 40, CTX_MARGIN = 50;
+
+    function collectCtxPorts(ctxName, dir) {
+      const ports = new Set();
+      DATA.contextEdges.filter(e => (dir === 'in' ? e.to : e.from) === ctxName)
+        .forEach(e => ports.add(dir === 'in' ? e.to_port : e.from_port));
+      return [...ports].slice(0, 12);
+    }
+
+    function layoutOverview() {
+      const ctxNames = DATA.contexts.map(c => c.name);
+      // Build context-level edges for topological sort
+      const ctxEdges = [];
+      const seen = new Set();
+      DATA.contextEdges.forEach(e => {
+        const key = e.from + '→' + e.to;
+        if (!seen.has(key)) { seen.add(key); ctxEdges.push({from: e.from, to: e.to}); }
+      });
+      const colMap = topoColumns(ctxNames, ctxEdges);
+
+      // Group contexts by column
+      const byCol = new Map();
+      ctxNames.forEach(name => {
+        const c = colMap.get(name) || 0;
+        if (!byCol.has(c)) byCol.set(c, []);
+        byCol.get(c).push(name);
+      });
+
+      const layouts = new Map();
+      const sortedCols = [...byCol.keys()].sort((a, b) => a - b);
+
+      let cx = CTX_MARGIN;
+      sortedCols.forEach(col => {
+        const names = byCol.get(col);
+        let cy = CTX_MARGIN;
+        let maxW = 0;
+
+        names.forEach(name => {
+          const ctx = ctxMap.get(name);
+          const inP = collectCtxPorts(name, 'in');
+          const outP = collectCtxPorts(name, 'out');
+          const portCount = Math.max(inP.length, outP.length, 1);
+          const h = CTX_HEADER + portCount * CTX_PORT_SP + 12;
+          const portY0 = cy + CTX_HEADER;
+
+          layouts.set(name, {
+            ...ctx, x: cx, y: cy, w: CTX_W, h,
+            inPorts: inP.map((n, i) => ({ name: n, x: cx, y: portY0 + i * CTX_PORT_SP + CTX_PORT_SP / 2 })),
+            outPorts: outP.map((n, i) => ({ name: n, x: cx + CTX_W, y: portY0 + i * CTX_PORT_SP + CTX_PORT_SP / 2 }))
+          });
+          cy += h + CTX_ROW_GAP;
+          maxW = Math.max(maxW, CTX_W);
+        });
+        cx += maxW + CTX_COL_GAP;
+      });
+      return layouts;
+    }
+
+    // ================================================================
+    // RENDER OVERVIEW
+    // ================================================================
+    function renderOverview() {
+      const vp = document.getElementById('viewport');
+      vp.innerHTML = '';
+      currentView = 'overview'; currentContext = null;
+      document.getElementById('btn-back').style.display = 'none';
+      document.getElementById('view-label').textContent = 'Overview';
+      setInfo(null);
+
+      const layouts = layoutOverview();
+
+      // Wires — port-to-port
+      const wireGroup = se('g', { id: 'wires' });
+      DATA.contextEdges.forEach(edge => {
+        const fc = layouts.get(edge.from), tc = layouts.get(edge.to);
+        if (!fc || !tc) return;
+        const outP = fc.outPorts.find(p => p.name === edge.from_port);
+        const inP = tc.inPorts.find(p => p.name === edge.to_port);
+        if (!outP || !inP) return;
+        wireGroup.appendChild(makeWire(outP.x, outP.y, inP.x, inP.y, edge.bypasses_boundary, edge.from, edge.to));
+      });
+      vp.appendChild(wireGroup);
+      vp.appendChild(se('g', { id: 'wire-highlights' }));
+
+      // Context boxes
+      layouts.forEach((ctx, name) => {
+        const g = se('g', { class: 'ctx-frame', 'data-id': name });
+        g.appendChild(sr(ctx.x, ctx.y, ctx.w, ctx.h, ctx.leak_calls > 0 ? 'ctx-bg has-leak' : 'ctx-bg normal'));
+        g.appendChild(st(ctx.x + 14, ctx.y + 22, (name.split('.').slice(-1)[0] || name), 'ctx-title'));
+        g.appendChild(st(ctx.x + 14, ctx.y + 38, `${ctx.members.length} modules · ${(ctx.cohesion*100).toFixed(0)}%`, 'ctx-stats'));
+
+        ctx.inPorts.forEach(p => {
+          g.appendChild(sc(p.x, p.y, 4, 'port-dot in'));
+          g.appendChild(st(p.x + 8, p.y + 3, p.name, 'port-label'));
+        });
+        ctx.outPorts.forEach(p => {
+          g.appendChild(sc(p.x, p.y, 4, 'port-dot out'));
+          const lbl = st(p.x - 8, p.y + 3, p.name, 'port-label');
+          lbl.setAttribute('text-anchor', 'end');
+          g.appendChild(lbl);
+        });
+
+        g.addEventListener('click', e => { e.stopPropagation(); enterContext(name); });
+        vp.appendChild(g);
+      });
+      zoomToFit();
+    }
+
+    // ================================================================
+    // DETAIL LAYOUT — topological column ordering for modules
+    // ================================================================
+    const NODE_W = 220, NODE_H_BASE = 40, PORT_H = 16, PORT_R = 4;
+    const NODE_COL_GAP = 280, NODE_ROW_GAP = 30, NODE_MARGIN = 50;
+
+    function layoutDetail(ctxName) {
+      const ctx = ctxMap.get(ctxName);
+      const memberIds = new Set(ctx.members);
+      const members = ctx.members.map(id => nodeMap.get(id)).filter(Boolean);
+
+      // Collect external connected module ids
+      const extIds = new Set();
+      DATA.edges.forEach(e => {
+        if (memberIds.has(e.from) && !memberIds.has(e.to)) extIds.add(e.to);
+        if (memberIds.has(e.to) && !memberIds.has(e.from)) extIds.add(e.from);
+      });
+
+      // All ids we'll lay out
+      const allIds = [...ctx.members, ...extIds];
+      // Edges among all ids
+      const relevantEdges = DATA.edges.filter(e => {
+        const hasFrom = memberIds.has(e.from) || extIds.has(e.from);
+        const hasTo = memberIds.has(e.to) || extIds.has(e.to);
+        return hasFrom && hasTo && e.from !== e.to;
+      });
+
+      const colMap = topoColumns(allIds, relevantEdges);
+
+      // Group by column
+      const byCol = new Map();
+      allIds.forEach(id => {
+        const c = colMap.get(id) || 0;
+        if (!byCol.has(c)) byCol.set(c, []);
+        byCol.get(c).push(id);
+      });
+
+      const nodeLayouts = new Map();
+      const sortedCols = [...byCol.keys()].sort((a, b) => a - b);
+
+      let cx = NODE_MARGIN;
+      sortedCols.forEach(col => {
+        const ids = byCol.get(col);
+        let cy = NODE_MARGIN;
+
+        ids.forEach(id => {
+          const n = nodeMap.get(id);
+          if (!n) return;
+          const isExt = extIds.has(id);
+          const inputs = isExt ? n.inputs.slice(0, 4) : n.inputs;
+          const outputs = isExt ? n.outputs.slice(0, 4) : n.outputs;
+          const nPorts = Math.max(inputs.length, outputs.length, 1);
+          const h = NODE_H_BASE + nPorts * PORT_H;
+
+          nodeLayouts.set(id, {
+            ...n, x: cx, y: cy, w: NODE_W, h, external: isExt,
+            inputPorts: mkPorts(inputs, cx, cy, h, 'input', NODE_W),
+            outputPorts: mkPorts(outputs, cx, cy, h, 'output', NODE_W)
+          });
+          cy += h + NODE_ROW_GAP;
+        });
+        cx += NODE_W + NODE_COL_GAP;
+      });
+      return nodeLayouts;
+    }
+
+    function mkPorts(ports, nx, ny, nh, type, nw) {
+      if (!ports || ports.length === 0) return [];
       const spacing = Math.min(PORT_H, (nh - 20) / ports.length);
       const startY = ny + 20;
-
       return ports.map((p, i) => ({
         ...p,
         x: type === 'input' ? nx : nx + nw,
@@ -320,130 +697,149 @@ defmodule Archdo.Compiled.DiagramInteractive do
       }));
     }
 
-    // --- SVG Rendering ---
-    function render(layoutData) {
+    // ================================================================
+    // RENDER DETAIL
+    // ================================================================
+    function renderDetail(ctxName) {
       const vp = document.getElementById('viewport');
       vp.innerHTML = '';
+      currentView = 'detail'; currentContext = ctxName;
+      document.getElementById('btn-back').style.display = 'inline-block';
+      document.getElementById('view-label').textContent = (ctxName.split('.').slice(-1)[0] || ctxName);
 
-      const { nodes, contextPositions } = layoutData;
+      const nodes = layoutDetail(ctxName);
+      const memberIds = new Set(ctxMap.get(ctxName).members);
 
-      // Draw context backgrounds
-      contextPositions.forEach(ctx => {
-        const g = svgEl('g');
-        g.appendChild(svgRect(ctx.x, ctx.y, ctx.w, ctx.h, 'context-bg'));
-        const label = svgText(ctx.x + 12, ctx.y + 18, ctx.name, 'context-label');
-        g.appendChild(label);
-        vp.appendChild(g);
-      });
+      // Background regions
+      drawRegionBg(vp, nodes, id => memberIds.has(id), ctxName, 0.35, false);
+      drawRegionBg(vp, nodes, id => !memberIds.has(id), 'External', 0.15, true);
 
-      // Draw wires (behind nodes)
-      const wireGroup = svgEl('g', { id: 'wires' });
+      // Wires — port-level routing
+      const wireGroup = se('g', { id: 'wires' });
       DATA.edges.forEach(edge => {
-        const fromNode = nodes.get(edge.from);
-        const toNode = nodes.get(edge.to);
-        if (!fromNode || !toNode) return;
+        const fn = nodes.get(edge.from), tn = nodes.get(edge.to);
+        if (!fn || !tn) return;
 
-        const x1 = fromNode.x + fromNode.w;
-        const y1 = fromNode.y + fromNode.h / 2;
-        const x2 = toNode.x;
-        const y2 = toNode.y + toNode.h / 2;
+        // Match output port by function name
+        const outP = (fn.outputPorts || []).find(p => p.name === edge.from_port);
+        // Match input port: the dependency name matches the source module's short name
+        const inP = (tn.inputPorts || []).find(p => p.name === fn.short || p.module === edge.from);
 
-        const dx = Math.abs(x2 - x1) * 0.5;
-        const path = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+        const x1 = outP ? outP.x : fn.x + fn.w;
+        const y1 = outP ? outP.y : fn.y + fn.h / 2;
+        const x2 = inP ? inP.x : tn.x;
+        const y2 = inP ? inP.y : tn.y + tn.h / 2;
 
-        const wire = svgEl('path', {
-          d: path, class: 'wire default',
-          'marker-end': 'url(#arrowhead)'
-        });
-        wire.setAttribute('data-from', edge.from);
-        wire.setAttribute('data-to', edge.to);
-        wireGroup.appendChild(wire);
+        wireGroup.appendChild(makeWire(x1, y1, x2, y2, edge.bypasses_boundary, edge.from, edge.to, edge.crosses_boundary));
       });
       vp.appendChild(wireGroup);
+      vp.appendChild(se('g', { id: 'wire-highlights' }));
 
-      // Highlight overlay group (rendered on top of everything)
-      const highlightGroup = svgEl('g', { id: 'wire-highlights' });
-      vp.appendChild(highlightGroup);
-
-      // Draw nodes
+      // Module nodes
       nodes.forEach((n, id) => {
-        const g = svgEl('g', { class: `node-frame layer-${n.layer}`, 'data-id': id });
-        g.setAttribute('transform', `translate(0,0)`);
+        const g = se('g', { class: `node-frame layer-${n.layer}`, 'data-id': id });
+        const rect = sr(n.x, n.y, n.w, n.h, 'node-bg');
+        if (n.external) rect.setAttribute('opacity', '0.5');
+        g.appendChild(rect);
 
-        // Background
-        g.appendChild(svgRect(n.x, n.y, n.w, n.h, 'node-bg'));
+        const titleText = n.short.length > 22 ? n.short.slice(0, 20) + '..' : n.short;
+        g.appendChild(st(n.x + 10, n.y + 16, titleText, n.is_boundary ? 'node-title boundary' : 'node-title internal'));
 
-        // Title (truncate to fit)
-        const titleText = n.short.length > 20 ? n.short.slice(0, 18) + '..' : n.short;
-        g.appendChild(svgText(n.x + 8, n.y + 14, titleText, 'node-title'));
-
-        // Input ports (left side)
-        n.inputPorts.forEach(p => {
-          g.appendChild(svgCircle(p.x, p.y, PORT_R, 'port-dot input'));
-          g.appendChild(svgText(p.x + 8, p.y + 3, p.name, 'port-label'));
+        (n.inputPorts || []).forEach(p => {
+          g.appendChild(sc(p.x, p.y, PORT_R, 'port-dot in'));
+          g.appendChild(st(p.x + 8, p.y + 3, p.name, 'port-label'));
         });
-
-        // Output ports (right side)
-        n.outputPorts.forEach(p => {
+        (n.outputPorts || []).forEach(p => {
           const connected = p.callers > 0;
-          g.appendChild(svgCircle(p.x, p.y, PORT_R,
-            'port-dot ' + (connected ? 'output' : 'unconnected')));
-          const label = svgText(p.x - 8, p.y + 3, p.name, 'port-label');
-          label.setAttribute('text-anchor', 'end');
-          g.appendChild(label);
+          g.appendChild(sc(p.x, p.y, PORT_R, 'port-dot ' + (connected ? 'out' : 'unconnected')));
+          const lbl = st(p.x - 8, p.y + 3, p.name, 'port-label');
+          lbl.setAttribute('text-anchor', 'end');
+          g.appendChild(lbl);
         });
 
-        g.addEventListener('click', (e) => {
+        g.addEventListener('click', e => {
           e.stopPropagation();
-          selectNode(n, id, nodes);
-          showDetail(n);
+          selectNode(id, nodes);
+          setInfo(buildModuleInfo(n));
         });
         vp.appendChild(g);
       });
+
+      setInfo(buildContextInfo(ctxName));
+      zoomToFit();
     }
 
-    // --- SVG Helpers ---
-    function svgEl(tag, attrs = {}) {
-      const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
-      Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
-      return el;
+    function drawRegionBg(vp, nodes, filterFn, label, opacity, dashed) {
+      const filtered = [];
+      nodes.forEach((n, id) => { if (filterFn(id)) filtered.push(n); });
+      if (filtered.length === 0) return;
+      const pad = 20;
+      const x0 = Math.min(...filtered.map(n => n.x)) - pad;
+      const y0 = Math.min(...filtered.map(n => n.y)) - 30;
+      const x1 = Math.max(...filtered.map(n => n.x + n.w)) + pad;
+      const y1 = Math.max(...filtered.map(n => n.y + n.h)) + pad;
+      const bg = sr(x0, y0, x1 - x0, y1 - y0, 'ctx-bg normal');
+      bg.setAttribute('opacity', String(opacity));
+      if (dashed) bg.setAttribute('stroke-dasharray', '6 3');
+      vp.appendChild(bg);
+      vp.appendChild(st(x0 + 10, y0 + 16, label, 'ctx-subtitle'));
     }
 
-    function svgRect(x, y, w, h, cls) {
-      return svgEl('rect', { x, y, width: w, height: h, class: cls });
+    // ================================================================
+    // WIRE FACTORY — Bezier from (x1,y1) output port to (x2,y2) input port
+    // ================================================================
+    function makeWire(x1, y1, x2, y2, isBypass, fromId, toId, crossBoundary) {
+      // If target is to the left, route around with wider control points
+      const goesLeft = x2 < x1;
+      let path;
+      if (goesLeft) {
+        // Route: go right, swing down/up, come back left
+        const detour = 60;
+        const midY = (y1 + y2) / 2 + (y2 > y1 ? detour : -detour);
+        path = `M ${x1} ${y1} C ${x1 + detour} ${y1}, ${x1 + detour} ${midY}, ${(x1+x2)/2} ${midY} S ${x2 - detour} ${y2}, ${x2} ${y2}`;
+      } else {
+        const dx = Math.max(Math.abs(x2 - x1) * 0.4, 40);
+        path = `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`;
+      }
+
+      let cls = 'wire normal';
+      let marker = 'url(#arrow)';
+      if (isBypass) { cls = 'wire bypass'; marker = 'url(#arrow-red)'; }
+      else if (crossBoundary) { cls = 'wire cross-boundary'; }
+
+      const wire = se('path', { d: path, class: cls, 'marker-end': marker });
+      wire.setAttribute('data-from', fromId);
+      wire.setAttribute('data-to', toId);
+      return wire;
     }
 
-    function svgText(x, y, text, cls) {
-      const el = svgEl('text', { x, y, class: cls });
-      el.textContent = text;
-      return el;
+    // ================================================================
+    // NAVIGATION
+    // ================================================================
+    function enterContext(ctxName) {
+      clearSelection();
+      renderDetail(ctxName);
+    }
+    function showOverview() {
+      clearSelection();
+      renderOverview();
     }
 
-    function svgCircle(cx, cy, r, cls) {
-      return svgEl('circle', { cx, cy, r, class: cls });
-    }
-
-    // --- Pan & Zoom ---
-    let viewX = 0, viewY = 0, zoom = 1;
-    let dragging = false, lastX, lastY;
-
+    // ================================================================
+    // PAN & ZOOM
+    // ================================================================
     const svg = document.getElementById('diagram');
-    const vp = document.getElementById('viewport');
 
     function updateTransform() {
-      vp.setAttribute('transform', `translate(${viewX},${viewY}) scale(${zoom})`);
+      document.getElementById('viewport').setAttribute('transform', `translate(${viewX},${viewY}) scale(${zoom})`);
     }
 
     svg.addEventListener('wheel', e => {
       e.preventDefault();
       const factor = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(0.1, Math.min(5, zoom * factor));
-
-      // Zoom toward cursor
+      const newZoom = Math.max(0.05, Math.min(6, zoom * factor));
       const rect = svg.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
       viewX = mx - (mx - viewX) * (newZoom / zoom);
       viewY = my - (my - viewY) * (newZoom / zoom);
       zoom = newZoom;
@@ -451,64 +847,51 @@ defmodule Archdo.Compiled.DiagramInteractive do
     });
 
     svg.addEventListener('mousedown', e => {
-      if (e.target.closest('.node-frame')) return;
-      dragging = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
+      if (e.target.closest('.ctx-frame') || e.target.closest('.node-frame')) return;
+      dragging = true; lastX = e.clientX; lastY = e.clientY;
       svg.style.cursor = 'grabbing';
     });
-
     svg.addEventListener('mousemove', e => {
       if (!dragging) return;
-      viewX += e.clientX - lastX;
-      viewY += e.clientY - lastY;
-      lastX = e.clientX;
-      lastY = e.clientY;
+      viewX += e.clientX - lastX; viewY += e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
       updateTransform();
     });
+    svg.addEventListener('mouseup', () => { dragging = false; svg.style.cursor = 'default'; });
 
-    svg.addEventListener('mouseup', () => {
-      dragging = false;
-      svg.style.cursor = 'default';
+    svg.addEventListener('click', e => {
+      if (!e.target.closest('.ctx-frame') && !e.target.closest('.node-frame')) {
+        clearSelection();
+        if (currentView === 'overview') setInfo(null);
+      }
     });
 
-    // --- Node Selection & Wire Highlighting ---
-    let selectedNodeId = null;
-
-    function selectNode(node, nodeId, allNodes) {
+    // ================================================================
+    // SELECTION & WIRE HIGHLIGHTING
+    // ================================================================
+    function selectNode(nodeId, nodeLayouts) {
       clearSelection();
-      selectedNodeId = nodeId;
+      document.getElementById('viewport').classList.add('dimmed');
 
-      const vp = document.getElementById('viewport');
-      vp.classList.add('dimmed');
+      const el = document.querySelector(`[data-id="${nodeId}"]`);
+      if (el) { el.classList.add('selected', 'highlighted'); }
 
-      // Mark selected node
-      const selectedEl = document.querySelector(`[data-id="${nodeId}"]`);
-      if (selectedEl) selectedEl.classList.add('selected');
-
-      // Find connected nodes and highlight wires
       const connectedIds = new Set([nodeId]);
-      const highlightGroup = document.getElementById('wire-highlights');
+      const hlGroup = document.getElementById('wire-highlights');
 
       document.querySelectorAll('.wire').forEach(wire => {
-        const from = wire.getAttribute('data-from');
-        const to = wire.getAttribute('data-to');
-
+        const from = wire.getAttribute('data-from'), to = wire.getAttribute('data-to');
         if (from === nodeId || to === nodeId) {
-          // Clone wire path to highlight group (renders on top)
           const hl = wire.cloneNode();
           hl.removeAttribute('class');
           hl.classList.add('wire-highlight');
-          hl.classList.add(from === nodeId ? 'outgoing' : 'incoming');
+          hl.classList.add(wire.classList.contains('bypass') ? 'violation' : (from === nodeId ? 'outgoing' : 'incoming'));
           hl.removeAttribute('marker-end');
-          highlightGroup.appendChild(hl);
-
-          connectedIds.add(from);
-          connectedIds.add(to);
+          hlGroup.appendChild(hl);
+          connectedIds.add(from); connectedIds.add(to);
         }
       });
 
-      // Un-dim connected nodes
       connectedIds.forEach(id => {
         const el = document.querySelector(`[data-id="${id}"]`);
         if (el) el.classList.add('highlighted');
@@ -516,100 +899,116 @@ defmodule Archdo.Compiled.DiagramInteractive do
     }
 
     function clearSelection() {
-      selectedNodeId = null;
-      const vp = document.getElementById('viewport');
-      vp.classList.remove('dimmed');
-
-      document.querySelectorAll('.selected, .highlighted').forEach(el => {
-        el.classList.remove('selected', 'highlighted');
-      });
-
+      document.getElementById('viewport').classList.remove('dimmed');
+      document.querySelectorAll('.selected, .highlighted').forEach(el => el.classList.remove('selected', 'highlighted'));
       const hlGroup = document.getElementById('wire-highlights');
       if (hlGroup) hlGroup.innerHTML = '';
     }
 
-    // Click on background clears selection
-    document.getElementById('diagram').addEventListener('click', (e) => {
-      if (!e.target.closest('.node-frame')) {
-        clearSelection();
-      }
-    });
-
-    // --- Zoom to Fit ---
+    // ================================================================
+    // ZOOM TO FIT (accounts for sidebar)
+    // ================================================================
     function zoomToFit() {
-      const screenW = window.innerWidth;
+      const screenW = window.innerWidth - PANEL_W;
       const screenH = window.innerHeight;
-      const contentW = layoutData.totalW + 100;
-      const contentH = computeContentHeight(layoutData) + 100;
 
-      zoom = Math.min(screenW / contentW, screenH / contentH) * 0.9;
-      viewX = (screenW - contentW * zoom) / 2;
-      viewY = (screenH - contentH * zoom) / 2;
+      const rects = document.querySelectorAll('#viewport rect');
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      rects.forEach(r => {
+        const x = +r.getAttribute('x'), y = +r.getAttribute('y');
+        const w = +r.getAttribute('width'), h = +r.getAttribute('height');
+        if (w > 0 && h > 0) {
+          minX = Math.min(minX, x); minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
+        }
+      });
+      if (!isFinite(minX)) return;
+
+      const contentW = maxX - minX + 80, contentH = maxY - minY + 80;
+      zoom = Math.min(screenW / contentW, screenH / contentH) * 0.88;
+      viewX = (screenW - contentW * zoom) / 2 - minX * zoom;
+      viewY = (screenH - contentH * zoom) / 2 - minY * zoom;
       updateTransform();
     }
 
-    function computeContentHeight(ld) {
-      let maxY = 0;
-      ld.nodes.forEach(n => { maxY = Math.max(maxY, n.y + n.h); });
-      return maxY;
+    // ================================================================
+    // INFO SIDEBAR
+    // ================================================================
+    function setInfo(html) {
+      const content = document.getElementById('info-content');
+      content.innerHTML = html || '<div id="info-hint">Click a context or module to see details</div>';
     }
 
-    // --- Detail Panel ---
-    function showDetail(node) {
-      const panel = document.getElementById('detail-panel');
-      const content = document.getElementById('detail-content');
+    function buildContextInfo(ctxName) {
+      const ctx = ctxMap.get(ctxName);
+      if (!ctx) return '';
+      const shortCtx = ctxName.split('.').slice(-1)[0];
 
-      let html = `<h2>${node.short} <span class="badge ${node.layer}">${node.layer}</span></h2>`;
-      html += `<div style="color:#888;margin-bottom:8px">${node.id}</div>`;
+      let h = `<h2>${shortCtx}</h2>`;
+      h += `<div style="color:#90a4ae;margin-bottom:8px;font-size:11px">${ctxName}</div>`;
+      h += `<h3>Metrics</h3>`;
+      h += statRow('Modules', ctx.members.length);
+      h += statRow('Cohesion', (ctx.cohesion * 100).toFixed(0) + '%');
+      h += statRow('Coupling', (ctx.coupling * 100).toFixed(0) + '%');
+      h += statRow('Internal calls', ctx.internal_calls);
+      h += statRow('Incoming calls', ctx.incoming_calls);
+      h += statRow('Outgoing calls', ctx.outgoing_calls);
+      if (ctx.leak_calls > 0) h += statRow('Boundary leaks', ctx.leak_calls, true);
 
-      if (node.behaviours.length > 0) {
-        html += `<h3>Behaviours</h3><div>${node.behaviours.join(', ')}</div>`;
-      }
-
-      if (node.struct_fields.length > 0) {
-        html += `<h3>Struct Fields</h3><div>${node.struct_fields.join(', ')}</div>`;
-      }
-
-      html += `<h3>Inputs (Dependencies)</h3><ul class="port-list">`;
-      if (node.inputs.length === 0) html += '<li style="color:#555">none</li>';
-      node.inputs.forEach(p => {
-        html += `<li><span class="connected">&#9679;</span> ${p.name} <span style="color:#666">(${p.module})</span></li>`;
+      h += `<h3>Members</h3><ul class="member-list">`;
+      ctx.members.forEach(m => {
+        const short = m.split('.').slice(-1)[0];
+        const isBoundary = m === ctx.boundary_module;
+        h += `<li>${short}${isBoundary ? '<span class="boundary-tag">boundary</span>' : ''}</li>`;
       });
-      html += '</ul>';
+      h += '</ul>';
+      return h;
+    }
 
-      html += `<h3>Outputs (Exports)</h3><ul class="port-list">`;
-      if (node.outputs.length === 0) html += '<li style="color:#555">none</li>';
-      node.outputs.forEach(p => {
-        const cls = p.callers > 0 ? 'connected' : 'unconnected';
-        html += `<li><span class="${cls}">&#9679;</span> ${p.name} <span style="color:#666">(${p.callers} callers)</span></li>`;
+    function buildModuleInfo(node) {
+      let h = `<h2>${node.short} <span class="badge ${node.layer}">${node.layer}</span></h2>`;
+      h += `<div style="color:#90a4ae;margin-bottom:6px;font-size:11px">${node.id}</div>`;
+      if (node.is_boundary) h += `<div style="color:#1565C0;font-size:10px;font-weight:600;margin-bottom:8px">BOUNDARY MODULE</div>`;
+
+      if (node.behaviours?.length) h += `<h3>Behaviours</h3><div style="font-size:11px">${node.behaviours.join(', ')}</div>`;
+      if (node.struct_fields?.length) h += `<h3>Struct</h3><div style="font-size:11px;word-break:break-all">${node.struct_fields.join(', ')}</div>`;
+
+      h += `<h3>Dependencies (inputs)</h3><ul class="port-list">`;
+      if (!node.inputs?.length) h += '<li style="color:#ccc">none</li>';
+      (node.inputs || []).forEach(p => {
+        const cross = p.context && p.context !== node.context;
+        h += `<li style="${cross ? 'color:#E53935' : ''}">&#9679; ${p.name}${cross ? ' <span style="font-size:9px">(cross-ctx)</span>' : ''}</li>`;
       });
-      html += '</ul>';
+      h += '</ul>';
 
-      content.innerHTML = html;
-      panel.style.display = 'block';
+      h += `<h3>Exports (outputs)</h3><ul class="port-list">`;
+      if (!node.outputs?.length) h += '<li style="color:#ccc">none</li>';
+      (node.outputs || []).forEach(p => {
+        h += `<li>&#9679; ${p.name} <span style="color:#90a4ae">(${p.callers} callers)</span></li>`;
+      });
+      h += '</ul>';
+      return h;
     }
 
-    function closeDetail() {
-      document.getElementById('detail-panel').style.display = 'none';
-      clearSelection();
+    function statRow(label, value, warn) {
+      return `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value${warn ? ' warn' : ''}">${value}</span></div>`;
     }
 
+    // ================================================================
+    // KEYBOARD
+    // ================================================================
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') closeDetail();
+      if (e.key === 'Escape') {
+        if (currentView === 'detail') showOverview();
+        else { clearSelection(); setInfo(null); }
+      }
       if (e.key === 'f' || e.key === 'F') zoomToFit();
     });
 
-    // --- Init ---
-    const layoutData = layout(DATA);
-    const svgEl2 = document.getElementById('diagram');
-    svgEl2.setAttribute('viewBox', `0 0 ${layoutData.totalW + 100} ${layoutData.totalH}`);
-    render(layoutData);
-
-    // Initial fit to screen
-    zoomToFit();
-    </script>
-    </body>
-    </html>
+    // ================================================================
+    // INIT
+    // ================================================================
+    renderOverview();
     """
   end
 end

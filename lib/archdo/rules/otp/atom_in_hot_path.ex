@@ -3,14 +3,13 @@ defmodule Archdo.Rules.OTP.AtomInHotPath do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Rules.Helpers.LoopDetection
 
   @impl true
   def id, do: "5.44"
 
   @impl true
   def description, do: "String.to_atom in hot paths risks atom table exhaustion"
-
-  @genserver_callbacks [:handle_call, :handle_cast, :handle_info]
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -21,81 +20,27 @@ defmodule Archdo.Rules.OTP.AtomInHotPath do
   end
 
   defp find_atom_in_hot_path(file, ast) do
-    in_callbacks(file, ast) ++ in_enum_callbacks(file, ast)
-  end
-
-  defp in_callbacks(file, ast) do
-    callbacks = AST.extract_callbacks(ast)
-
-    for callback_name <- @genserver_callbacks,
-        {_meta, _args, body} <- Map.get(callbacks, callback_name, []),
-        body != nil,
-        call <- find_string_to_atom(body),
-        {_, call_meta, _} = call do
-      build_diagnostic(file, call_meta, "GenServer.#{callback_name}")
+    predicate = fn
+      {{:., _, [{:__aliases__, _, [:String]}, :to_atom]}, _, _} -> true
+      _ -> false
     end
-  end
 
-  defp in_enum_callbacks(file, ast) do
-    enum_calls = find_enum_with_to_atom(ast)
-    for_calls = find_for_with_to_atom(ast)
+    # Check all loops (Enum, Stream, :lists, for, receive, Task.async_stream)
+    loop_hits =
+      LoopDetection.find_in_loops(ast, predicate)
+      |> Enum.map(fn {_, meta} -> build_diagnostic(file, meta, "loop body") end)
 
-    Enum.map(enum_calls ++ for_calls, fn {meta, context} ->
-      build_diagnostic(file, meta, context)
-    end)
-  end
+    # Check GenServer callbacks
+    genserver_hits =
+      LoopDetection.find_in_genserver_callbacks(ast, predicate)
+      |> Enum.map(fn {_, meta} -> build_diagnostic(file, meta, "GenServer callback") end)
 
-  defp find_enum_with_to_atom(ast) do
-    ast
-    |> AST.find_all(fn
-      {{:., _, [{:__aliases__, _, [:Enum]}, fun]}, _, _}
-      when fun in [:map, :reduce, :flat_map, :each, :filter] ->
-        true
+    # Check recursive functions
+    recursion_hits =
+      LoopDetection.find_in_recursive_fns(ast, predicate)
+      |> Enum.map(fn {_, meta} -> build_diagnostic(file, meta, "recursive function") end)
 
-      _ ->
-        false
-    end)
-    |> Enum.flat_map(fn {_, meta, args} = _node ->
-      # The callback is typically the last argument
-      callback = List.last(args)
-
-      case has_string_to_atom?(callback) do
-        true -> [{meta, "Enum callback"}]
-        false -> []
-      end
-    end)
-  end
-
-  defp find_for_with_to_atom(ast) do
-    ast
-    |> AST.find_all(fn
-      {:for, _, _} -> true
-      _ -> false
-    end)
-    |> Enum.flat_map(fn {:for, meta, args} ->
-      body = Keyword.get(List.last(args) || [], :do)
-
-      case has_string_to_atom?(body) do
-        true -> [{meta, "for comprehension"}]
-        false -> []
-      end
-    end)
-  end
-
-  defp find_string_to_atom(ast) do
-    AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, [:String]}, :to_atom]}, _, _} -> true
-      _ -> false
-    end)
-  end
-
-  defp has_string_to_atom?(nil), do: false
-
-  defp has_string_to_atom?(ast) do
-    AST.contains?(ast, fn
-      {{:., _, [{:__aliases__, _, [:String]}, :to_atom]}, _, _} -> true
-      _ -> false
-    end)
+    loop_hits ++ genserver_hits ++ recursion_hits
   end
 
   defp build_diagnostic(file, meta, context) do
@@ -104,7 +49,7 @@ defmodule Archdo.Rules.OTP.AtomInHotPath do
       message: "String.to_atom/1 called inside #{context} — atoms are never garbage collected",
       why:
         "The BEAM atom table has a hard limit (default ~1M entries) and atoms are never garbage " <>
-          "collected. Calling String.to_atom/1 inside a GenServer callback or an Enum/for loop " <>
+          "collected. Calling String.to_atom/1 inside a GenServer callback or a loop " <>
           "means every incoming message or collection element can create a new atom. Under load " <>
           "this exhausts the atom table and crashes the VM with :system_limit.",
       alternatives: [

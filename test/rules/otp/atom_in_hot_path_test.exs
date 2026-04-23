@@ -20,7 +20,7 @@ defmodule Archdo.Rules.OTP.AtomInHotPathTest do
       diag = hd(diags)
       assert diag.severity == :warning
       assert diag.rule_id == "5.44"
-      assert diag.context.hot_path =~ "handle_call"
+      assert diag.context.hot_path =~ "GenServer"
     end
 
     test "flags String.to_atom inside handle_info" do
@@ -37,7 +37,7 @@ defmodule Archdo.Rules.OTP.AtomInHotPathTest do
 
       diags = assert_flagged(AtomInHotPath, code)
       diag = hd(diags)
-      assert diag.context.hot_path =~ "handle_info"
+      assert diag.context.hot_path =~ "GenServer"
     end
 
     test "flags String.to_atom inside Enum.map" do
@@ -53,7 +53,7 @@ defmodule Archdo.Rules.OTP.AtomInHotPathTest do
 
       diags = assert_flagged(AtomInHotPath, code)
       diag = hd(diags)
-      assert diag.context.hot_path == "Enum callback"
+      assert diag.context.hot_path == "loop body"
     end
 
     test "flags String.to_atom inside for comprehension" do
@@ -69,7 +69,7 @@ defmodule Archdo.Rules.OTP.AtomInHotPathTest do
 
       diags = assert_flagged(AtomInHotPath, code)
       diag = hd(diags)
-      assert diag.context.hot_path == "for comprehension"
+      assert diag.context.hot_path == "loop body"
     end
 
     test "allows String.to_existing_atom in callbacks" do

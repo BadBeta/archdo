@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Module.CollectionPerf do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Rules.Helpers.LoopDetection
 
   @impl true
   def id, do: "6.51"
@@ -164,37 +165,16 @@ defmodule Archdo.Rules.Module.CollectionPerf do
 
   # --- Enum.member? on list inside a loop ---
 
-  @enum_loop_fns [:map, :each, :reduce, :flat_map, :filter, :reject, :any?, :find,
-                   :map_reduce, :reduce_while]
-
   defp find_member_in_loop(file, ast) do
-    {_, diagnostics} =
-      Macro.prewalk(ast, [], fn
-        {{:., _, [{:__aliases__, _, [:Enum]}, func]}, _meta, args} = node, acc
-        when func in @enum_loop_fns and is_list(args) ->
-          new_diags =
-            args
-            |> Enum.filter(fn
-              {:fn, _, _} -> true
-              {:&, _, _} -> true
-              _ -> false
-            end)
-            |> Enum.flat_map(fn callback ->
-              Enum.map(AST.find_all(callback, fn
-                {{:., _, [{:__aliases__, _, [:Enum]}, :member?]}, _, _} -> true
-                _ -> false
-              end), fn {_, meta, _} ->
-                build_diagnostic(file, AST.line(meta), :member_in_loop, nil)
-              end)
-            end)
+    member_predicate = fn
+      {{:., _, [{:__aliases__, _, [:Enum]}, :member?]}, _, _} -> true
+      _ -> false
+    end
 
-          {node, new_diags ++ acc}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    diagnostics
+    LoopDetection.find_in_all_loops(ast, member_predicate)
+    |> Enum.map(fn {_, meta} ->
+      build_diagnostic(file, AST.line(meta), :member_in_loop, nil)
+    end)
   end
 
   # --- Diagnostics ---

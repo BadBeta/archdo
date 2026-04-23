@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Module.KeywordLookupInLoop do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Rules.Helpers.LoopDetection
 
   @impl true
   def id, do: "6.53"
@@ -10,8 +11,7 @@ defmodule Archdo.Rules.Module.KeywordLookupInLoop do
   @impl true
   def description, do: "Keyword.get/fetch inside a loop — Keyword lists are O(n) for lookups"
 
-  @enum_loop_fns [:map, :each, :reduce, :flat_map, :filter, :reject, :any?, :find,
-                   :map_reduce, :reduce_while]
+  @keyword_lookup_fns [:get, :fetch, :fetch!, :has_key?, :get_lazy]
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -22,37 +22,17 @@ defmodule Archdo.Rules.Module.KeywordLookupInLoop do
   end
 
   defp find_keyword_in_loops(file, ast) do
-    {_, diagnostics} =
-      Macro.prewalk(ast, [], fn
-        {{:., _, [{:__aliases__, _, [:Enum]}, func]}, _meta, args} = node, acc
-        when func in @enum_loop_fns and is_list(args) ->
-          new_diags =
-            args
-            |> Enum.filter(fn
-              {:fn, _, _} -> true
-              {:&, _, _} -> true
-              _ -> false
-            end)
-            |> Enum.flat_map(fn callback ->
-              Enum.map(AST.find_all(callback, fn
-                {{:., _, [{:__aliases__, _, [:Keyword]}, func]}, _, _}
-                when func in [:get, :fetch, :fetch!, :has_key?, :get_lazy] ->
-                  true
+    predicate = fn
+      {{:., _, [{:__aliases__, _, [:Keyword]}, func]}, _, _}
+      when func in @keyword_lookup_fns ->
+        true
 
-                _ ->
-                  false
-              end), fn {_, meta, _} ->
-                build_diagnostic(file, AST.line(meta))
-              end)
-            end)
+      _ ->
+        false
+    end
 
-          {node, new_diags ++ acc}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    diagnostics
+    LoopDetection.find_in_all_loops(ast, predicate)
+    |> Enum.map(fn {_, meta} -> build_diagnostic(file, AST.line(meta)) end)
   end
 
   defp build_diagnostic(file, line) do
@@ -67,8 +47,9 @@ defmodule Archdo.Rules.Module.KeywordLookupInLoop do
       alternatives: [
         Fix.new(
           summary: "Convert to Map before the loop",
-          detail: "`map = Map.new(keyword_list)` before the loop,\n" <>
-            "then `Map.get(map, key)` inside the loop.",
+          detail:
+            "`map = Map.new(keyword_list)` before the loop,\n" <>
+              "then `Map.get(map, key)` inside the loop.",
           applies_when: "The keyword list doesn't change during the loop."
         )
       ],
