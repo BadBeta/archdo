@@ -23,6 +23,7 @@ defmodule Mix.Tasks.Archdo do
       code detection, macro-aware behaviour checking, and precise call graph.
       Requires the target project to be compiled (`mix compile`).
     * `--coverage` - Print test coverage gap matrix and exit (no other rules run)
+    * `--stats` - Print project statistics (files, lines, modules, functions, tests, OTP constructs) and exit
     * `--metrics` - Print Martin package metrics (Ca/Ce/I/A/D) matrix and exit
     * `--diagram` - Generate Mermaid architecture diagram from compiled beams.
       Values: `overview` (contexts + cross-boundary deps), `modules` (all module deps),
@@ -77,6 +78,7 @@ defmodule Mix.Tasks.Archdo do
           compiled: :boolean,
           coverage: :boolean,
           diagram: :string,
+          stats: :boolean,
           metrics: :boolean,
           freeze: :boolean,
           freeze_stats: :boolean,
@@ -96,6 +98,11 @@ defmodule Mix.Tasks.Archdo do
 
       Keyword.has_key?(opts, :diagram) ->
         run_diagram(opts[:diagram], paths)
+        :ok
+
+      Keyword.get(opts, :stats, false) ->
+        stats = Archdo.Stats.collect(paths)
+        Mix.shell().info(Archdo.Stats.format(stats))
         :ok
 
       Keyword.get(opts, :coverage, false) ->

@@ -14,7 +14,7 @@ defmodule Archdo.Mcp.Server do
 
   alias Archdo.Mcp.Tools.{
     AnalyzeFile, AnalyzePaths, DeepReview, Diagram, Diff,
-    ExplainFinding, ExplainRule, Fix, Health, ListRules, PerfAudit, Suggest
+    ExplainFinding, ExplainRule, Fix, Health, ListRules, PerfAudit, Stats, Suggest
   }
 
   @protocol_version "2024-11-05"
@@ -23,7 +23,7 @@ defmodule Archdo.Mcp.Server do
 
   @tools [
     AnalyzePaths, AnalyzeFile, ListRules, ExplainRule, DeepReview,
-    Health, Diff, Diagram, PerfAudit, Suggest, ExplainFinding, Fix
+    Health, Diff, Diagram, PerfAudit, Suggest, ExplainFinding, Fix, Stats
   ]
 
   @doc """
