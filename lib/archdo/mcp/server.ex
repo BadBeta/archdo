@@ -79,7 +79,20 @@ defmodule Archdo.Mcp.Server do
     end
   rescue
     e ->
-      log("unhandled error: #{inspect(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}")
+      log("unhandled error: #{Exception.format(:error, e, __STACKTRACE__)}")
+
+      # Extract request id if possible so the client doesn't hang
+      request_id =
+        case Jason.decode(line) do
+          {:ok, %{"id" => id}} -> id
+          _ -> nil
+        end
+
+      write_response(%{
+        "jsonrpc" => "2.0",
+        "id" => request_id,
+        "error" => %{"code" => -32_603, "message" => "Internal error"}
+      })
   end
 
   # ─────────────────────────────────── dispatch ────────────────────────────────────

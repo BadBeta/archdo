@@ -58,6 +58,7 @@ defmodule Archdo.Stats do
       paths
       |> List.first()
       |> then(fn
+        nil -> "."
         "lib" -> "."
         path when is_binary(path) ->
           case String.ends_with?(path, "/lib") do
@@ -144,7 +145,13 @@ defmodule Archdo.Stats do
   end
 
   defp analyze_file(path) do
-    content = File.read!(path)
+    case File.read(path) do
+      {:ok, content} -> do_analyze_file(path, content)
+      {:error, _} -> Map.merge(empty_ast_stats(), %{file: path, lines: 0, code_lines: 0, comment_lines: 0, blank_lines: 0})
+    end
+  end
+
+  defp do_analyze_file(path, content) do
     lines = String.split(content, "\n")
     line_count = length(lines)
 

@@ -203,7 +203,10 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
 
   defp find_matches(node, predicate) do
     AST.find_all(node, predicate)
-    |> Enum.map(fn {_, meta, _} = match -> {match, meta} end)
+    |> Enum.flat_map(fn
+      {_, meta, _} = match -> [{match, meta}]
+      _non_triple -> []
+    end)
   end
 
   defp callback?({:fn, _, _}), do: true

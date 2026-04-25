@@ -395,10 +395,12 @@ defmodule Archdo.Rules.Module.SensitiveDataExposure do
 
   defp contains_sensitive_interpolation?(ast) do
     AST.contains?(ast, fn
+      # inspect(credentials) or IO.inspect(credentials)
       {:inspect, _, [{var, _, ctx} | _]} when is_atom(var) and is_atom(ctx) ->
         sensitive_variable_name?(var)
 
-      {var, _, ctx} when is_atom(var) and is_atom(ctx) ->
+      {{:., _, [{:__aliases__, _, [:IO]}, :inspect]}, _, [{var, _, ctx} | _]}
+      when is_atom(var) and is_atom(ctx) ->
         sensitive_variable_name?(var)
 
       _ ->

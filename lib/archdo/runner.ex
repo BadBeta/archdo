@@ -211,8 +211,12 @@ defmodule Archdo.Runner do
       timeout: 30_000
     )
     |> Enum.flat_map(fn
-      {:ok, diagnostics} -> diagnostics
-      {:exit, _reason} -> []
+      {:ok, diagnostics} ->
+        diagnostics
+
+      {:exit, reason} ->
+        IO.puts(:standard_error, "[archdo] file analysis crashed: #{inspect(reason)}")
+        []
     end)
     |> sort_diagnostics()
   end
@@ -289,7 +293,8 @@ defmodule Archdo.Runner do
     rule.analyze(file, ast, opts)
   rescue
     e ->
-      IO.puts(:standard_error, "[archdo] rule #{rule.id()} crashed on #{file}: #{Exception.message(e)}")
+      IO.puts(:standard_error,
+        "[archdo] rule #{rule.id()} crashed on #{file}: #{Exception.format(:error, e, __STACKTRACE__)}")
       []
   end
 

@@ -122,7 +122,8 @@ defmodule Archdo do
     rule.analyze_compiled(graph)
   rescue
     e ->
-      IO.puts(:standard_error, "[archdo] compiled rule #{rule.id()} crashed: #{Exception.message(e)}")
+      IO.puts(:standard_error,
+        "[archdo] compiled rule #{rule.id()} crashed: #{Exception.format(:error, e, __STACKTRACE__)}")
       []
   end
 
