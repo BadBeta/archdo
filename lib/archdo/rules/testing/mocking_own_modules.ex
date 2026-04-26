@@ -31,7 +31,8 @@ defmodule Archdo.Rules.Testing.MockingOwnModules do
     |> Enum.map(fn {target, meta} ->
       Diagnostic.info("7.15",
         title: "Mocking an internal module",
-        message: "Mox.defmock targets #{target}, which appears to be an internal (non-boundary) module",
+        message:
+          "Mox.defmock targets #{target}, which appears to be an internal (non-boundary) module",
         why:
           "Mocks at system boundaries (HTTP, email, external APIs) shield tests from slow/flaky network. " <>
             "Mocking your own internal modules instead of using the real implementation tests the test, not " <>
@@ -62,7 +63,9 @@ defmodule Archdo.Rules.Testing.MockingOwnModules do
     end)
   end
 
-  defp extract_mock_target({{:., _, [_, :defmock]}, meta, args}), do: extract_from_args(args, meta)
+  defp extract_mock_target({{:., _, [_, :defmock]}, meta, args}),
+    do: extract_from_args(args, meta)
+
   defp extract_mock_target({:defmock, meta, args}), do: extract_from_args(args, meta)
 
   defp extract_from_args([_mock_name, opts], meta) when is_list(opts) do

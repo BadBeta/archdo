@@ -9,7 +9,8 @@ defmodule Archdo.Rules.Module.UnboundedRecursion do
 
   @impl true
   def description,
-    do: "Recursive function without depth guard or size limit — stack overflow risk on large input"
+    do:
+      "Recursive function without depth guard or size limit — stack overflow risk on large input"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -190,8 +191,7 @@ defmodule Archdo.Rules.Module.UnboundedRecursion do
         ),
         Fix.new(
           summary: "Use Enum/Stream instead of manual recursion",
-          detail:
-            "Enum.map/reduce/flat_map handle stack management internally.",
+          detail: "Enum.map/reduce/flat_map handle stack management internally.",
           applies_when: "The recursion processes a flat collection."
         )
       ],

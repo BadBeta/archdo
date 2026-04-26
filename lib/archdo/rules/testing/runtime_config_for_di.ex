@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Testing.RuntimeConfigForDi do
   def id, do: "7.16"
 
   @impl true
-  def description, do: "Use Application.compile_env for dependency injection, not get_env at runtime"
+  def description,
+    do: "Use Application.compile_env for dependency injection, not get_env at runtime"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -37,7 +38,8 @@ defmodule Archdo.Rules.Testing.RuntimeConfigForDi do
     |> Enum.map(fn {_, meta, _} ->
       Diagnostic.info("7.16",
         title: "Runtime DI via Application.get_env",
-        message: "Application.get_env is used at runtime to dispatch into a swappable implementation",
+        message:
+          "Application.get_env is used at runtime to dispatch into a swappable implementation",
         why:
           "Pulling the implementation from Application env on every call is slow (an Application lookup per " <>
             "call), not compile-time safe (a typo silently uses the default), and not friendly to Mox: tests " <>
@@ -45,7 +47,8 @@ defmodule Archdo.Rules.Testing.RuntimeConfigForDi do
             "once at compile time and pins it into a module attribute, which is faster and safer.",
         alternatives: [
           Fix.new(
-            summary: "Use `Application.compile_env/3` and store the implementation in a module attribute",
+            summary:
+              "Use `Application.compile_env/3` and store the implementation in a module attribute",
             detail:
               "Replace the runtime lookup with `@http_client Application.compile_env(:my_app, :http_client, " <>
                 "MyApp.HTTPClient.Impl)` at the top of the module. Calls become `@http_client.fetch(...)`. " <>

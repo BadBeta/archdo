@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Module.IdentityTransformation do
   def id, do: "6.38"
 
   @impl true
-  def description, do: "Identity transformation — no-op function call that returns its input unchanged"
+  def description,
+    do: "Identity transformation — no-op function call that returns its input unchanged"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -30,82 +31,98 @@ defmodule Archdo.Rules.Module.IdentityTransformation do
   # --- Enum.map(_, fn x -> x end) or Enum.map(_, & &1) ---
 
   defp find_identity_map(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # Enum.map(_, fn x -> x end)
-      {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, [_, {:fn, _, [{:->, _, [[{var, _, ctx}], {var, _, ctx}]}]}]}
-      when is_atom(var) and is_atom(ctx) ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # Enum.map(_, fn x -> x end)
+        {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _,
+         [_, {:fn, _, [{:->, _, [[{var, _, ctx}], {var, _, ctx}]}]}]}
+        when is_atom(var) and is_atom(ctx) ->
+          true
 
-      # Enum.map(_, & &1) — the 1 may or may not be wrapped in __block__
-      {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, [_, {:&, _, [{:&, _, [1]}]}]} ->
-        true
+        # Enum.map(_, & &1) — the 1 may or may not be wrapped in __block__
+        {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, [_, {:&, _, [{:&, _, [1]}]}]} ->
+          true
 
-      {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, [_, {:&, _, [{:&, _, [{:__block__, _, [1]}]}]}]} ->
-        true
+        {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _,
+         [_, {:&, _, [{:&, _, [{:__block__, _, [1]}]}]}]} ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :identity_map)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :identity_map)
+      end
+    )
   end
 
   # --- Enum.filter(_, fn _ -> true end) ---
 
   defp find_always_true_filter(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # Enum.filter(_, fn _ -> true end)
-      {{:., _, [{:__aliases__, _, [:Enum]}, :filter]}, _, [_, {:fn, _, [{:->, _, [_, true]}]}]} ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # Enum.filter(_, fn _ -> true end)
+        {{:., _, [{:__aliases__, _, [:Enum]}, :filter]}, _, [_, {:fn, _, [{:->, _, [_, true]}]}]} ->
+          true
 
-      # Enum.filter(_, fn _ -> true end) with literal_encoder wrapping
-      {{:., _, [{:__aliases__, _, [:Enum]}, :filter]}, _, [_, {:fn, _, [{:->, _, [_, {:__block__, _, [true]}]}]}]} ->
-        true
+        # Enum.filter(_, fn _ -> true end) with literal_encoder wrapping
+        {{:., _, [{:__aliases__, _, [:Enum]}, :filter]}, _,
+         [_, {:fn, _, [{:->, _, [_, {:__block__, _, [true]}]}]}]} ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :always_true_filter)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :always_true_filter)
+      end
+    )
   end
 
   # --- Enum.reject(_, fn _ -> false end) ---
 
   defp find_always_false_reject(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # Enum.reject(_, fn _ -> false end)
-      {{:., _, [{:__aliases__, _, [:Enum]}, :reject]}, _, [_, {:fn, _, [{:->, _, [_, false]}]}]} ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # Enum.reject(_, fn _ -> false end)
+        {{:., _, [{:__aliases__, _, [:Enum]}, :reject]}, _, [_, {:fn, _, [{:->, _, [_, false]}]}]} ->
+          true
 
-      # With literal_encoder wrapping
-      {{:., _, [{:__aliases__, _, [:Enum]}, :reject]}, _, [_, {:fn, _, [{:->, _, [_, {:__block__, _, [false]}]}]}]} ->
-        true
+        # With literal_encoder wrapping
+        {{:., _, [{:__aliases__, _, [:Enum]}, :reject]}, _,
+         [_, {:fn, _, [{:->, _, [_, {:__block__, _, [false]}]}]}]} ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :always_false_reject)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :always_false_reject)
+      end
+    )
   end
 
   # --- List.flatten([single_item]) ---
 
   defp find_flatten_single(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # List.flatten([single]) — a list literal with exactly one element
-      # The list literal is wrapped in __block__ by the literal_encoder
-      {{:., _, [{:__aliases__, _, [:List]}, :flatten]}, _, [{:__block__, _, [[_single]]}]} ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # List.flatten([single]) — a list literal with exactly one element
+        # The list literal is wrapped in __block__ by the literal_encoder
+        {{:., _, [{:__aliases__, _, [:List]}, :flatten]}, _, [{:__block__, _, [[_single]]}]} ->
+          true
 
-      # Without literal_encoder wrapping
-      {{:., _, [{:__aliases__, _, [:List]}, :flatten]}, _, [[_single]]} ->
-        true
+        # Without literal_encoder wrapping
+        {{:., _, [{:__aliases__, _, [:List]}, :flatten]}, _, [[_single]]} ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :flatten_single)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :flatten_single)
+      end
+    )
   end
 
   # --- Diagnostics ---

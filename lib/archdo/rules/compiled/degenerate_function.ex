@@ -38,13 +38,29 @@ defmodule Archdo.Rules.Compiled.DegenerateFunction do
   defp find_degenerate(mod, forms, exports) do
     Enum.flat_map(forms, fn
       {:function, _line, name, arity, clauses}
-      when name not in [:__info__, :module_info, :__struct__, :__impl__, :__protocol__,
-                         :__deriving__, :__using__, :__before_compile__, :__after_compile__,
-                         :behaviour_info,
-                         # OTP callbacks that normally return fixed atoms
-                         :init, :terminate, :code_change, :format_status,
-                         :handle_continue, :start_link, :child_spec,
-                         :mount, :render, :update] ->
+      when name not in [
+             :__info__,
+             :module_info,
+             :__struct__,
+             :__impl__,
+             :__protocol__,
+             :__deriving__,
+             :__using__,
+             :__before_compile__,
+             :__after_compile__,
+             :behaviour_info,
+             # OTP callbacks that normally return fixed atoms
+             :init,
+             :terminate,
+             :code_change,
+             :format_status,
+             :handle_continue,
+             :start_link,
+             :child_spec,
+             :mount,
+             :render,
+             :update
+           ] ->
         case MapSet.member?(exports, {name, arity}) do
           true -> check_function(mod, name, arity, clauses)
           false -> []
@@ -70,11 +86,9 @@ defmodule Archdo.Rules.Compiled.DegenerateFunction do
       # Always-raises is a stub regardless of clause count
       [:always_raises] -> :always_raises
       [:not_implemented_raise] -> :not_implemented
-
       # Fixed atom is only degenerate with multiple clauses
       # (single-clause :ok returns are normal for side-effect functions)
       [:returns_fixed_atom] when length(clauses) > 1 -> :returns_fixed_atom
-
       _ -> nil
     end
   end
@@ -86,7 +100,9 @@ defmodule Archdo.Rules.Compiled.DegenerateFunction do
        [{:tuple, _, [{:atom, _, exception}, message | _]}]}
       when exception in [RuntimeError, ArgumentError] ->
         case extract_string(message) do
-          nil -> :always_raises
+          nil ->
+            :always_raises
+
           msg ->
             lower = String.downcase(msg)
 
@@ -168,5 +184,4 @@ defmodule Archdo.Rules.Compiled.DegenerateFunction do
       line: 0
     )
   end
-
 end

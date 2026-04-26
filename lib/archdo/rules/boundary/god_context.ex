@@ -91,7 +91,8 @@ defmodule Archdo.Rules.Boundary.GodContext do
           detail:
             "If the context is genuinely cohesive and active development is winding down, document the " <>
               "responsibility in a moduledoc on the public API module and add to the freeze baseline.",
-          applies_when: "Splitting would create artificial boundaries with high inter-context coupling."
+          applies_when:
+            "Splitting would create artificial boundaries with high inter-context coupling."
         )
       ],
       references: ["ARCHITECTURE_RULES.md#4.7"],

@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Module.BuriedRescue do
   def id, do: "6.32"
 
   @impl true
-  def description, do: "try/rescue buried inside anonymous function or callback — extract to named function"
+  def description,
+    do: "try/rescue buried inside anonymous function or callback — extract to named function"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -58,8 +59,11 @@ defmodule Archdo.Rules.Module.BuriedRescue do
     {_, found} =
       Macro.prewalk(ast, false, fn
         # Don't recurse into nested def/defp — those are their own scope
-        {:def, _, _} = node, acc -> {node, acc}
-        {:defp, _, _} = node, acc -> {node, acc}
+        {:def, _, _} = node, acc ->
+          {node, acc}
+
+        {:defp, _, _} = node, acc ->
+          {node, acc}
 
         {:try, _, [opts]} = node, _acc when is_list(opts) ->
           case Keyword.has_key?(opts, :rescue) do
@@ -96,8 +100,7 @@ defmodule Archdo.Rules.Module.BuriedRescue do
 
     Diagnostic.info("6.32",
       title: "Buried try/rescue",
-      message:
-        "try/rescue inside #{location_desc} — extract to a named function for clarity",
+      message: "try/rescue inside #{location_desc} — extract to a named function for clarity",
       why:
         "A try/rescue block buried inside an anonymous function, Enum callback, or " <>
           "case branch is hard to read and obscures the error handling intent. The rescue " <>

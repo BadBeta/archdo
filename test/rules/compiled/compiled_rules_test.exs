@@ -4,6 +4,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
   @moduletag :self_analysis
 
   alias Archdo.Compiled.Graph
+
   alias Archdo.Rules.Compiled.{
     DeadCode,
     TransitiveDeadCode,
@@ -359,9 +360,9 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
 
       # Archdo.Compiled.analyze/1 returns {:ok, _} | {:error, _} — should NOT be flagged
       refute Enum.any?(diagnostics, fn diag ->
-        diag.context.module == "Archdo.Compiled" and
-          diag.context.function == "analyze/1"
-      end)
+               diag.context.module == "Archdo.Compiled" and
+                 diag.context.function == "analyze/1"
+             end)
     end
   end
 
@@ -456,12 +457,14 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
       diagnostics = InternalModuleLeak.analyze_compiled(graph)
 
       refute Enum.any?(diagnostics, fn diag ->
-        diag.context.internal_module == "Archdo.AST"
-      end), "Archdo.AST is widely used — should not be flagged as internal leak"
+               diag.context.internal_module == "Archdo.AST"
+             end),
+             "Archdo.AST is widely used — should not be flagged as internal leak"
 
       refute Enum.any?(diagnostics, fn diag ->
-        diag.context.internal_module == "Archdo.Diagnostic"
-      end), "Archdo.Diagnostic is widely used — should not be flagged as internal leak"
+               diag.context.internal_module == "Archdo.Diagnostic"
+             end),
+             "Archdo.Diagnostic is widely used — should not be flagged as internal leak"
     end
   end
 
@@ -491,8 +494,9 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
       diagnostics = PhantomDependency.analyze_compiled(graph)
 
       refute Enum.any?(diagnostics, fn diag ->
-        diag.context.reference_type == :behaviour
-      end), "Behaviour declarations should not be flagged as phantom"
+               diag.context.reference_type == :behaviour
+             end),
+             "Behaviour declarations should not be flagged as phantom"
     end
   end
 
@@ -520,9 +524,10 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
       diagnostics = DegenerateFunction.analyze_compiled(graph)
 
       refute Enum.any?(diagnostics, fn diag ->
-        diag.context.function =~ "terminate/" or
-          diag.context.function =~ "init/"
-      end), "OTP callbacks should not be flagged as degenerate"
+               diag.context.function =~ "terminate/" or
+                 diag.context.function =~ "init/"
+             end),
+             "OTP callbacks should not be flagged as degenerate"
     end
   end
 

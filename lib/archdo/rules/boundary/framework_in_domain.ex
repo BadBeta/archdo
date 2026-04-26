@@ -35,7 +35,8 @@ defmodule Archdo.Rules.Boundary.FrameworkInDomain do
             detail:
               "Lift the call to a controller, channel, or context module in the interface/web layer. The domain " <>
                 "function takes plain data as input and returns plain data — the framework code stays at the edge.",
-            applies_when: "The call is genuinely a framework concern (request/response, channel, websocket)."
+            applies_when:
+              "The call is genuinely a framework concern (request/response, channel, websocket)."
           ),
           Fix.new(
             summary: "Define a behaviour in the domain and inject the framework adapter",

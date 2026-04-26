@@ -210,7 +210,9 @@ defmodule Archdo.Compiled.DiagramOTP do
 
       messages ->
         # Render as a text summary at the bottom
-        [~s(<text x="#{@margin}" y="#{@margin}" fill="#{@dim_text}" font-size="10" font-family="monospace" opacity="0">Messages: #{length(messages)}</text>)]
+        [
+          ~s(<text x="#{@margin}" y="#{@margin}" fill="#{@dim_text}" font-size="10" font-family="monospace" opacity="0">Messages: #{length(messages)}</text>)
+        ]
     end
   end
 
@@ -378,7 +380,9 @@ defmodule Archdo.Compiled.DiagramOTP do
 
   defp no_otp_svg do
     DiagramHelpers.wrap_svg(
-      [~s(<text x="40" y="40" fill="#{@dim_text}" font-size="14" font-family="monospace">No OTP processes detected in compiled beams.</text>)],
+      [
+        ~s(<text x="40" y="40" fill="#{@dim_text}" font-size="14" font-family="monospace">No OTP processes detected in compiled beams.</text>)
+      ],
       500,
       80
     )

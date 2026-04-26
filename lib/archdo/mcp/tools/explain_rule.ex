@@ -50,5 +50,4 @@ defmodule Archdo.Mcp.Tools.ExplainRule do
     all = Runner.phase1_rules() ++ Runner.graph_rules()
     Enum.find(all, fn mod -> mod.id() == id end)
   end
-
 end

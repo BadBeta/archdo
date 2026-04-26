@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Module.VerboseOkUnwrap do
   def id, do: "6.40"
 
   @impl true
-  def description, do: "Verbose ok/error unwrap — case with ok/error that swallows error and returns nil"
+  def description,
+    do: "Verbose ok/error unwrap — case with ok/error that swallows error and returns nil"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -27,44 +28,50 @@ defmodule Archdo.Rules.Module.VerboseOkUnwrap do
 
   # Detect: case expr do {:ok, val} -> val; {:error, _} -> nil end
   defp find_swallow_error_nil(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      {:case, _, [_expr, clauses_kw]} ->
-        clauses = extract_clauses(clauses_kw)
+    Enum.map(
+      AST.find_all(ast, fn
+        {:case, _, [_expr, clauses_kw]} ->
+          clauses = extract_clauses(clauses_kw)
 
-        case length(clauses) == 2 do
-          true -> has_ok_extract?(clauses) and has_error_nil?(clauses)
-          false -> false
-        end
+          case length(clauses) == 2 do
+            true -> has_ok_extract?(clauses) and has_error_nil?(clauses)
+            false -> false
+          end
 
-      _ ->
-        false
-    end), fn {:case, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :swallow_error_nil)
-    end)
+        _ ->
+          false
+      end),
+      fn {:case, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :swallow_error_nil)
+      end
+    )
   end
 
   # Detect: case expr do {:ok, val} -> val end (no error clause)
   defp find_single_ok_clause(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      {:case, _, [_expr, clauses_kw]} ->
-        clauses = extract_clauses(clauses_kw)
+    Enum.map(
+      AST.find_all(ast, fn
+        {:case, _, [_expr, clauses_kw]} ->
+          clauses = extract_clauses(clauses_kw)
 
-        case length(clauses) == 1 do
-          true -> has_ok_extract?(clauses)
-          false -> false
-        end
+          case length(clauses) == 1 do
+            true -> has_ok_extract?(clauses)
+            false -> false
+          end
 
-      _ ->
-        false
-    end), fn {:case, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :single_ok_clause)
-    end)
+        _ ->
+          false
+      end),
+      fn {:case, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :single_ok_clause)
+      end
+    )
   end
 
   # Extract clauses from the keyword body of a case expression.
   # With literal_encoder, it's [{__block__(:do), [clause1, clause2]}]
   defp extract_clauses([{_, clauses}]) when is_list(clauses), do: clauses
-  defp extract_clauses([do: clauses]) when is_list(clauses), do: clauses
+  defp extract_clauses(do: clauses) when is_list(clauses), do: clauses
   defp extract_clauses(_), do: []
 
   # Check if clauses contain {:ok, var} -> var (extracting the ok value)
@@ -163,8 +170,7 @@ defmodule Archdo.Rules.Module.VerboseOkUnwrap do
           detail:
             "Consider `with {:ok, val} <- expr do val else _ -> nil end`, " <>
               "or propagate the error with `{:ok, val} = expr`.",
-          applies_when:
-            "A case expression matches {:ok, val} -> val and {:error, _} -> nil."
+          applies_when: "A case expression matches {:ok, val} -> val and {:error, _} -> nil."
         )
       ],
       file: file,

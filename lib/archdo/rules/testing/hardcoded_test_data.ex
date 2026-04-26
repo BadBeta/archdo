@@ -61,7 +61,8 @@ defmodule Archdo.Rules.Testing.HardcodedTestData do
                   ),
                   Fix.new(
                     summary: "Use factories or fixtures for test data",
-                    detail: "Generate unique test data with ExMachina, Faker, or custom fixtures.",
+                    detail:
+                      "Generate unique test data with ExMachina, Faker, or custom fixtures.",
                     applies_when: "Tests need realistic but non-production data."
                   )
                 ],

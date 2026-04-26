@@ -68,7 +68,8 @@ defmodule Archdo.Rules.Module.NestingDepth do
   defp build_diagnostic(file, name, arity, meta, depth) do
     Diagnostic.info("6.17",
       title: "Deep nesting",
-      message: "#{name}/#{arity} has control flow nested #{depth} levels deep (max: #{@max_depth})",
+      message:
+        "#{name}/#{arity} has control flow nested #{depth} levels deep (max: #{@max_depth})",
       why:
         "Each nesting level (case inside with inside if) adds a branch the reader must " <>
           "track mentally. Beyond 3-4 levels, the code becomes hard to follow and test. " <>
@@ -84,8 +85,7 @@ defmodule Archdo.Rules.Module.NestingDepth do
         ),
         Fix.new(
           summary: "Use `with` to flatten nested case statements",
-          detail:
-            "If the nesting is caused by chained `case` on ok/error, flatten with `with`.",
+          detail: "If the nesting is caused by chained `case` on ok/error, flatten with `with`.",
           applies_when: "The nesting is from chained ok/error matching."
         )
       ],

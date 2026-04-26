@@ -15,7 +15,11 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
   def analyze(_file, _ast, _opts), do: []
 
   @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules, calls_by_module: calls_by_module, beam_dir: beam_dir})
+  def analyze_compiled(%Graph{
+        modules: modules,
+        calls_by_module: calls_by_module,
+        beam_dir: beam_dir
+      })
       when is_binary(beam_dir) do
     project_modules = MapSet.new(Map.keys(modules))
 
@@ -197,8 +201,7 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
 
     Diagnostic.info("4.26",
       title: "Phantom dependency",
-      message:
-        "#{caller_name} #{type_desc} but never calls any of its functions",
+      message: "#{caller_name} #{type_desc} but never calls any of its functions",
       why:
         "After macro expansion and compilation, #{caller_name} references " <>
           "#{target_name} (as a #{ref_type}) but makes zero function calls to it. " <>
@@ -231,5 +234,4 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
       line: 0
     )
   end
-
 end

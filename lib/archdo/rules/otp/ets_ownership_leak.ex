@@ -48,8 +48,7 @@ defmodule Archdo.Rules.OTP.EtsOwnershipLeak do
       [
         Diagnostic.info("5.40",
           title: "ETS table without cleanup",
-          message:
-            "#{module_name} creates an ETS table but has no terminate/2 to clean up",
+          message: "#{module_name} creates an ETS table but has no terminate/2 to clean up",
           why:
             "When the owning process dies, its ETS tables are automatically deleted. But if the " <>
               "process is restarted by a supervisor, the new instance creates a fresh table — " <>

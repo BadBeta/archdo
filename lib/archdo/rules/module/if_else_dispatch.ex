@@ -30,23 +30,35 @@ defmodule Archdo.Rules.Module.IfElseDispatch do
   defp find_dispatch_ifs(nil, _file, _name, _arity), do: []
 
   defp find_dispatch_ifs(body, file, name, arity) do
-    Enum.map(AST.find_all(body, fn
-      # if/else with both branches returning values (not side-effect-only)
-      {:if, _, [condition, [{:do, do_body}, {:else, else_body}]]} ->
-        structural_dispatch?(condition) and
-          both_return_values?(do_body, else_body)
+    Enum.map(
+      AST.find_all(body, fn
+        # if/else with both branches returning values (not side-effect-only)
+        {:if, _, [condition, [{:do, do_body}, {:else, else_body}]]} ->
+          structural_dispatch?(condition) and
+            both_return_values?(do_body, else_body)
 
-      # if with is_* guard AND else branch — structural dispatch on type
-      {:if, _, [{guard, _, _}, [{:do, _}, {:else, _}]]}
-      when guard in [:is_map, :is_list, :is_binary, :is_struct, :is_atom,
-                     :is_integer, :is_nil, :is_float, :is_tuple] ->
-        true
+        # if with is_* guard AND else branch — structural dispatch on type
+        {:if, _, [{guard, _, _}, [{:do, _}, {:else, _}]]}
+        when guard in [
+               :is_map,
+               :is_list,
+               :is_binary,
+               :is_struct,
+               :is_atom,
+               :is_integer,
+               :is_nil,
+               :is_float,
+               :is_tuple
+             ] ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, name, arity, meta)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, name, arity, meta)
+      end
+    )
   end
 
   # Detects structural dispatch conditions:
@@ -55,8 +67,20 @@ defmodule Archdo.Rules.Module.IfElseDispatch do
   # - match?(pattern, x)
   # - Map.has_key?(x, :key)
   defp structural_dispatch?({guard, _, _})
-       when guard in [:is_map, :is_list, :is_binary, :is_struct, :is_atom, :is_integer,
-                      :is_float, :is_tuple, :is_nil, :is_boolean, :is_number, :is_pid] do
+       when guard in [
+              :is_map,
+              :is_list,
+              :is_binary,
+              :is_struct,
+              :is_atom,
+              :is_integer,
+              :is_float,
+              :is_tuple,
+              :is_nil,
+              :is_boolean,
+              :is_number,
+              :is_pid
+            ] do
     true
   end
 
@@ -115,8 +139,7 @@ defmodule Archdo.Rules.Module.IfElseDispatch do
         ),
         Fix.new(
           summary: "Use guards for type constraints",
-          detail:
-            "Move the type check to a guard: `def process(data) when is_map(data)`",
+          detail: "Move the type check to a guard: `def process(data) when is_map(data)`",
           applies_when: "The condition is a simple type guard."
         )
       ],

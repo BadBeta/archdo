@@ -33,7 +33,9 @@ defmodule Archdo.Compiled.Graph do
           calls_by_callee: %{mfa_tuple() => [call()]},
           calls_by_module: %{module() => [call()]},
           protocol_impls: %{module() => [module()]},
-          struct_expansions: [%{user_module: module(), struct_module: module(), line: non_neg_integer()}],
+          struct_expansions: [
+            %{user_module: module(), struct_module: module(), line: non_neg_integer()}
+          ],
           app_name: String.t() | nil,
           beam_dir: String.t() | nil
         }
@@ -238,7 +240,9 @@ defmodule Archdo.Compiled.Graph do
         keys -> Enum.max(keys)
       end
 
-    mod_info = Map.get(modules, module, %{exports: [], behaviours: [], struct_fields: [], callback_fns: []})
+    mod_info =
+      Map.get(modules, module, %{exports: [], behaviours: [], struct_fields: [], callback_fns: []})
+
     defines_struct = mod_info.struct_fields != []
     defines_behaviour = mod_info.callback_fns != []
 
@@ -371,14 +375,16 @@ defmodule Archdo.Compiled.Graph do
 
         has_any_catch_all = Enum.any?(clause_info, & &1.has_catch_all)
 
-        [%{
-          name: name,
-          arity: arity,
-          exported: exported,
-          clauses: clause_info,
-          has_catch_all: has_any_catch_all,
-          clause_count: length(clause_info)
-        }]
+        [
+          %{
+            name: name,
+            arity: arity,
+            exported: exported,
+            clauses: clause_info,
+            has_catch_all: has_any_catch_all,
+            clause_count: length(clause_info)
+          }
+        ]
 
       _ ->
         []
@@ -520,7 +526,9 @@ defmodule Archdo.Compiled.Graph do
   A context "knows about" another context when any of its member modules
   call functions in modules belonging to the other context.
   """
-  @spec context_knows_about(t(), String.t()) :: [%{context: String.t(), modules_called: [module()], call_count: non_neg_integer()}]
+  @spec context_knows_about(t(), String.t()) :: [
+          %{context: String.t(), modules_called: [module()], call_count: non_neg_integer()}
+        ]
   def context_knows_about(%__MODULE__{} = graph, context_name) do
     contexts = discover_contexts(graph)
     context_of = build_context_membership(contexts)
@@ -560,7 +568,9 @@ defmodule Archdo.Compiled.Graph do
   A context is "known by" another when modules from the other context
   call functions in this context's members.
   """
-  @spec context_known_by(t(), String.t()) :: [%{context: String.t(), calling_modules: [module()], call_count: non_neg_integer()}]
+  @spec context_known_by(t(), String.t()) :: [
+          %{context: String.t(), calling_modules: [module()], call_count: non_neg_integer()}
+        ]
   def context_known_by(%__MODULE__{} = graph, context_name) do
     contexts = discover_contexts(graph)
     context_of = build_context_membership(contexts)
@@ -648,7 +658,14 @@ defmodule Archdo.Compiled.Graph do
           coupling: float(),
           quality_score: float(),
           leaking_modules: [%{module: module(), external_callers: non_neg_integer()}],
-          misplaced_modules: [%{module: module(), calls_to_own: non_neg_integer(), calls_to_other: non_neg_integer(), strongest_affinity: String.t()}]
+          misplaced_modules: [
+            %{
+              module: module(),
+              calls_to_own: non_neg_integer(),
+              calls_to_other: non_neg_integer(),
+              strongest_affinity: String.t()
+            }
+          ]
         }
 
   defp detect_app_prefix(modules) do
@@ -688,8 +705,8 @@ defmodule Archdo.Compiled.Graph do
       Enum.find(members, fn mod ->
         mod
         |> Module.split()
-        |> Enum.join(".")
-        == context_name
+        |> Enum.join(".") ==
+          context_name
       end)
 
     # Classify all calls involving this context
@@ -751,7 +768,9 @@ defmodule Archdo.Compiled.Graph do
   end
 
   defp classify_context_calls(all_calls, member_set, project_set, boundary_module) do
-    Enum.reduce(all_calls, {[], [], [], [], []}, fn call, {internal, incoming, outgoing, boundary_in, leak_in} ->
+    Enum.reduce(all_calls, {[], [], [], [], []}, fn call,
+                                                    {internal, incoming, outgoing, boundary_in,
+                                                     leak_in} ->
       caller_mod = elem(call.caller, 0)
       callee_mod = elem(call.callee, 0)
       caller_in = MapSet.member?(member_set, caller_mod)
@@ -831,7 +850,14 @@ defmodule Archdo.Compiled.Graph do
             |> Enum.max_by(fn {_ctx, count} -> count end, fn -> {context_name, 0} end)
             |> elem(0)
 
-          [%{module: mod, calls_to_own: own_calls, calls_to_other: other_count, strongest_affinity: strongest}]
+          [
+            %{
+              module: mod,
+              calls_to_own: own_calls,
+              calls_to_other: other_count,
+              strongest_affinity: strongest
+            }
+          ]
 
         false ->
           []
@@ -871,12 +897,13 @@ defmodule Archdo.Compiled.Graph do
       struct_fields = collect_struct_fields(mod)
       callback_fns = collect_callback_fns(mod)
 
-      {mod, %{
-        exports: exports,
-        behaviours: behaviours,
-        struct_fields: struct_fields,
-        callback_fns: callback_fns
-      }}
+      {mod,
+       %{
+         exports: exports,
+         behaviours: behaviours,
+         struct_fields: struct_fields,
+         callback_fns: callback_fns
+       }}
     end)
   end
 
@@ -975,10 +1002,11 @@ defmodule Archdo.Compiled.Graph do
     calls_by_module =
       Enum.group_by(calls, fn call -> elem(call.caller, 0) end)
 
-    %{graph |
-      calls_by_caller: calls_by_caller,
-      calls_by_callee: calls_by_callee,
-      calls_by_module: calls_by_module
+    %{
+      graph
+      | calls_by_caller: calls_by_caller,
+        calls_by_callee: calls_by_callee,
+        calls_by_module: calls_by_module
     }
   end
 
@@ -1071,12 +1099,13 @@ defmodule Archdo.Compiled.Graph do
   end
 
   defp tarjan_strongconnect(v, adjacency, state) do
-    state = %{state |
-      indexes: Map.put(state.indexes, v, state.index),
-      lowlinks: Map.put(state.lowlinks, v, state.index),
-      index: state.index + 1,
-      stack: [v | state.stack],
-      on_stack: MapSet.put(state.on_stack, v)
+    state = %{
+      state
+      | indexes: Map.put(state.indexes, v, state.index),
+        lowlinks: Map.put(state.lowlinks, v, state.index),
+        index: state.index + 1,
+        stack: [v | state.stack],
+        on_stack: MapSet.put(state.on_stack, v)
     }
 
     # Process all successors

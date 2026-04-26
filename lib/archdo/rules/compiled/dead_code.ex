@@ -33,7 +33,8 @@ defmodule Archdo.Rules.Compiled.DeadCode do
 
     Diagnostic.info("6.24",
       title: "Dead public function",
-      message: "#{mod_name}.#{func}/#{arity} is exported but never called from outside the module",
+      message:
+        "#{mod_name}.#{func}/#{arity} is exported but never called from outside the module",
       why:
         "Public functions are part of the module's API contract. An exported function that " <>
           "nobody calls is dead weight — it increases the API surface callers must understand, " <>

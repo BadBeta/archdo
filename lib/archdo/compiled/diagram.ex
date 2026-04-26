@@ -46,8 +46,13 @@ defmodule Archdo.Compiled.Diagram do
     style_lines =
       Enum.flat_map(contexts, fn ctx ->
         case ctx.boundary_module do
-          nil -> []
-          mod -> ["  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
+          nil ->
+            []
+
+          mod ->
+            [
+              "  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"
+            ]
         end
       end)
 
@@ -76,7 +81,9 @@ defmodule Archdo.Compiled.Diagram do
   and their call relationships. Edge thickness represents call count.
   """
   @spec module_dependencies(CompiledGraph.t()) :: String.t()
-  def module_dependencies(%CompiledGraph{modules: modules, calls_by_module: calls_by_module} = _graph) do
+  def module_dependencies(
+        %CompiledGraph{modules: modules, calls_by_module: calls_by_module} = _graph
+      ) do
     project_modules = MapSet.new(Map.keys(modules))
 
     # Aggregate calls at module level
@@ -220,7 +227,10 @@ defmodule Archdo.Compiled.Diagram do
 
   # --- Private helpers ---
 
-  defp collect_cross_context_edges(%CompiledGraph{calls_by_module: calls_by_module, modules: modules}, context_of) do
+  defp collect_cross_context_edges(
+         %CompiledGraph{calls_by_module: calls_by_module, modules: modules},
+         context_of
+       ) do
     project_modules = MapSet.new(Map.keys(modules))
 
     calls_by_module
@@ -251,7 +261,9 @@ defmodule Archdo.Compiled.Diagram do
     # Show boundary module prominently, then a sample of internal modules
     boundary_line =
       case ctx.boundary_module do
-        nil -> []
+        nil ->
+          []
+
         mod ->
           id = sanitize_id(AST.module_name(mod))
           ["    #{id}([\"#{AST.short_name(mod)} · BOUNDARY\"])"]
@@ -333,8 +345,14 @@ defmodule Archdo.Compiled.Diagram do
     # Style
     style_lines =
       case ctx.boundary_module do
-        nil -> []
-        mod -> ["", "  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
+        nil ->
+          []
+
+        mod ->
+          [
+            "",
+            "  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"
+          ]
       end
 
     leak_style =
@@ -345,7 +363,9 @@ defmodule Archdo.Compiled.Diagram do
       end)
 
     Enum.join(
-      lines ++ member_lines ++ subgraph_end ++ internal_edges ++ [""] ++ external_callers ++ style_lines ++ leak_style,
+      lines ++
+        member_lines ++
+        subgraph_end ++ internal_edges ++ [""] ++ external_callers ++ style_lines ++ leak_style,
       "\n"
     )
   end
@@ -535,7 +555,12 @@ defmodule Archdo.Compiled.Diagram do
     ]
 
     Enum.join(
-      lines ++ node_lines ++ [""] ++ confirmed_lines ++ [""] ++ hidden_lines ++ [""] ++ phantom_lines ++ [""] ++ hidden_style ++ phantom_style ++ summary,
+      lines ++
+        node_lines ++
+        [""] ++
+        confirmed_lines ++
+        [""] ++
+        hidden_lines ++ [""] ++ phantom_lines ++ [""] ++ hidden_style ++ phantom_style ++ summary,
       "\n"
     )
   end
@@ -858,7 +883,9 @@ defmodule Archdo.Compiled.Diagram do
 
     boundary_line =
       case boundary do
-        nil -> []
+        nil ->
+          []
+
         mod ->
           id = sanitize_id(AST.module_name(mod))
           ["    #{id}{{\"#{AST.short_name(mod)} · BOUNDARY\"}}"]
@@ -924,8 +951,11 @@ defmodule Archdo.Compiled.Diagram do
 
     boundary_style =
       case boundary do
-        nil -> []
-        mod -> ["  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
+        nil ->
+          []
+
+        mod ->
+          ["  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
       end
 
     # Style external callers as input terminals (blue)
@@ -941,8 +971,18 @@ defmodule Archdo.Compiled.Diagram do
       end)
 
     Enum.join(
-      lines ++ caller_lines ++ context_lines ++ boundary_line ++ internal_lines ++ more_line ++
-        context_end ++ internal_wiring ++ [""] ++ dep_lines ++ style_lines ++ boundary_style ++
+      lines ++
+        caller_lines ++
+        context_lines ++
+        boundary_line ++
+        internal_lines ++
+        more_line ++
+        context_end ++
+        internal_wiring ++
+        [""] ++
+        dep_lines ++
+        style_lines ++
+        boundary_style ++
         caller_style ++ dep_style,
       "\n"
     )
@@ -955,15 +995,33 @@ defmodule Archdo.Compiled.Diagram do
       |> Enum.uniq()
 
     case shapes do
-      [{:tagged_tuple, :ok}] -> "{:ok, _}"
-      [{:tagged_tuple, :error}] -> "{:error, _}"
-      [{:atom, val}] -> ":#{val}"
-      [:list] -> "[...]"
-      [:map] -> "%{}"
-      [:binary] -> "<<>>"
-      [:call] -> "fn()"
-      [:variable] -> "var"
-      [{:mixed, _}] -> "mixed"
+      [{:tagged_tuple, :ok}] ->
+        "{:ok, _}"
+
+      [{:tagged_tuple, :error}] ->
+        "{:error, _}"
+
+      [{:atom, val}] ->
+        ":#{val}"
+
+      [:list] ->
+        "[...]"
+
+      [:map] ->
+        "%{}"
+
+      [:binary] ->
+        "<<>>"
+
+      [:call] ->
+        "fn()"
+
+      [:variable] ->
+        "var"
+
+      [{:mixed, _}] ->
+        "mixed"
+
       _ ->
         tags = for {:tagged_tuple, t} <- shapes, do: t
 

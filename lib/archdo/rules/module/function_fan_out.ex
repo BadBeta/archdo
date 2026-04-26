@@ -11,7 +11,8 @@ defmodule Archdo.Rules.Module.FunctionFanOut do
   def id, do: "6.5"
 
   @impl true
-  def description, do: "Function fan-out — individual functions depending on too many distinct modules"
+  def description,
+    do: "Function fan-out — individual functions depending on too many distinct modules"
 
   @impl true
   def analyze(_file, _ast, _opts), do: []
@@ -36,8 +37,7 @@ defmodule Archdo.Rules.Module.FunctionFanOut do
 
       builder.("6.5",
         title: "Function with high fan-out",
-        message:
-          "#{module}.#{name}/#{arity} depends on #{count} distinct external modules",
+        message: "#{module}.#{name}/#{arity} depends on #{count} distinct external modules",
         why:
           "A single function that touches many other modules is doing too much: it has to know how each " <>
             "of them works, it breaks when any of them changes, and it's hard to test because every test has " <>
@@ -62,7 +62,11 @@ defmodule Archdo.Rules.Module.FunctionFanOut do
           )
         ],
         references: ["ARCHITECTURE_RULES.md#6.5"],
-        context: %{function: "#{module}.#{name}/#{arity}", fan_out: count, threshold: @warn_threshold},
+        context: %{
+          function: "#{module}.#{name}/#{arity}",
+          fan_out: count,
+          threshold: @warn_threshold
+        },
         file: file,
         line: line
       )

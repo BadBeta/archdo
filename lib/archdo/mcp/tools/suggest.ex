@@ -34,12 +34,13 @@ defmodule Archdo.Mcp.Tools.Suggest do
         file_type = classify_file(file)
         suggestions = suggestions_for(file_type)
 
-        {:ok, %{
-          file: file,
-          file_type: file_type,
-          findings: Encoder.encode_diagnostics(diagnostics),
-          suggestions: suggestions
-        }}
+        {:ok,
+         %{
+           file: file,
+           file_type: file_type,
+           findings: Encoder.encode_diagnostics(diagnostics),
+           suggestions: suggestions
+         }}
 
       false ->
         {:error, "File not found: #{file}"}
@@ -50,12 +51,23 @@ defmodule Archdo.Mcp.Tools.Suggest do
 
   defp classify_file(file) do
     cond do
-      String.contains?(file, "/test/") -> :test
-      String.contains?(file, "_live.ex") or String.contains?(file, "/live/") -> :liveview
-      String.contains?(file, "_controller.ex") or String.contains?(file, "/controllers/") -> :controller
-      String.contains?(file, "mix.exs") -> :mix
-      String.ends_with?(file, "/native.ex") or String.contains?(file, "/native/") -> :nif
-      true -> detect_from_content(file)
+      String.contains?(file, "/test/") ->
+        :test
+
+      String.contains?(file, "_live.ex") or String.contains?(file, "/live/") ->
+        :liveview
+
+      String.contains?(file, "_controller.ex") or String.contains?(file, "/controllers/") ->
+        :controller
+
+      String.contains?(file, "mix.exs") ->
+        :mix
+
+      String.ends_with?(file, "/native.ex") or String.contains?(file, "/native/") ->
+        :nif
+
+      true ->
+        detect_from_content(file)
     end
   end
 
@@ -63,12 +75,25 @@ defmodule Archdo.Mcp.Tools.Suggest do
     case File.read(file) do
       {:ok, content} ->
         cond do
-          String.contains?(content, "use GenServer") -> :genserver
-          String.contains?(content, "use GenStateMachine") or String.contains?(content, ":gen_statem") -> :state_machine
-          String.contains?(content, "use Commanded") -> :event_sourcing
-          String.contains?(content, "use Ecto.Schema") -> :schema
-          String.contains?(content, "use Supervisor") or String.contains?(content, "use DynamicSupervisor") -> :supervisor
-          true -> :module
+          String.contains?(content, "use GenServer") ->
+            :genserver
+
+          String.contains?(content, "use GenStateMachine") or
+              String.contains?(content, ":gen_statem") ->
+            :state_machine
+
+          String.contains?(content, "use Commanded") ->
+            :event_sourcing
+
+          String.contains?(content, "use Ecto.Schema") ->
+            :schema
+
+          String.contains?(content, "use Supervisor") or
+              String.contains?(content, "use DynamicSupervisor") ->
+            :supervisor
+
+          true ->
+            :module
         end
 
       {:error, _} ->

@@ -9,7 +9,8 @@ defmodule Archdo.Rules.Module.RegexInLoop do
   def id, do: "6.49"
 
   @impl true
-  def description, do: "Regex literal in hot path — recompiled each call, hoist to module attribute"
+  def description,
+    do: "Regex literal in hot path — recompiled each call, hoist to module attribute"
 
   @impl true
   def analyze(file, ast, _opts) do

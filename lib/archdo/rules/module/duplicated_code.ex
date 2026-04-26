@@ -18,7 +18,8 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   def id, do: "3.1"
 
   @impl true
-  def description, do: "Detect code duplication — Type-2 clones (structurally identical functions)"
+  def description,
+    do: "Detect code duplication — Type-2 clones (structurally identical functions)"
 
   @impl true
   def analyze(_file, _ast, _opts), do: []
@@ -91,7 +92,8 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
               "Sometimes structurally identical functions are not conceptually the same — a CRUD module and " <>
                 "an event handler might both pattern-match a struct and update a field, but they will evolve " <>
                 "independently. If extracting would couple unrelated concepts, leave them and add the freeze baseline.",
-            applies_when: "The clones evolve independently and unifying them would create false coupling."
+            applies_when:
+              "The clones evolve independently and unifying them would create false coupling."
           )
         ],
         references: ["ARCHITECTURE_RULES.md#3.1"],
@@ -153,7 +155,13 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
     case Map.get(state.mapping, name) do
       nil ->
         new_id = state.counter
-        new_state = %{state | counter: state.counter + 1, mapping: Map.put(state.mapping, name, new_id)}
+
+        new_state = %{
+          state
+          | counter: state.counter + 1,
+            mapping: Map.put(state.mapping, name, new_id)
+        }
+
         {{:_VAR, [], new_id}, new_state}
 
       id ->
@@ -212,5 +220,4 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
 
     {Enum.reverse(acc), new_state}
   end
-
 end

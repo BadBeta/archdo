@@ -22,20 +22,32 @@ defmodule Archdo.Rules.Testing.TrivialAssertion do
     ast
     |> AST.find_all(fn
       # assert true
-      {:assert, _, [true]} -> true
-      {:assert, _, [{:__block__, _, [true]}]} -> true
+      {:assert, _, [true]} ->
+        true
+
+      {:assert, _, [{:__block__, _, [true]}]} ->
+        true
+
       # assert false (should be refute false)
-      {:assert, _, [false]} -> true
+      {:assert, _, [false]} ->
+        true
+
       # assert x == x (where both sides are the same)
-      {:assert, _, [{:==, _, [a, a]}]} -> true
+      {:assert, _, [{:==, _, [a, a]}]} ->
+        true
+
       # assert 1 == 1
-      {:assert, _, [{:==, _, [{:__block__, _, [n]}, {:__block__, _, [n]}]}]} when is_integer(n) -> true
-      _ -> false
+      {:assert, _, [{:==, _, [{:__block__, _, [n]}, {:__block__, _, [n]}]}]} when is_integer(n) ->
+        true
+
+      _ ->
+        false
     end)
     |> Enum.map(fn {:assert, meta, _} ->
       Diagnostic.warning("7.10",
         title: "Trivial assertion in test",
-        message: "Test contains a tautology like `assert true`, `assert false`, or `assert x == x`",
+        message:
+          "Test contains a tautology like `assert true`, `assert false`, or `assert x == x`",
         why:
           "Tautological assertions never test anything: `assert true` always passes, `assert false` always " <>
             "fails (and breaks CI for nothing), and `assert x == x` is a typo waiting to happen. They are the " <>

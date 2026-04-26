@@ -10,7 +10,9 @@ defmodule Archdo.Rules.Module.BooleanBlindness do
   def id, do: "6.45"
 
   @impl true
-  def description, do: "Public function returns bare boolean for failable operation — use {:ok, _}/{:error, reason}"
+  def description,
+    do:
+      "Public function returns bare boolean for failable operation — use {:ok, _}/{:error, reason}"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -128,7 +130,8 @@ defmodule Archdo.Rules.Module.BooleanBlindness do
           detail:
             "Replace `true` with `{:ok, result}` and `false` with `{:error, :specific_reason}`. " <>
               "This gives callers actionable error information.",
-          applies_when: "The function performs validation, authorization, or any failable operation."
+          applies_when:
+            "The function performs validation, authorization, or any failable operation."
         ),
         Fix.new(
           summary: "Rename to a predicate if it truly is a boolean check",

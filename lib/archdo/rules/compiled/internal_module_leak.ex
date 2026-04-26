@@ -32,6 +32,7 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
       |> Map.keys()
       |> Enum.filter(fn mod ->
         parent = parent_module(mod)
+
         parent != nil and MapSet.member?(project_modules, parent) and
           not widely_used?(graph, mod)
       end)
@@ -147,5 +148,4 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
       line: 0
     )
   end
-
 end

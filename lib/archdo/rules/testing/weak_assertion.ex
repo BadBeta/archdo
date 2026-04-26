@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Testing.WeakAssertion do
   def id, do: "7.18"
 
   @impl true
-  def description, do: "Weak assertion — assert function() without pattern match loses error details"
+  def description,
+    do: "Weak assertion — assert function() without pattern match loses error details"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -21,14 +22,33 @@ defmodule Archdo.Rules.Testing.WeakAssertion do
   defp find_weak_assertions(file, ast) do
     AST.find_all(ast, fn
       # assert Module.function(args) — call result only checked for truthiness
-      {:assert, _, [{{:., _, _}, _, _}]} -> true
+      {:assert, _, [{{:., _, _}, _, _}]} ->
+        true
 
       # assert function(args) — local call only checked for truthiness
       # Exclude: pattern match (=), comparison (==, !=), guards (is_*), match?
       {:assert, _, [{func, _, args}]}
       when is_atom(func) and is_list(args) ->
-        func not in [:match?, :is_struct, :=, :==, :!=, :===, :!==, :>, :<, :>=, :<=,
-                     :true, :false, :nil, :in, :not, :and, :or] and
+        func not in [
+          :match?,
+          :is_struct,
+          :=,
+          :==,
+          :!=,
+          :===,
+          :!==,
+          :>,
+          :<,
+          :>=,
+          :<=,
+          true,
+          false,
+          nil,
+          :in,
+          :not,
+          :and,
+          :or
+        ] and
           not String.starts_with?(Atom.to_string(func), "is_")
 
       _ ->

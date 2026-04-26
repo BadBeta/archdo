@@ -10,7 +10,8 @@ defmodule Archdo.MixProject do
       deps: deps(),
       dialyzer: [plt_add_apps: [:mix], flags: [:unmatched_returns, :no_opaque]],
       elixirc_paths: elixirc_paths(Mix.env()),
-      description: "Architectural quality checker for Elixir — checks OTP patterns, boundaries, and test architecture",
+      description:
+        "Architectural quality checker for Elixir — checks OTP patterns, boundaries, and test architecture",
       package: package()
     ]
   end

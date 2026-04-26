@@ -64,7 +64,8 @@ defmodule Archdo.Rules.Module.ScatteredConfig do
     end)
   end
 
-  defp config_file?(file), do: String.contains?(file, "/config") or String.ends_with?(file, "_config.ex")
+  defp config_file?(file),
+    do: String.contains?(file, "/config") or String.ends_with?(file, "_config.ex")
 
   defp mix_file?(file) do
     String.ends_with?(file, "mix.exs") or String.contains?(file, "/mix/")

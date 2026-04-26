@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Module.LongParameterList do
   def id, do: "6.43"
 
   @impl true
-  def description, do: "Public function with 5+ parameters — consider a map, keyword list, or struct"
+  def description,
+    do: "Public function with 5+ parameters — consider a map, keyword list, or struct"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -44,7 +45,8 @@ defmodule Archdo.Rules.Module.LongParameterList do
 
     builder.("6.43",
       title: "Long parameter list: #{name}/#{arity}",
-      message: "#{name}/#{arity} has #{arity} parameters — functions with 5+ params are hard to call correctly",
+      message:
+        "#{name}/#{arity} has #{arity} parameters — functions with 5+ params are hard to call correctly",
       why:
         "Long parameter lists make call sites fragile (easy to swap arguments) " <>
           "and hard to extend. Group related parameters into a map, keyword list, " <>

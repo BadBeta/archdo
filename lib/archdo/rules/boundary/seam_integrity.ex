@@ -176,7 +176,9 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
       |> String.split(".")
       |> Enum.drop(-1)
       |> Enum.join(".")
-    target_parent != "" and (caller == target_parent or String.starts_with?(caller, target_parent <> "."))
+
+    target_parent != "" and
+      (caller == target_parent or String.starts_with?(caller, target_parent <> "."))
   end
 
   defp behaviour_or_protocol_def?(caller, registry) do
@@ -235,7 +237,8 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
           detail:
             "Accept the module as a parameter: `def my_func(#{key_name(seam)} \\\\ #{target}, ...)`. " <>
               "Tests pass a mock explicitly. This avoids global config and makes the dependency visible.",
-          applies_when: "Only a few call sites need the seam — function-level injection is simpler."
+          applies_when:
+            "Only a few call sites need the seam — function-level injection is simpler."
         ),
         Fix.new(
           summary: "Call through the behaviour/protocol module instead",

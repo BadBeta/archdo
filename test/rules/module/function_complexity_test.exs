@@ -32,9 +32,10 @@ defmodule Archdo.Rules.Module.FunctionComplexityTest do
 
   test "flags high cyclomatic complexity" do
     # Build a function with many branches
-    branches = Enum.map_join(1..12, "\n", fn i ->
-      "      :val_#{i} -> :result_#{i}"
-    end)
+    branches =
+      Enum.map_join(1..12, "\n", fn i ->
+        "      :val_#{i} -> :result_#{i}"
+      end)
 
     code = """
     defmodule MyApp.Complex do

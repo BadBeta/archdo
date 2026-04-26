@@ -141,5 +141,4 @@ defmodule Archdo.Rules.Compiled.CrossBoundaryCall do
       line: 0
     )
   end
-
 end

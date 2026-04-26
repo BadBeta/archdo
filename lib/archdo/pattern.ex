@@ -115,7 +115,9 @@ defmodule Archdo.Pattern do
   end
 
   defp do_tokenize([], [], tokens), do: Enum.reverse(tokens)
-  defp do_tokenize([], buf, tokens), do: Enum.reverse([{:lit, List.to_string(Enum.reverse(buf))} | tokens])
+
+  defp do_tokenize([], buf, tokens),
+    do: Enum.reverse([{:lit, List.to_string(Enum.reverse(buf))} | tokens])
 
   defp do_tokenize([?*, ?* | rest], buf, tokens) do
     tokens =

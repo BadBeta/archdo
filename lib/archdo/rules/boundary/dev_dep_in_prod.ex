@@ -8,17 +8,36 @@ defmodule Archdo.Rules.Boundary.DevDepInProd do
   def id, do: "4.29"
 
   @impl true
-  def description, do: "Dev/test dependency missing `only:` option — will be included in production releases"
+  def description,
+    do: "Dev/test dependency missing `only:` option — will be included in production releases"
 
   # Well-known dev/test-only packages that should never ship to prod.
   # NOTE: :esbuild and :tailwind are excluded — Phoenix 1.8+ deliberately
   # uses `runtime: Mix.env() == :dev` without `only:` because
   # `mix assets.deploy` runs with MIX_ENV=prod.
   @dev_only_deps [
-    :credo, :dialyxir, :ex_doc, :excoveralls, :mix_test_watch, :mix_audit,
-    :sobelow, :doctor, :ex_check, :stream_data, :benchee, :mox, :mimic,
-    :hammox, :bypass, :mock, :ex_machina, :faker, :floki, :wallaby,
-    :phoenix_live_reload, :dart_sass
+    :credo,
+    :dialyxir,
+    :ex_doc,
+    :excoveralls,
+    :mix_test_watch,
+    :mix_audit,
+    :sobelow,
+    :doctor,
+    :ex_check,
+    :stream_data,
+    :benchee,
+    :mox,
+    :mimic,
+    :hammox,
+    :bypass,
+    :mock,
+    :ex_machina,
+    :faker,
+    :floki,
+    :wallaby,
+    :phoenix_live_reload,
+    :dart_sass
   ]
 
   @impl true
@@ -37,11 +56,14 @@ defmodule Archdo.Rules.Boundary.DevDepInProd do
     {_, diagnostics} =
       Macro.prewalk(ast, [], fn
         # 3-element dep tuple: {:name, "version", opts}
-        {:{}, meta, [
-          {:__block__, _, [dep_name]},
-          _version,
-          opts
-        ]} = node, acc when is_atom(dep_name) and is_list(opts) ->
+        {:{}, meta,
+         [
+           {:__block__, _, [dep_name]},
+           _version,
+           opts
+         ]} = node,
+        acc
+        when is_atom(dep_name) and is_list(opts) ->
           case dev_only_without_only?(dep_name, opts) do
             true ->
               {node, [build_diagnostic(file, meta_line(meta), dep_name) | acc]}
@@ -51,9 +73,12 @@ defmodule Archdo.Rules.Boundary.DevDepInProd do
           end
 
         # 2-element dep tuple (no opts at all): {:name, "version"}
-        {:__block__, meta, [
-          {{:__block__, _, [dep_name]}, _version}
-        ]} = node, acc when is_atom(dep_name) ->
+        {:__block__, meta,
+         [
+           {{:__block__, _, [dep_name]}, _version}
+         ]} = node,
+        acc
+        when is_atom(dep_name) ->
           case dep_name in @dev_only_deps do
             true ->
               {node, [build_diagnostic(file, meta_line(meta), dep_name) | acc]}
@@ -63,10 +88,13 @@ defmodule Archdo.Rules.Boundary.DevDepInProd do
           end
 
         # 2-element dep tuple without __block__ wrapper
-        {:{}, meta, [
-          {:__block__, _, [dep_name]},
-          _version
-        ]} = node, acc when is_atom(dep_name) ->
+        {:{}, meta,
+         [
+           {:__block__, _, [dep_name]},
+           _version
+         ]} = node,
+        acc
+        when is_atom(dep_name) ->
           case dep_name in @dev_only_deps do
             true ->
               {node, [build_diagnostic(file, meta_line(meta), dep_name) | acc]}
@@ -104,7 +132,8 @@ defmodule Archdo.Rules.Boundary.DevDepInProd do
   defp build_diagnostic(file, line, dep_name) do
     Diagnostic.warning("4.29",
       title: "Dev dependency without `only:` option",
-      message: ":#{dep_name} is a dev/test tool but has no `only:` restriction — it will be included in production releases",
+      message:
+        ":#{dep_name} is a dev/test tool but has no `only:` restriction — it will be included in production releases",
       why:
         "Dependencies without `only: :dev` or `only: [:dev, :test]` are compiled into " <>
           "production releases. Dev tools like Credo, Dialyxir, and ExDoc add unnecessary " <>

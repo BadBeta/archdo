@@ -10,7 +10,9 @@ defmodule Archdo.Rules.Module.BehaviourSize do
   def id, do: "4.1"
 
   @impl true
-  def description, do: "Behaviours should have focused interfaces (max #{@max_required_callbacks} required callbacks)"
+  def description,
+    do:
+      "Behaviours should have focused interfaces (max #{@max_required_callbacks} required callbacks)"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -54,7 +56,11 @@ defmodule Archdo.Rules.Module.BehaviourSize do
             )
           ],
           references: ["ARCHITECTURE_RULES.md#4.1"],
-          context: %{module: module_name, callback_count: count, threshold: @max_required_callbacks},
+          context: %{
+            module: module_name,
+            callback_count: count,
+            threshold: @max_required_callbacks
+          },
           file: file,
           line: 1
         )
@@ -72,7 +78,8 @@ defmodule Archdo.Rules.Module.BehaviourSize do
           arity = length(args || [])
           {node, {MapSet.put(cbs, {name, arity}), opt}}
 
-        {:@, _, [{:callback, _, [{:when, _, [{:"::", _, [{name, _, args} | _]} | _]}]}]} = node, {cbs, opt}
+        {:@, _, [{:callback, _, [{:when, _, [{:"::", _, [{name, _, args} | _]} | _]}]}]} = node,
+        {cbs, opt}
         when is_atom(name) ->
           arity = length(args || [])
           {node, {MapSet.put(cbs, {name, arity}), opt}}
@@ -99,5 +106,4 @@ defmodule Archdo.Rules.Module.BehaviourSize do
 
     {callbacks, optional}
   end
-
 end

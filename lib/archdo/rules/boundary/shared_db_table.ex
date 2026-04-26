@@ -48,16 +48,21 @@ defmodule Archdo.Rules.Boundary.SharedDbTable do
     context = extract_context(file)
 
     case context do
-      nil -> []
+      nil ->
+        []
+
       ctx ->
-        Enum.map(AST.find_all(ast, fn
-          {:schema, _, [table_name | _]} when is_binary(table_name) -> true
-          {:schema, _, [{:__block__, _, [table_name]} | _]} when is_binary(table_name) -> true
-          _ -> false
-        end), fn {_, meta, [table_name | _]} ->
-          table = unwrap_table(table_name)
-          {table, ctx, file, AST.line(meta)}
-        end)
+        Enum.map(
+          AST.find_all(ast, fn
+            {:schema, _, [table_name | _]} when is_binary(table_name) -> true
+            {:schema, _, [{:__block__, _, [table_name]} | _]} when is_binary(table_name) -> true
+            _ -> false
+          end),
+          fn {_, meta, [table_name | _]} ->
+            table = unwrap_table(table_name)
+            {table, ctx, file, AST.line(meta)}
+          end
+        )
     end
   end
 

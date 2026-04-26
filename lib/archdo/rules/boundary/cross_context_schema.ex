@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Boundary.CrossContextSchema do
   def id, do: "1.29"
 
   @impl true
-  def description, do: "Schema struct from another context used directly — access through owning context API"
+  def description,
+    do: "Schema struct from another context used directly — access through owning context API"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -28,25 +29,29 @@ defmodule Archdo.Rules.Boundary.CrossContextSchema do
   end
 
   defp find_foreign_schema_refs(file, ast, own_context) do
-    Enum.map(AST.find_all(ast, fn
-      # %OtherContext.Schema{} struct literal
-      {:%, _, [{:__aliases__, _, aliases}, {:%{}, _, _}]} ->
-        foreign_context_schema?(aliases, own_context)
+    Enum.map(
+      AST.find_all(ast, fn
+        # %OtherContext.Schema{} struct literal
+        {:%, _, [{:__aliases__, _, aliases}, {:%{}, _, _}]} ->
+          foreign_context_schema?(aliases, own_context)
 
-      # %OtherContext.Schema{struct | field: val} update
-      {:%, _, [{:__aliases__, _, aliases}, _]} ->
-        foreign_context_schema?(aliases, own_context)
+        # %OtherContext.Schema{struct | field: val} update
+        {:%, _, [{:__aliases__, _, aliases}, _]} ->
+          foreign_context_schema?(aliases, own_context)
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), own_context)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), own_context)
+      end
+    )
   end
 
   # Check if aliases refer to a schema in a different context
   # Pattern: [:MyApp, :OtherContext, :Schema] where OtherContext != own context
-  defp foreign_context_schema?(aliases, own_context) when is_list(aliases) and length(aliases) >= 3 do
+  defp foreign_context_schema?(aliases, own_context)
+       when is_list(aliases) and length(aliases) >= 3 do
     # Get the context portion (second element for MyApp.Context.Schema pattern)
     context_atom = Enum.at(aliases, 1)
 
@@ -64,8 +69,19 @@ defmodule Archdo.Rules.Boundary.CrossContextSchema do
 
   # Infrastructure modules are shared — not a boundary violation
   defp infrastructure_module?(name) do
-    name in ["Repo", "Mailer", "Endpoint", "Router", "Telemetry", "Application",
-             "PubSub", "Presence", "Gettext", "Guardian", "Auth"]
+    name in [
+      "Repo",
+      "Mailer",
+      "Endpoint",
+      "Router",
+      "Telemetry",
+      "Application",
+      "PubSub",
+      "Presence",
+      "Gettext",
+      "Guardian",
+      "Auth"
+    ]
   end
 
   # Extract the context name from a file path

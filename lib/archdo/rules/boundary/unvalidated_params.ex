@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
   def id, do: "1.14"
 
   @impl true
-  def description, do: "Controller/LiveView actions should validate incoming params at the boundary"
+  def description,
+    do: "Controller/LiveView actions should validate incoming params at the boundary"
 
   # Module prefixes that indicate schema/param validation
   @validation_modules ~w(

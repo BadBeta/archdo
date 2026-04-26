@@ -10,7 +10,8 @@ defmodule Archdo.Rules.Boundary.LogicInLiveview do
   def id, do: "1.27"
 
   @impl true
-  def description, do: "LiveView handle_event contains business logic — delegate to context modules"
+  def description,
+    do: "LiveView handle_event contains business logic — delegate to context modules"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -64,7 +65,8 @@ defmodule Archdo.Rules.Boundary.LogicInLiveview do
               "Extract the business logic into a context function like " <>
                 "`MyApp.Accounts.update_user(params)`. The handle_event becomes: " <>
                 "extract params -> call context -> assign result to socket.",
-            applies_when: "The handle_event does more than param extraction and socket assignment."
+            applies_when:
+              "The handle_event does more than param extraction and socket assignment."
           ),
           Fix.new(
             summary: "Extract into a helper function in the LiveView",

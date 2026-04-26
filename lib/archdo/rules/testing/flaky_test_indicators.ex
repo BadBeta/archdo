@@ -95,7 +95,10 @@ defmodule Archdo.Rules.Testing.FlakyTestIndicators do
   end
 
   defp random_pattern_name({{:., _, [:rand, :uniform]}, _, _}), do: ":rand.uniform"
-  defp random_pattern_name({{:., _, [{:__aliases__, _, [:Enum]}, :random]}, _, _}), do: "Enum.random"
+
+  defp random_pattern_name({{:., _, [{:__aliases__, _, [:Enum]}, :random]}, _, _}),
+    do: "Enum.random"
+
   defp random_pattern_name(_), do: "random call"
 
   # Time-dependent assertions

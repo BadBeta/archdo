@@ -26,11 +26,14 @@ defmodule Archdo.Rules.Boundary.UmbrellaDepConsistency do
     {_, diagnostics} =
       Macro.prewalk(ast, [], fn
         # 3-element dep tuple with in_umbrella: true
-        {:{}, meta, [
-          {:__block__, _, [dep_name]},
-          _version_or_opts,
-          opts
-        ]} = node, acc when is_atom(dep_name) and is_list(opts) ->
+        {:{}, meta,
+         [
+           {:__block__, _, [dep_name]},
+           _version_or_opts,
+           opts
+         ]} = node,
+        acc
+        when is_atom(dep_name) and is_list(opts) ->
           case in_umbrella_without_override?(opts) do
             true ->
               {node, [build_diagnostic(file, meta_line(meta), dep_name, :missing_override) | acc]}
@@ -40,9 +43,12 @@ defmodule Archdo.Rules.Boundary.UmbrellaDepConsistency do
           end
 
         # 2-element tuple where second element is keyword list with in_umbrella
-        {:__block__, meta, [
-          {{:__block__, _, [dep_name]}, opts}
-        ]} = node, acc when is_atom(dep_name) and is_list(opts) ->
+        {:__block__, meta,
+         [
+           {{:__block__, _, [dep_name]}, opts}
+         ]} = node,
+        acc
+        when is_atom(dep_name) and is_list(opts) ->
           case in_umbrella_without_override?(opts) do
             true ->
               {node, [build_diagnostic(file, meta_line(meta), dep_name, :missing_override) | acc]}
@@ -113,8 +119,7 @@ defmodule Archdo.Rules.Boundary.UmbrellaDepConsistency do
       alternatives: [
         Fix.new(
           summary: "Add `only:` if this is environment-specific",
-          detail:
-            "If :#{dep_name} is only needed in dev/test, add `only: [:dev, :test]`.",
+          detail: "If :#{dep_name} is only needed in dev/test, add `only: [:dev, :test]`.",
           applies_when: "The sibling app is only used during development or testing."
         ),
         Fix.new(

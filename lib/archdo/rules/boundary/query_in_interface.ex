@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Boundary.QueryInInterface do
   def id, do: "1.28"
 
   @impl true
-  def description, do: "Ecto.Query building in interface layer — queries belong in context modules"
+  def description,
+    do: "Ecto.Query building in interface layer — queries belong in context modules"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -19,28 +20,43 @@ defmodule Archdo.Rules.Boundary.QueryInInterface do
   end
 
   defp find_query_building(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # import Ecto.Query
-      {:import, _, [{:__aliases__, _, aliases} | _]} ->
-        alias_ends_with?(aliases, :Query)
+    Enum.map(
+      AST.find_all(ast, fn
+        # import Ecto.Query
+        {:import, _, [{:__aliases__, _, aliases} | _]} ->
+          alias_ends_with?(aliases, :Query)
 
-      # from(u in User, ...)
-      {:from, _, _} -> true
+        # from(u in User, ...)
+        {:from, _, _} ->
+          true
 
-      # Ecto.Query.from(...)
-      {{:., _, [{:__aliases__, _, aliases}, :from]}, _, _} ->
-        alias_ends_with?(aliases, :Query)
+        # Ecto.Query.from(...)
+        {{:., _, [{:__aliases__, _, aliases}, :from]}, _, _} ->
+          alias_ends_with?(aliases, :Query)
 
-      # where(query, ...) / select(query, ...) / join(query, ...) etc.
-      {{:., _, [{:__aliases__, _, aliases}, func]}, _, _}
-      when func in [:where, :select, :join, :preload, :order_by, :group_by, :having, :limit, :offset, :distinct] ->
-        alias_ends_with?(aliases, :Query)
+        # where(query, ...) / select(query, ...) / join(query, ...) etc.
+        {{:., _, [{:__aliases__, _, aliases}, func]}, _, _}
+        when func in [
+               :where,
+               :select,
+               :join,
+               :preload,
+               :order_by,
+               :group_by,
+               :having,
+               :limit,
+               :offset,
+               :distinct
+             ] ->
+          alias_ends_with?(aliases, :Query)
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta))
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta))
+      end
+    )
   end
 
   defp alias_ends_with?(aliases, target) when is_list(aliases) do

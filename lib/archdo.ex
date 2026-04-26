@@ -122,8 +122,11 @@ defmodule Archdo do
     rule.analyze_compiled(graph)
   rescue
     e ->
-      IO.puts(:standard_error,
-        "[archdo] compiled rule #{rule.id()} crashed: #{Exception.format(:error, e, __STACKTRACE__)}")
+      IO.puts(
+        :standard_error,
+        "[archdo] compiled rule #{rule.id()} crashed: #{Exception.format(:error, e, __STACKTRACE__)}"
+      )
+
       []
   end
 
@@ -395,6 +398,7 @@ defmodule Archdo do
       metrics
       |> Enum.map(& &1.distance)
       |> Enum.sum()
+
     avg_distance = total_distance / length(metrics)
 
     footer = [
@@ -415,9 +419,14 @@ defmodule Archdo do
     |> Enum.flat_map(fn path ->
       project_root =
         cond do
-          String.ends_with?(path, "/lib") -> Path.dirname(path)
-          String.ends_with?(path, "lib") and File.dir?(Path.join(path, "..")) -> Path.dirname(path)
-          true -> "."
+          String.ends_with?(path, "/lib") ->
+            Path.dirname(path)
+
+          String.ends_with?(path, "lib") and File.dir?(Path.join(path, "..")) ->
+            Path.dirname(path)
+
+          true ->
+            "."
         end
 
       Path.wildcard(Path.join(project_root, "test/**/*_test.exs"))
@@ -450,7 +459,9 @@ defmodule Archdo do
     paths
     |> Enum.flat_map(fn path ->
       cond do
-        File.regular?(path) -> [path]
+        File.regular?(path) ->
+          [path]
+
         File.dir?(path) ->
           Path.wildcard(Path.join(path, "**/*.ex")) ++
             Path.wildcard(Path.join(path, "**/*.exs"))
@@ -462,5 +473,4 @@ defmodule Archdo do
     |> Enum.sort()
     |> Enum.uniq()
   end
-
 end

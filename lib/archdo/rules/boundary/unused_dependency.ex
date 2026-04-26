@@ -90,5 +90,4 @@ defmodule Archdo.Rules.Boundary.UnusedDependency do
 
     Enum.reverse(aliases)
   end
-
 end

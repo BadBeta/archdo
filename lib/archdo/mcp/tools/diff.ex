@@ -23,7 +23,8 @@ defmodule Archdo.Mcp.Tools.Diff do
         },
         "ref" => %{
           "type" => "string",
-          "description" => "Git ref to diff against. Default: \"HEAD~1\". Use \"main\" for PR review."
+          "description" =>
+            "Git ref to diff against. Default: \"HEAD~1\". Use \"main\" for PR review."
         },
         "only" => %{
           "type" => "array",
@@ -48,15 +49,23 @@ defmodule Archdo.Mcp.Tools.Diff do
       {:ok, files} when files != [] ->
         opts = build_opts(args)
         diagnostics = Runner.analyze(files, opts)
-        {:ok, %{
-          ref: ref,
-          changed_files: length(files),
-          files: files,
-          diagnostics: Encoder.encode_diagnostics(diagnostics)
-        }}
+
+        {:ok,
+         %{
+           ref: ref,
+           changed_files: length(files),
+           files: files,
+           diagnostics: Encoder.encode_diagnostics(diagnostics)
+         }}
 
       {:ok, []} ->
-        {:ok, %{ref: ref, changed_files: 0, files: [], diagnostics: %{summary: %{total: 0}, diagnostics: []}}}
+        {:ok,
+         %{
+           ref: ref,
+           changed_files: 0,
+           files: [],
+           diagnostics: %{summary: %{total: 0}, diagnostics: []}
+         }}
 
       {:error, reason} ->
         {:error, reason}
@@ -65,7 +74,8 @@ defmodule Archdo.Mcp.Tools.Diff do
 
   defp changed_files(ref, base_paths) do
     case System.cmd("git", ["diff", "--name-only", "--diff-filter=ACMR", ref, "--"] ++ base_paths,
-           stderr_to_stdout: true) do
+           stderr_to_stdout: true
+         ) do
       {output, 0} ->
         files =
           output
@@ -81,9 +91,12 @@ defmodule Archdo.Mcp.Tools.Diff do
   end
 
   defp build_opts(args) do
-    Enum.reject([
-      only: Helpers.list_or_nil(args["only"]),
-      ignore: args["ignore"] || []
-    ], fn {_k, v} -> is_nil(v) end)
+    Enum.reject(
+      [
+        only: Helpers.list_or_nil(args["only"]),
+        ignore: args["ignore"] || []
+      ],
+      fn {_k, v} -> is_nil(v) end
+    )
   end
 end

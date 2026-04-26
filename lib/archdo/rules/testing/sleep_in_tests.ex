@@ -65,5 +65,4 @@ defmodule Archdo.Rules.Testing.SleepInTests do
       )
     end)
   end
-
 end

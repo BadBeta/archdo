@@ -16,26 +16,31 @@ defmodule Archdo.Rules.OTP.EtsAsBus do
   end
 
   defp check_ets_polling_pattern(file, ast) do
-    has_ets_insert? = AST.contains?(ast, fn
-      {{:., _, [:ets, :insert]}, _, _} -> true
-      _ -> false
-    end)
+    has_ets_insert? =
+      AST.contains?(ast, fn
+        {{:., _, [:ets, :insert]}, _, _} -> true
+        _ -> false
+      end)
 
-    has_ets_delete? = AST.contains?(ast, fn
-      {{:., _, [:ets, :delete]}, _, [_, _]} -> true  # delete with key, not table delete
-      _ -> false
-    end)
+    has_ets_delete? =
+      AST.contains?(ast, fn
+        # delete with key, not table delete
+        {{:., _, [:ets, :delete]}, _, [_, _]} -> true
+        _ -> false
+      end)
 
-    has_polling? = AST.contains?(ast, fn
-      {{:., _, [:ets, :first]}, _, _} -> true
-      {{:., _, [:ets, :next]}, _, _} -> true
-      _ -> false
-    end)
+    has_polling? =
+      AST.contains?(ast, fn
+        {{:., _, [:ets, :first]}, _, _} -> true
+        {{:., _, [:ets, :next]}, _, _} -> true
+        _ -> false
+      end)
 
-    has_sleep_loop? = AST.contains?(ast, fn
-      {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, _, _} -> true
-      _ -> false
-    end)
+    has_sleep_loop? =
+      AST.contains?(ast, fn
+        {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, _, _} -> true
+        _ -> false
+      end)
 
     if has_ets_insert? and has_ets_delete? and (has_polling? or has_sleep_loop?) do
       [

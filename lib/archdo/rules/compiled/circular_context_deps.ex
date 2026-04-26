@@ -9,7 +9,9 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
   def id, do: "1.24"
 
   @impl true
-  def description, do: "Circular context dependencies — Context A depends on Context B which depends on Context A"
+  def description,
+    do:
+      "Circular context dependencies — Context A depends on Context B which depends on Context A"
 
   @impl true
   def analyze(_file, _ast, _opts), do: []
@@ -85,8 +87,16 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
 
         false ->
           case MapSet.member?(visited, neighbor) do
-            true -> []
-            false -> dfs_find_cycles(adjacency, neighbor, [neighbor | path], MapSet.put(visited, neighbor))
+            true ->
+              []
+
+            false ->
+              dfs_find_cycles(
+                adjacency,
+                neighbor,
+                [neighbor | path],
+                MapSet.put(visited, neighbor)
+              )
           end
       end
     end)

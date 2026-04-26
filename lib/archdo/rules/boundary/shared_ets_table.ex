@@ -8,15 +8,29 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
   def id, do: "1.33"
 
   @impl true
-  def description, do: "Multiple contexts access the same named ETS table directly — consider a shared API module"
+  def description,
+    do:
+      "Multiple contexts access the same named ETS table directly — consider a shared API module"
 
   # Project-level rule
   @impl true
   def analyze(_file, _ast, _opts), do: []
 
-  @ets_access_fns [:lookup, :insert, :delete, :select, :match, :update_element,
-                    :update_counter, :member, :info, :tab2list, :first, :next,
-                    :lookup_element]
+  @ets_access_fns [
+    :lookup,
+    :insert,
+    :delete,
+    :select,
+    :match,
+    :update_element,
+    :update_counter,
+    :member,
+    :info,
+    :tab2list,
+    :first,
+    :next,
+    :lookup_element
+  ]
 
   def analyze_project(file_asts) do
     # Collect {table_name, context, file, line, operation} tuples
@@ -40,6 +54,7 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
       case length(contexts) > 1 do
         true ->
           context_names = Enum.join(contexts, ", ")
+
           Enum.map(entries, fn {_table, _ctx, file, line} ->
             build_diagnostic(file, line, table, context_names)
           end)
@@ -54,29 +69,34 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
     context = extract_context(file)
 
     case context do
-      nil -> []
+      nil ->
+        []
+
       ctx ->
-        Enum.map(AST.find_all(ast, fn
-          # :ets.lookup(:table_name, ...)
-          {{:., _, [:ets, func]}, _, [{:__block__, _, [table_name]} | _]}
-          when func in @ets_access_fns and is_atom(table_name) ->
-            true
+        Enum.map(
+          AST.find_all(ast, fn
+            # :ets.lookup(:table_name, ...)
+            {{:., _, [:ets, func]}, _, [{:__block__, _, [table_name]} | _]}
+            when func in @ets_access_fns and is_atom(table_name) ->
+              true
 
-          {{:., _, [{:__block__, _, [:ets]}, func]}, _, [{:__block__, _, [table_name]} | _]}
-          when func in @ets_access_fns and is_atom(table_name) ->
-            true
+            {{:., _, [{:__block__, _, [:ets]}, func]}, _, [{:__block__, _, [table_name]} | _]}
+            when func in @ets_access_fns and is_atom(table_name) ->
+              true
 
-          # :ets.lookup(table_name, ...) without literal_encoder wrapping
-          {{:., _, [:ets, func]}, _, [table_name | _]}
-          when func in @ets_access_fns and is_atom(table_name) ->
-            true
+            # :ets.lookup(table_name, ...) without literal_encoder wrapping
+            {{:., _, [:ets, func]}, _, [table_name | _]}
+            when func in @ets_access_fns and is_atom(table_name) ->
+              true
 
-          _ ->
-            false
-        end), fn {_, meta, [table_arg | _]} ->
-          table = unwrap_atom(table_arg)
-          {table, ctx, file, AST.line(meta)}
-        end)
+            _ ->
+              false
+          end),
+          fn {_, meta, [table_arg | _]} ->
+            table = unwrap_atom(table_arg)
+            {table, ctx, file, AST.line(meta)}
+          end
+        )
     end
   end
 

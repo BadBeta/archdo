@@ -49,13 +49,13 @@ defmodule Archdo.Rules.Testing.GenericTestNames do
   defp generic?(name) do
     lower = String.downcase(String.trim(name))
 
+    # Pure numeric like "1", "2", "3"
     lower in @generic_exact or
       lower == "it works" or
       Enum.any?(@generic_prefixes, fn prefix ->
         String.starts_with?(lower, prefix) and
           remainder_is_numeric?(String.replace_prefix(lower, prefix, ""))
       end) or
-      # Pure numeric like "1", "2", "3"
       String.match?(lower, ~r/^\d+$/)
   end
 

@@ -16,13 +16,14 @@ defmodule Archdo.Rules.Module.IdentityTransformationTest do
 
   describe "identity map" do
     test "flags Enum.map with fn x -> x end" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(list) do
-          Enum.map(list, fn x -> x end)
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(list) do
+            Enum.map(list, fn x -> x end)
+          end
         end
-      end
-      """)
+        """)
 
       assert [%{message: msg}] = diagnostics
       assert msg =~ "Enum.map"
@@ -30,38 +31,41 @@ defmodule Archdo.Rules.Module.IdentityTransformationTest do
     end
 
     test "flags Enum.map with & &1" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(list) do
-          Enum.map(list, & &1)
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(list) do
+            Enum.map(list, & &1)
+          end
         end
-      end
-      """)
+        """)
 
       assert [%{message: msg}] = diagnostics
       assert msg =~ "Enum.map"
     end
 
     test "clean: Enum.map with actual transformation is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(list) do
-          Enum.map(list, fn x -> x + 1 end)
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(list) do
+            Enum.map(list, fn x -> x + 1 end)
+          end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end
 
     test "clean: Enum.map with function capture is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(list) do
-          Enum.map(list, &String.upcase/1)
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(list) do
+            Enum.map(list, &String.upcase/1)
+          end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end
@@ -69,13 +73,14 @@ defmodule Archdo.Rules.Module.IdentityTransformationTest do
 
   describe "always-true filter" do
     test "flags Enum.filter with fn _ -> true end" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(list) do
-          Enum.filter(list, fn _ -> true end)
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(list) do
+            Enum.filter(list, fn _ -> true end)
+          end
         end
-      end
-      """)
+        """)
 
       assert [%{message: msg}] = diagnostics
       assert msg =~ "Enum.filter"
@@ -83,13 +88,14 @@ defmodule Archdo.Rules.Module.IdentityTransformationTest do
     end
 
     test "clean: Enum.filter with actual predicate is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(list) do
-          Enum.filter(list, fn x -> x > 0 end)
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(list) do
+            Enum.filter(list, fn x -> x > 0 end)
+          end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end
@@ -97,13 +103,14 @@ defmodule Archdo.Rules.Module.IdentityTransformationTest do
 
   describe "always-false reject" do
     test "flags Enum.reject with fn _ -> false end" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(list) do
-          Enum.reject(list, fn _ -> false end)
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(list) do
+            Enum.reject(list, fn _ -> false end)
+          end
         end
-      end
-      """)
+        """)
 
       assert [%{message: msg}] = diagnostics
       assert msg =~ "Enum.reject"
@@ -111,13 +118,14 @@ defmodule Archdo.Rules.Module.IdentityTransformationTest do
     end
 
     test "clean: Enum.reject with actual predicate is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(list) do
-          Enum.reject(list, fn x -> x == 0 end)
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(list) do
+            Enum.reject(list, fn x -> x == 0 end)
+          end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end
@@ -125,13 +133,14 @@ defmodule Archdo.Rules.Module.IdentityTransformationTest do
 
   describe "flatten single element" do
     test "flags List.flatten([single])" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(x) do
-          List.flatten([x])
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(x) do
+            List.flatten([x])
+          end
         end
-      end
-      """)
+        """)
 
       assert [%{message: msg}] = diagnostics
       assert msg =~ "List.flatten"
@@ -139,25 +148,27 @@ defmodule Archdo.Rules.Module.IdentityTransformationTest do
     end
 
     test "clean: List.flatten with multiple elements is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(x, y) do
-          List.flatten([x, y])
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(x, y) do
+            List.flatten([x, y])
+          end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end
 
     test "clean: List.flatten on a variable is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(list) do
-          List.flatten(list)
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(list) do
+            List.flatten(list)
+          end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end

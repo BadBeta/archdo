@@ -77,5 +77,4 @@ defmodule Archdo.Rules.Compiled.CompileDependencyHotspot do
       line: 0
     )
   end
-
 end

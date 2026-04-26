@@ -55,26 +55,30 @@ defmodule Archdo.Rules.Module.InconsistentErrorShape do
   defp classify_style(nil), do: :unknown
 
   defp classify_style(body) do
-    has_ok_error = AST.contains?(body, fn
-      {:{}, _, [{:__block__, _, [:ok]} | _]} -> true
-      {:{}, _, [{:__block__, _, [:error]} | _]} -> true
-      {:ok, _} -> true
-      {:error, _} -> true
-      _ -> false
-    end)
+    has_ok_error =
+      AST.contains?(body, fn
+        {:{}, _, [{:__block__, _, [:ok]} | _]} -> true
+        {:{}, _, [{:__block__, _, [:error]} | _]} -> true
+        {:ok, _} -> true
+        {:error, _} -> true
+        _ -> false
+      end)
 
-    has_raise = AST.contains?(body, fn
-      {:raise, _, _} -> true
-      _ -> false
-    end) and not AST.contains?(body, fn
-      {:rescue, _} -> true
-      _ -> false
-    end)
+    has_raise =
+      AST.contains?(body, fn
+        {:raise, _, _} -> true
+        _ -> false
+      end) and
+        not AST.contains?(body, fn
+          {:rescue, _} -> true
+          _ -> false
+        end)
 
-    has_nil_return = AST.contains?(body, fn
-      {:__block__, _, [nil]} -> true
-      _ -> false
-    end)
+    has_nil_return =
+      AST.contains?(body, fn
+        {:__block__, _, [nil]} -> true
+        _ -> false
+      end)
 
     cond do
       has_ok_error -> :ok_error
@@ -113,8 +117,7 @@ defmodule Archdo.Rules.Module.InconsistentErrorShape do
 
     Diagnostic.info("6.11",
       title: "Inconsistent error handling in module",
-      message:
-        "#{module_name} mixes #{length(style_groups)} error styles: #{detail_parts}",
+      message: "#{module_name} mixes #{length(style_groups)} error styles: #{detail_parts}",
       why:
         "When a module's public API uses ok/error tuples for some functions and raises for others " <>
           "(without the `!` naming convention), callers can't predict which pattern to use. A `with` " <>

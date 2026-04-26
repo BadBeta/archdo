@@ -11,7 +11,8 @@ defmodule Archdo.Rules.OTP.CallbackSprawl do
   def id, do: "5.43"
 
   @impl true
-  def description, do: "GenServer with too many distinct callback message patterns — consider splitting"
+  def description,
+    do: "GenServer with too many distinct callback message patterns — consider splitting"
 
   @impl true
   def analyze(file, ast, _opts) do

@@ -16,47 +16,50 @@ defmodule Archdo.Rules.Module.VerboseOkUnwrapTest do
 
   describe "swallow error, return nil" do
     test "flags case with {:ok, val} -> val; {:error, _} -> nil" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(id) do
-          case fetch(id) do
-            {:ok, val} -> val
-            {:error, _} -> nil
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(id) do
+            case fetch(id) do
+              {:ok, val} -> val
+              {:error, _} -> nil
+            end
           end
         end
-      end
-      """)
+        """)
 
       assert [%{title: title}] = diagnostics
       assert title =~ "swallow error"
     end
 
     test "clean: case with {:ok, val} -> val; {:error, reason} -> {:error, reason} is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(id) do
-          case fetch(id) do
-            {:ok, val} -> val
-            {:error, reason} -> {:error, reason}
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(id) do
+            case fetch(id) do
+              {:ok, val} -> val
+              {:error, reason} -> {:error, reason}
+            end
           end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end
 
     test "clean: case with different ok handling is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(id) do
-          case fetch(id) do
-            {:ok, val} -> process(val)
-            {:error, _} -> nil
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(id) do
+            case fetch(id) do
+              {:ok, val} -> process(val)
+              {:error, _} -> nil
+            end
           end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end
@@ -64,46 +67,49 @@ defmodule Archdo.Rules.Module.VerboseOkUnwrapTest do
 
   describe "single ok clause" do
     test "flags case with only {:ok, val} -> val" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(id) do
-          case fetch(id) do
-            {:ok, val} -> val
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(id) do
+            case fetch(id) do
+              {:ok, val} -> val
+            end
           end
         end
-      end
-      """)
+        """)
 
       assert [%{title: title}] = diagnostics
       assert title =~ "only :ok clause"
     end
 
     test "clean: case with multiple clauses is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(id) do
-          case fetch(id) do
-            {:ok, val} -> val
-            {:error, :not_found} -> default()
-            {:error, reason} -> raise reason
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(id) do
+            case fetch(id) do
+              {:ok, val} -> val
+              {:error, :not_found} -> default()
+              {:error, reason} -> raise reason
+            end
           end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end
 
     test "clean: single clause that transforms value is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def bar(id) do
-          case fetch(id) do
-            {:ok, val} -> process(val)
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def bar(id) do
+            case fetch(id) do
+              {:ok, val} -> process(val)
+            end
           end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end

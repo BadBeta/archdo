@@ -68,14 +68,18 @@ defmodule Archdo.Graph do
           |> Enum.filter(fn target ->
             Enum.any?(root_modules, fn rm ->
               rm_str = AST.module_name(rm)
-              rm_str != mod_str and (target == rm_str or String.starts_with?(target, rm_str <> "."))
+
+              rm_str != mod_str and
+                (target == rm_str or String.starts_with?(target, rm_str <> "."))
             end)
           end)
           |> Enum.map(fn target ->
-            AST.module_name(Enum.find(root_modules, fn rm ->
-              rm_str = AST.module_name(rm)
-              target == rm_str or String.starts_with?(target, rm_str <> ".")
-            end))
+            AST.module_name(
+              Enum.find(root_modules, fn rm ->
+                rm_str = AST.module_name(rm)
+                target == rm_str or String.starts_with?(target, rm_str <> ".")
+              end)
+            )
           end)
           |> Enum.uniq()
 
@@ -114,8 +118,7 @@ defmodule Archdo.Graph do
           Enum.reduce(edges, graph.edges_by_source, fn edge, acc ->
             Map.update(acc, edge.source, [edge], &[edge | &1])
           end),
-        modules_by_file:
-          Map.put(graph.modules_by_file, file, modules)
+        modules_by_file: Map.put(graph.modules_by_file, file, modules)
     }
   end
 
@@ -146,25 +149,45 @@ defmodule Archdo.Graph do
         # alias MyApp.Foo
         {:alias, meta, [{:__aliases__, _, aliases} | _]} = node, {mod, edges} when mod != nil ->
           case safe_concat(aliases) do
-            nil -> {node, {mod, edges}}
+            nil ->
+              {node, {mod, edges}}
+
             target ->
-              edge = %{source: mod, target: target, type: :alias, file: file, line: AST.line(meta)}
+              edge = %{
+                source: mod,
+                target: target,
+                type: :alias,
+                file: file,
+                line: AST.line(meta)
+              }
+
               {node, {mod, [edge | edges]}}
           end
 
         # import MyApp.Foo
         {:import, meta, [{:__aliases__, _, aliases} | _]} = node, {mod, edges} when mod != nil ->
           case safe_concat(aliases) do
-            nil -> {node, {mod, edges}}
+            nil ->
+              {node, {mod, edges}}
+
             target ->
-              edge = %{source: mod, target: target, type: :import, file: file, line: AST.line(meta)}
+              edge = %{
+                source: mod,
+                target: target,
+                type: :import,
+                file: file,
+                line: AST.line(meta)
+              }
+
               {node, {mod, [edge | edges]}}
           end
 
         # use MyApp.Foo
         {:use, meta, [{:__aliases__, _, aliases} | _]} = node, {mod, edges} when mod != nil ->
           case safe_concat(aliases) do
-            nil -> {node, {mod, edges}}
+            nil ->
+              {node, {mod, edges}}
+
             target ->
               edge = %{source: mod, target: target, type: :use, file: file, line: AST.line(meta)}
               {node, {mod, [edge | edges]}}
@@ -174,7 +197,9 @@ defmodule Archdo.Graph do
         {{:., meta, [{:__aliases__, _, aliases}, _func]}, _, _args} = node, {mod, edges}
         when mod != nil ->
           case safe_concat(aliases) do
-            nil -> {node, {mod, edges}}
+            nil ->
+              {node, {mod, edges}}
+
             target ->
               edge = %{source: mod, target: target, type: :call, file: file, line: AST.line(meta)}
               {node, {mod, [edge | edges]}}
@@ -216,7 +241,11 @@ defmodule Archdo.Graph do
   end
 
   defp dfs_visit(node, adjacency, state, path) do
-    state = %{state | visited: MapSet.put(state.visited, node), in_stack: MapSet.put(state.in_stack, node)}
+    state = %{
+      state
+      | visited: MapSet.put(state.visited, node),
+        in_stack: MapSet.put(state.in_stack, node)
+    }
 
     state =
       Enum.reduce(Map.get(adjacency, node, []), state, fn neighbor, acc ->
@@ -226,7 +255,9 @@ defmodule Archdo.Graph do
             cycle_start = Enum.find_index(ordered, &(&1 == neighbor))
 
             case cycle_start do
-              nil -> acc
+              nil ->
+                acc
+
               idx ->
                 cycle = Enum.slice(ordered, idx..-1//1) ++ [neighbor]
                 %{acc | cycles: [cycle | acc.cycles]}

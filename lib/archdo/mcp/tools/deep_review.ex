@@ -31,7 +31,8 @@ defmodule Archdo.Mcp.Tools.DeepReview do
         "only" => %{
           "type" => "array",
           "items" => %{"type" => "string"},
-          "description" => "Restrict static analysis to these rule IDs. The review plan is always generated from whatever findings exist."
+          "description" =>
+            "Restrict static analysis to these rule IDs. The review plan is always generated from whatever findings exist."
         },
         "ignore" => %{
           "type" => "array",
@@ -66,15 +67,15 @@ defmodule Archdo.Mcp.Tools.DeepReview do
          %{
            diagnostics: Encoder.encode_diagnostics(filtered),
            review_plan: format_review_plan(review_plan),
-         instructions:
-           "TWO-LAYER REVIEW. The `diagnostics` section is Layer 1 (static findings). " <>
-             "The `review_plan` is Layer 2 (investigation + fixes). For each review_plan item: " <>
-             "(1) read the files listed in `files_to_read`, " <>
-             "(2) for each item in `investigate`, answer the `question` by reading the code, " <>
-             "(3) if the answer is YES, apply the fix described in `if_confirmed` — it includes " <>
-             "the specific code pattern to use. If `example` is present, adapt it to the project. " <>
-             "Prioritize by `priority` (1 = critical). Report what you found and what you fixed."
-       }}
+           instructions:
+             "TWO-LAYER REVIEW. The `diagnostics` section is Layer 1 (static findings). " <>
+               "The `review_plan` is Layer 2 (investigation + fixes). For each review_plan item: " <>
+               "(1) read the files listed in `files_to_read`, " <>
+               "(2) for each item in `investigate`, answer the `question` by reading the code, " <>
+               "(3) if the answer is YES, apply the fix described in `if_confirmed` — it includes " <>
+               "the specific code pattern to use. If `example` is present, adapt it to the project. " <>
+               "Prioritize by `priority` (1 = critical). Report what you found and what you fixed."
+         }}
 
       {:error, _} = error ->
         error
@@ -125,11 +126,13 @@ defmodule Archdo.Mcp.Tools.DeepReview do
   defp fetch_paths(_), do: {:error, "missing or empty `paths` argument"}
 
   defp build_opts(args) do
-    Enum.reject([
-      only: Helpers.list_or_nil(args["only"]),
-      ignore: args["ignore"] || [],
-      boundaries: true
-    ], fn {_k, v} -> is_nil(v) end)
+    Enum.reject(
+      [
+        only: Helpers.list_or_nil(args["only"]),
+        ignore: args["ignore"] || [],
+        boundaries: true
+      ],
+      fn {_k, v} -> is_nil(v) end
+    )
   end
-
 end

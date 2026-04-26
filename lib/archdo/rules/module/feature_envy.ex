@@ -81,12 +81,14 @@ defmodule Archdo.Rules.Module.FeatureEnvy do
                     applies_when: "#{dominant_mod} is the natural home for this logic."
                   ),
                   Fix.new(
-                    summary: "Add a higher-level operation to #{dominant_mod} and have #{caller_mod} call it",
+                    summary:
+                      "Add a higher-level operation to #{dominant_mod} and have #{caller_mod} call it",
                     detail:
                       "If the function does something specific to #{caller_mod} but also pokes deep into " <>
                         "#{dominant_mod}'s internals, add a new public operation on #{dominant_mod} that hides " <>
                         "the internal accesses. #{caller_mod} keeps its function but only makes one outbound call.",
-                    applies_when: "The function belongs in caller_mod conceptually but needs cleaner access to dominant_mod."
+                    applies_when:
+                      "The function belongs in caller_mod conceptually but needs cleaner access to dominant_mod."
                   )
                 ],
                 references: ["ARCHITECTURE_RULES.md#4.9"],
@@ -123,6 +125,7 @@ defmodule Archdo.Rules.Module.FeatureEnvy do
       mod
       |> String.split(".")
       |> hd()
+
     MapSet.member?(@stdlib, top)
   end
 

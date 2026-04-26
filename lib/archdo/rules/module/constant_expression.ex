@@ -93,8 +93,7 @@ defmodule Archdo.Rules.Module.ConstantExpression do
   defp build_cond_diagnostic(file, line) do
     Diagnostic.info("6.42",
       title: "Constant expression",
-      message:
-        "cond has `true ->` as the first clause — all subsequent clauses are dead code",
+      message: "cond has `true ->` as the first clause — all subsequent clauses are dead code",
       why:
         "When `true ->` is the first clause in a cond expression, it matches immediately " <>
           "and no other clauses execute. This makes the entire cond pointless. " <>
@@ -108,8 +107,7 @@ defmodule Archdo.Rules.Module.ConstantExpression do
         ),
         Fix.new(
           summary: "Reorder clauses",
-          detail:
-            "Move `true ->` to the last position as a default handler.",
+          detail: "Move `true ->` to the last position as a default handler.",
           applies_when: "The true clause was meant to be the fallback, not the first match."
         )
       ],

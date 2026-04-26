@@ -114,8 +114,7 @@ defmodule Archdo.Rules.Module.BangInOkErrorFunction do
 
     Diagnostic.info("6.15",
       title: "Bang call in ok/error function",
-      message:
-        "#{name}/#{arity} returns ok/error tuples but calls bang functions: #{bang_list}",
+      message: "#{name}/#{arity} returns ok/error tuples but calls bang functions: #{bang_list}",
       why:
         "When a function establishes an ok/error contract (returns {:ok, _} or {:error, _}), " <>
           "callers expect failures to come back as {:error, reason}, not as raised exceptions. " <>

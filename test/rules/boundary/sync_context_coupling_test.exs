@@ -19,18 +19,20 @@ defmodule Archdo.Rules.Boundary.SyncContextCouplingTest do
   test "flags cross-context write call" do
     graph =
       build_graph([
-        {"lib/my_app/orders.ex", """
-          defmodule MyApp.Orders do
-            def create(attrs) do
-              MyApp.Billing.create_invoice(attrs)
-            end
-          end
-        """},
-        {"lib/my_app/billing.ex", """
-          defmodule MyApp.Billing do
-            def create_invoice(attrs), do: :ok
-          end
-        """}
+        {"lib/my_app/orders.ex",
+         """
+           defmodule MyApp.Orders do
+             def create(attrs) do
+               MyApp.Billing.create_invoice(attrs)
+             end
+           end
+         """},
+        {"lib/my_app/billing.ex",
+         """
+           defmodule MyApp.Billing do
+             def create_invoice(attrs), do: :ok
+           end
+         """}
       ])
 
     diags = SyncContextCoupling.analyze_project(graph, contexts(["Orders", "Billing"]))
@@ -43,18 +45,20 @@ defmodule Archdo.Rules.Boundary.SyncContextCouplingTest do
   test "allows cross-context read call" do
     graph =
       build_graph([
-        {"lib/my_app/orders.ex", """
-          defmodule MyApp.Orders do
-            def show(id) do
-              MyApp.Accounts.get_user(id)
-            end
-          end
-        """},
-        {"lib/my_app/accounts.ex", """
-          defmodule MyApp.Accounts do
-            def get_user(id), do: nil
-          end
-        """}
+        {"lib/my_app/orders.ex",
+         """
+           defmodule MyApp.Orders do
+             def show(id) do
+               MyApp.Accounts.get_user(id)
+             end
+           end
+         """},
+        {"lib/my_app/accounts.ex",
+         """
+           defmodule MyApp.Accounts do
+             def get_user(id), do: nil
+           end
+         """}
       ])
 
     diags = SyncContextCoupling.analyze_project(graph, contexts(["Orders", "Accounts"]))
@@ -64,18 +68,20 @@ defmodule Archdo.Rules.Boundary.SyncContextCouplingTest do
   test "allows same-context write call" do
     graph =
       build_graph([
-        {"lib/my_app/orders.ex", """
-          defmodule MyApp.Orders do
-            def create(attrs) do
-              MyApp.Orders.Repo.insert(attrs)
-            end
-          end
-        """},
-        {"lib/my_app/orders/repo.ex", """
-          defmodule MyApp.Orders.Repo do
-            def insert(attrs), do: :ok
-          end
-        """}
+        {"lib/my_app/orders.ex",
+         """
+           defmodule MyApp.Orders do
+             def create(attrs) do
+               MyApp.Orders.Repo.insert(attrs)
+             end
+           end
+         """},
+        {"lib/my_app/orders/repo.ex",
+         """
+           defmodule MyApp.Orders.Repo do
+             def insert(attrs), do: :ok
+           end
+         """}
       ])
 
     diags = SyncContextCoupling.analyze_project(graph, contexts(["Orders"]))
@@ -85,18 +91,20 @@ defmodule Archdo.Rules.Boundary.SyncContextCouplingTest do
   test "allows web controller calling context write" do
     graph =
       build_graph([
-        {"lib/my_app_web/controllers/user_controller.ex", """
-          defmodule MyAppWeb.UserController do
-            def create(conn, params) do
-              MyApp.Accounts.create_user(params)
-            end
-          end
-        """},
-        {"lib/my_app/accounts.ex", """
-          defmodule MyApp.Accounts do
-            def create_user(attrs), do: :ok
-          end
-        """}
+        {"lib/my_app_web/controllers/user_controller.ex",
+         """
+           defmodule MyAppWeb.UserController do
+             def create(conn, params) do
+               MyApp.Accounts.create_user(params)
+             end
+           end
+         """},
+        {"lib/my_app/accounts.ex",
+         """
+           defmodule MyApp.Accounts do
+             def create_user(attrs), do: :ok
+           end
+         """}
       ])
 
     diags = SyncContextCoupling.analyze_project(graph, contexts(["Accounts"]))
@@ -106,11 +114,12 @@ defmodule Archdo.Rules.Boundary.SyncContextCouplingTest do
   test "returns empty when no contexts configured" do
     graph =
       build_graph([
-        {"lib/my_app/orders.ex", """
-          defmodule MyApp.Orders do
-            def create(attrs), do: MyApp.Billing.create_invoice(attrs)
-          end
-        """}
+        {"lib/my_app/orders.ex",
+         """
+           defmodule MyApp.Orders do
+             def create(attrs), do: MyApp.Billing.create_invoice(attrs)
+           end
+         """}
       ])
 
     diags = SyncContextCoupling.analyze_project(graph, [])

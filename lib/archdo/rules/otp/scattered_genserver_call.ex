@@ -13,7 +13,9 @@ defmodule Archdo.Rules.OTP.ScatteredGenserverCall do
   @impl true
   def analyze(file, ast, _opts) do
     case AST.test_file?(file) do
-      true -> []
+      true ->
+        []
+
       false ->
         defining_module = AST.extract_module_name(ast)
         find_scattered_calls(file, ast, defining_module)
@@ -23,7 +25,8 @@ defmodule Archdo.Rules.OTP.ScatteredGenserverCall do
   defp find_scattered_calls(file, ast, defining_module) do
     AST.find_all(ast, fn
       # GenServer.call(LiteralModule, msg) or GenServer.call(LiteralModule, msg, timeout)
-      {{:., _, [{:__aliases__, _, [:GenServer]}, call_type]}, _meta, [{:__aliases__, _, _target} | _]}
+      {{:., _, [{:__aliases__, _, [:GenServer]}, call_type]}, _meta,
+       [{:__aliases__, _, _target} | _]}
       when call_type in [:call, :cast] ->
         true
 

@@ -20,21 +20,27 @@ defmodule Archdo.Rules.OTP.ProcessSleep do
   end
 
   defp find_process_sleep(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, _meta, _args} -> true
-      _ -> false
-    end), fn {_, meta, _} ->
-      sleep_diag(file, meta, "Process.sleep/1")
-    end)
+    Enum.map(
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, _meta, _args} -> true
+        _ -> false
+      end),
+      fn {_, meta, _} ->
+        sleep_diag(file, meta, "Process.sleep/1")
+      end
+    )
   end
 
   defp find_timer_sleep(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      {{:., _, [:timer, :sleep]}, _meta, _args} -> true
-      _ -> false
-    end), fn {_, meta, _} ->
-      sleep_diag(file, meta, ":timer.sleep/1")
-    end)
+    Enum.map(
+      AST.find_all(ast, fn
+        {{:., _, [:timer, :sleep]}, _meta, _args} -> true
+        _ -> false
+      end),
+      fn {_, meta, _} ->
+        sleep_diag(file, meta, ":timer.sleep/1")
+      end
+    )
   end
 
   defp sleep_diag(file, meta, call) do

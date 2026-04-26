@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Boundary.SchemaOwnership do
   def id, do: "1.5"
 
   @impl true
-  def description, do: "Each Ecto schema has one owning context — no cross-context schema construction"
+  def description,
+    do: "Each Ecto schema has one owning context — no cross-context schema construction"
 
   @impl true
   def analyze(_file, _ast, _opts), do: []
@@ -58,7 +59,8 @@ defmodule Archdo.Rules.Boundary.SchemaOwnership do
           target_name =
             AST.module_name(Module.concat(parts))
 
-          MapSet.member?(schemas, target_name) and not in_same_context?(caller_module, target_name)
+          MapSet.member?(schemas, target_name) and
+            not in_same_context?(caller_module, target_name)
         else
           false
         end
@@ -73,7 +75,8 @@ defmodule Archdo.Rules.Boundary.SchemaOwnership do
 
       Diagnostic.info("1.5",
         title: "Cross-context schema construction",
-        message: "#{caller_module} constructs %#{schema_name}{} which is owned by #{owning_context}",
+        message:
+          "#{caller_module} constructs %#{schema_name}{} which is owned by #{owning_context}",
         why:
           "Schemas describe the internal data shape of the context that owns them. When another context " <>
             "constructs that struct directly, it freezes the field set in two places — the owning context can " <>

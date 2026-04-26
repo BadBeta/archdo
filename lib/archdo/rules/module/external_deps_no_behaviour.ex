@@ -12,13 +12,22 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviour do
 
   @external_services [
     # HTTP clients
-    [:HTTPoison], [:Finch], [:Req], [:Tesla], [:Mint, :HTTP],
+    [:HTTPoison],
+    [:Finch],
+    [:Req],
+    [:Tesla],
+    [:Mint, :HTTP],
     # Email
-    [:Swoosh, :Mailer], [:Bamboo, :Mailer],
+    [:Swoosh, :Mailer],
+    [:Bamboo, :Mailer],
     # AWS
-    [:ExAws], [:ExAws, :S3], [:ExAws, :SQS], [:ExAws, :SNS],
+    [:ExAws],
+    [:ExAws, :S3],
+    [:ExAws, :SQS],
+    [:ExAws, :SNS],
     # Stripe
-    [:Stripity, :Stripe], [:Stripe],
+    [:Stripity, :Stripe],
+    [:Stripe],
     # Twilio
     [:ExTwilio]
   ]
@@ -106,5 +115,4 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviour do
   defp infrastructure_file?(file) do
     String.contains?(file, "/mailer") or String.ends_with?(file, "_client.ex")
   end
-
 end

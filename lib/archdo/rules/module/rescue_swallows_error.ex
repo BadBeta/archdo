@@ -51,11 +51,13 @@ defmodule Archdo.Rules.Module.RescueSwallowsError do
   defp swallows_error?(_), do: false
 
   defp catches_wildcard?([{:_, _, _}]), do: true
+
   defp catches_wildcard?([{name, _, ctx}]) when is_atom(name) and is_atom(ctx) do
     name
     |> Atom.to_string()
     |> String.starts_with?("_")
   end
+
   # rescue e -> (no module filter)
   defp catches_wildcard?([{name, _, ctx}]) when is_atom(name) and is_atom(ctx), do: true
   # rescue e in [...] with broad list

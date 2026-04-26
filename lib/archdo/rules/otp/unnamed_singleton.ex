@@ -15,8 +15,9 @@ defmodule Archdo.Rules.OTP.UnnamedSingleton do
     case AST.genserver_module?(ast) do
       false ->
         []
+
       true ->
-      check_singleton_pattern(file, ast)
+        check_singleton_pattern(file, ast)
     end
   end
 

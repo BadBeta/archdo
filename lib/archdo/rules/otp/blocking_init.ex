@@ -30,12 +30,13 @@ defmodule Archdo.Rules.OTP.BlockingInit do
     case AST.genserver_module?(ast) do
       false ->
         []
-      true ->
-      callbacks = AST.extract_callbacks(ast)
 
-      Enum.flat_map(callbacks[:init], fn {meta, _args, body} ->
-        check_init_body(file, body, AST.line(meta))
-      end)
+      true ->
+        callbacks = AST.extract_callbacks(ast)
+
+        Enum.flat_map(callbacks[:init], fn {meta, _args, body} ->
+          check_init_body(file, body, AST.line(meta))
+        end)
     end
   end
 
@@ -92,36 +93,42 @@ defmodule Archdo.Rules.OTP.BlockingInit do
   end
 
   defp find_blocking_calls(body) do
-    Enum.map(AST.find_all(body, fn
-      {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
-        Enum.any?(@blocking_calls, fn
-          {mod, nil} -> mod_parts == mod
-          {mod, f} -> mod_parts == mod and func == f
-        end)
+    Enum.map(
+      AST.find_all(body, fn
+        {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
+          Enum.any?(@blocking_calls, fn
+            {mod, nil} -> mod_parts == mod
+            {mod, f} -> mod_parts == mod and func == f
+          end)
 
-      {{:., _, [:timer, :sleep]}, _meta, _args} ->
-        true
+        {{:., _, [:timer, :sleep]}, _meta, _args} ->
+          true
 
-      _ ->
-        false
-    end), fn
-      {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
-        {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
+        _ ->
+          false
+      end),
+      fn
+        {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+          {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
 
-      {{:., _, [:timer, :sleep]}, meta, _} ->
-        {":timer.sleep", AST.line(meta)}
-    end)
+        {{:., _, [:timer, :sleep]}, meta, _} ->
+          {":timer.sleep", AST.line(meta)}
+      end
+    )
   end
 
   defp find_repo_calls(body) do
-    Enum.map(AST.find_all(body, fn
-      {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
-        List.last(mod_parts) == :Repo
+    Enum.map(
+      AST.find_all(body, fn
+        {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
+          List.last(mod_parts) == :Repo
 
-      _ ->
-        false
-    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
-      {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
-    end)
+        _ ->
+          false
+      end),
+      fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+        {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
+      end
+    )
   end
 end

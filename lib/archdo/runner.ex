@@ -278,6 +278,7 @@ defmodule Archdo.Runner do
 
         Enum.reject(diagnostics, fn d ->
           prev_line = Enum.at(lines, max(d.line - 2, 0), "")
+
           String.contains?(prev_line, "archdo:allow") and
             (String.contains?(prev_line, d.rule_id) or String.contains?(prev_line, "all"))
         end)
@@ -293,8 +294,11 @@ defmodule Archdo.Runner do
     rule.analyze(file, ast, opts)
   rescue
     e ->
-      IO.puts(:standard_error,
-        "[archdo] rule #{rule.id()} crashed on #{file}: #{Exception.format(:error, e, __STACKTRACE__)}")
+      IO.puts(
+        :standard_error,
+        "[archdo] rule #{rule.id()} crashed on #{file}: #{Exception.format(:error, e, __STACKTRACE__)}"
+      )
+
       []
   end
 

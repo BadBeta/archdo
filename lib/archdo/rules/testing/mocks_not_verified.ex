@@ -38,10 +38,10 @@ defmodule Archdo.Rules.Testing.MocksNotVerified do
         {:import, _, [{:__aliases__, _, [:Mox]} | _]} -> true
         _ -> false
       end) and
-      AST.contains?(ast, fn
-        {:verify_on_exit!, _, _} -> true
-        _ -> false
-      end)
+        AST.contains?(ast, fn
+          {:verify_on_exit!, _, _} -> true
+          _ -> false
+        end)
 
     if uses_mox and not has_verify do
       [

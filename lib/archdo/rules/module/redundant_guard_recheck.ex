@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Module.RedundantGuardRecheck do
   def id, do: "6.36"
 
   @impl true
-  def description, do: "Redundant guard recheck — type already guaranteed by pattern match or guard"
+  def description,
+    do: "Redundant guard recheck — type already guaranteed by pattern match or guard"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -165,10 +166,12 @@ defmodule Archdo.Rules.Module.RedundantGuardRecheck do
     end)
     |> Enum.map(fn {guard_fn, meta, [{var, _, _}]} ->
       line = AST.line(meta)
-      actual_line = case line > 0 do
-        true -> line
-        false -> fn_line
-      end
+
+      actual_line =
+        case line > 0 do
+          true -> line
+          false -> fn_line
+        end
 
       build_diagnostic(file, actual_line, %{
         guard: guard_fn,

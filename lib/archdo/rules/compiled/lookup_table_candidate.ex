@@ -9,7 +9,8 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
   def id, do: "6.31"
 
   @impl true
-  def description, do: "Function is a pure literal-to-literal mapping — replace with a lookup table"
+  def description,
+    do: "Function is a pure literal-to-literal mapping — replace with a lookup table"
 
   @impl true
   def analyze(_file, _ast, _opts), do: []
@@ -303,5 +304,4 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
       "  @#{result.name}_map %{#{entries}#{more}}" <>
       catch_all_line
   end
-
 end

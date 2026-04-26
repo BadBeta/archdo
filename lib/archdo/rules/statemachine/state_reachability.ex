@@ -103,8 +103,12 @@ defmodule Archdo.Rules.StateMachine.StateReachability do
           v when is_binary(v) -> true
           _ -> false
         end)
-      {key, list} when is_binary(key) and is_list(list) -> true
-      _ -> false
+
+      {key, list} when is_binary(key) and is_list(list) ->
+        true
+
+      _ ->
+        false
     end) and length(pairs) >= 2
   end
 

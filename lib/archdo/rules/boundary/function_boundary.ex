@@ -47,7 +47,8 @@ defmodule Archdo.Rules.Boundary.FunctionBoundary do
             applies_when: "An equivalent public function already exists."
           ),
           Fix.new(
-            summary: "Add `#{call.target_fn}/#{call.target_arity}` to #{target_context} as a delegated public API",
+            summary:
+              "Add `#{call.target_fn}/#{call.target_arity}` to #{target_context} as a delegated public API",
             detail:
               "If no public function exists yet, add one to #{target_context} that wraps the internal call " <>
                 "(often a single `defdelegate`). Update the caller to use it. The new function becomes part of " <>

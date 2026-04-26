@@ -8,7 +8,8 @@ defmodule Archdo.Rules.OTP.StalePidReference do
   def id, do: "5.36"
 
   @impl true
-  def description, do: "PIDs stored in state or ETS without monitoring — become stale on process death"
+  def description,
+    do: "PIDs stored in state or ETS without monitoring — become stale on process death"
 
   @impl true
   def analyze(file, ast, _opts) do

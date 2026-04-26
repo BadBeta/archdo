@@ -19,15 +19,16 @@ defmodule Archdo.Rules.EventSourcing.ImmutableEvents do
   end
 
   defp check_has_struct(file, ast) do
-    has_struct? = AST.contains?(ast, fn
-      {:defstruct, _, _} -> true
-      # Macro-based event definitions (defevent, deftypedstruct, etc.)
-      # generate a struct internally — common in Trento, Spear, etc.
-      {:defevent, _, _} -> true
-      {:typedstruct, _, _} -> true
-      {:embedded_schema, _, _} -> true
-      _ -> false
-    end) or uses_event_macro?(ast)
+    has_struct? =
+      AST.contains?(ast, fn
+        {:defstruct, _, _} -> true
+        # Macro-based event definitions (defevent, deftypedstruct, etc.)
+        # generate a struct internally — common in Trento, Spear, etc.
+        {:defevent, _, _} -> true
+        {:typedstruct, _, _} -> true
+        {:embedded_schema, _, _} -> true
+        _ -> false
+      end) or uses_event_macro?(ast)
 
     if has_struct? do
       []
@@ -60,7 +61,8 @@ defmodule Archdo.Rules.EventSourcing.ImmutableEvents do
               applies_when: "Always — events should always be explicit structs."
             ),
             Fix.new(
-              summary: "Use the project's event-builder macro (`use MyApp.Event`, `defevent`, `typedstruct`, …)",
+              summary:
+                "Use the project's event-builder macro (`use MyApp.Event`, `defevent`, `typedstruct`, …)",
               detail:
                 "Some codebases wrap defstruct in a macro that also derives Jason.Encoder, registers the event " <>
                   "type, and adds metadata. Use the same macro the rest of the events in this codebase use.",
@@ -84,8 +86,11 @@ defmodule Archdo.Rules.EventSourcing.ImmutableEvents do
           aliases
           |> List.last()
           |> Atom.to_string()
+
         last == "Event" or String.ends_with?(last, "Event")
-      _ -> false
+
+      _ ->
+        false
     end)
   end
 
@@ -154,5 +159,4 @@ defmodule Archdo.Rules.EventSourcing.ImmutableEvents do
 
     found?
   end
-
 end

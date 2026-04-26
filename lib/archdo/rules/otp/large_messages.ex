@@ -17,25 +17,31 @@ defmodule Archdo.Rules.OTP.LargeMessages do
 
   defp find_conn_in_spawn(file, ast) do
     # Find spawn/Task.async/GenServer.cast/send where conn is an argument
-    process_sends = AST.find_all(ast, fn
-      {:spawn, _meta, [func]} -> contains_conn_ref?(func)
-      {:spawn_link, _meta, [func]} -> contains_conn_ref?(func)
-      {:send, _meta, [_, msg]} -> contains_conn_ref?(msg)
+    process_sends =
+      AST.find_all(ast, fn
+        {:spawn, _meta, [func]} ->
+          contains_conn_ref?(func)
 
-      {{:., _, [{:__aliases__, _, [:GenServer]}, func]}, _meta, [_ | args]}
-      when func in [:call, :cast] ->
-        Enum.any?(args, &contains_conn_ref?/1)
+        {:spawn_link, _meta, [func]} ->
+          contains_conn_ref?(func)
 
-      {{:., _, [{:__aliases__, _, [:Task]}, :async]}, _meta, [func]} ->
-        contains_conn_ref?(func)
+        {:send, _meta, [_, msg]} ->
+          contains_conn_ref?(msg)
 
-      {{:., _, [{:__aliases__, _, [:Task, :Supervisor]}, func]}, _meta, [_ | args]}
-      when func in [:start_child, :async, :async_nolink] ->
-        Enum.any?(args, &contains_conn_ref?/1)
+        {{:., _, [{:__aliases__, _, [:GenServer]}, func]}, _meta, [_ | args]}
+        when func in [:call, :cast] ->
+          Enum.any?(args, &contains_conn_ref?/1)
 
-      _ ->
-        false
-    end)
+        {{:., _, [{:__aliases__, _, [:Task]}, :async]}, _meta, [func]} ->
+          contains_conn_ref?(func)
+
+        {{:., _, [{:__aliases__, _, [:Task, :Supervisor]}, func]}, _meta, [_ | args]}
+        when func in [:start_child, :async, :async_nolink] ->
+          Enum.any?(args, &contains_conn_ref?/1)
+
+        _ ->
+          false
+      end)
 
     Enum.map(process_sends, fn {_, meta, _} ->
       Diagnostic.info("5.19",

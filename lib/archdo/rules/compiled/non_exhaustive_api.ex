@@ -115,5 +115,4 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
     |> Enum.map(fn _ -> "_" end)
     |> Enum.join(", ")
   end
-
 end

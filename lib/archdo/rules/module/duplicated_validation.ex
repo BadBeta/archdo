@@ -39,7 +39,8 @@ defmodule Archdo.Rules.Module.DuplicatedValidation do
             "layer should ask the domain whether the input is valid, not re-implement the check.",
         alternatives: [
           Fix.new(
-            summary: "Move the validation to the domain changeset and have the web layer delegate",
+            summary:
+              "Move the validation to the domain changeset and have the web layer delegate",
             detail:
               "Keep all validation in the domain's changeset/changeset_for_X functions. Controllers and " <>
                 "LiveViews build the changeset and call `Repo.insert/update` (or the context's create/update " <>

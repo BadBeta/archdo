@@ -136,9 +136,16 @@ defmodule Archdo.Rules.EventSourcing.CommandEventNaming do
     AST.contains?(ast, fn
       {:use, _, [{:__aliases__, _, aliases} | _]} ->
         mod = Module.concat(aliases)
-        mod in [Commanded.Commands.Router, Commanded.Aggregates.Aggregate,
-                Commanded.Event.Handler, Commanded.ProcessManagers.ProcessManager]
-      _ -> false
+
+        mod in [
+          Commanded.Commands.Router,
+          Commanded.Aggregates.Aggregate,
+          Commanded.Event.Handler,
+          Commanded.ProcessManagers.ProcessManager
+        ]
+
+      _ ->
+        false
     end) or has_command_event_namespace?(ast)
   end
 
@@ -148,8 +155,11 @@ defmodule Archdo.Rules.EventSourcing.CommandEventNaming do
         {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, _acc ->
           parts = Enum.map(aliases, &Atom.to_string/1)
           {node, "Commands" in parts or "Events" in parts}
-        node, acc -> {node, acc}
+
+        node, acc ->
+          {node, acc}
       end)
+
     found?
   end
 end

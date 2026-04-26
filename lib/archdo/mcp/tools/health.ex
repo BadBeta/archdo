@@ -31,25 +31,29 @@ defmodule Archdo.Mcp.Tools.Health do
     diagnostics = Runner.analyze_with_graph(files, [])
 
     by_severity = Enum.group_by(diagnostics, & &1.severity)
+
     by_rule =
       diagnostics
       |> Enum.group_by(fn d -> {d.rule_id, d.title} end)
-      |> Enum.map(fn {{id, title}, diags} -> %{rule_id: id, title: title, count: length(diags)} end)
+      |> Enum.map(fn {{id, title}, diags} ->
+        %{rule_id: id, title: title, count: length(diags)}
+      end)
       |> Enum.sort_by(& &1.count, :desc)
 
     perf_count = Enum.count(diagnostics, fn d -> :perf in Map.get(d, :tags, []) end)
 
-    {:ok, %{
-      summary: %{
-        errors: length(Map.get(by_severity, :error, [])),
-        warnings: length(Map.get(by_severity, :warning, [])),
-        infos: length(Map.get(by_severity, :info, [])),
-        total: length(diagnostics),
-        performance_issues: perf_count
-      },
-      top_rules: Enum.take(by_rule, 10),
-      health_grade: grade(diagnostics, files)
-    }}
+    {:ok,
+     %{
+       summary: %{
+         errors: length(Map.get(by_severity, :error, [])),
+         warnings: length(Map.get(by_severity, :warning, [])),
+         infos: length(Map.get(by_severity, :info, [])),
+         total: length(diagnostics),
+         performance_issues: perf_count
+       },
+       top_rules: Enum.take(by_rule, 10),
+       health_grade: grade(diagnostics, files)
+     }}
   end
 
   defp grade(diagnostics, files) do

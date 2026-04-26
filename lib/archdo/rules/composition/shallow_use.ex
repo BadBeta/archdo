@@ -66,7 +66,11 @@ defmodule Archdo.Rules.Composition.ShallowUse do
                   )
                 ],
                 references: ["ARCHITECTURE_RULES.md#10.1"],
-                context: %{module: module_name, use_count: non_standard, threshold: @max_use_statements},
+                context: %{
+                  module: module_name,
+                  use_count: non_standard,
+                  threshold: @max_use_statements
+                },
                 file: file,
                 line: AST.line(meta)
               )
@@ -101,5 +105,4 @@ defmodule Archdo.Rules.Composition.ShallowUse do
 
     length(uses)
   end
-
 end

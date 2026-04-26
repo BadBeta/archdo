@@ -23,15 +23,16 @@ defmodule Archdo.Rules.OTP.MissingTerminate do
     case AST.genserver_module?(ast) do
       false ->
         []
-      true ->
-      callbacks = AST.extract_callbacks(ast)
-      has_terminate? = callbacks[:terminate] != []
 
-      if has_terminate? do
-        []
-      else
-        find_resource_acquisition(file, ast)
-      end
+      true ->
+        callbacks = AST.extract_callbacks(ast)
+        has_terminate? = callbacks[:terminate] != []
+
+        if has_terminate? do
+          []
+        else
+          find_resource_acquisition(file, ast)
+        end
     end
   end
 
@@ -80,7 +81,8 @@ defmodule Archdo.Rules.OTP.MissingTerminate do
             applies_when: "The GenServer owns the resource for its entire lifetime."
           ),
           Fix.new(
-            summary: "Move the resource into a child process or supervisor-owned ETS table with `:heir`",
+            summary:
+              "Move the resource into a child process or supervisor-owned ETS table with `:heir`",
             detail:
               "Create the resource in a parent supervisor (or supervisor's start callback) and pass it down. " <>
                 "It now outlives the GenServer's restart cycles and there is nothing to release on shutdown.",

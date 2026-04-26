@@ -13,7 +13,8 @@ defmodule Archdo.Rules.Module.MainSequenceDistance do
   def id, do: "6.8"
 
   @impl true
-  def description, do: "Distance from main sequence — concrete/stable or abstract/unstable modules"
+  def description,
+    do: "Distance from main sequence — concrete/stable or abstract/unstable modules"
 
   @impl true
   def analyze(_file, _ast, _opts), do: []
@@ -47,14 +48,14 @@ defmodule Archdo.Rules.Module.MainSequenceDistance do
     mod_str = m.module
 
     # Ecto Repo — designed to be depended on
+    # Phoenix web wrapper — high afferent coupling is the convention
+    # Config modules — centralized readers, many consumers
+    # Pure data structs with no behaviour to abstract
     String.ends_with?(mod_str, ".Repo") or
-      # Phoenix web wrapper — high afferent coupling is the convention
       String.ends_with?(mod_str, "Web") or
-      # Config modules — centralized readers, many consumers
       String.ends_with?(mod_str, ".Config") or String.ends_with?(mod_str, ".Configuration") or
-      # Pure data structs with no behaviour to abstract
-      (String.ends_with?(mod_str, ".Reading") or String.ends_with?(mod_str, ".Event")) and
-        m.abstractness == 0.0 and m.ce <= 1
+      ((String.ends_with?(mod_str, ".Reading") or String.ends_with?(mod_str, ".Event")) and
+         m.abstractness == 0.0 and m.ce <= 1)
   end
 
   defp build_distance_diag(m, zone, severity, file) do

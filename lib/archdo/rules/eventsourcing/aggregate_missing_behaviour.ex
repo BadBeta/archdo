@@ -9,17 +9,20 @@ defmodule Archdo.Rules.EventSourcing.AggregateMissingBehaviour do
   def id, do: "8.8"
 
   @impl true
-  def description, do: "Aggregate modules should `use Commanded.Aggregates.Aggregate` for lifecycle management"
+  def description,
+    do: "Aggregate modules should `use Commanded.Aggregates.Aggregate` for lifecycle management"
 
   @impl true
   def analyze(file, ast, _opts) do
-    if ESHelpers.aggregate_shape?(ast) and not ESHelpers.uses_aggregate_behaviour?(ast) and not ESHelpers.upcaster_module?(ast) do
+    if ESHelpers.aggregate_shape?(ast) and not ESHelpers.uses_aggregate_behaviour?(ast) and
+         not ESHelpers.upcaster_module?(ast) do
       module_name = AST.extract_module_name(ast)
 
       [
         Diagnostic.info("8.8",
           title: "Aggregate without Commanded behaviour",
-          message: "#{module_name} defines execute/2 and apply/2 but does not use Commanded.Aggregates.Aggregate",
+          message:
+            "#{module_name} defines execute/2 and apply/2 but does not use Commanded.Aggregates.Aggregate",
           why:
             "A module that walks like an aggregate (command handler + event applier) but does not declare itself " <>
               "as one is invisible to the framework: no GenServer wrapper, no snapshotting, no router registration, " <>
@@ -39,7 +42,8 @@ defmodule Archdo.Rules.EventSourcing.AggregateMissingBehaviour do
               end
               ```
               """,
-              applies_when: "The module is a real aggregate that should participate in the command pipeline."
+              applies_when:
+                "The module is a real aggregate that should participate in the command pipeline."
             ),
             Fix.new(
               summary: "Rename the functions if the module is not an aggregate",
@@ -59,5 +63,4 @@ defmodule Archdo.Rules.EventSourcing.AggregateMissingBehaviour do
       []
     end
   end
-
 end

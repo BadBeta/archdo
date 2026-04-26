@@ -71,7 +71,8 @@ defmodule Archdo.Rules.Module.TimeInjection do
               "Define a `Clock` behaviour with `now/0`, default to a `RealClock` module that calls " <>
                 "DateTime.utc_now/0, and read the implementation via `Application.get_env(:my_app, :clock, RealClock)`. " <>
                 "Tests configure a `FakeClock` that returns a fixed time.",
-            applies_when: "Many functions in the module need the clock and an argument is too noisy."
+            applies_when:
+              "Many functions in the module need the clock and an argument is too noisy."
           )
         ],
         references: ["ARCHITECTURE_RULES.md#1.9"],

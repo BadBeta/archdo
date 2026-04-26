@@ -75,31 +75,63 @@ defmodule Archdo.Rules.Compiled.CircularContextDepsTest do
           }
         },
         calls: [
-          %{caller: {MyApp.Accounts.User, :name, 0}, callee: {MyApp.Billing.Invoice, :total, 0}, line: 10},
-          %{caller: {MyApp.Billing.Invoice, :total, 0}, callee: {MyApp.Accounts.User, :name, 0}, line: 20}
+          %{
+            caller: {MyApp.Accounts.User, :name, 0},
+            callee: {MyApp.Billing.Invoice, :total, 0},
+            line: 10
+          },
+          %{
+            caller: {MyApp.Billing.Invoice, :total, 0},
+            callee: {MyApp.Accounts.User, :name, 0},
+            line: 20
+          }
         ],
         calls_by_caller: %{
           {MyApp.Accounts.User, :name, 0} => [
-            %{caller: {MyApp.Accounts.User, :name, 0}, callee: {MyApp.Billing.Invoice, :total, 0}, line: 10}
+            %{
+              caller: {MyApp.Accounts.User, :name, 0},
+              callee: {MyApp.Billing.Invoice, :total, 0},
+              line: 10
+            }
           ],
           {MyApp.Billing.Invoice, :total, 0} => [
-            %{caller: {MyApp.Billing.Invoice, :total, 0}, callee: {MyApp.Accounts.User, :name, 0}, line: 20}
+            %{
+              caller: {MyApp.Billing.Invoice, :total, 0},
+              callee: {MyApp.Accounts.User, :name, 0},
+              line: 20
+            }
           ]
         },
         calls_by_callee: %{
           {MyApp.Billing.Invoice, :total, 0} => [
-            %{caller: {MyApp.Accounts.User, :name, 0}, callee: {MyApp.Billing.Invoice, :total, 0}, line: 10}
+            %{
+              caller: {MyApp.Accounts.User, :name, 0},
+              callee: {MyApp.Billing.Invoice, :total, 0},
+              line: 10
+            }
           ],
           {MyApp.Accounts.User, :name, 0} => [
-            %{caller: {MyApp.Billing.Invoice, :total, 0}, callee: {MyApp.Accounts.User, :name, 0}, line: 20}
+            %{
+              caller: {MyApp.Billing.Invoice, :total, 0},
+              callee: {MyApp.Accounts.User, :name, 0},
+              line: 20
+            }
           ]
         },
         calls_by_module: %{
           MyApp.Accounts.User => [
-            %{caller: {MyApp.Accounts.User, :name, 0}, callee: {MyApp.Billing.Invoice, :total, 0}, line: 10}
+            %{
+              caller: {MyApp.Accounts.User, :name, 0},
+              callee: {MyApp.Billing.Invoice, :total, 0},
+              line: 10
+            }
           ],
           MyApp.Billing.Invoice => [
-            %{caller: {MyApp.Billing.Invoice, :total, 0}, callee: {MyApp.Accounts.User, :name, 0}, line: 20}
+            %{
+              caller: {MyApp.Billing.Invoice, :total, 0},
+              callee: {MyApp.Accounts.User, :name, 0},
+              line: 20
+            }
           ]
         },
         protocol_impls: %{},

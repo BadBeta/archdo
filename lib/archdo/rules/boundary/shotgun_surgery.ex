@@ -33,8 +33,7 @@ defmodule Archdo.Rules.Boundary.ShotgunSurgery do
         [
           Diagnostic.info("1.8",
             title: "High fan-in function (shotgun-surgery risk)",
-            message:
-              "#{module}.#{name}/#{arity} is called from #{caller_count} distinct modules",
+            message: "#{module}.#{name}/#{arity} is called from #{caller_count} distinct modules",
             why:
               "Functions with very high fan-in are change-ripple amplifiers: any signature change touches every " <>
                 "caller, so the function becomes implicitly frozen and the codebase routes around it instead of " <>

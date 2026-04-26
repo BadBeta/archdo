@@ -76,8 +76,7 @@ defmodule Archdo.Rules.Compiled.TestOnlyPublic do
 
     Diagnostic.info("7.21",
       title: "Test-only public function",
-      message:
-        "#{mod_name}.#{func}/#{arity} is public but only called from test modules",
+      message: "#{mod_name}.#{func}/#{arity} is public but only called from test modules",
       why:
         "A public function that is only exercised by tests — never by production code — " <>
           "suggests the test is reaching into implementation details rather than testing " <>

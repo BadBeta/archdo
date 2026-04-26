@@ -34,8 +34,7 @@ defmodule Archdo.Rules.Boundary.DependencyDirection do
 
       Diagnostic.error("1.1",
         title: "Inward dependency violation",
-        message:
-          "#{edge.source} (#{source_layer}) depends on #{edge.target} (#{target_layer})",
+        message: "#{edge.source} (#{source_layer}) depends on #{edge.target} (#{target_layer})",
         why:
           "Hexagonal/Onion architecture requires dependencies to point inward: outer layers (web, infrastructure) " <>
             "may know about inner layers (domain, business rules), but never the reverse. When a #{source_layer} " <>
@@ -48,8 +47,8 @@ defmodule Archdo.Rules.Boundary.DependencyDirection do
             detail:
               "Replace the direct call with a behaviour declared in #{source_layer} (an abstract port). " <>
                 "Implement that behaviour in #{target_layer} (a concrete adapter) and inject the implementation " <>
-                  "via configuration or function arguments. The dependency arrow now flips: the outer layer " <>
-                  "depends on the inner-layer behaviour, not the other way around.",
+                "via configuration or function arguments. The dependency arrow now flips: the outer layer " <>
+                "depends on the inner-layer behaviour, not the other way around.",
             applies_when: "The dependency is needed but the direction must be inverted."
           ),
           Fix.new(
@@ -86,8 +85,8 @@ defmodule Archdo.Rules.Boundary.DependencyDirection do
     target = edge.target
 
     # Ecto is accepted in domain
+    # Phoenix.PubSub is general-purpose
     String.starts_with?(target, "Ecto.") or
-      # Phoenix.PubSub is general-purpose
       String.starts_with?(target, "Phoenix.PubSub")
   end
 end

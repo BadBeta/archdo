@@ -38,7 +38,9 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
     end)
     |> Enum.filter(fn {:import, _meta, [{:__aliases__, _, aliases} | opts]} ->
       case AST.safe_concat(aliases) do
-        nil -> false
+        nil ->
+          false
+
         mod ->
           target = AST.module_name(mod)
           no_only_clause?(opts) and not tolerated_import?(target)
@@ -49,7 +51,8 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
 
       Diagnostic.warning("4.5",
         title: "Broad import without :only clause",
-        message: "import #{target} without `:only` — every public function in #{target} is in scope",
+        message:
+          "import #{target} without `:only` — every public function in #{target} is in scope",
         why:
           "An unrestricted import dumps every public function from the imported module into the current " <>
             "module's namespace. The reader can't tell where any function comes from without grepping, the " <>
@@ -157,10 +160,10 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
   end
 
   defp tolerated_import?(target) do
+    # Tolerate Telemetry.Metrics — standard Phoenix telemetry pattern
+    # Tolerate any import ending in CoreComponents — Phoenix convention
     Enum.any?(@tolerated_imports, &(target == &1)) or
-      # Tolerate Telemetry.Metrics — standard Phoenix telemetry pattern
       target == "Telemetry.Metrics" or
-      # Tolerate any import ending in CoreComponents — Phoenix convention
       String.ends_with?(target, "CoreComponents")
   end
 
@@ -169,5 +172,4 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
   defp phoenix_macro_file?(file) do
     String.ends_with?(file, "_web.ex") or String.ends_with?(file, "_web/components.ex")
   end
-
 end

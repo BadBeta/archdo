@@ -99,10 +99,10 @@ defmodule Archdo.Rules.EventSourcing.SharedProjections do
   end
 
   defp schema_reference?(target) do
+    # Exclude standard library modules
     not String.contains?(target, "Projector") and
       not String.starts_with?(target, "Ecto.") and
       not String.starts_with?(target, "Commanded.") and
-      # Exclude standard library modules
       target not in ~w(Enum String List Map MapSet Keyword Process Kernel IO File Path)
   end
 end

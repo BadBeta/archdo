@@ -33,9 +33,9 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
   defp scan_file(file, ast) do
     behaviours =
       case AST.find_all(ast, fn
-        {:@, _, [{:callback, _, _}]} -> true
-        _ -> false
-      end) do
+             {:@, _, [{:callback, _, _}]} -> true
+             _ -> false
+           end) do
         [] ->
           %{}
 
@@ -93,7 +93,8 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
                 detail:
                   "Replace the behaviour with a regular module containing the operations. If a second " <>
                     "implementation appears later, reintroduce the behaviour then — it's a small refactor.",
-                applies_when: "The abstraction was added 'just in case' and no second implementation is planned."
+                applies_when:
+                  "The abstraction was added 'just in case' and no second implementation is planned."
               ),
               Fix.new(
                 summary: "Verify the implementation isn't outside the analyzed paths",
@@ -121,7 +122,8 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
                 "would work fine on the concrete module via a real seam). The behaviour is dead weight.",
             alternatives: [
               Fix.new(
-                summary: "Inline the production implementation and use Mox-style verifying mocks differently",
+                summary:
+                  "Inline the production implementation and use Mox-style verifying mocks differently",
                 detail:
                   "If you only need to mock the module in tests, declare the test mock as a separate module that " <>
                     "the test passes in (dependency injection via function arg or Application env), and remove " <>

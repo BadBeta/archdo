@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Module.RescueForExpected do
   def id, do: "6.14"
 
   @impl true
-  def description, do: "try/rescue used for expected failures — use ok/error tuples or non-bang functions"
+  def description,
+    do: "try/rescue used for expected failures — use ok/error tuples or non-bang functions"
 
   @impl true
   def analyze(file, ast, _opts) do

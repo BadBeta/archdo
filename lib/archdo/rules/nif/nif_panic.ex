@@ -91,12 +91,23 @@ defmodule Archdo.Rules.NIF.NifPanic do
     trimmed = String.trim(line)
 
     cond do
-      String.starts_with?(trimmed, "//") -> []
-      String.contains?(line, ".unwrap()") -> [panic_diag(file, line_num, :unwrap)]
-      String.match?(line, ~r/\.expect\s*\(/) -> [panic_diag(file, line_num, :expect)]
-      String.match?(line, ~r/panic!\s*\(/) -> [panic_diag(file, line_num, :panic_macro)]
-      String.match?(line, ~r/(todo|unimplemented)!\s*\(/) -> [panic_diag(file, line_num, extract_macro(line))]
-      true -> []
+      String.starts_with?(trimmed, "//") ->
+        []
+
+      String.contains?(line, ".unwrap()") ->
+        [panic_diag(file, line_num, :unwrap)]
+
+      String.match?(line, ~r/\.expect\s*\(/) ->
+        [panic_diag(file, line_num, :expect)]
+
+      String.match?(line, ~r/panic!\s*\(/) ->
+        [panic_diag(file, line_num, :panic_macro)]
+
+      String.match?(line, ~r/(todo|unimplemented)!\s*\(/) ->
+        [panic_diag(file, line_num, extract_macro(line))]
+
+      true ->
+        []
     end
   end
 

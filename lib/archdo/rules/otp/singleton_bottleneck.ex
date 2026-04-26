@@ -15,8 +15,9 @@ defmodule Archdo.Rules.OTP.SingletonBottleneck do
     case AST.genserver_module?(ast) do
       false ->
         []
+
       true ->
-      check_singleton_with_id_dispatch(file, ast)
+        check_singleton_with_id_dispatch(file, ast)
     end
   end
 
@@ -43,7 +44,8 @@ defmodule Archdo.Rules.OTP.SingletonBottleneck do
                 "Spin up one GenServer per entity under a DynamicSupervisor and locate it via " <>
                   "`{:via, Registry, {MyApp.Registry, entity_id}}`. Independent entities run on independent " <>
                   "processes; the BEAM scheduler parallelizes them automatically.",
-              applies_when: "Entities can be addressed by id and don't need cross-entity coordination."
+              applies_when:
+                "Entities can be addressed by id and don't need cross-entity coordination."
             ),
             Fix.new(
               summary: "Move state into ETS and remove the GenServer entirely",
@@ -105,5 +107,4 @@ defmodule Archdo.Rules.OTP.SingletonBottleneck do
         false
     end)
   end
-
 end

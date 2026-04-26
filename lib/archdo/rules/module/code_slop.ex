@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Module.CodeSlop do
   def id, do: "6.33"
 
   @impl true
-  def description, do: "LLM-generated code slop — unnecessary verbosity, trivial wrappers, redundant patterns"
+  def description,
+    do: "LLM-generated code slop — unnecessary verbosity, trivial wrappers, redundant patterns"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -66,10 +67,12 @@ defmodule Archdo.Rules.Module.CodeSlop do
     Enum.flat_map(fns, fn {name, arity, meta, args, body} ->
       case trivial_delegation?(name, arity, args, body) do
         {:yes, target} ->
-          [build_diagnostic(file, AST.line(meta), :trivial_wrapper, %{
-            function: "#{name}/#{arity}",
-            target: target
-          })]
+          [
+            build_diagnostic(file, AST.line(meta), :trivial_wrapper, %{
+              function: "#{name}/#{arity}",
+              target: target
+            })
+          ]
 
         :no ->
           []
@@ -118,22 +121,26 @@ defmodule Archdo.Rules.Module.CodeSlop do
   # --- Redundant == true / == false ---
 
   defp find_redundant_boolean(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      {:==, _, [_, true]} -> true
-      {:==, _, [_, {:__block__, _, [true]}]} -> true
-      {:==, _, [_, false]} -> true
-      {:==, _, [_, {:__block__, _, [false]}]} -> true
-      {:!=, _, [_, true]} -> true
-      {:!=, _, [_, {:__block__, _, [true]}]} -> true
-      {:!=, _, [_, false]} -> true
-      {:!=, _, [_, {:__block__, _, [false]}]} -> true
-      _ -> false
-    end), fn {op, meta, [_expr, val]} ->
-      bool_val = unwrap_literal(val)
-      build_diagnostic(file, AST.line(meta), :redundant_boolean, %{
-        comparison: "#{op} #{bool_val}"
-      })
-    end)
+    Enum.map(
+      AST.find_all(ast, fn
+        {:==, _, [_, true]} -> true
+        {:==, _, [_, {:__block__, _, [true]}]} -> true
+        {:==, _, [_, false]} -> true
+        {:==, _, [_, {:__block__, _, [false]}]} -> true
+        {:!=, _, [_, true]} -> true
+        {:!=, _, [_, {:__block__, _, [true]}]} -> true
+        {:!=, _, [_, false]} -> true
+        {:!=, _, [_, {:__block__, _, [false]}]} -> true
+        _ -> false
+      end),
+      fn {op, meta, [_expr, val]} ->
+        bool_val = unwrap_literal(val)
+
+        build_diagnostic(file, AST.line(meta), :redundant_boolean, %{
+          comparison: "#{op} #{bool_val}"
+        })
+      end
+    )
   end
 
   defp unwrap_literal({:__block__, _, [val]}), do: val
@@ -142,15 +149,18 @@ defmodule Archdo.Rules.Module.CodeSlop do
   # --- Empty @doc "" ---
 
   defp find_empty_doc(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      {:@, _, [{:doc, _, [""]}]} -> true
-      {:@, _, [{:doc, _, [{:__block__, _, [""]}]}]} -> true
-      {:@, _, [{:moduledoc, _, [""]}]} -> true
-      {:@, _, [{:moduledoc, _, [{:__block__, _, [""]}]}]} -> true
-      _ -> false
-    end), fn {:@, meta, [{attr_name, _, _}]} ->
-      build_diagnostic(file, AST.line(meta), :empty_doc, %{attribute: "@#{attr_name}"})
-    end)
+    Enum.map(
+      AST.find_all(ast, fn
+        {:@, _, [{:doc, _, [""]}]} -> true
+        {:@, _, [{:doc, _, [{:__block__, _, [""]}]}]} -> true
+        {:@, _, [{:moduledoc, _, [""]}]} -> true
+        {:@, _, [{:moduledoc, _, [{:__block__, _, [""]}]}]} -> true
+        _ -> false
+      end),
+      fn {:@, meta, [{attr_name, _, _}]} ->
+        build_diagnostic(file, AST.line(meta), :empty_doc, %{attribute: "@#{attr_name}"})
+      end
+    )
   end
 
   # --- Single pipe ---
@@ -255,7 +265,8 @@ defmodule Archdo.Rules.Module.CodeSlop do
       alternatives: [
         Fix.new(
           summary: "Use `#{attr} false` or write documentation",
-          detail: "`#{attr} false` hides the item from ExDoc. An empty string just looks like a mistake.",
+          detail:
+            "`#{attr} false` hides the item from ExDoc. An empty string just looks like a mistake.",
           applies_when: "Always."
         )
       ],

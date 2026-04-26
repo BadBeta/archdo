@@ -56,7 +56,8 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
                 "mock for an undocumented contract.",
             alternatives: [
               Fix.new(
-                summary: "Define `#{parent}.Adapter` with `@callback`s and have each adapter implement it",
+                summary:
+                  "Define `#{parent}.Adapter` with `@callback`s and have each adapter implement it",
                 detail:
                   "Extract the common operations into a behaviour module. Add `@behaviour #{parent}.Adapter` " <>
                     "to each existing adapter and `@impl true` on the callback functions. The compiler now " <>
@@ -88,6 +89,7 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
       name
       |> String.split(".")
       |> List.last("")
+
     String.ends_with?(last, "Adapter") or String.ends_with?(last, "Client")
   end
 
@@ -95,13 +97,16 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
     parts = String.split(name, ".")
 
     case parts do
-      [] -> "(root)"
-      [_] -> "(root)"
+      [] ->
+        "(root)"
+
+      [_] ->
+        "(root)"
+
       _ ->
         parts
         |> Enum.drop(-1)
         |> Enum.join(".")
     end
   end
-
 end

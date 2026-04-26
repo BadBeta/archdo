@@ -87,7 +87,9 @@ defmodule Archdo.Config do
   def classify_module(%__MODULE__{layers: layers}, module_name) when is_binary(module_name) do
     Enum.find_value([:interface, :domain, :infrastructure], :unknown, fn layer ->
       case Map.get(layers, layer) do
-        nil -> false
+        nil ->
+          false
+
         regex ->
           case Regex.match?(regex, module_name) do
             true -> layer
@@ -109,7 +111,8 @@ defmodule Archdo.Config do
   Check if a module is a framework/web-specific module that domain should not reference.
   """
   @spec framework_module?(t(), String.t() | atom()) :: boolean()
-  def framework_module?(%__MODULE__{framework_modules: patterns}, module_name) when is_binary(module_name) do
+  def framework_module?(%__MODULE__{framework_modules: patterns}, module_name)
+      when is_binary(module_name) do
     Enum.any?(patterns, &Regex.match?(&1, module_name))
   end
 
@@ -261,5 +264,4 @@ defmodule Archdo.Config do
       []
     end
   end
-
 end

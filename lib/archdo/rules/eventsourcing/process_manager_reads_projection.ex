@@ -21,7 +21,8 @@ defmodule Archdo.Rules.EventSourcing.ProcessManagerReadsProjection do
   defp find_repo_reads(file, ast) do
     AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _} ->
-        List.last(mod_parts) == :Repo and func in [:get, :get!, :get_by, :get_by!, :one, :one!, :all]
+        List.last(mod_parts) == :Repo and
+          func in [:get, :get!, :get_by, :get_by!, :one, :one!, :all]
 
       _ ->
         false
@@ -45,7 +46,8 @@ defmodule Archdo.Rules.EventSourcing.ProcessManagerReadsProjection do
               "Identify the event that carries the information you currently fetch from the Repo, and add the " <>
                 "field to the event payload. Update `apply/2` to store it in the process manager state and read " <>
                 "from state in your `handle/2` clauses.",
-            applies_when: "The data exists on (or can be added to) an event already in the workflow."
+            applies_when:
+              "The data exists on (or can be added to) an event already in the workflow."
           ),
           Fix.new(
             summary: "Subscribe the process manager to a new event that publishes the data",

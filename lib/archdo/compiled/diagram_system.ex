@@ -91,28 +91,53 @@ defmodule Archdo.Compiled.DiagramSystem do
 
     cond do
       # Interface layer: controllers, LiveView, channels, plugs, CLI
-      String.contains?(mod_str, "Controller") -> :interface
-      String.contains?(mod_str, "Live.") -> :interface
-      String.contains?(mod_str, "LiveView") -> :interface
-      String.contains?(mod_str, "Channel") -> :interface
-      String.contains?(mod_str, "Socket") -> :interface
-      String.contains?(mod_str, "Endpoint") -> :interface
-      String.contains?(mod_str, "Router") -> :interface
-      String.contains?(mod_str, "Plug.") -> :interface
-      String.contains?(mod_str, "Mix.Tasks.") -> :interface
+      String.contains?(mod_str, "Controller") ->
+        :interface
+
+      String.contains?(mod_str, "Live.") ->
+        :interface
+
+      String.contains?(mod_str, "LiveView") ->
+        :interface
+
+      String.contains?(mod_str, "Channel") ->
+        :interface
+
+      String.contains?(mod_str, "Socket") ->
+        :interface
+
+      String.contains?(mod_str, "Endpoint") ->
+        :interface
+
+      String.contains?(mod_str, "Router") ->
+        :interface
+
+      String.contains?(mod_str, "Plug.") ->
+        :interface
+
+      String.contains?(mod_str, "Mix.Tasks.") ->
+        :interface
 
       # Infrastructure: Repo, Mailer, HTTP clients, external service adapters
-      String.contains?(mod_str, ".Repo") -> :infrastructure
-      String.contains?(mod_str, "Mailer") -> :infrastructure
-      String.contains?(mod_str, ".Adapter") -> :infrastructure
-      String.contains?(mod_str, ".Client") -> :infrastructure
+      String.contains?(mod_str, ".Repo") ->
+        :infrastructure
+
+      String.contains?(mod_str, "Mailer") ->
+        :infrastructure
+
+      String.contains?(mod_str, ".Adapter") ->
+        :infrastructure
+
+      String.contains?(mod_str, ".Client") ->
+        :infrastructure
 
       # Check if it's an OTP process (GenServer/Supervisor/Agent)
       Enum.any?(info.behaviours, &(&1 in [Supervisor, GenServer, Agent, :gen_statem])) ->
         :domain
 
       # Default: domain
-      true -> :domain
+      true ->
+        :domain
     end
   end
 
@@ -220,7 +245,8 @@ defmodule Archdo.Compiled.DiagramSystem do
       callee_fn = elem(call.callee, 1)
 
       cond do
-        String.contains?(callee_mod_str, "Repo") and callee_fn in [:get, :get!, :all, :insert, :update, :delete, :one, :transaction] ->
+        String.contains?(callee_mod_str, "Repo") and
+            callee_fn in [:get, :get!, :all, :insert, :update, :delete, :one, :transaction] ->
           %{acc | database: true}
 
         callee_mod_str =~ "PubSub" ->
@@ -303,7 +329,14 @@ defmodule Archdo.Compiled.DiagramSystem do
     tools_count = max(length(tools), 1)
     sm_count = min(map_size(state_machines), 3)
 
-    max_cols = Enum.max([outside_count, interface_count, domain_count + sm_count, infra_count, tools_count])
+    max_cols =
+      Enum.max([
+        outside_count,
+        interface_count,
+        domain_count + sm_count,
+        infra_count,
+        tools_count
+      ])
 
     total_w = max(max_cols * (@node_w + @node_gap) + @margin * 2 + 100, 800)
 
@@ -337,21 +370,37 @@ defmodule Archdo.Compiled.DiagramSystem do
     w = layout.total_w - @margin * 2
 
     # Layer 1: Outside World (top)
-    {outside_elems, y, _pos0} = render_horizontal_layer(
-      @margin, y, w, layout.layer_h,
-      "Outside World", @layer_bg_outside, @layer_border_outside,
-      render_outside_nodes(outside), []
-    )
+    {outside_elems, y, _pos0} =
+      render_horizontal_layer(
+        @margin,
+        y,
+        w,
+        layout.layer_h,
+        "Outside World",
+        @layer_bg_outside,
+        @layer_border_outside,
+        render_outside_nodes(outside),
+        []
+      )
+
     y = y + @layer_gap
 
     # Layer 2: Interface — prioritize modules with most connections
     interface_mods = prioritize_by_connections(layers.interface, graph, 8)
-    {interface_elems, y, pos_interface} = render_horizontal_layer(
-      @margin, y, w, layout.layer_h,
-      "Interface", @layer_bg_interface, @layer_border_interface,
-      render_module_nodes(interface_mods, @layer_border_interface, 8),
-      interface_mods
-    )
+
+    {interface_elems, y, pos_interface} =
+      render_horizontal_layer(
+        @margin,
+        y,
+        w,
+        layout.layer_h,
+        "Interface",
+        @layer_bg_interface,
+        @layer_border_interface,
+        render_module_nodes(interface_mods, @layer_border_interface, 8),
+        interface_mods
+      )
+
     y = y + @layer_gap
 
     # Layer 3: Domain — prioritize connected modules + state machines
@@ -362,39 +411,65 @@ defmodule Archdo.Compiled.DiagramSystem do
       (sm_mods ++ domain_mods)
       |> Enum.uniq()
       |> Enum.take(11)
-    domain_nodes = render_module_nodes(Enum.reject(all_domain_mods, &(&1 in sm_mods)), @layer_border_domain, 8)
+
+    domain_nodes =
+      render_module_nodes(Enum.reject(all_domain_mods, &(&1 in sm_mods)), @layer_border_domain, 8)
+
     sm_nodes = render_state_machine_nodes(state_machines)
 
-    {domain_elems, y, pos_domain} = render_horizontal_layer(
-      @margin, y, w, layout.domain_layer_h,
-      "Domain", @layer_bg_domain, @layer_border_domain,
-      domain_nodes ++ sm_nodes,
-      all_domain_mods
-    )
+    {domain_elems, y, pos_domain} =
+      render_horizontal_layer(
+        @margin,
+        y,
+        w,
+        layout.domain_layer_h,
+        "Domain",
+        @layer_bg_domain,
+        @layer_border_domain,
+        domain_nodes ++ sm_nodes,
+        all_domain_mods
+      )
+
     y = y + @layer_gap
 
     # Layer 4: Infrastructure — prioritize connected modules
     infra_mods = prioritize_by_connections(layers.infrastructure, graph, 6)
-    {infra_elems, y, pos_infra} = render_horizontal_layer(
-      @margin, y, w, layout.layer_h,
-      "Infrastructure", @layer_bg_infra, @layer_border_infra,
-      render_module_nodes(infra_mods, @layer_border_infra, 6),
-      infra_mods
-    )
+
+    {infra_elems, y, pos_infra} =
+      render_horizontal_layer(
+        @margin,
+        y,
+        w,
+        layout.layer_h,
+        "Infrastructure",
+        @layer_bg_infra,
+        @layer_border_infra,
+        render_module_nodes(infra_mods, @layer_border_infra, 6),
+        infra_mods
+      )
+
     y = y + @layer_gap
 
     # Layer 5: Inside Tools (bottom)
-    {tools_elems, _y, _pos_tools} = render_horizontal_layer(
-      @margin, y, w, layout.layer_h,
-      "Inside Tools", @layer_bg_tools, @layer_border_tools,
-      render_tool_nodes(tools), []
-    )
+    {tools_elems, _y, _pos_tools} =
+      render_horizontal_layer(
+        @margin,
+        y,
+        w,
+        layout.layer_h,
+        "Inside Tools",
+        @layer_bg_tools,
+        @layer_border_tools,
+        render_tool_nodes(tools),
+        []
+      )
 
     # Cross-layer wires between specific modules
-    cross_wires = render_cross_layer_wires(graph, [
-      {pos_interface, pos_domain, @layer_border_interface},
-      {pos_domain, pos_infra, @layer_border_domain}
-    ])
+    cross_wires =
+      render_cross_layer_wires(graph, [
+        {pos_interface, pos_domain, @layer_border_interface},
+        {pos_domain, pos_infra, @layer_border_domain}
+      ])
 
     # Title
     title = [
@@ -406,11 +481,26 @@ defmodule Archdo.Compiled.DiagramSystem do
       ~s[<defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#{@wire_color}" opacity="0.5"/></marker></defs>]
     ]
 
-    all = arrow_def ++ title ++ outside_elems ++ interface_elems ++ domain_elems ++ infra_elems ++ tools_elems ++ cross_wires
+    all =
+      arrow_def ++
+        title ++
+        outside_elems ++
+        interface_elems ++ domain_elems ++ infra_elems ++ tools_elems ++ cross_wires
+
     wrap_svg(all, layout.total_w, layout.total_h)
   end
 
-  defp render_horizontal_layer(x, y, width, height, title, bg_color, border_color, node_renderers, modules) do
+  defp render_horizontal_layer(
+         x,
+         y,
+         width,
+         height,
+         title,
+         bg_color,
+         border_color,
+         node_renderers,
+         modules
+       ) do
     frame = [
       ~s[<rect x="#{x}" y="#{y}" width="#{width}" height="#{height}" rx="8" fill="#{bg_color}" stroke="#{border_color}" stroke-width="1.5" opacity="0.6"/>],
       ~s[<text x="#{x + 12}" y="#{y + 17}" fill="#{border_color}" font-size="11" font-weight="600" font-family="monospace">#{title}</text>]
@@ -418,7 +508,8 @@ defmodule Archdo.Compiled.DiagramSystem do
 
     # Spread nodes horizontally and track positions
     # Pad modules to match renderers length so zip works
-    padded_modules = modules ++ List.duplicate(nil, max(0, length(node_renderers) - length(modules)))
+    padded_modules =
+      modules ++ List.duplicate(nil, max(0, length(node_renderers) - length(modules)))
 
     {node_elems, positions} =
       node_renderers
@@ -431,6 +522,7 @@ defmodule Archdo.Compiled.DiagramSystem do
         new_elems = renderer.(nx, ny)
 
         center_x = nx + @node_w / 2
+
         new_pos =
           case mod do
             nil -> pos
@@ -482,7 +574,9 @@ defmodule Archdo.Compiled.DiagramSystem do
 
       shown_down = Enum.take(down_connections, 5)
       shown_up = Enum.take(up_connections, 3)
-      hidden_count = length(down_connections) - length(shown_down) + length(up_connections) - length(shown_up)
+
+      hidden_count =
+        length(down_connections) - length(shown_down) + length(up_connections) - length(shown_up)
 
       # Render downward tunnels (output bottom → input left)
       down_elems =
@@ -490,9 +584,13 @@ defmodule Archdo.Compiled.DiagramSystem do
         |> Enum.with_index()
         |> Enum.flat_map(fn {{upper_mod, lower_mod}, wire_idx} ->
           render_tunnel_wire(
-            upper_positions, lower_positions,
-            upper_mod, lower_mod,
-            color, wire_idx, :down
+            upper_positions,
+            lower_positions,
+            upper_mod,
+            lower_mod,
+            color,
+            wire_idx,
+            :down
           )
         end)
 
@@ -502,9 +600,13 @@ defmodule Archdo.Compiled.DiagramSystem do
         |> Enum.with_index()
         |> Enum.flat_map(fn {{lower_mod, upper_mod}, wire_idx} ->
           render_tunnel_wire(
-            lower_positions, upper_positions,
-            lower_mod, upper_mod,
-            @wire_color, wire_idx, :up
+            lower_positions,
+            upper_positions,
+            lower_mod,
+            upper_mod,
+            @wire_color,
+            wire_idx,
+            :up
           )
         end)
 
@@ -514,7 +616,9 @@ defmodule Archdo.Compiled.DiagramSystem do
           true ->
             case Map.values(upper_positions) do
               [{_cx, _ty, by} | _] ->
-                [~s[<text x="#{@margin + 4}" y="#{by + 14}" fill="#{@dim}" font-size="8" font-family="monospace" opacity="0.6">+#{hidden_count} more</text>]]
+                [
+                  ~s[<text x="#{@margin + 4}" y="#{by + 14}" fill="#{@dim}" font-size="8" font-family="monospace" opacity="0.6">+#{hidden_count} more</text>]
+                ]
 
               _ ->
                 []
@@ -528,7 +632,15 @@ defmodule Archdo.Compiled.DiagramSystem do
     end)
   end
 
-  defp render_tunnel_wire(source_positions, target_positions, source_mod, target_mod, color, wire_idx, direction) do
+  defp render_tunnel_wire(
+         source_positions,
+         target_positions,
+         source_mod,
+         target_mod,
+         color,
+         wire_idx,
+         direction
+       ) do
     case {Map.get(source_positions, source_mod), Map.get(target_positions, target_mod)} do
       {{src_cx, _src_ty, src_by}, {_tgt_cx, tgt_ty, _tgt_by}} ->
         # Output tunnel: colored square on bottom edge of source module
@@ -659,7 +771,9 @@ defmodule Archdo.Compiled.DiagramSystem do
                 ty = y + 34 + to_idx * 20
                 ax = x + @node_w - 20
 
-                [~s[<path d="M #{ax - 10} #{fy} C #{ax} #{fy}, #{ax} #{ty}, #{ax - 10} #{ty}" fill="none" stroke="#{@wire_color}" stroke-width="0.8" marker-end="url(#arrowhead)"/>]]
+                [
+                  ~s[<path d="M #{ax - 10} #{fy} C #{ax} #{fy}, #{ax} #{ty}, #{ax - 10} #{ty}" fill="none" stroke="#{@wire_color}" stroke-width="0.8" marker-end="url(#arrowhead)"/>]
+                ]
 
               false ->
                 []

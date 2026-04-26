@@ -31,7 +31,8 @@ defmodule Archdo.Rules.NIF.NifSchedulerSafety do
       [
         Diagnostic.warning("11.2",
           title: "NIF without dirty scheduler config",
-          message: "NIF module #{module_name} has stub functions but no dirty scheduler configuration",
+          message:
+            "NIF module #{module_name} has stub functions but no dirty scheduler configuration",
           why:
             "Regular NIFs run on the BEAM's normal schedulers. Anything that takes more than ~1ms blocks " <>
               "the scheduler and prevents thousands of other processes from making progress. Operations on " <>
@@ -84,13 +85,24 @@ defmodule Archdo.Rules.NIF.NifSchedulerSafety do
     AST.find_all(ast, fn
       {:def, _, [{_name, _, _args}, [do: body]]} ->
         AST.contains?(body, fn
-          {:raise, _, [msg]} when is_binary(msg) -> String.contains?(msg, "NIF")
-          {:raise, _, [{:__block__, _, [msg]}]} when is_binary(msg) -> String.contains?(msg, "NIF")
-          {:nif_error, _, _} -> true
-          {{:., _, [:erlang, :nif_error]}, _, _} -> true
-          _ -> false
+          {:raise, _, [msg]} when is_binary(msg) ->
+            String.contains?(msg, "NIF")
+
+          {:raise, _, [{:__block__, _, [msg]}]} when is_binary(msg) ->
+            String.contains?(msg, "NIF")
+
+          {:nif_error, _, _} ->
+            true
+
+          {{:., _, [:erlang, :nif_error]}, _, _} ->
+            true
+
+          _ ->
+            false
         end)
-      _ -> false
+
+      _ ->
+        false
     end)
   end
 
@@ -98,9 +110,9 @@ defmodule Archdo.Rules.NIF.NifSchedulerSafety do
     file_content = ast_to_rough_string(ast)
 
     # Rustler: schedule = "DirtyCpu" or schedule = "DirtyIo"
+    # Zigler: dirty: :cpu or dirty: :io
     String.contains?(file_content, "DirtyCpu") or
       String.contains?(file_content, "DirtyIo") or
-      # Zigler: dirty: :cpu or dirty: :io
       String.contains?(file_content, "dirty:")
   end
 
@@ -109,5 +121,4 @@ defmodule Archdo.Rules.NIF.NifSchedulerSafety do
   rescue
     _ -> ""
   end
-
 end

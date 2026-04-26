@@ -104,5 +104,4 @@ defmodule Archdo.Rules.Compiled.ChangeRisk do
       line: 0
     )
   end
-
 end

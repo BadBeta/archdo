@@ -10,7 +10,8 @@ defmodule Archdo.Rules.Boundary.LargeLiveviewAssigns do
   def id, do: "1.16"
 
   @impl true
-  def description, do: "LiveView with too many assigns — use streams for collections, reduce socket size"
+  def description,
+    do: "LiveView with too many assigns — use streams for collections, reduce socket size"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -113,7 +114,6 @@ defmodule Archdo.Rules.Boundary.LargeLiveviewAssigns do
 
     keys
   end
-
 
   defp uses_live_view?(ast) do
     AST.contains?(ast, fn

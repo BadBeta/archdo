@@ -51,7 +51,9 @@ defmodule Archdo.Rules.Module.SimilarCode do
     |> Enum.flat_map(fn {fn_a, i} ->
       functions
       |> Enum.drop(i + 1)
-      |> Enum.filter(fn fn_b -> size_compatible?(fn_a.size, fn_b.size) and not_same_pair?(fn_a, fn_b) end)
+      |> Enum.filter(fn fn_b ->
+        size_compatible?(fn_a.size, fn_b.size) and not_same_pair?(fn_a, fn_b)
+      end)
       |> Enum.map(fn fn_b ->
         sim = jaccard(fn_a.fingerprint, fn_b.fingerprint)
         {fn_a, fn_b, sim}
@@ -138,6 +140,7 @@ defmodule Archdo.Rules.Module.SimilarCode do
   defp jaccard(set_a, set_b) do
     intersection = MapSet.size(MapSet.intersection(set_a, set_b))
     union = MapSet.size(MapSet.union(set_a, set_b))
+
     case union do
       0 -> 0.0
       _ -> intersection / union
@@ -163,8 +166,7 @@ defmodule Archdo.Rules.Module.SimilarCode do
 
     Diagnostic.info("3.4",
       title: "Similar function (Type-3 clone)",
-      message:
-        "#{fn_a.name}/#{fn_a.arity} is #{pct}% similar to #{other}",
+      message: "#{fn_a.name}/#{fn_a.arity} is #{pct}% similar to #{other}",
       why:
         "Type-3 clones are functions that started as copies and then drifted slightly — different variable " <>
           "names, an extra step, a renamed call. They are the most expensive form of duplication: bug fixes " <>
@@ -207,5 +209,4 @@ defmodule Archdo.Rules.Module.SimilarCode do
       line: fn_a.line
     )
   end
-
 end

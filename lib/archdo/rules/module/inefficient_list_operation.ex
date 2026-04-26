@@ -35,13 +35,16 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
   # --- Pattern 1: list ++ [item] — always flag ---
 
   defp find_append_via_concat(ast, file) do
-    Enum.map(AST.find_all(ast, fn
-      {:++, _, [_list, [_single_item]]} -> true
-      {:++, _, [_list, [{:__block__, _, [_single_item]}]]} -> true
-      _ -> false
-    end), fn {:++, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :append_via_concat)
-    end)
+    Enum.map(
+      AST.find_all(ast, fn
+        {:++, _, [_list, [_single_item]]} -> true
+        {:++, _, [_list, [{:__block__, _, [_single_item]}]]} -> true
+        _ -> false
+      end),
+      fn {:++, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :append_via_concat)
+      end
+    )
   end
 
   # --- Pattern 1b: acc ++ list in Enum.reduce — always O(n^2) ---
@@ -64,7 +67,11 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
         when func in @reduce_fns and mod in [[:Enum], [:Stream]] and is_list(args) ->
           new_diags =
             args
-            |> Enum.filter(fn {:fn, _, _} -> true; {:&, _, _} -> true; _ -> false end)
+            |> Enum.filter(fn
+              {:fn, _, _} -> true
+              {:&, _, _} -> true
+              _ -> false
+            end)
             |> Enum.flat_map(fn callback ->
               Enum.map(AST.find_all(callback, predicate), fn {_, meta, _} ->
                 build_diagnostic(file, AST.line(meta), kind)
@@ -78,7 +85,11 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
         when fold_fn in [:foldl, :foldr] and is_list(args) ->
           new_diags =
             args
-            |> Enum.filter(fn {:fn, _, _} -> true; {:&, _, _} -> true; _ -> false end)
+            |> Enum.filter(fn
+              {:fn, _, _} -> true
+              {:&, _, _} -> true
+              _ -> false
+            end)
             |> Enum.flat_map(fn callback ->
               Enum.map(AST.find_all(callback, predicate), fn {_, meta, _} ->
                 build_diagnostic(file, AST.line(meta), kind)
@@ -99,7 +110,9 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
 
               new_diags =
                 case do_block do
-                  nil -> []
+                  nil ->
+                    []
+
                   body ->
                     Enum.map(AST.find_all(body, predicate), fn {_, meta, _} ->
                       build_diagnostic(file, AST.line(meta), kind)
@@ -130,20 +143,36 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
   # --- Pattern 2: Enum.at(list, 0) — always flag ---
 
   defp find_enum_at_zero(ast, file) do
-    Enum.map(AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, [:Enum]}, :at]}, _, [_, 0]} -> true
-      {{:., _, [{:__aliases__, _, [:Enum]}, :at]}, _, [_, {:__block__, _, [0]}]} -> true
-      _ -> false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :enum_at_zero)
-    end)
+    Enum.map(
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, [:Enum]}, :at]}, _, [_, 0]} -> true
+        {{:., _, [{:__aliases__, _, [:Enum]}, :at]}, _, [_, {:__block__, _, [0]}]} -> true
+        _ -> false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :enum_at_zero)
+      end
+    )
   end
 
   # --- Pattern 3: List.last in loop — only flag in hot path ---
 
   # Known-small AST structure variables — List.last on these is always O(1)-equivalent
-  @small_list_vars [:args, :aliases, :parts, :meta, :opts, :clauses, :params, :fields,
-                    :items, :mod_parts, :body, :path, :exprs]
+  @small_list_vars [
+    :args,
+    :aliases,
+    :parts,
+    :meta,
+    :opts,
+    :clauses,
+    :params,
+    :fields,
+    :items,
+    :mod_parts,
+    :body,
+    :path,
+    :exprs
+  ]
 
   defp find_list_last_in_loop(ast, file) do
     find_in_loops(ast, file, :list_last_in_loop, fn
@@ -151,8 +180,11 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
       when is_atom(var) and is_atom(ctx) ->
         var not in @small_list_vars
 
-      {{:., _, [{:__aliases__, _, [:List]}, :last]}, _, _} -> true
-      _ -> false
+      {{:., _, [{:__aliases__, _, [:List]}, :last]}, _, _} ->
+        true
+
+      _ ->
+        false
     end)
   end
 
@@ -166,42 +198,52 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
 
   # Enum.reverse(list) |> hd()
   defp find_reverse_pipe_hd(ast, file) do
-    Enum.map(AST.find_all(ast, fn
-      {:|>, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, _},
-        {:hd, _, _}
-      ]} ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        {:|>, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, _},
+           {:hd, _, _}
+         ]} ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :reverse_then_hd)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :reverse_then_hd)
+      end
+    )
   end
 
   # hd(Enum.reverse(list))
   defp find_hd_wrapping_reverse(ast, file) do
-    Enum.map(AST.find_all(ast, fn
-      {:hd, _, [{{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, _}]} -> true
-      _ -> false
-    end), fn {:hd, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :reverse_then_hd)
-    end)
+    Enum.map(
+      AST.find_all(ast, fn
+        {:hd, _, [{{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, _}]} -> true
+        _ -> false
+      end),
+      fn {:hd, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :reverse_then_hd)
+      end
+    )
   end
 
   # --- Pattern 5: List.insert_at(list, -1, item) — always flag ---
 
   defp find_insert_at_neg1(ast, file) do
-    Enum.map(AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, [:List]}, :insert_at]}, _, [_, idx, _]} ->
-        neg_one?(idx)
+    Enum.map(
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, [:List]}, :insert_at]}, _, [_, idx, _]} ->
+          neg_one?(idx)
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :insert_at_neg1)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :insert_at_neg1)
+      end
+    )
   end
 
   # --- Pattern 6: List.delete_at in loop — only in hot path ---
@@ -326,7 +368,8 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
   defp build_diagnostic(file, line, :list_last_in_loop) do
     Diagnostic.info("6.50",
       title: "List.last/1 in loop",
-      message: "`List.last/1` inside a loop is O(n) per iteration — consider a different data structure",
+      message:
+        "`List.last/1` inside a loop is O(n) per iteration — consider a different data structure",
       why:
         "List.last/1 traverses the entire list to reach the final element. " <>
           "Inside a loop this compounds to O(n*m) where n is the loop size and " <>
@@ -430,7 +473,8 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
           detail:
             "Use `List.to_tuple(list)` and `elem(tuple, i)` for O(1) access, " <>
               "or `list |> Enum.with_index() |> Map.new(fn {v, i} -> {i, v} end)`.",
-          applies_when: "Enum.at/2 with a variable index inside Enum callbacks or for comprehensions."
+          applies_when:
+            "Enum.at/2 with a variable index inside Enum callbacks or for comprehensions."
         )
       ],
       tags: [:perf],

@@ -101,7 +101,8 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
                         detail:
                           "If some public functions are never called from outside the context, " <>
                             "make them private (defp). A smaller public API is easier to test thoroughly.",
-                        applies_when: "Some public functions are internal helpers exposed accidentally."
+                        applies_when:
+                          "Some public functions are internal helpers exposed accidentally."
                       )
                     ],
                     references: ["ARCHITECTURE_RULES.md#7.28"],

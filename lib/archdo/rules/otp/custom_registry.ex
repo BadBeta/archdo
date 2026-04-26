@@ -15,8 +15,9 @@ defmodule Archdo.Rules.OTP.CustomRegistry do
     case AST.genserver_module?(ast) do
       false ->
         []
+
       true ->
-      check_custom_registry(file, ast)
+        check_custom_registry(file, ast)
     end
   end
 
@@ -100,5 +101,4 @@ defmodule Archdo.Rules.OTP.CustomRegistry do
       end)
     end)
   end
-
 end

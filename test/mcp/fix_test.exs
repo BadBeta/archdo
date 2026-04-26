@@ -5,7 +5,9 @@ defmodule Archdo.Mcp.Tools.FixTest do
 
   # Helper: write temp file, call fix, read result
   defp fix_file(code, opts \\ %{}) do
-    path = Path.join(System.tmp_dir!(), "archdo_fix_test_#{System.unique_integer([:positive])}.ex")
+    path =
+      Path.join(System.tmp_dir!(), "archdo_fix_test_#{System.unique_integer([:positive])}.ex")
+
     File.write!(path, code)
 
     result = Fix.call(Map.put(opts, "file", path))
@@ -36,7 +38,10 @@ defmodule Archdo.Mcp.Tools.FixTest do
       fix = Enum.find(result.fixes, &(&1.rule_id == "6.50"))
 
       case fix do
-        nil -> :ok  # Rule may not fire depending on AST shape
+        # Rule may not fire depending on AST shape
+        nil ->
+          :ok
+
         f ->
           assert f.auto_fixable == true
           assert f.original =~ "Enum.at"
@@ -60,7 +65,10 @@ defmodule Archdo.Mcp.Tools.FixTest do
       fix = Enum.find(result.fixes, &(&1.rule_id == "4.27"))
 
       case fix do
-        nil -> :ok  # May not detect if alias detection differs
+        # May not detect if alias detection differs
+        nil ->
+          :ok
+
         f ->
           assert f.auto_fixable == true
           assert f.replacement == ""
@@ -86,7 +94,9 @@ defmodule Archdo.Mcp.Tools.FixTest do
       fix = Enum.find(result.fixes, &(&1.rule_id == "6.41"))
 
       case fix do
-        nil -> :ok
+        nil ->
+          :ok
+
         f ->
           assert f.auto_fixable == false
           assert f.suggestion =~ "case"
@@ -94,14 +104,17 @@ defmodule Archdo.Mcp.Tools.FixTest do
     end
 
     test "auto-fixes inline with" do
-      code = "defmodule Foo do\n  def bar(x) do\n    with {:ok, val} <- process(x), do: use_val(val)\n  end\nend\n"
+      code =
+        "defmodule Foo do\n  def bar(x) do\n    with {:ok, val} <- process(x), do: use_val(val)\n  end\nend\n"
 
       {{:ok, result}, _} = fix_file(code)
 
       fix = Enum.find(result.fixes, &(&1.rule_id == "6.41"))
 
       case fix do
-        nil -> :ok
+        nil ->
+          :ok
+
         f ->
           assert f.auto_fixable == true
           assert f.replacement =~ "case"
@@ -165,7 +178,9 @@ defmodule Archdo.Mcp.Tools.FixTest do
       fix = Enum.find(result.fixes, &(&1.rule_id == "6.33"))
 
       case fix do
-        nil -> :ok
+        nil ->
+          :ok
+
         f ->
           assert f.auto_fixable == true
           assert f.original =~ "|>"
@@ -188,7 +203,9 @@ defmodule Archdo.Mcp.Tools.FixTest do
       fix = Enum.find(result.fixes, &(&1.rule_id == "6.33"))
 
       case fix do
-        nil -> :ok
+        nil ->
+          :ok
+
         f ->
           assert f.auto_fixable == true
           assert f.replacement =~ "Enum.map(list,"
@@ -198,9 +215,11 @@ defmodule Archdo.Mcp.Tools.FixTest do
 
   describe "CLI --fix single-pipe integration" do
     test "applies single-pipe fix to temp file" do
-      path = Path.join(System.tmp_dir!(), "archdo_pipe_fix_#{System.unique_integer([:positive])}.ex")
+      path =
+        Path.join(System.tmp_dir!(), "archdo_pipe_fix_#{System.unique_integer([:positive])}.ex")
 
-      code = "defmodule PipeTarget do\n  def process(items) do\n    items |> Enum.sort()\n  end\nend\n"
+      code =
+        "defmodule PipeTarget do\n  def process(items) do\n    items |> Enum.sort()\n  end\nend\n"
 
       File.write!(path, code)
 
@@ -208,7 +227,9 @@ defmodule Archdo.Mcp.Tools.FixTest do
       pipe_fix = Enum.find(fix_result.fixes, &(&1.rule_id == "6.33"))
 
       case pipe_fix do
-        nil -> :ok
+        nil ->
+          :ok
+
         f ->
           assert f.auto_fixable == true
           assert not String.contains?(f.replacement, "|>")
@@ -221,7 +242,11 @@ defmodule Archdo.Mcp.Tools.FixTest do
 
   describe "CLI --fix integration" do
     test "applies unused alias removal" do
-      path = Path.join(System.tmp_dir!(), "archdo_autofix_test_#{System.unique_integer([:positive])}.ex")
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "archdo_autofix_test_#{System.unique_integer([:positive])}.ex"
+        )
 
       code = """
       defmodule FixTarget do
@@ -234,8 +259,12 @@ defmodule Archdo.Mcp.Tools.FixTest do
 
       # The CLI fix uses Runner.analyze + apply_fixes
       # Simulate what --fix does
-      {:ok, ast} = Code.string_to_quoted(code, columns: true, token_metadata: true,
-        literal_encoder: &{:ok, {:__block__, &2, [&1]}})
+      {:ok, ast} =
+        Code.string_to_quoted(code,
+          columns: true,
+          token_metadata: true,
+          literal_encoder: &{:ok, {:__block__, &2, [&1]}}
+        )
 
       diagnostics = Archdo.Rules.Boundary.UnusedAlias.analyze(path, ast, [])
 

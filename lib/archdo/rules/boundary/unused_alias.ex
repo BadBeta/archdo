@@ -173,7 +173,8 @@ defmodule Archdo.Rules.Boundary.UnusedAlias do
         ),
         Fix.new(
           summary: "Use the aliased module",
-          detail: "If the alias was added intentionally, add the code that references #{short_name}.",
+          detail:
+            "If the alias was added intentionally, add the code that references #{short_name}.",
           applies_when: "The code using this alias was accidentally removed."
         )
       ],

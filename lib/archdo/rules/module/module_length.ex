@@ -24,6 +24,7 @@ defmodule Archdo.Rules.Module.ModuleLength do
             content
             |> String.split("\n")
             |> length()
+
           check_length(file, lines)
 
         _ ->

@@ -39,8 +39,8 @@ defmodule Archdo.Rules.Module.StringConcatInLoop do
     {_, diagnostics} =
       Macro.prewalk(ast, [], fn
         # Enum.reduce(_, "", fn ..., acc -> acc <> ... end)
-        {{:., _, [{:__aliases__, _, mod}, :reduce]}, meta,
-         [_enumerable, init, {:fn, _, _} = fun]} = node,
+        {{:., _, [{:__aliases__, _, mod}, :reduce]}, meta, [_enumerable, init, {:fn, _, _} = fun]} =
+            node,
         acc
         when mod in [[:Enum], [:Stream]] ->
           case string_init?(init) and fn_body_has_concat?(fun) do
@@ -49,9 +49,7 @@ defmodule Archdo.Rules.Module.StringConcatInLoop do
           end
 
         # :lists.foldl(fun, "", list) or :lists.foldr(fun, "", list)
-        {{:., _, [:lists, fold_fn]}, meta,
-         [{:fn, _, _} = fun, init, _list]} = node,
-        acc
+        {{:., _, [:lists, fold_fn]}, meta, [{:fn, _, _} = fun, init, _list]} = node, acc
         when fold_fn in [:foldl, :foldr] ->
           case string_init?(init) and fn_body_has_concat?(fun) do
             true -> {node, [build_diagnostic(file, AST.line(meta), :reduce) | acc]}

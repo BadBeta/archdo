@@ -138,17 +138,28 @@ defmodule Archdo.FunctionGraph do
     # state. Macro.prewalk can't easily express "this AST node is inside a def"
     # because the def's body is walked after the def header. Instead we do
     # explicit recursion.
-    state = %{module: nil, function: nil, arity: nil, in_spec: false, defs: %{}, calls: [], file: file}
+    state = %{
+      module: nil,
+      function: nil,
+      arity: nil,
+      in_spec: false,
+      defs: %{},
+      calls: [],
+      file: file
+    }
+
     state = walk(ast, state)
     {state.defs, state.calls}
   end
 
   # Module definition — body may be wrapped by literal_encoder, use helper
   defp walk({:defmodule, _meta, [{:__aliases__, _, aliases}, body_kw]}, state) do
-    mod = case AST.safe_concat(aliases) do
-      nil -> "Unknown"
-      atom -> normalize_module(atom)
-    end
+    mod =
+      case AST.safe_concat(aliases) do
+        nil -> "Unknown"
+        atom -> normalize_module(atom)
+      end
+
     body = extract_do_body(body_kw)
     body_state = walk(body, %{state | module: mod})
     %{state | defs: body_state.defs, calls: body_state.calls}
@@ -191,10 +202,12 @@ defmodule Archdo.FunctionGraph do
          %{module: mod, in_spec: false} = state
        )
        when is_atom(target_fn) and mod != nil do
-    target_mod = case AST.safe_concat(aliases) do
-      nil -> "Unknown"
-      atom -> normalize_module(atom)
-    end
+    target_mod =
+      case AST.safe_concat(aliases) do
+        nil -> "Unknown"
+        atom -> normalize_module(atom)
+      end
+
     target_arity = arg_count(args)
 
     call = %{

@@ -24,12 +24,13 @@ defmodule Archdo.Rules.OTP.CastForCall do
     case AST.genserver_module?(ast) do
       false ->
         []
-      true ->
-      callbacks = AST.extract_callbacks(ast)
 
-      Enum.flat_map(callbacks[:handle_cast] || [], fn {meta, args, body} ->
-        check_cast(file, meta, args, body)
-      end)
+      true ->
+        callbacks = AST.extract_callbacks(ast)
+
+        Enum.flat_map(callbacks[:handle_cast] || [], fn {meta, args, body} ->
+          check_cast(file, meta, args, body)
+        end)
     end
   end
 
@@ -110,5 +111,4 @@ defmodule Archdo.Rules.OTP.CastForCall do
   defp extract_message_name([{name, _, _} | _]) when is_atom(name), do: name
   defp extract_message_name([{:__block__, _, [name]} | _]) when is_atom(name), do: name
   defp extract_message_name(_), do: nil
-
 end

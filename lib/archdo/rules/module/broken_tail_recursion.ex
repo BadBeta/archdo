@@ -9,7 +9,8 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
 
   @impl true
   def description,
-    do: "Recursive function appears tail-recursive but TCO is broken by try/rescue or post-call operations"
+    do:
+      "Recursive function appears tail-recursive but TCO is broken by try/rescue or post-call operations"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -158,8 +159,7 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
         ),
         Fix.new(
           summary: "Use Enum functions instead of recursion",
-          detail:
-            "Enum.map/reduce/flat_map handle iteration with proper stack management.",
+          detail: "Enum.map/reduce/flat_map handle iteration with proper stack management.",
           applies_when: "The recursion can be expressed as Enum operations."
         )
       ],

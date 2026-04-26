@@ -64,7 +64,8 @@ defmodule Archdo.Rules.Module.SequentialWhereParallel do
         when stream_fn in [:map, :each, :flat_map] ->
           case callback_has_io?(callback) do
             {true, io_target} ->
-              {node, [build_collection_diagnostic(file, meta, :"Stream.#{stream_fn}", io_target) | acc]}
+              {node,
+               [build_collection_diagnostic(file, meta, :"Stream.#{stream_fn}", io_target) | acc]}
 
             false ->
               {node, acc}
@@ -126,7 +127,9 @@ defmodule Archdo.Rules.Module.SequentialWhereParallel do
   end
 
   # Function capture: &Module.func/arity
-  defp callback_has_io?({:&, _, [{:/, _, [{{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _}, _arity]}]}) do
+  defp callback_has_io?(
+         {:&, _, [{:/, _, [{{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _}, _arity]}]}
+       ) do
     mod_name = Enum.join(mod_parts, ".")
 
     case io_module?(mod_name) or io_function?(func) do

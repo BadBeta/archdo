@@ -55,7 +55,8 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
                 "Replace one direction of the cycle with a published event the other side subscribes to. " <>
                   "The dependency arrow becomes 'publishes' rather than 'calls', and there is no compile-time " <>
                   "edge between the modules.",
-              applies_when: "The cycle exists because one side needs to react to the other's state changes."
+              applies_when:
+                "The cycle exists because one side needs to react to the other's state changes."
             ),
             Fix.new(
               summary: "Extract shared logic into a third context",

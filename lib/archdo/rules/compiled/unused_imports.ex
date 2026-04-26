@@ -113,5 +113,4 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
       line: 0
     )
   end
-
 end

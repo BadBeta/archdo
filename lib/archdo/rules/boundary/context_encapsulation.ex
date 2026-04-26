@@ -20,10 +20,10 @@ defmodule Archdo.Rules.Boundary.ContextEncapsulation do
       source_context = Config.owning_context(config, edge.source)
 
       # Target is inside a context, but not the context's root module
+      # Source is outside that context
+      # Target is an internal module (not the context root itself)
       target_context != nil and
-        # Source is outside that context
         source_context != target_context and
-        # Target is an internal module (not the context root itself)
         internal_module?(edge.target, target_context)
     end)
     |> Enum.reject(fn edge -> tolerated?(edge, config) end)
@@ -74,6 +74,7 @@ defmodule Archdo.Rules.Boundary.ContextEncapsulation do
 
   defp internal_module?(target, context) do
     ctx_str = normalize(context)
+
     target_str =
       case target do
         t when is_binary(t) -> t

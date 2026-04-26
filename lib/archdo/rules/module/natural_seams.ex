@@ -12,7 +12,8 @@ defmodule Archdo.Rules.Module.NaturalSeams do
   def id, do: "4.14"
 
   @impl true
-  def description, do: "Natural seams — public functions cluster by prefix, suggesting sub-modules"
+  def description,
+    do: "Natural seams — public functions cluster by prefix, suggesting sub-modules"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -81,7 +82,8 @@ defmodule Archdo.Rules.Module.NaturalSeams do
           context: %{
             module: module_name,
             cluster_count: length(prefix_groups),
-            clusters: Enum.map(prefix_groups, fn {p, ns} -> %{prefix: to_string(p), count: length(ns)} end)
+            clusters:
+              Enum.map(prefix_groups, fn {p, ns} -> %{prefix: to_string(p), count: length(ns)} end)
           },
           file: file,
           line: 1
@@ -105,5 +107,4 @@ defmodule Archdo.Rules.Module.NaturalSeams do
   defp format_clusters(groups) do
     Enum.map_join(groups, ", ", fn {prefix, names} -> "#{prefix}_* (#{length(names)})" end)
   end
-
 end

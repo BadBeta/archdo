@@ -54,6 +54,7 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
 
   defp skip_function?({name, _arity}) do
     name_str = Atom.to_string(name)
+
     (String.starts_with?(name_str, "__") and String.ends_with?(name_str, "__")) or
       String.starts_with?(name_str, "sigil_")
   end
@@ -106,6 +107,7 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
     |> Enum.reduce(MapSet.new(), fn
       [_, name], acc ->
         atom = String.to_atom(name)
+
         Enum.reduce(0..6, acc, fn arity, set ->
           MapSet.put(set, {atom, arity})
         end)

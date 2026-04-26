@@ -50,11 +50,13 @@ defmodule Archdo.Metrics do
       ca = afferent_coupling(graph, mod)
       ce = efferent_coupling(graph, mod)
       instability = compute_instability(ca, ce)
+
       abstractness =
         case MapSet.member?(abstract_modules, mod) do
           true -> 1.0
           false -> 0.0
         end
+
       distance = abs(abstractness + instability - 1.0)
 
       %{

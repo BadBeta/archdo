@@ -33,49 +33,53 @@ defmodule Archdo.Rules.Module.TypeDispatch do
   defp find_atom_dispatch_cases(_file, nil, _name, _arity), do: []
 
   defp find_atom_dispatch_cases(file, body, fn_name, fn_arity) do
-    Enum.map(AST.find_all(body, fn
-      {:case, _meta, [_expr, [do: clauses]]} when is_list(clauses) ->
-        # Count clauses that match on bare atoms (not :ok/:error/true/false)
-        atom_clauses = count_atom_dispatch_clauses(clauses)
-        atom_clauses >= 4
+    Enum.map(
+      AST.find_all(body, fn
+        {:case, _meta, [_expr, [do: clauses]]} when is_list(clauses) ->
+          # Count clauses that match on bare atoms (not :ok/:error/true/false)
+          atom_clauses = count_atom_dispatch_clauses(clauses)
+          atom_clauses >= 4
 
-      _ ->
-        false
-    end), fn {:case, meta, [_expr, [do: clauses]]} ->
-      atom_count = count_atom_dispatch_clauses(clauses)
+        _ ->
+          false
+      end),
+      fn {:case, meta, [_expr, [do: clauses]]} ->
+        atom_count = count_atom_dispatch_clauses(clauses)
 
-      Diagnostic.info("4.3",
-        title: "Type-dispatching case statement",
-        message: "case in #{fn_name}/#{fn_arity} dispatches on #{atom_count} distinct type atoms",
-        why:
-          "When a case matches on `:foo`, `:bar`, `:baz` to pick which code path to run, the case is " <>
-            "implementing manual polymorphism. Adding a new type means editing every case dispatch in the " <>
-            "codebase — exactly the change-amplification problem behaviours and protocols solve. The case " <>
-            "violates Open/Closed: adding a type shouldn't require modifying existing functions.",
-        alternatives: [
-          Fix.new(
-            summary: "Define a behaviour and one impl module per type",
-            detail:
-              "If the dispatch hides genuinely different logic per type, define a behaviour with the relevant " <>
-                "callbacks and put each branch in its own module. Routes through a `Map.get(@impls, type)` " <>
-                "lookup or a single dispatch function.",
-            applies_when: "Each branch is substantial and the type set may grow."
-          ),
-          Fix.new(
-            summary: "Use a Protocol if the dispatch is on struct types",
-            detail:
-              "If the case is matching on `%FooStruct{}` vs `%BarStruct{}`, that's exactly what protocols " <>
-                "are for. Define a protocol with the operation, implement it for each struct type, and call " <>
-                "the protocol function instead.",
-            applies_when: "The dispatch is on struct types rather than atoms."
-          )
-        ],
-        references: ["ARCHITECTURE_RULES.md#4.3"],
-        context: %{function: "#{fn_name}/#{fn_arity}", branch_count: atom_count},
-        file: file,
-        line: AST.line(meta)
-      )
-    end)
+        Diagnostic.info("4.3",
+          title: "Type-dispatching case statement",
+          message:
+            "case in #{fn_name}/#{fn_arity} dispatches on #{atom_count} distinct type atoms",
+          why:
+            "When a case matches on `:foo`, `:bar`, `:baz` to pick which code path to run, the case is " <>
+              "implementing manual polymorphism. Adding a new type means editing every case dispatch in the " <>
+              "codebase — exactly the change-amplification problem behaviours and protocols solve. The case " <>
+              "violates Open/Closed: adding a type shouldn't require modifying existing functions.",
+          alternatives: [
+            Fix.new(
+              summary: "Define a behaviour and one impl module per type",
+              detail:
+                "If the dispatch hides genuinely different logic per type, define a behaviour with the relevant " <>
+                  "callbacks and put each branch in its own module. Routes through a `Map.get(@impls, type)` " <>
+                  "lookup or a single dispatch function.",
+              applies_when: "Each branch is substantial and the type set may grow."
+            ),
+            Fix.new(
+              summary: "Use a Protocol if the dispatch is on struct types",
+              detail:
+                "If the case is matching on `%FooStruct{}` vs `%BarStruct{}`, that's exactly what protocols " <>
+                  "are for. Define a protocol with the operation, implement it for each struct type, and call " <>
+                  "the protocol function instead.",
+              applies_when: "The dispatch is on struct types rather than atoms."
+            )
+          ],
+          references: ["ARCHITECTURE_RULES.md#4.3"],
+          context: %{function: "#{fn_name}/#{fn_arity}", branch_count: atom_count},
+          file: file,
+          line: AST.line(meta)
+        )
+      end
+    )
   end
 
   # --- Multi-clause function dispatch ---
@@ -115,10 +119,10 @@ defmodule Archdo.Rules.Module.TypeDispatch do
             message:
               "#{name}/#{arity} has #{length(distinct)} clauses dispatching on atom types: " <>
                 "#{Enum.map_join(Enum.take(distinct, 5), ", ", &inspect/1)}" <>
-                (case match?([_, _, _, _, _, _ | _], distinct) do
-                   true -> ", ..."
-                   false -> ""
-                 end),
+                case match?([_, _, _, _, _, _ | _], distinct) do
+                  true -> ", ..."
+                  false -> ""
+                end,
             why:
               "When a function has many clauses each matching a different atom as the first argument, " <>
                 "adding a new type requires editing this module. This violates Open/Closed — the module " <>

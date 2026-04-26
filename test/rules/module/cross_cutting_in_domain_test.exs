@@ -48,7 +48,9 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomainTest do
       end
       """
 
-      assert_clean(CrossCuttingInDomain, code, file: "lib/my_app_web/controllers/account_controller.ex")
+      assert_clean(CrossCuttingInDomain, code,
+        file: "lib/my_app_web/controllers/account_controller.ex"
+      )
     end
   end
 end

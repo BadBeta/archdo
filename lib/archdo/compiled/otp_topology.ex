@@ -233,7 +233,11 @@ defmodule Archdo.Compiled.OTPTopology do
       end
     )
     |> Map.new(fn {sup, children} ->
-      {sup, children |> Enum.reject(&is_nil/1) |> Enum.filter(&MapSet.member?(process_set, &1)) |> Enum.uniq()}
+      {sup,
+       children
+       |> Enum.reject(&is_nil/1)
+       |> Enum.filter(&MapSet.member?(process_set, &1))
+       |> Enum.uniq()}
     end)
   end
 

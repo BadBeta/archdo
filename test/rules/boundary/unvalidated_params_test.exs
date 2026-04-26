@@ -45,9 +45,7 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParamsTest do
       # The rule fires here — which is correct: the controller doesn't validate.
       # The context might, but the controller should at least extract keys.
       diags =
-        analyze(UnvalidatedParams, code,
-          file: "lib/my_app_web/controllers/user_controller.ex"
-        )
+        analyze(UnvalidatedParams, code, file: "lib/my_app_web/controllers/user_controller.ex")
 
       # This is a borderline case — the context handles validation.
       # The rule fires as info-level to prompt review.
@@ -74,9 +72,7 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParamsTest do
       end
       """
 
-      assert_clean(UnvalidatedParams, code,
-        file: "lib/my_app_web/controllers/user_controller.ex"
-      )
+      assert_clean(UnvalidatedParams, code, file: "lib/my_app_web/controllers/user_controller.ex")
     end
 
     test "allows controller action using JSV validation" do
@@ -93,9 +89,7 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParamsTest do
       end
       """
 
-      assert_clean(UnvalidatedParams, code,
-        file: "lib/my_app_web/controllers/api_controller.ex"
-      )
+      assert_clean(UnvalidatedParams, code, file: "lib/my_app_web/controllers/api_controller.ex")
     end
 
     test "allows controller with pattern-matched params" do
@@ -114,9 +108,7 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParamsTest do
       # The rule should still fire since there's no validation, but the
       # pattern match is a weak signal. Let's check what happens.
       diags =
-        analyze(UnvalidatedParams, code,
-          file: "lib/my_app_web/controllers/user_controller.ex"
-        )
+        analyze(UnvalidatedParams, code, file: "lib/my_app_web/controllers/user_controller.ex")
 
       # show/2 with pattern match — still no validation per se
       assert is_list(diags)
@@ -155,9 +147,7 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParamsTest do
       """
 
       diags =
-        assert_flagged(UnvalidatedParams, code,
-          file: "lib/my_app_web/live/user_live.ex"
-        )
+        assert_flagged(UnvalidatedParams, code, file: "lib/my_app_web/live/user_live.ex")
 
       assert hd(diags).rule_id == "1.14"
       assert hd(diags).message =~ "handle_event/3"
@@ -175,9 +165,7 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParamsTest do
       end
       """
 
-      assert_clean(UnvalidatedParams, code,
-        file: "lib/my_app_web/live/user_live.ex"
-      )
+      assert_clean(UnvalidatedParams, code, file: "lib/my_app_web/live/user_live.ex")
     end
   end
 end

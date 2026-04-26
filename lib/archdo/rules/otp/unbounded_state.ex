@@ -27,8 +27,9 @@ defmodule Archdo.Rules.OTP.UnboundedState do
     case AST.genserver_module?(ast) do
       false ->
         []
+
       true ->
-      check_unbounded_growth(file, ast)
+        check_unbounded_growth(file, ast)
     end
   end
 
@@ -41,7 +42,9 @@ defmodule Archdo.Rules.OTP.UnboundedState do
 
     has_accumulation? = any_callback_matches?(callbacks, accumulation_cbs, &has_accumulation?/1)
     has_cleanup? = any_callback_matches?(callbacks, cleanup_cbs, &has_cleanup?/1)
-    has_list_prepend? = any_callback_matches?(callbacks, [:handle_cast, :handle_info], &has_list_prepend?/1)
+
+    has_list_prepend? =
+      any_callback_matches?(callbacks, [:handle_cast, :handle_info], &has_list_prepend?/1)
 
     build_diagnostics(file, module_name, has_accumulation?, has_cleanup?, has_list_prepend?)
   end
@@ -67,8 +70,11 @@ defmodule Archdo.Rules.OTP.UnboundedState do
       title: "Unbounded GenServer state",
       message:
         case kind do
-          :map_accumulation -> "#{module_name} grows a Map in state via Map.put/merge with no Map.delete"
-          :list_prepend -> "#{module_name} prepends to a list in state with no pruning"
+          :map_accumulation ->
+            "#{module_name} grows a Map in state via Map.put/merge with no Map.delete"
+
+          :list_prepend ->
+            "#{module_name} prepends to a list in state with no pruning"
         end,
       why:
         "GenServer state lives on the process heap. When state grows without bound, garbage collection " <>
@@ -123,7 +129,9 @@ defmodule Archdo.Rules.OTP.UnboundedState do
     AST.contains?(body, fn
       {{:., _, [{:__aliases__, _, mod}, func]}, _, _} ->
         Enum.any?(@accumulation_funcs, fn {m, fns} -> mod == m and func in fns end)
-      _ -> false
+
+      _ ->
+        false
     end)
   end
 
@@ -133,7 +141,9 @@ defmodule Archdo.Rules.OTP.UnboundedState do
     AST.contains?(body, fn
       {{:., _, [{:__aliases__, _, mod}, func]}, _, _} ->
         Enum.any?(@cleanup_funcs, fn {m, fns} -> mod == m and func in fns end)
-      _ -> false
+
+      _ ->
+        false
     end)
   end
 
@@ -146,5 +156,4 @@ defmodule Archdo.Rules.OTP.UnboundedState do
       _ -> false
     end)
   end
-
 end

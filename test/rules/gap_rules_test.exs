@@ -248,9 +248,7 @@ defmodule Archdo.Rules.GapRulesTest do
       end
       """
 
-      assert_clean(LogicInController, code,
-        file: "lib/my_app_web/controllers/user_controller.ex"
-      )
+      assert_clean(LogicInController, code, file: "lib/my_app_web/controllers/user_controller.ex")
     end
   end
 
@@ -361,7 +359,9 @@ defmodule Archdo.Rules.GapRulesTest do
       end
       """
 
-      diags = assert_flagged(LargeLiveviewAssigns, code, file: "lib/my_app_web/live/dashboard_live.ex")
+      diags =
+        assert_flagged(LargeLiveviewAssigns, code, file: "lib/my_app_web/live/dashboard_live.ex")
+
       assert hd(diags).rule_id == "1.16"
     end
 
@@ -396,9 +396,7 @@ defmodule Archdo.Rules.GapRulesTest do
       """
 
       diags =
-        assert_flagged(PubsubWithoutHandler, code,
-          file: "lib/my_app_web/live/feed_live.ex"
-        )
+        assert_flagged(PubsubWithoutHandler, code, file: "lib/my_app_web/live/feed_live.ex")
 
       assert hd(diags).rule_id == "1.17"
     end
@@ -419,9 +417,7 @@ defmodule Archdo.Rules.GapRulesTest do
       end
       """
 
-      assert_clean(PubsubWithoutHandler, code,
-        file: "lib/my_app_web/live/feed_live.ex"
-      )
+      assert_clean(PubsubWithoutHandler, code, file: "lib/my_app_web/live/feed_live.ex")
     end
   end
 

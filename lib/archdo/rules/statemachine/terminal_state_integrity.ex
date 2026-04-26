@@ -31,7 +31,8 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
     # Actually, the more practical check: states named like terminal states
     # (completed, cancelled, failed, terminated, done, closed, archived)
     # that have outgoing transitions to non-self states
-    terminal_names = ~w(completed cancelled failed terminated done closed archived deleted expired)
+    terminal_names =
+      ~w(completed cancelled failed terminated done closed archived deleted expired)
 
     all_states
     |> Enum.filter(fn state ->
@@ -107,5 +108,4 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
       _ -> false
     end) and length(pairs) >= 2
   end
-
 end

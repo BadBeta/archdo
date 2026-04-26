@@ -69,10 +69,10 @@ defmodule Archdo.Rules.Boundary.PrivateModuleCalls do
     source_parent = Enum.take(source_parts, length(source_parts) - 1)
     target_parent = Enum.take(target_parts, length(target_parts) - 1)
 
+    # Source is the parent of target
+    # They share the same top-2 namespace
     source_parent == target_parent or
-      # Source is the parent of target
       source_parts == target_parent or
-      # They share the same top-2 namespace
       Enum.take(source_parts, 2) == Enum.take(target_parts, 2)
   end
 
@@ -82,7 +82,9 @@ defmodule Archdo.Rules.Boundary.PrivateModuleCalls do
     |> Enum.take(-2)
     |> Enum.take(1)
     |> then(fn
-      [] -> module_name
+      [] ->
+        module_name
+
       _parts ->
         module_name
         |> String.split(".")

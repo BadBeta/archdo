@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Module.NonTailRecursion do
   def id, do: "6.20"
 
   @impl true
-  def description, do: "Recursive function not in tail position — risks stack overflow on large input"
+  def description,
+    do: "Recursive function not in tail position — risks stack overflow on large input"
 
   @impl true
   def analyze(file, ast, _opts) do

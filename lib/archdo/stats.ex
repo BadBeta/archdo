@@ -58,8 +58,12 @@ defmodule Archdo.Stats do
       paths
       |> List.first()
       |> then(fn
-        nil -> "."
-        "lib" -> "."
+        nil ->
+          "."
+
+        "lib" ->
+          "."
+
         path when is_binary(path) ->
           case String.ends_with?(path, "/lib") do
             true -> String.replace_suffix(path, "/lib", "")
@@ -146,8 +150,17 @@ defmodule Archdo.Stats do
 
   defp analyze_file(path) do
     case File.read(path) do
-      {:ok, content} -> do_analyze_file(path, content)
-      {:error, _} -> Map.merge(empty_ast_stats(), %{file: path, lines: 0, code_lines: 0, comment_lines: 0, blank_lines: 0})
+      {:ok, content} ->
+        do_analyze_file(path, content)
+
+      {:error, _} ->
+        Map.merge(empty_ast_stats(), %{
+          file: path,
+          lines: 0,
+          code_lines: 0,
+          comment_lines: 0,
+          blank_lines: 0
+        })
     end
   end
 
@@ -191,7 +204,12 @@ defmodule Archdo.Stats do
           {node, %{acc | modules: acc.modules + 1}}
 
         {:def, meta, [{name, _, _} | _]} = node, acc when is_atom(name) ->
-          {node, %{acc | public_fns: acc.public_fns + 1, module_lines: [{path, name, AST.line(meta)} | acc.module_lines]}}
+          {node,
+           %{
+             acc
+             | public_fns: acc.public_fns + 1,
+               module_lines: [{path, name, AST.line(meta)} | acc.module_lines]
+           }}
 
         {:defp, _, [{name, _, _} | _]} = node, acc when is_atom(name) ->
           {node, %{acc | private_fns: acc.private_fns + 1}}
@@ -247,10 +265,21 @@ defmodule Archdo.Stats do
 
   defp empty_ast_stats do
     %{
-      modules: 0, public_fns: 0, private_fns: 0, macros: 0,
-      tests: 0, describes: 0, genservers: 0, supervisors: 0,
-      schemas: 0, behaviours_defined: 0, behaviours_implemented: 0,
-      protocols: 0, structs: 0, specs: 0, moduledocs: 0,
+      modules: 0,
+      public_fns: 0,
+      private_fns: 0,
+      macros: 0,
+      tests: 0,
+      describes: 0,
+      genservers: 0,
+      supervisors: 0,
+      schemas: 0,
+      behaviours_defined: 0,
+      behaviours_implemented: 0,
+      protocols: 0,
+      structs: 0,
+      specs: 0,
+      moduledocs: 0,
       module_lines: []
     }
   end
@@ -371,8 +400,9 @@ defmodule Archdo.Stats do
   end
 
   defp maybe_otp_rows(stats) do
-    otp_total = stats.genservers + stats.supervisors + stats.schemas +
-                stats.protocols + stats.structs + stats.behaviours_defined
+    otp_total =
+      stats.genservers + stats.supervisors + stats.schemas +
+        stats.protocols + stats.structs + stats.behaviours_defined
 
     case otp_total do
       0 ->
@@ -436,7 +466,8 @@ defmodule Archdo.Stats do
     header = [
       "┌─ Contexts (from compiled beams) ──────────────────────",
       "│",
-      "│  " <> String.pad_trailing("Context", 28) <>
+      "│  " <>
+        String.pad_trailing("Context", 28) <>
         String.pad_trailing("Mods", 6) <>
         String.pad_trailing("Coh.", 7) <>
         String.pad_trailing("Coup.", 7) <>

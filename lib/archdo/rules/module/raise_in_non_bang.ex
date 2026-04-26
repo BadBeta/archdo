@@ -116,7 +116,8 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
           detail:
             "If the raise is intentional (the function is meant to crash on invalid input, like " <>
               "a validation guard), rename it with a `!` suffix so callers know what to expect.",
-          applies_when: "The function is intentionally strict — callers should never pass invalid input."
+          applies_when:
+            "The function is intentionally strict — callers should never pass invalid input."
         ),
         Fix.new(
           summary: "Keep the raise if this is compile-time or startup validation",

@@ -69,13 +69,16 @@ defmodule Archdo.Rules.OTP.CallSelfDeadlock do
   defp find_genserver_call_self(nil), do: []
 
   defp find_genserver_call_self(body) do
-    Enum.map(AST.find_all(body, fn
-      {{:., _, [{:__aliases__, _, [:GenServer]}, :call]}, _, [target | _]} ->
-        self_target?(target)
+    Enum.map(
+      AST.find_all(body, fn
+        {{:., _, [{:__aliases__, _, [:GenServer]}, :call]}, _, [target | _]} ->
+          self_target?(target)
 
-      _ ->
-        false
-    end), fn {_, meta, _} -> {AST.line(meta)} end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} -> {AST.line(meta)} end
+    )
   end
 
   defp self_target?({:__MODULE__, _, _}), do: true

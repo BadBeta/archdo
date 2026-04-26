@@ -17,26 +17,84 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
 
   # Enum functions that iterate over a collection with a callback
   @enum_fns [
-    :map, :each, :reduce, :flat_map, :filter, :reject, :any?, :all?,
-    :find, :find_value, :find_index, :map_reduce, :reduce_while,
-    :sort_by, :min_by, :max_by, :group_by, :count, :sum_by,
-    :uniq_by, :dedup_by, :frequencies_by, :map_join, :map_intersperse,
-    :scan, :with_index, :zip_with, :zip_reduce, :map_every,
-    :chunk_by, :chunk_while, :take_while, :drop_while
+    :map,
+    :each,
+    :reduce,
+    :flat_map,
+    :filter,
+    :reject,
+    :any?,
+    :all?,
+    :find,
+    :find_value,
+    :find_index,
+    :map_reduce,
+    :reduce_while,
+    :sort_by,
+    :min_by,
+    :max_by,
+    :group_by,
+    :count,
+    :sum_by,
+    :uniq_by,
+    :dedup_by,
+    :frequencies_by,
+    :map_join,
+    :map_intersperse,
+    :scan,
+    :with_index,
+    :zip_with,
+    :zip_reduce,
+    :map_every,
+    :chunk_by,
+    :chunk_while,
+    :take_while,
+    :drop_while
   ]
 
   # Stream functions that iterate lazily with a callback
   @stream_fns [
-    :map, :each, :filter, :reject, :flat_map, :transform, :unfold,
-    :scan, :with_index, :chunk_while, :dedup_by, :uniq_by,
-    :take_while, :drop_while, :map_every, :zip_with, :resource
+    :map,
+    :each,
+    :filter,
+    :reject,
+    :flat_map,
+    :transform,
+    :unfold,
+    :scan,
+    :with_index,
+    :chunk_while,
+    :dedup_by,
+    :uniq_by,
+    :take_while,
+    :drop_while,
+    :map_every,
+    :zip_with,
+    :resource
   ]
 
   # Erlang :lists functions that iterate with a callback
   @lists_fns [
-    :map, :foldl, :foldr, :filter, :foreach, :filtermap, :flatmap,
-    :any, :all, :search, :mapfoldl, :mapfoldr, :sort, :usort,
-    :keymap, :keysort, :partition, :splitwith, :takewhile, :dropwhile,
+    :map,
+    :foldl,
+    :foldr,
+    :filter,
+    :foreach,
+    :filtermap,
+    :flatmap,
+    :any,
+    :all,
+    :search,
+    :mapfoldl,
+    :mapfoldr,
+    :sort,
+    :usort,
+    :keymap,
+    :keysort,
+    :partition,
+    :splitwith,
+    :takewhile,
+    :dropwhile,
     :zipwith
   ]
 
@@ -115,7 +173,9 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
 
   These are hot paths — called on every message the process receives.
   """
-  @spec find_in_genserver_callbacks(Macro.t(), (Macro.t() -> boolean())) :: [{Macro.t(), keyword()}]
+  @spec find_in_genserver_callbacks(Macro.t(), (Macro.t() -> boolean())) :: [
+          {Macro.t(), keyword()}
+        ]
   def find_in_genserver_callbacks(ast, predicate) do
     callbacks = AST.extract_callbacks(ast)
 
@@ -174,7 +234,7 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
   end
 
   defp extract_body_ast(nil), do: nil
-  defp extract_body_ast([do: body]), do: body
+  defp extract_body_ast(do: body), do: body
   defp extract_body_ast({:do, body}), do: body
   defp extract_body_ast(body) when is_tuple(body), do: body
   defp extract_body_ast(body) when is_list(body), do: {:__block__, [], body}

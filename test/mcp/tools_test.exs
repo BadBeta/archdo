@@ -2,8 +2,16 @@ defmodule Archdo.Mcp.ToolsTest do
   use ExUnit.Case, async: true
 
   alias Archdo.Mcp.Tools.{
-    AnalyzePaths, AnalyzeFile, Health, Diff, PerfAudit,
-    Suggest, ExplainFinding, Fix, ExplainRule, ListRules
+    AnalyzePaths,
+    AnalyzeFile,
+    Health,
+    Diff,
+    PerfAudit,
+    Suggest,
+    ExplainFinding,
+    Fix,
+    ExplainRule,
+    ListRules
   }
 
   describe "archdo_health" do
@@ -28,10 +36,11 @@ defmodule Archdo.Mcp.ToolsTest do
     end
 
     test "respects only filter" do
-      {:ok, result} = AnalyzePaths.call(%{
-        "paths" => ["lib/archdo/ast.ex"],
-        "only" => ["2.1"]
-      })
+      {:ok, result} =
+        AnalyzePaths.call(%{
+          "paths" => ["lib/archdo/ast.ex"],
+          "only" => ["2.1"]
+        })
 
       Enum.each(result.diagnostics, fn d ->
         assert d.rule_id == "2.1"
@@ -45,10 +54,11 @@ defmodule Archdo.Mcp.ToolsTest do
 
   describe "archdo_analyze_file" do
     test "analyzes a real file" do
-      {:ok, result} = AnalyzeFile.call(%{
-        "file" => "lib/archdo/diagnostic.ex",
-        "content" => File.read!("lib/archdo/diagnostic.ex")
-      })
+      {:ok, result} =
+        AnalyzeFile.call(%{
+          "file" => "lib/archdo/diagnostic.ex",
+          "content" => File.read!("lib/archdo/diagnostic.ex")
+        })
 
       assert is_map(result.summary)
       assert is_list(result.diagnostics)
@@ -108,10 +118,11 @@ defmodule Archdo.Mcp.ToolsTest do
 
   describe "archdo_explain_finding" do
     test "returns finding at specified line" do
-      {:ok, result} = ExplainFinding.call(%{
-        "file" => "lib/archdo/ast.ex",
-        "line" => 1
-      })
+      {:ok, result} =
+        ExplainFinding.call(%{
+          "file" => "lib/archdo/ast.ex",
+          "line" => 1
+        })
 
       assert result.file == "lib/archdo/ast.ex"
       assert is_binary(result.code_context) or is_nil(result.code_context)
@@ -136,12 +147,14 @@ defmodule Archdo.Mcp.ToolsTest do
     end
 
     test "generates fixes for specific rule" do
-      {:ok, result} = Fix.call(%{
-        "file" => "lib/archdo/ast.ex",
-        "rule_id" => "4.27"
-      })
+      {:ok, result} =
+        Fix.call(%{
+          "file" => "lib/archdo/ast.ex",
+          "rule_id" => "4.27"
+        })
 
       assert is_list(result.fixes)
+
       Enum.each(result.fixes, fn fix ->
         assert fix.rule_id == "4.27"
       end)

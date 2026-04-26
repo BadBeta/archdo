@@ -16,13 +16,14 @@ defmodule Archdo.Rules.Module.RedundantGuardRecheckTest do
 
   describe "pattern match guarantees" do
     test "flags is_map when param matched as %{} = var" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def process(%{} = x) do
-          if is_map(x), do: :yes, else: :no
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def process(%{} = x) do
+            if is_map(x), do: :yes, else: :no
+          end
         end
-      end
-      """)
+        """)
 
       assert [%{message: msg}] = diagnostics
       assert msg =~ "is_map"
@@ -30,13 +31,14 @@ defmodule Archdo.Rules.Module.RedundantGuardRecheckTest do
     end
 
     test "flags is_list when param matched as [_ | _] = var" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def process([_ | _] = items) do
-          if is_list(items), do: length(items), else: 0
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def process([_ | _] = items) do
+            if is_list(items), do: length(items), else: 0
+          end
         end
-      end
-      """)
+        """)
 
       assert [%{message: msg}] = diagnostics
       assert msg =~ "is_list"
@@ -44,13 +46,14 @@ defmodule Archdo.Rules.Module.RedundantGuardRecheckTest do
     end
 
     test "flags is_binary when param matched as <<>> = var" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def process(<<>> = data) do
-          if is_binary(data), do: byte_size(data), else: 0
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def process(<<>> = data) do
+            if is_binary(data), do: byte_size(data), else: 0
+          end
         end
-      end
-      """)
+        """)
 
       assert [%{message: msg}] = diagnostics
       assert msg =~ "is_binary"
@@ -58,25 +61,27 @@ defmodule Archdo.Rules.Module.RedundantGuardRecheckTest do
     end
 
     test "clean: is_map on unmatched variable is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def process(x) do
-          if is_map(x), do: :map, else: :other
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def process(x) do
+            if is_map(x), do: :map, else: :other
+          end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end
 
     test "clean: different type check is fine" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def process(%{} = x) do
-          if is_list(x), do: :list, else: :not_list
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def process(%{} = x) do
+            if is_list(x), do: :list, else: :not_list
+          end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end
@@ -84,13 +89,14 @@ defmodule Archdo.Rules.Module.RedundantGuardRecheckTest do
 
   describe "guard clause guarantees" do
     test "flags is_list in body when guard already checks is_list" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def process(x) when is_list(x) do
-          if is_list(x), do: length(x), else: 0
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def process(x) when is_list(x) do
+            if is_list(x), do: length(x), else: 0
+          end
         end
-      end
-      """)
+        """)
 
       assert [%{message: msg}] = diagnostics
       assert msg =~ "is_list"
@@ -98,29 +104,31 @@ defmodule Archdo.Rules.Module.RedundantGuardRecheckTest do
     end
 
     test "flags is_map in body when guard already checks is_map" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def process(x) when is_map(x) do
-          case is_map(x) do
-            true -> Map.keys(x)
-            false -> []
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def process(x) when is_map(x) do
+            case is_map(x) do
+              true -> Map.keys(x)
+              false -> []
+            end
           end
         end
-      end
-      """)
+        """)
 
       assert [%{message: msg}] = diagnostics
       assert msg =~ "is_map"
     end
 
     test "clean: guard checks different variable than body check" do
-      diagnostics = analyze("""
-      defmodule Foo do
-        def process(x, y) when is_list(x) do
-          if is_list(y), do: y, else: []
+      diagnostics =
+        analyze("""
+        defmodule Foo do
+          def process(x, y) when is_list(x) do
+            if is_list(y), do: y, else: []
+          end
         end
-      end
-      """)
+        """)
 
       assert diagnostics == []
     end

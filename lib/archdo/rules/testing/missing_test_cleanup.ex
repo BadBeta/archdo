@@ -47,7 +47,8 @@ defmodule Archdo.Rules.Testing.MissingTestCleanup do
       [
         Diagnostic.info("7.19",
           title: "Test starts process without cleanup",
-          message: "#{module_name} starts processes directly without start_supervised!/1 or on_exit/1",
+          message:
+            "#{module_name} starts processes directly without start_supervised!/1 or on_exit/1",
           why:
             "Processes started with GenServer.start_link or Task.start in tests outlive the " <>
               "test case if not cleaned up. They may interfere with subsequent tests, hold " <>

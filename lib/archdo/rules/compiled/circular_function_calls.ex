@@ -78,5 +78,4 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
       line: 0
     )
   end
-
 end

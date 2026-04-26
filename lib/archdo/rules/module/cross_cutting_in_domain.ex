@@ -10,7 +10,8 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
   def id, do: "1.6"
 
   @impl true
-  def description, do: "Cross-cutting concerns (Logger, Telemetry) belong at boundaries, not in domain"
+  def description,
+    do: "Cross-cutting concerns (Logger, Telemetry) belong at boundaries, not in domain"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -67,14 +68,16 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
   end
 
   defp count_logger_calls(ast) do
-    length(AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, [:Logger]}, level]}, _, _}
-      when level in [:debug, :info, :warning, :warn, :notice] ->
-        true
+    length(
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, [:Logger]}, level]}, _, _}
+        when level in [:debug, :info, :warning, :warn, :notice] ->
+          true
 
-      _ ->
-        false
-    end))
+        _ ->
+          false
+      end)
+    )
   end
 
   defp web_file?(file), do: String.contains?(file, "_web/") or String.contains?(file, "web/")

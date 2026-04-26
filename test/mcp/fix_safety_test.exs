@@ -17,42 +17,45 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
 
   describe "AF-1: assignment pipes must not be auto-fixed" do
     test "skips x = foo() |> bar()" do
-      {:ok, result} = fix_file("""
-      defmodule Foo do
-        def bar do
-          path = Path.join(base, "file.dets") |> to_charlist()
-          path
+      {:ok, result} =
+        fix_file("""
+        defmodule Foo do
+          def bar do
+            path = Path.join(base, "file.dets") |> to_charlist()
+            path
+          end
         end
-      end
-      """)
+        """)
 
       pipe_fixes = Enum.filter(result.fixes, &(&1.rule_id == "6.33" and &1.auto_fixable))
       assert pipe_fixes == []
     end
 
     test "skips values = Enum.map(items, &f/1) |> Enum.reject(&is_nil/1)" do
-      {:ok, result} = fix_file("""
-      defmodule Foo do
-        def bar(items) do
-          values = Enum.map(items, &extract/1) |> Enum.reject(&is_nil/1)
-          values
+      {:ok, result} =
+        fix_file("""
+        defmodule Foo do
+          def bar(items) do
+            values = Enum.map(items, &extract/1) |> Enum.reject(&is_nil/1)
+            values
+          end
         end
-      end
-      """)
+        """)
 
       pipe_fixes = Enum.filter(result.fixes, &(&1.rule_id == "6.33" and &1.auto_fixable))
       assert pipe_fixes == []
     end
 
     test "skips indexed = Enum.with_index(samples) |> Enum.map(...)" do
-      {:ok, result} = fix_file("""
-      defmodule Foo do
-        def bar(samples) do
-          indexed = Enum.with_index(samples) |> Enum.map(fn {v, i} -> {i, v} end)
-          indexed
+      {:ok, result} =
+        fix_file("""
+        defmodule Foo do
+          def bar(samples) do
+            indexed = Enum.with_index(samples) |> Enum.map(fn {v, i} -> {i, v} end)
+            indexed
+          end
         end
-      end
-      """)
+        """)
 
       pipe_fixes = Enum.filter(result.fixes, &(&1.rule_id == "6.33" and &1.auto_fixable))
       assert pipe_fixes == []
@@ -61,27 +64,29 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
 
   describe "keyword value pipes must not be auto-fixed" do
     test "skips key: expr |> func()" do
-      {:ok, result} = fix_file("""
-      defmodule Foo do
-        @schema %{
-          timeout: Zoi.integer() |> Zoi.optional(),
-          name: Zoi.string() |> Zoi.default("test")
-        }
-      end
-      """)
+      {:ok, result} =
+        fix_file("""
+        defmodule Foo do
+          @schema %{
+            timeout: Zoi.integer() |> Zoi.optional(),
+            name: Zoi.string() |> Zoi.default("test")
+          }
+        end
+        """)
 
       pipe_fixes = Enum.filter(result.fixes, &(&1.rule_id == "6.33" and &1.auto_fixable))
       assert pipe_fixes == []
     end
 
     test "skips key?: expr |> func()" do
-      {:ok, result} = fix_file("""
-      defmodule Foo do
-        @schema %{
-          compress?: Zoi.boolean() |> Zoi.default(false)
-        }
-      end
-      """)
+      {:ok, result} =
+        fix_file("""
+        defmodule Foo do
+          @schema %{
+            compress?: Zoi.boolean() |> Zoi.default(false)
+          }
+        end
+        """)
 
       pipe_fixes = Enum.filter(result.fixes, &(&1.rule_id == "6.33" and &1.auto_fixable))
       assert pipe_fixes == []
@@ -90,16 +95,17 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
 
   describe "case clause pipes must not be auto-fixed" do
     test "skips node -> Enum.map(...) |> Enum.reject(...)" do
-      {:ok, result} = fix_file("""
-      defmodule Foo do
-        def bar(machine, id) do
-          case get_node(machine, id) do
-            nil -> []
-            node -> Enum.map(node.children, &get/1) |> Enum.reject(&is_nil/1)
+      {:ok, result} =
+        fix_file("""
+        defmodule Foo do
+          def bar(machine, id) do
+            case get_node(machine, id) do
+              nil -> []
+              node -> Enum.map(node.children, &get/1) |> Enum.reject(&is_nil/1)
+            end
           end
         end
-      end
-      """)
+        """)
 
       pipe_fixes = Enum.filter(result.fixes, &(&1.rule_id == "6.33" and &1.auto_fixable))
       assert pipe_fixes == []
@@ -108,13 +114,14 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
 
   describe "safe pipes ARE auto-fixed" do
     test "fixes simple variable pipe" do
-      {:ok, result} = fix_file("""
-      defmodule Foo do
-        def bar(list) do
-          list |> Enum.sort()
+      {:ok, result} =
+        fix_file("""
+        defmodule Foo do
+          def bar(list) do
+            list |> Enum.sort()
+          end
         end
-      end
-      """)
+        """)
 
       pipe_fixes = Enum.filter(result.fixes, &(&1.rule_id == "6.33" and &1.auto_fixable))
 
@@ -129,13 +136,14 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
     end
 
     test "fixes list literal pipe" do
-      {:ok, result} = fix_file("""
-      defmodule Foo do
-        def bar(a, b) do
-          [a, b] |> Enum.sort()
+      {:ok, result} =
+        fix_file("""
+        defmodule Foo do
+          def bar(a, b) do
+            [a, b] |> Enum.sort()
+          end
         end
-      end
-      """)
+        """)
 
       pipe_fixes = Enum.filter(result.fixes, &(&1.rule_id == "6.33" and &1.auto_fixable))
 
@@ -151,7 +159,11 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
 
   describe "rule 7.24 describe block crash" do
     test "does not crash on quoted describe name" do
-      path = Path.join(System.tmp_dir!(), "archdo_describe_#{System.unique_integer([:positive])}_test.exs")
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "archdo_describe_#{System.unique_integer([:positive])}_test.exs"
+        )
 
       code = """
       defmodule FooTest do
@@ -168,9 +180,19 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
       File.write!(path, code)
 
       # Rule 7.24 should NOT crash — it previously crashed on {:__block__, _, ["string"]}
-      diags = Archdo.Rules.Testing.EmptyDescribe.analyze(path, elem(Code.string_to_quoted(code,
-        columns: true, token_metadata: true,
-        literal_encoder: &{:ok, {:__block__, &2, [&1]}}), 1), [])
+      diags =
+        Archdo.Rules.Testing.EmptyDescribe.analyze(
+          path,
+          elem(
+            Code.string_to_quoted(code,
+              columns: true,
+              token_metadata: true,
+              literal_encoder: &{:ok, {:__block__, &2, [&1]}}
+            ),
+            1
+          ),
+          []
+        )
 
       assert is_list(diags)
       File.rm(path)
@@ -232,10 +254,16 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
       end
       """
 
-      {:ok, ast} = Code.string_to_quoted(code, columns: true, token_metadata: true,
-        literal_encoder: &{:ok, {:__block__, &2, [&1]}})
+      {:ok, ast} =
+        Code.string_to_quoted(code,
+          columns: true,
+          token_metadata: true,
+          literal_encoder: &{:ok, {:__block__, &2, [&1]}}
+        )
 
-      diags = Archdo.Rules.Module.DeadPrivateFunction.analyze("lib/foo_web/components.ex", ast, [])
+      diags =
+        Archdo.Rules.Module.DeadPrivateFunction.analyze("lib/foo_web/components.ex", ast, [])
+
       dead_fns = Enum.filter(diags, &(&1.rule_id == "6.34"))
 
       # format_name should NOT be flagged as dead — it's called from HEEx
@@ -257,11 +285,19 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
       end
       """
 
-      {:ok, ast} = Code.string_to_quoted(code, columns: true, token_metadata: true,
-        literal_encoder: &{:ok, {:__block__, &2, [&1]}})
+      {:ok, ast} =
+        Code.string_to_quoted(code,
+          columns: true,
+          token_metadata: true,
+          literal_encoder: &{:ok, {:__block__, &2, [&1]}}
+        )
 
-      diags = Archdo.Rules.Boundary.ReverseDependency.analyze(
-        "lib/my_app_web.ex", ast, [])
+      diags =
+        Archdo.Rules.Boundary.ReverseDependency.analyze(
+          "lib/my_app_web.ex",
+          ast,
+          []
+        )
 
       assert diags == []
     end
@@ -284,8 +320,12 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
       end
       """
 
-      {:ok, ast} = Code.string_to_quoted(code, columns: true, token_metadata: true,
-        literal_encoder: &{:ok, {:__block__, &2, [&1]}})
+      {:ok, ast} =
+        Code.string_to_quoted(code,
+          columns: true,
+          token_metadata: true,
+          literal_encoder: &{:ok, {:__block__, &2, [&1]}}
+        )
 
       diags = Archdo.Rules.OTP.MaxRestarts.analyze("lib/my_app/supervisor.ex", ast, [])
       assert diags == []

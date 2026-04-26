@@ -32,158 +32,189 @@ defmodule Archdo.Rules.Module.EagerEvaluation do
   # --- Enum.map |> Enum.take(n) → Enum.take then Enum.map, or Stream ---
 
   defp find_map_then_take(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # list |> Enum.map(f) |> Enum.take(n)
-      {:|>, _, [
-        {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]},
-        {{:., _, [{:__aliases__, _, [:Enum]}, :take]}, _, _}
-      ]} ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # list |> Enum.map(f) |> Enum.take(n)
+        {:|>, _,
+         [
+           {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]},
+           {{:., _, [{:__aliases__, _, [:Enum]}, :take]}, _, _}
+         ]} ->
+          true
 
-      # Enum.take(Enum.map(list, f), n)
-      {{:., _, [{:__aliases__, _, [:Enum]}, :take]}, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _} | _
-      ]} ->
-        true
+        # Enum.take(Enum.map(list, f), n)
+        {{:., _, [{:__aliases__, _, [:Enum]}, :take]}, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _} | _
+         ]} ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :map_then_take)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :map_then_take)
+      end
+    )
   end
 
   # --- Enum.map |> hd → transform the first element only ---
 
   defp find_map_then_hd(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # list |> Enum.map(f) |> hd()
-      {:|>, _, [
-        {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]},
-        {:hd, _, _}
-      ]} ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # list |> Enum.map(f) |> hd()
+        {:|>, _,
+         [
+           {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]},
+           {:hd, _, _}
+         ]} ->
+          true
 
-      # |> Enum.map(f) |> hd() (2-step pipe)
-      {:|>, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _},
-        {:hd, _, _}
-      ]} ->
-        true
+        # |> Enum.map(f) |> hd() (2-step pipe)
+        {:|>, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _},
+           {:hd, _, _}
+         ]} ->
+          true
 
-      # hd(Enum.map(list, f))
-      {:hd, _, [{{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]} ->
-        true
+        # hd(Enum.map(list, f))
+        {:hd, _, [{{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]} ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :map_then_hd)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :map_then_hd)
+      end
+    )
   end
 
   # --- Enum.to_list(Stream...) |> Enum.filter → defeats lazy evaluation ---
 
   defp find_to_list_then_filter(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # Stream.* |> Enum.to_list() |> Enum.filter/map/etc
-      {:|>, _, [
-        {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :to_list]}, _, _}]},
-        {{:., _, [{:__aliases__, _, [:Enum]}, func]}, _, _}
-      ]} when func in [:filter, :map, :reject, :take, :find] ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # Stream.* |> Enum.to_list() |> Enum.filter/map/etc
+        {:|>, _,
+         [
+           {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :to_list]}, _, _}]},
+           {{:., _, [{:__aliases__, _, [:Enum]}, func]}, _, _}
+         ]}
+        when func in [:filter, :map, :reject, :take, :find] ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :to_list_then_process)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :to_list_then_process)
+      end
+    )
   end
 
   # --- Enum.map |> Enum.count / length → Enum.count directly ---
 
   defp find_map_then_count(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # list |> Enum.map(f) |> Enum.count()
-      {:|>, _, [
-        {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]},
-        {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, count_args}
-      ]} ->
-        # Enum.count() with no predicate — just counting mapped elements
-        length(count_args || []) == 0
+    Enum.map(
+      AST.find_all(ast, fn
+        # list |> Enum.map(f) |> Enum.count()
+        {:|>, _,
+         [
+           {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]},
+           {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, count_args}
+         ]} ->
+          # Enum.count() with no predicate — just counting mapped elements
+          length(count_args || []) == 0
 
-      # list |> Enum.map(f) |> length()
-      {:|>, _, [
-        {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]},
-        {:length, _, _}
-      ]} ->
-        true
+        # list |> Enum.map(f) |> length()
+        {:|>, _,
+         [
+           {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]},
+           {:length, _, _}
+         ]} ->
+          true
 
-      # list |> Enum.map(f) |> Enum.count()  (2-step pipe)
-      {:|>, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _},
-        {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, count_args}
-      ]} ->
-        length(count_args || []) == 0
+        # list |> Enum.map(f) |> Enum.count()  (2-step pipe)
+        {:|>, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _},
+           {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, count_args}
+         ]} ->
+          length(count_args || []) == 0
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :map_then_count)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :map_then_count)
+      end
+    )
   end
 
   # --- Repo.all |> length → Repo.aggregate(:count) ---
 
   defp find_all_then_length(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # Repo.all(query) |> length()
-      {:|>, _, [
-        {{:., _, [{:__aliases__, _, aliases}, :all]}, _, _},
-        {:length, _, _}
-      ]} ->
-        repo_module?(aliases)
+    Enum.map(
+      AST.find_all(ast, fn
+        # Repo.all(query) |> length()
+        {:|>, _,
+         [
+           {{:., _, [{:__aliases__, _, aliases}, :all]}, _, _},
+           {:length, _, _}
+         ]} ->
+          repo_module?(aliases)
 
-      # Repo.all(query) |> Enum.count()
-      {:|>, _, [
-        {{:., _, [{:__aliases__, _, aliases}, :all]}, _, _},
-        {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, count_args}
-      ]} ->
-        repo_module?(aliases) and length(count_args || []) == 0
+        # Repo.all(query) |> Enum.count()
+        {:|>, _,
+         [
+           {{:., _, [{:__aliases__, _, aliases}, :all]}, _, _},
+           {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, count_args}
+         ]} ->
+          repo_module?(aliases) and length(count_args || []) == 0
 
-      # length(Repo.all(query))
-      {:length, _, [{{:., _, [{:__aliases__, _, aliases}, :all]}, _, _}]} ->
-        repo_module?(aliases)
+        # length(Repo.all(query))
+        {:length, _, [{{:., _, [{:__aliases__, _, aliases}, :all]}, _, _}]} ->
+          repo_module?(aliases)
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :all_then_length)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :all_then_length)
+      end
+    )
   end
 
   # --- Enum.map |> Enum.find → Enum.find_value ---
 
   defp find_map_then_find(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # list |> Enum.map(f) |> Enum.find(g)
-      {:|>, _, [
-        {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]},
-        {{:., _, [{:__aliases__, _, [:Enum]}, :find]}, _, _}
-      ]} ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # list |> Enum.map(f) |> Enum.find(g)
+        {:|>, _,
+         [
+           {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}]},
+           {{:., _, [{:__aliases__, _, [:Enum]}, :find]}, _, _}
+         ]} ->
+          true
 
-      {:|>, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _},
-        {{:., _, [{:__aliases__, _, [:Enum]}, :find]}, _, _}
-      ]} ->
-        true
+        {:|>, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _},
+           {{:., _, [{:__aliases__, _, [:Enum]}, :find]}, _, _}
+         ]} ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :map_then_find)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :map_then_find)
+      end
+    )
   end
 
   defp repo_module?(aliases) do
@@ -221,8 +252,7 @@ defmodule Archdo.Rules.Module.EagerEvaluation do
     Diagnostic.info("6.55",
       title: "Enum.map then hd — transforms all to get first",
       message: "Enum.map processes every element but only the first is used",
-      why:
-        "Mapping the entire collection to take only the head wastes N-1 transformations.",
+      why: "Mapping the entire collection to take only the head wastes N-1 transformations.",
       alternatives: [
         Fix.new(
           summary: "Transform only the first element",

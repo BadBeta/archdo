@@ -23,34 +23,41 @@ defmodule Archdo.Rules.OTP.FlatSupervision do
 
     # Check direct list literals in Supervisor calls
     direct =
-      Enum.map(AST.find_all(ast, fn
-        {{:., _, [{:__aliases__, _, [:Supervisor]}, func]}, _meta, [children | _]}
-        when func in [:init, :start_link] and is_list(children) ->
-          length(children) > @max_children
+      Enum.map(
+        AST.find_all(ast, fn
+          {{:., _, [{:__aliases__, _, [:Supervisor]}, func]}, _meta, [children | _]}
+          when func in [:init, :start_link] and is_list(children) ->
+            length(children) > @max_children
 
-        _ ->
-          false
-      end), fn {_, meta, [children | _]} ->
-        {length(children), AST.line(meta)}
-      end)
+          _ ->
+            false
+        end),
+        fn {_, meta, [children | _]} ->
+          {length(children), AST.line(meta)}
+        end
+      )
 
     # Check Supervisor calls with variable children
     indirect =
-      Enum.map(AST.find_all(ast, fn
-        {{:., _, [{:__aliases__, _, [:Supervisor]}, func]}, _meta, [{name, _, _} | _]}
-        when func in [:init, :start_link] and is_atom(name) ->
-          Map.get(child_var_counts, name, 0) > @max_children
+      Enum.map(
+        AST.find_all(ast, fn
+          {{:., _, [{:__aliases__, _, [:Supervisor]}, func]}, _meta, [{name, _, _} | _]}
+          when func in [:init, :start_link] and is_atom(name) ->
+            Map.get(child_var_counts, name, 0) > @max_children
 
-        _ ->
-          false
-      end), fn {{:., _, _}, meta, [{name, _, _} | _]} ->
-        {Map.get(child_var_counts, name, 0), AST.line(meta)}
-      end)
+          _ ->
+            false
+        end),
+        fn {{:., _, _}, meta, [{name, _, _} | _]} ->
+          {Map.get(child_var_counts, name, 0), AST.line(meta)}
+        end
+      )
 
     Enum.map(direct ++ indirect, fn {count, line} ->
       Diagnostic.info("5.4",
         title: "Flat supervision tree",
-        message: "Supervisor manages #{count} direct children (> #{@max_children}) with no sub-supervisors",
+        message:
+          "Supervisor manages #{count} direct children (> #{@max_children}) with no sub-supervisors",
         why:
           "A wide flat tree gives every child the same restart budget and the same failure domain. One " <>
             "misbehaving child can chew through max_restarts and bring down the whole subtree, including " <>

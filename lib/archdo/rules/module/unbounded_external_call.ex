@@ -79,8 +79,7 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
     |> Enum.map(fn {{:., _, _}, meta, _} ->
       Diagnostic.info("4.18",
         title: "GenServer.call without explicit timeout",
-        message:
-          "GenServer.call/2 uses implicit 5s timeout — consider making it explicit",
+        message: "GenServer.call/2 uses implicit 5s timeout — consider making it explicit",
         why:
           "The default 5s timeout is often fine, but making it explicit documents the " <>
             "expected response time and makes debugging timeout errors easier. For calls " <>
@@ -134,5 +133,4 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
     |> String.trim_trailing("!")
     |> String.to_existing_atom()
   end
-
 end

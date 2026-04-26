@@ -127,8 +127,7 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
 
     Diagnostic.warning("1.22",
       title: "Direct Repo access outside context",
-      message:
-        "#{caller_name} calls Repo directly: #{repo_fns}",
+      message: "#{caller_name} calls Repo directly: #{repo_fns}",
       why:
         "Compiled analysis confirms #{caller_name} calls Repo functions directly. " <>
           "Only context boundary modules should access the Repo — this ensures " <>
@@ -161,5 +160,4 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
       line: 0
     )
   end
-
 end

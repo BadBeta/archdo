@@ -30,7 +30,8 @@ defmodule Archdo.Rules.Module.ModuleCohesionTest do
   end
 
   test "subtracts delegates from count" do
-    delegates = Enum.map_join(1..22, "\n", fn i -> "  defdelegate func_#{i}(x), to: MyApp.Impl" end)
+    delegates =
+      Enum.map_join(1..22, "\n", fn i -> "  defdelegate func_#{i}(x), to: MyApp.Impl" end)
 
     code = """
     defmodule MyApp.Facade do

@@ -13,8 +13,19 @@ defmodule Archdo.Mcp.Server do
   alias Archdo.Mcp.SchemaValidator
 
   alias Archdo.Mcp.Tools.{
-    AnalyzeFile, AnalyzePaths, DeepReview, Diagram, Diff,
-    ExplainFinding, ExplainRule, Fix, Health, ListRules, PerfAudit, Stats, Suggest
+    AnalyzeFile,
+    AnalyzePaths,
+    DeepReview,
+    Diagram,
+    Diff,
+    ExplainFinding,
+    ExplainRule,
+    Fix,
+    Health,
+    ListRules,
+    PerfAudit,
+    Stats,
+    Suggest
   }
 
   @protocol_version "2024-11-05"
@@ -22,8 +33,19 @@ defmodule Archdo.Mcp.Server do
   @server_version Mix.Project.config()[:version] || "0.0.0"
 
   @tools [
-    AnalyzePaths, AnalyzeFile, ListRules, ExplainRule, DeepReview,
-    Health, Diff, Diagram, PerfAudit, Suggest, ExplainFinding, Fix, Stats
+    AnalyzePaths,
+    AnalyzeFile,
+    ListRules,
+    ExplainRule,
+    DeepReview,
+    Health,
+    Diff,
+    Diagram,
+    PerfAudit,
+    Suggest,
+    ExplainFinding,
+    Fix,
+    Stats
   ]
 
   @doc """

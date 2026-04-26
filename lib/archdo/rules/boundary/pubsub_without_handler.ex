@@ -45,7 +45,8 @@ defmodule Archdo.Rules.Boundary.PubsubWithoutHandler do
       [
         Diagnostic.warning("1.17",
           title: "PubSub subscribe without handler",
-          message: "#{module_name} subscribes to PubSub but has no handle_info/2 to receive broadcasts",
+          message:
+            "#{module_name} subscribes to PubSub but has no handle_info/2 to receive broadcasts",
           why:
             "PubSub.subscribe sets up a subscription, but broadcasts arrive as regular messages. " <>
               "Without handle_info/2, the messages pile up in the LiveView process mailbox — " <>

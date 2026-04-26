@@ -34,7 +34,8 @@ defmodule Archdo.Rules.Boundary.LogicInController do
 
       Diagnostic.info("1.15",
         title: "Large controller action",
-        message: "#{name}/#{arity} has #{size} AST nodes (limit: #{@max_controller_action_nodes}) — extract logic to a context",
+        message:
+          "#{name}/#{arity} has #{size} AST nodes (limit: #{@max_controller_action_nodes}) — extract logic to a context",
         why:
           "Controllers should be thin dispatchers: receive params, call a context function, " <>
             "render a response. Business logic in controllers can't be reused from LiveViews, " <>
@@ -62,5 +63,4 @@ defmodule Archdo.Rules.Boundary.LogicInController do
       )
     end)
   end
-
 end

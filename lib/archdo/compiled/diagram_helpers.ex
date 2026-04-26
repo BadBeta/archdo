@@ -29,7 +29,9 @@ defmodule Archdo.Compiled.DiagramHelpers do
   @spec error_svg(String.t(), String.t()) :: String.t()
   def error_svg(message, error_color \\ "#F38BA8") do
     wrap_svg(
-      [~s(<text x="20" y="30" fill="#{error_color}" font-size="14" font-family="monospace">#{message}</text>)],
+      [
+        ~s(<text x="20" y="30" fill="#{error_color}" font-size="14" font-family="monospace">#{message}</text>)
+      ],
       400,
       60
     )

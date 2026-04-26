@@ -2,6 +2,7 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
   use ExUnit.Case, async: true
 
   alias Archdo.{Config, Graph}
+
   alias Archdo.Rules.Boundary.{
     CircularDependencies,
     ContextEncapsulation,
@@ -47,14 +48,16 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
 
   describe "1.1 DependencyDirection" do
     test "flags domain depending on interface" do
-      graph = build_graph([
-        {"lib/my_app/accounts.ex", ~S"""
-        defmodule MyApp.Accounts do
-          alias MyAppWeb.Router.Helpers
-          def url, do: Helpers.user_path(nil, :index)
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app/accounts.ex",
+           ~S"""
+           defmodule MyApp.Accounts do
+             alias MyAppWeb.Router.Helpers
+             def url, do: Helpers.user_path(nil, :index)
+           end
+           """}
+        ])
 
       diags = DependencyDirection.analyze_graph(graph, test_config())
       assert [first | _] = diags
@@ -64,28 +67,32 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
     end
 
     test "allows interface depending on domain" do
-      graph = build_graph([
-        {"lib/my_app_web/user_controller.ex", ~S"""
-        defmodule MyAppWeb.UserController do
-          alias MyApp.Accounts
-          def index(conn, _), do: Accounts.list_users()
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app_web/user_controller.ex",
+           ~S"""
+           defmodule MyAppWeb.UserController do
+             alias MyApp.Accounts
+             def index(conn, _), do: Accounts.list_users()
+           end
+           """}
+        ])
 
       diags = DependencyDirection.analyze_graph(graph, test_config())
       assert diags == []
     end
 
     test "tolerates Ecto in domain" do
-      graph = build_graph([
-        {"lib/my_app/accounts.ex", ~S"""
-        defmodule MyApp.Accounts do
-          import Ecto.Query
-          def list_users, do: Ecto.Query.from(u in "users")
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app/accounts.ex",
+           ~S"""
+           defmodule MyApp.Accounts do
+             import Ecto.Query
+             def list_users, do: Ecto.Query.from(u in "users")
+           end
+           """}
+        ])
 
       diags = DependencyDirection.analyze_graph(graph, test_config())
       assert diags == []
@@ -94,14 +101,16 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
 
   describe "1.1b FrameworkInDomain" do
     test "flags domain using Phoenix.LiveView" do
-      graph = build_graph([
-        {"lib/my_app/dashboard.ex", ~S"""
-        defmodule MyApp.Dashboard do
-          import Phoenix.LiveView
-          def render(assigns), do: nil
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app/dashboard.ex",
+           ~S"""
+           defmodule MyApp.Dashboard do
+             import Phoenix.LiveView
+             def render(assigns), do: nil
+           end
+           """}
+        ])
 
       diags = FrameworkInDomain.analyze_graph(graph, test_config())
       assert [first | _] = diags
@@ -110,14 +119,16 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
     end
 
     test "allows interface using Phoenix.LiveView" do
-      graph = build_graph([
-        {"lib/my_app_web/live/dashboard_live.ex", ~S"""
-        defmodule MyAppWeb.DashboardLive do
-          use Phoenix.LiveView
-          def render(assigns), do: nil
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app_web/live/dashboard_live.ex",
+           ~S"""
+           defmodule MyAppWeb.DashboardLive do
+             use Phoenix.LiveView
+             def render(assigns), do: nil
+           end
+           """}
+        ])
 
       diags = FrameworkInDomain.analyze_graph(graph, test_config())
       assert diags == []
@@ -126,15 +137,17 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
 
   describe "1.2 ContextEncapsulation" do
     test "flags external module reaching into context internals via call" do
-      graph = build_graph([
-        {"lib/my_app_web/user_controller.ex", ~S"""
-        defmodule MyAppWeb.UserController do
-          def index(conn, _) do
-            MyApp.Accounts.UserQuery.active()
-          end
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app_web/user_controller.ex",
+           ~S"""
+           defmodule MyAppWeb.UserController do
+             def index(conn, _) do
+               MyApp.Accounts.UserQuery.active()
+             end
+           end
+           """}
+        ])
 
       diags = ContextEncapsulation.analyze_graph(graph, test_config())
       assert [first | _] = diags
@@ -143,30 +156,34 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
     end
 
     test "allows calling context root module" do
-      graph = build_graph([
-        {"lib/my_app_web/user_controller.ex", ~S"""
-        defmodule MyAppWeb.UserController do
-          def index(conn, _) do
-            MyApp.Accounts.list_users()
-          end
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app_web/user_controller.ex",
+           ~S"""
+           defmodule MyAppWeb.UserController do
+             def index(conn, _) do
+               MyApp.Accounts.list_users()
+             end
+           end
+           """}
+        ])
 
       diags = ContextEncapsulation.analyze_graph(graph, test_config())
       assert diags == []
     end
 
     test "allows internal calls within same context" do
-      graph = build_graph([
-        {"lib/my_app/accounts.ex", ~S"""
-        defmodule MyApp.Accounts do
-          def list_users do
-            MyApp.Accounts.UserQuery.active()
-          end
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app/accounts.ex",
+           ~S"""
+           defmodule MyApp.Accounts do
+             def list_users do
+               MyApp.Accounts.UserQuery.active()
+             end
+           end
+           """}
+        ])
 
       diags = ContextEncapsulation.analyze_graph(graph, test_config())
       assert diags == []
@@ -175,18 +192,21 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
 
   describe "1.3 CircularDependencies" do
     test "detects circular dependency between contexts" do
-      graph = build_graph([
-        {"lib/my_app/accounts.ex", ~S"""
-        defmodule MyApp.Accounts do
-          def get_billing(user), do: MyApp.Billing.for_user(user)
-        end
-        """},
-        {"lib/my_app/billing.ex", ~S"""
-        defmodule MyApp.Billing do
-          def get_account(bill), do: MyApp.Accounts.get(bill.user_id)
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app/accounts.ex",
+           ~S"""
+           defmodule MyApp.Accounts do
+             def get_billing(user), do: MyApp.Billing.for_user(user)
+           end
+           """},
+          {"lib/my_app/billing.ex",
+           ~S"""
+           defmodule MyApp.Billing do
+             def get_account(bill), do: MyApp.Accounts.get(bill.user_id)
+           end
+           """}
+        ])
 
       diags = CircularDependencies.analyze_graph(graph, test_config())
       assert [first | _] = diags
@@ -195,18 +215,21 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
     end
 
     test "allows one-way dependency" do
-      graph = build_graph([
-        {"lib/my_app/billing.ex", ~S"""
-        defmodule MyApp.Billing do
-          def for_user(user), do: MyApp.Accounts.get(user.id)
-        end
-        """},
-        {"lib/my_app/accounts.ex", ~S"""
-        defmodule MyApp.Accounts do
-          def get(id), do: {:ok, id}
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app/billing.ex",
+           ~S"""
+           defmodule MyApp.Billing do
+             def for_user(user), do: MyApp.Accounts.get(user.id)
+           end
+           """},
+          {"lib/my_app/accounts.ex",
+           ~S"""
+           defmodule MyApp.Accounts do
+             def get(id), do: {:ok, id}
+           end
+           """}
+        ])
 
       diags = CircularDependencies.analyze_graph(graph, test_config())
       assert diags == []
@@ -215,15 +238,17 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
 
   describe "1.4 RepoInInterface" do
     test "flags Repo call from controller" do
-      graph = build_graph([
-        {"lib/my_app_web/user_controller.ex", ~S"""
-        defmodule MyAppWeb.UserController do
-          def index(conn, _) do
-            users = MyApp.Repo.all(User)
-          end
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app_web/user_controller.ex",
+           ~S"""
+           defmodule MyAppWeb.UserController do
+             def index(conn, _) do
+               users = MyApp.Repo.all(User)
+             end
+           end
+           """}
+        ])
 
       diags = RepoInInterface.analyze_graph(graph, test_config())
       assert [first | _] = diags
@@ -232,13 +257,15 @@ defmodule Archdo.Rules.Boundary.GraphRulesTest do
     end
 
     test "allows domain calling Repo" do
-      graph = build_graph([
-        {"lib/my_app/accounts.ex", ~S"""
-        defmodule MyApp.Accounts do
-          def list_users, do: MyApp.Repo.all(User)
-        end
-        """}
-      ])
+      graph =
+        build_graph([
+          {"lib/my_app/accounts.ex",
+           ~S"""
+           defmodule MyApp.Accounts do
+             def list_users, do: MyApp.Repo.all(User)
+           end
+           """}
+        ])
 
       diags = RepoInInterface.analyze_graph(graph, test_config())
       assert diags == []

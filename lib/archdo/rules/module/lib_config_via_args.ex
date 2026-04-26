@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Module.LibConfigViaArgs do
   def id, do: "3.3"
 
   @impl true
-  def description, do: "Scattered Application.get_env calls — centralize configuration in a Config module"
+  def description,
+    do: "Scattered Application.get_env calls — centralize configuration in a Config module"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -89,8 +90,9 @@ defmodule Archdo.Rules.Module.LibConfigViaArgs do
         {:defmodule, _, [{:__aliases__, _, aliases} | _]} ->
           name = Atom.to_string(List.last(aliases))
           name in ["Config", "Configuration", "Settings"]
-        _ -> false
+
+        _ ->
+          false
       end)
   end
-
 end

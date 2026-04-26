@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Boundary.UntypedBoundary do
   def id, do: "1.12"
 
   @impl true
-  def description, do: "Untyped boundaries — context public APIs returning map()/keyword() instead of structs"
+  def description,
+    do: "Untyped boundaries — context public APIs returning map()/keyword() instead of structs"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -35,7 +36,8 @@ defmodule Archdo.Rules.Boundary.UntypedBoundary do
             [
               Diagnostic.info("1.12",
                 title: "Untyped public API return",
-                message: "#{fn_name}'s @spec returns an untyped map()/keyword()/list() across the context boundary",
+                message:
+                  "#{fn_name}'s @spec returns an untyped map()/keyword()/list() across the context boundary",
                 why:
                   "When a public function returns an untyped map, callers can only discover its shape by " <>
                     "reading the source. There is no compile-time check on field names, no IDE help, and " <>

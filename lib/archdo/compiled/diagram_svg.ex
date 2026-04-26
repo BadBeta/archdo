@@ -94,6 +94,7 @@ defmodule Archdo.Compiled.DiagramSVG do
 
     # Render dependencies (right column)
     dep_x = center_x + @node_width + @col_gap
+
     {dep_elements, dep_ports} =
       render_column(deps, dep_x, 30, total_height - 60, :dependency)
 
@@ -168,16 +169,20 @@ defmodule Archdo.Compiled.DiagramSVG do
         return_str = format_return_tag(fn_info)
 
         # Input port (left)
-        input_port = ~s(<circle cx="#{x}" cy="#{py}" r="#{@port_radius}" fill="#{wire_color_for_fn(fn_info)}" stroke="#{@node_border}"/>)
+        input_port =
+          ~s(<circle cx="#{x}" cy="#{py}" r="#{@port_radius}" fill="#{wire_color_for_fn(fn_info)}" stroke="#{@node_border}"/>)
 
         # Output port (right)
-        output_port = ~s(<circle cx="#{x + @node_width}" cy="#{py}" r="#{@port_radius}" fill="#{wire_color_for_fn(fn_info)}" stroke="#{@node_border}"/>)
+        output_port =
+          ~s(<circle cx="#{x + @node_width}" cy="#{py}" r="#{@port_radius}" fill="#{wire_color_for_fn(fn_info)}" stroke="#{@node_border}"/>)
 
         # Function name
-        fn_text = ~s(<text x="#{x + 14}" y="#{py + 4}" fill="#{@port_text}" font-size="#{@font_size}" font-family="monospace">#{fn_info.name}/#{fn_info.arity}</text>)
+        fn_text =
+          ~s(<text x="#{x + 14}" y="#{py + 4}" fill="#{@port_text}" font-size="#{@font_size}" font-family="monospace">#{fn_info.name}/#{fn_info.arity}</text>)
 
         # Return type (right-aligned)
-        ret_text = ~s(<text x="#{x + @node_width - 14}" y="#{py + 4}" text-anchor="end" fill="#{@dim_text}" font-size="10" font-family="monospace">#{return_str}</text>)
+        ret_text =
+          ~s(<text x="#{x + @node_width - 14}" y="#{py + 4}" text-anchor="end" fill="#{@dim_text}" font-size="10" font-family="monospace">#{return_str}</text>)
 
         [input_port, output_port, fn_text, ret_text]
       end)
@@ -306,13 +311,24 @@ defmodule Archdo.Compiled.DiagramSVG do
     ext_deps =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        Enum.reject(Graph.knows_about(graph, mod), fn e -> MapSet.member?(member_set, e.module) end)
+        Enum.reject(Graph.knows_about(graph, mod), fn e ->
+          MapSet.member?(member_set, e.module)
+        end)
       end)
       |> Enum.uniq_by(& &1.module)
       |> Enum.take(6)
 
-    left_col_w = case ext_callers do [] -> 0; _ -> @node_width + @col_gap end
-    right_col_w = case ext_deps do [] -> 0; _ -> @col_gap + @node_width end
+    left_col_w =
+      case ext_callers do
+        [] -> 0
+        _ -> @node_width + @col_gap
+      end
+
+    right_col_w =
+      case ext_deps do
+        [] -> 0
+        _ -> @col_gap + @node_width
+      end
 
     total_w = left_col_w + frame_w + right_col_w + 40
     total_h = max(frame_h, max(length(ext_callers), length(ext_deps)) * 50) + 60
@@ -369,6 +385,7 @@ defmodule Archdo.Compiled.DiagramSVG do
       |> Enum.with_index()
       |> Enum.flat_map(fn {entry, idx} ->
         ey = 40 + idx * 50
+
         [
           ~s(<rect x="20" y="#{ey}" width="#{@node_width}" height="36" rx="4" fill="#1E3A5F" stroke="#2563EB" stroke-width="1"/>),
           ~s(<text x="30" y="#{ey + 22}" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{AST.short_name(entry.module)}</text>),
@@ -383,6 +400,7 @@ defmodule Archdo.Compiled.DiagramSVG do
       |> Enum.flat_map(fn {entry, idx} ->
         ey = 40 + idx * 50
         dx = frame_x + frame_w + @col_gap
+
         [
           ~s(<rect x="#{dx}" y="#{ey}" width="#{@node_width}" height="36" rx="4" fill="#3D2E1E" stroke="#D97706" stroke-width="1"/>),
           ~s(<text x="#{dx + 10}" y="#{ey + 22}" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{AST.short_name(entry.module)}</text>),
@@ -420,12 +438,24 @@ defmodule Archdo.Compiled.DiagramSVG do
       |> Enum.uniq()
 
     case shapes do
-      [{:tagged_tuple, :ok}] -> "{:ok, _}"
-      [{:tagged_tuple, :error}] -> "{:error, _}"
-      [{:atom, val}] -> ":#{val}"
-      [:list] -> "[...]"
-      [:map] -> "%{}"
-      [:call] -> "fn()"
+      [{:tagged_tuple, :ok}] ->
+        "{:ok, _}"
+
+      [{:tagged_tuple, :error}] ->
+        "{:error, _}"
+
+      [{:atom, val}] ->
+        ":#{val}"
+
+      [:list] ->
+        "[...]"
+
+      [:map] ->
+        "%{}"
+
+      [:call] ->
+        "fn()"
+
       _ ->
         tags = for {:tagged_tuple, t} <- shapes, do: t
 

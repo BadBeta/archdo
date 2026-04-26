@@ -52,8 +52,11 @@ defmodule Archdo.Rules.Testing.AssertOnImplementation do
   end
 
   defp identity_callback?({:&, _, [{:&, _, [1]}]}), do: true
+
   defp identity_callback?({:fn, _, [{:->, _, [[{_, _, _}], {name, _, ctx}]}]})
-       when is_atom(name) and is_atom(ctx), do: true
+       when is_atom(name) and is_atom(ctx),
+       do: true
+
   defp identity_callback?(_), do: false
 
   defp build_diagnostic(file, line, pattern) do

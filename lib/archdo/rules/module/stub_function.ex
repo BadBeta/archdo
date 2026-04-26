@@ -139,7 +139,8 @@ defmodule Archdo.Rules.Module.StubFunction do
           detail:
             "If the operation is intentionally unsupported, return " <>
               "`{:error, :not_supported}` and document why in @doc.",
-          applies_when: "The function is part of a behaviour but this implementation doesn't support it."
+          applies_when:
+            "The function is part of a behaviour but this implementation doesn't support it."
         ),
         Fix.new(
           summary: "Delete the function",

@@ -72,6 +72,7 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
   # Normalize shapes for comparison — tagged tuples with same tag are the same shape
   defp normalize_shape({:tagged_tuple, tag}), do: {:tagged_tuple, tag}
   defp normalize_shape({:atom, _}), do: :atom
+
   defp normalize_shape({:mixed, shapes}) do
     normalized =
       shapes
@@ -80,6 +81,7 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
 
     {:mixed, normalized}
   end
+
   defp normalize_shape(other), do: other
 
   # {:ok, _} and {:error, _} together is a valid pattern — not inconsistent
@@ -87,12 +89,17 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
     tags =
       shapes
       |> Enum.flat_map(fn
-        {:tagged_tuple, tag} -> [tag]
-        {:mixed, inner} -> Enum.flat_map(inner, fn
-          {:tagged_tuple, tag} -> [tag]
-          _ -> []
-        end)
-        _ -> []
+        {:tagged_tuple, tag} ->
+          [tag]
+
+        {:mixed, inner} ->
+          Enum.flat_map(inner, fn
+            {:tagged_tuple, tag} -> [tag]
+            _ -> []
+          end)
+
+        _ ->
+          []
       end)
       |> MapSet.new()
 
@@ -155,5 +162,4 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
   defp format_shape(:integer), do: "integer"
   defp format_shape({:mixed, shapes}), do: "mixed(#{Enum.map_join(shapes, "|", &format_shape/1)})"
   defp format_shape(other), do: "#{inspect(other)}"
-
 end

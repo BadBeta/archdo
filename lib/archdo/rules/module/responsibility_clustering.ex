@@ -19,7 +19,8 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
 
   @impl true
   def description,
-    do: "Single Responsibility — module has independent function clusters suggesting multiple responsibilities"
+    do:
+      "Single Responsibility — module has independent function clusters suggesting multiple responsibilities"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -124,7 +125,9 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
 
     # Union-find via adjacency
     adjacency =
-      for a <- pub_keys, b <- pub_keys, a < b,
+      for a <- pub_keys,
+          b <- pub_keys,
+          a < b,
           not MapSet.disjoint?(reachable_map[a], reachable_map[b]),
           reduce: %{} do
         adj ->

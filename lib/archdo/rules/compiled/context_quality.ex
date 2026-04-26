@@ -39,7 +39,8 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
 
         # Check for low cohesion
         issues =
-          case ctx.cohesion < @cohesion_threshold and ctx.internal_calls + ctx.incoming_calls + ctx.outgoing_calls > 10 do
+          case ctx.cohesion < @cohesion_threshold and
+                 ctx.internal_calls + ctx.incoming_calls + ctx.outgoing_calls > 10 do
             true -> [build_cohesion_diagnostic(ctx) | issues]
             false -> issues
           end
@@ -54,7 +55,9 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
     # Also report a summary diagnostic if no contexts have boundary modules
     no_boundary =
       contexts
-      |> Enum.filter(fn ctx -> length(ctx.members) >= @min_members and ctx.boundary_module == nil end)
+      |> Enum.filter(fn ctx ->
+        length(ctx.members) >= @min_members and ctx.boundary_module == nil
+      end)
       |> Enum.map(&build_no_boundary_diagnostic/1)
 
     context_diagnostics ++ no_boundary

@@ -78,5 +78,4 @@ defmodule Archdo.Rules.NIF.PortVsNif do
         false
     end)
   end
-
 end

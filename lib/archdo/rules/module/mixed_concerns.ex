@@ -48,7 +48,8 @@ defmodule Archdo.Rules.Module.MixedConcerns do
       [
         Diagnostic.info("4.13",
           title: "Module mixes multiple concern families",
-          message: "#{module_name} touches #{length(touched)} distinct concern families: #{concern_list}",
+          message:
+            "#{module_name} touches #{length(touched)} distinct concern families: #{concern_list}",
           why:
             "A single module that touches web, persistence, HTTP clients, email, and file IO is doing the " <>
               "work of several modules. Each concern is a different reason to change, a different test setup, " <>

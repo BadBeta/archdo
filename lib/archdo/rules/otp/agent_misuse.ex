@@ -67,7 +67,8 @@ defmodule Archdo.Rules.OTP.AgentMisuse do
           def put(key, val), do: :ets.insert(:my_cache, {key, val})
           ```
           """,
-          applies_when: "The data is mostly read-only, or writes are infrequent enough not to need ordering."
+          applies_when:
+            "The data is mostly read-only, or writes are infrequent enough not to need ordering."
         ),
         Fix.new(
           summary: "Use `:persistent_term` for almost-static configuration",
@@ -87,7 +88,8 @@ defmodule Archdo.Rules.OTP.AgentMisuse do
   defp complex_callback_diag(file, module_name) do
     Diagnostic.info("5.3",
       title: "Complex logic inside Agent callback",
-      message: "#{module_name} runs non-trivial logic inside an Agent.get/update anonymous function",
+      message:
+        "#{module_name} runs non-trivial logic inside an Agent.get/update anonymous function",
       why:
         "Anonymous functions passed to Agent run inside the Agent process. While they execute, every other " <>
           "caller is blocked on the Agent's mailbox. Heavy logic inside the callback turns the Agent into a " <>
@@ -116,10 +118,12 @@ defmodule Archdo.Rules.OTP.AgentMisuse do
   end
 
   defp count_calls(ast, func_name) do
-    length(AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, [:Agent]}, ^func_name]}, _, _} -> true
-      _ -> false
-    end))
+    length(
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, [:Agent]}, ^func_name]}, _, _} -> true
+        _ -> false
+      end)
+    )
   end
 
   defp has_complex_agent_fns?(ast) do
@@ -151,5 +155,4 @@ defmodule Archdo.Rules.OTP.AgentMisuse do
 
     count
   end
-
 end

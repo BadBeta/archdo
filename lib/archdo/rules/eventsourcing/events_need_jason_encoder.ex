@@ -28,7 +28,9 @@ defmodule Archdo.Rules.EventSourcing.EventsNeedJasonEncoder do
 
     has_derive_jason? =
       AST.contains?(ast, fn
-        {:@, _, [{:derive, _, [{:__aliases__, _, [:Jason, :Encoder]}]}]} -> true
+        {:@, _, [{:derive, _, [{:__aliases__, _, [:Jason, :Encoder]}]}]} ->
+          true
+
         # @derive [Jason.Encoder] list form
         {:@, _, [{:derive, _, [list]}]} when is_list(list) ->
           Enum.any?(list, fn
@@ -37,8 +39,11 @@ defmodule Archdo.Rules.EventSourcing.EventsNeedJasonEncoder do
           end)
 
         # @derive {Jason.Encoder, only: [...]}
-        {:@, _, [{:derive, _, [{{:__aliases__, _, [:Jason, :Encoder]}, _}]}]} -> true
-        _ -> false
+        {:@, _, [{:derive, _, [{{:__aliases__, _, [:Jason, :Encoder]}, _}]}]} ->
+          true
+
+        _ ->
+          false
       end)
 
     if has_struct? and not has_derive_jason? do
@@ -106,5 +111,4 @@ defmodule Archdo.Rules.EventSourcing.EventsNeedJasonEncoder do
 
     found?
   end
-
 end

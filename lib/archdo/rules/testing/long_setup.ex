@@ -69,5 +69,4 @@ defmodule Archdo.Rules.Testing.LongSetup do
       )
     end)
   end
-
 end

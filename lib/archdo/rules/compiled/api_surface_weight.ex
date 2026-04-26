@@ -72,8 +72,7 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
       alternatives: [
         Fix.new(
           summary: "Make unused exports private",
-          detail:
-            "Consider making these functions private: #{unused_fns}",
+          detail: "Consider making these functions private: #{unused_fns}",
           applies_when: "The functions are only used within the module."
         ),
         Fix.new(
@@ -94,5 +93,4 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
       line: 0
     )
   end
-
 end

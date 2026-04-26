@@ -35,7 +35,8 @@ defmodule Archdo.Rules.OTP.UnnecessaryProcess do
       [
         Diagnostic.info("5.2",
           title: "Process without justification",
-          message: "#{module_name} is a GenServer with trivial init state and no mutations or side effects in callbacks",
+          message:
+            "#{module_name} is a GenServer with trivial init state and no mutations or side effects in callbacks",
           why:
             "The official Elixir guide states a GenServer must never be used for code organization. Valid " <>
               "reasons to spawn a process are mutable state, concurrent execution, fault isolation, or resource " <>
@@ -109,11 +110,14 @@ defmodule Archdo.Rules.OTP.UnnecessaryProcess do
     # Check if any callback returns a modified state
     AST.contains?(body, fn
       # Pattern: %{state | key: value} — struct update
-      {:%{}, _, [{:|, _, _} | _]} -> true
+      {:%{}, _, [{:|, _, _} | _]} ->
+        true
+
       # Map.put, Map.merge, etc
       {{:., _, [{:__aliases__, _, [:Map]}, func]}, _, _}
       when func in [:put, :merge, :delete, :update, :put_new] ->
         true
+
       _ ->
         false
     end)
@@ -146,7 +150,8 @@ defmodule Archdo.Rules.OTP.UnnecessaryProcess do
         mod in [Phoenix.LiveView, Phoenix.LiveComponent, Phoenix.Channel] or
           match_phoenix_use_convention(rest)
 
-      _ -> false
+      _ ->
+        false
     end)
   end
 
@@ -182,13 +187,18 @@ defmodule Archdo.Rules.OTP.UnnecessaryProcess do
 
         last in [
           # Membrane Framework
-          :Bin, :Source, :Sink, :Filter, :Endpoint,
+          :Bin,
+          :Source,
+          :Sink,
+          :Filter,
+          :Endpoint,
           # Broadway
           :Broadway,
           # GenStage
           :GenStage,
           # Phoenix
-          :Channel, :Socket
+          :Channel,
+          :Socket
         ]
 
       _ ->

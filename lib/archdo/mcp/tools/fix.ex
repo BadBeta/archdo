@@ -54,12 +54,13 @@ defmodule Archdo.Mcp.Tools.Fix do
               |> Enum.map(fn d -> generate_fix(d, lines) end)
               |> Enum.reject(&is_nil/1)
 
-            {:ok, %{
-              file: file,
-              fixable_count: length(fixes),
-              total_findings: length(diagnostics),
-              fixes: fixes
-            }}
+            {:ok,
+             %{
+               file: file,
+               fixable_count: length(fixes),
+               total_findings: length(diagnostics),
+               fixes: fixes
+             }}
 
           {:error, reason} ->
             {:error, "Cannot read #{file}: #{reason}"}
@@ -75,7 +76,9 @@ defmodule Archdo.Mcp.Tools.Fix do
   # Generate a fix for single-clause with → case
   defp generate_fix(%{rule_id: "6.41", line: line}, lines) do
     case Enum.at(lines, line - 1) do
-      nil -> nil
+      nil ->
+        nil
+
       original_line ->
         trimmed = String.trim(original_line)
 
@@ -105,7 +108,9 @@ defmodule Archdo.Mcp.Tools.Fix do
 
   defp generate_fix(%{rule_id: "4.27", line: line}, lines) do
     case Enum.at(lines, line - 1) do
-      nil -> nil
+      nil ->
+        nil
+
       original_line ->
         %{
           rule_id: "4.27",
@@ -120,14 +125,18 @@ defmodule Archdo.Mcp.Tools.Fix do
 
   defp generate_fix(%{rule_id: "6.50", title: "Enum.at(list, 0)" <> _, line: line}, lines) do
     case Enum.at(lines, line - 1) do
-      nil -> nil
+      nil ->
+        nil
+
       original_line ->
         trimmed = String.trim(original_line)
         # Try to generate replacement
         replacement = String.replace(trimmed, ~r/Enum\.at\(([^,]+),\s*0\)/, "hd(\\1)")
 
         case replacement == trimmed do
-          true -> nil
+          true ->
+            nil
+
           false ->
             %{
               rule_id: "6.50",
@@ -140,15 +149,25 @@ defmodule Archdo.Mcp.Tools.Fix do
         end
     end
   end
-  defp generate_fix(%{rule_id: "6.33", title: "Code slop: single-step pipeline" <> _, line: line}, lines) do
+
+  defp generate_fix(
+         %{rule_id: "6.33", title: "Code slop: single-step pipeline" <> _, line: line},
+         lines
+       ) do
     case Enum.at(lines, line - 1) do
-      nil -> nil
+      nil ->
+        nil
+
       original_line ->
         trimmed = String.trim(original_line)
 
         case rewrite_single_pipe(trimmed) do
-          nil -> nil
-          ^trimmed -> nil
+          nil ->
+            nil
+
+          ^trimmed ->
+            nil
+
           fixed ->
             %{
               rule_id: "6.33",
@@ -164,7 +183,9 @@ defmodule Archdo.Mcp.Tools.Fix do
 
   defp generate_fix(%{rule_id: rule_id, line: line, title: title}, lines) do
     case Enum.at(lines, line - 1) do
-      nil -> nil
+      nil ->
+        nil
+
       original_line ->
         %{
           rule_id: rule_id,
@@ -219,7 +240,10 @@ defmodule Archdo.Mcp.Tools.Fix do
         "#{func_name}(#{new_args})"
 
       _ ->
-        case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/, String.trim(call)) do
+        case Regex.run(
+               ~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/,
+               String.trim(call)
+             ) do
           [_, func_name] -> "#{func_name}(#{input})"
           _ -> nil
         end
@@ -238,11 +262,15 @@ defmodule Archdo.Mcp.Tools.Fix do
         case Regex.run(~r/^with\s+(.+?)\s*<-\s*(.+?)\s+do\s*$/, line) do
           [_, pattern, expr] ->
             error_clause = infer_error_clause(pattern)
-            suggestion = "case #{String.trim(expr)} do\n  #{pattern} -> ...\n  #{error_clause}\nend"
+
+            suggestion =
+              "case #{String.trim(expr)} do\n  #{pattern} -> ...\n  #{error_clause}\nend"
+
             {:manual, line, suggestion}
 
           _ ->
-            {:manual, line, "Replace `with pattern <- expr do ... end` with `case expr do pattern -> ...; error -> error end`"}
+            {:manual, line,
+             "Replace `with pattern <- expr do ... end` with `case expr do pattern -> ...; error -> error end`"}
         end
     end
   end

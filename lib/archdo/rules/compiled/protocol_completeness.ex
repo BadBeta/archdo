@@ -54,8 +54,7 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
 
     Diagnostic.warning("4.24",
       title: "Incomplete behaviour implementation",
-      message:
-        "#{mod_name} implements #{bhv_name} but is missing: #{missing_str}",
+      message: "#{mod_name} implements #{bhv_name} but is missing: #{missing_str}",
       why:
         "Compiled beam analysis shows this module declares @behaviour #{bhv_name} " <>
           "but doesn't export all required callbacks. This is detected after macro " <>
@@ -85,5 +84,4 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
       line: 0
     )
   end
-
 end

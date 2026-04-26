@@ -98,5 +98,4 @@ defmodule Archdo.Rules.Compiled.WeakDependency do
       line: 0
     )
   end
-
 end

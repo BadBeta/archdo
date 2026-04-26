@@ -10,7 +10,8 @@ defmodule Archdo.Rules.Module.NestedControlFlow do
   def id, do: "6.44"
 
   @impl true
-  def description, do: "Deeply nested control flow — with inside with, or 3+ levels of case/cond/if/with"
+  def description,
+    do: "Deeply nested control flow — with inside with, or 3+ levels of case/cond/if/with"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -94,7 +95,8 @@ defmodule Archdo.Rules.Module.NestedControlFlow do
   defp build_diagnostic(file, line, name, arity, :with_inside_control_flow) do
     Diagnostic.info("6.44",
       title: "Nested control flow: with inside control flow in #{name}/#{arity}",
-      message: "`with` nested inside another control flow construct — flatten or extract a function",
+      message:
+        "`with` nested inside another control flow construct — flatten or extract a function",
       why:
         "Nested `with` chains are hard to follow. Each `with` should represent " <>
           "a single sequence of dependent operations. If you need `with` inside `with`, " <>
@@ -116,7 +118,8 @@ defmodule Archdo.Rules.Module.NestedControlFlow do
   defp build_diagnostic(file, line, name, arity, :deep_nesting) do
     Diagnostic.info("6.44",
       title: "Deeply nested control flow in #{name}/#{arity}",
-      message: "3+ levels of nested case/with/cond/if — extract inner logic into helper functions",
+      message:
+        "3+ levels of nested case/with/cond/if — extract inner logic into helper functions",
       why:
         "Deeply nested control flow is hard to read and reason about. " <>
           "Each nesting level multiplies the number of code paths a reader must track. " <>

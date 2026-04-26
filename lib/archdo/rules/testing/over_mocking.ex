@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Testing.OverMocking do
   def id, do: "7.23"
 
   @impl true
-  def description, do: "Tests with excessive mocking — 4+ expect or 3+ stub calls in a single test"
+  def description,
+    do: "Tests with excessive mocking — 4+ expect or 3+ stub calls in a single test"
 
   @impl true
   def analyze(file, ast, _opts) do

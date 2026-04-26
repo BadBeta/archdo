@@ -42,7 +42,8 @@ defmodule Archdo.Rules.Composition.NamespaceDepth do
                       "Replace levels that describe what the module is (`Helpers`, `Queries`, `Validators`) " <>
                         "with the domain concept the module represents. The module ends up under the bounded " <>
                         "context that owns it, with no extra middle layers.",
-                    applies_when: "The deep levels describe technical taxonomy, not domain structure."
+                    applies_when:
+                      "The deep levels describe technical taxonomy, not domain structure."
                   ),
                   Fix.new(
                     summary: "Accept the depth if it reflects real domain hierarchy",

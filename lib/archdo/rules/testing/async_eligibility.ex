@@ -56,7 +56,8 @@ defmodule Archdo.Rules.Testing.AsyncEligibility do
                 detail:
                   "Change `use ExUnit.Case` to `use ExUnit.Case, async: true`. Run the suite once to confirm " <>
                     "no flakiness, then commit.",
-                applies_when: "The test really has no shared state — the rule already checked for blockers."
+                applies_when:
+                  "The test really has no shared state — the rule already checked for blockers."
               ),
               Fix.new(
                 summary: "Explicitly opt out with `async: false` if you have a hidden blocker",
@@ -121,14 +122,21 @@ defmodule Archdo.Rules.Testing.AsyncEligibility do
   defp find_async_blockers(ast) do
     AST.find_all(ast, fn
       # Application.put_env — global state mutation
-      {{:., _, [{:__aliases__, _, [:Application]}, :put_env]}, _, _} -> true
+      {{:., _, [{:__aliases__, _, [:Application]}, :put_env]}, _, _} ->
+        true
+
       # :ets.new with named_table or :public — likely global
-      {{:., _, [:ets, :new]}, _, _} -> true
+      {{:., _, [:ets, :new]}, _, _} ->
+        true
+
       # File system mutation outside tmp
-      {{:., _, [{:__aliases__, _, [:File]}, func]}, _, _} when func in [:write, :write!, :rm, :rm_rf] -> true
+      {{:., _, [{:__aliases__, _, [:File]}, func]}, _, _}
+      when func in [:write, :write!, :rm, :rm_rf] ->
+        true
+
       # Named GenServer/Agent.start_link with name: __MODULE__ at top level
-      _ -> false
+      _ ->
+        false
     end)
   end
-
 end

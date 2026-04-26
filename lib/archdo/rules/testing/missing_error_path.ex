@@ -78,8 +78,7 @@ defmodule Archdo.Rules.Testing.MissingErrorPath do
 
     Diagnostic.info("7.22",
       title: "No error-path tests",
-      message:
-        "#{module_name} has #{total} tests but none exercise error or failure paths",
+      message: "#{module_name} has #{total} tests but none exercise error or failure paths",
       why:
         "Happy-path-only test suites give a false sense of coverage. Production code encounters " <>
           "invalid input, network failures, and race conditions. Without error-path tests, these " <>

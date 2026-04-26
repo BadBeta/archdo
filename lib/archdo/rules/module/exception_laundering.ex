@@ -8,7 +8,8 @@ defmodule Archdo.Rules.Module.ExceptionLaundering do
   def id, do: "6.18"
 
   @impl true
-  def description, do: "Rescue catches one exception type but raises a different one — hides the original"
+  def description,
+    do: "Rescue catches one exception type but raises a different one — hides the original"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -37,7 +38,8 @@ defmodule Archdo.Rules.Module.ExceptionLaundering do
 
       Diagnostic.info("6.18",
         title: "Exception laundering",
-        message: "Rescue catches an exception and raises a different one — original stacktrace is lost",
+        message:
+          "Rescue catches an exception and raises a different one — original stacktrace is lost",
         why:
           "When a rescue clause catches ExceptionA but raises ExceptionB, the original " <>
             "stacktrace and error context are lost. Debugging becomes harder because the " <>

@@ -36,15 +36,18 @@ defmodule Archdo.Rules.OTP.GenstageNoDemand do
   defp find_subscribe_to(nil), do: []
 
   defp find_subscribe_to(body) do
-    Enum.map(AST.find_all(body, fn
-      # subscribe_to: [...]
-      {:subscribe_to, _} -> true
-      {{:__block__, _, [:subscribe_to]}, _} -> true
-      _ -> false
-    end), fn
-      {:subscribe_to, value} -> {value, 1}
-      {{:__block__, _, [:subscribe_to]}, value} -> {value, 1}
-    end)
+    Enum.map(
+      AST.find_all(body, fn
+        # subscribe_to: [...]
+        {:subscribe_to, _} -> true
+        {{:__block__, _, [:subscribe_to]}, _} -> true
+        _ -> false
+      end),
+      fn
+        {:subscribe_to, value} -> {value, 1}
+        {{:__block__, _, [:subscribe_to]}, value} -> {value, 1}
+      end
+    )
   end
 
   defp check_subscription({value, line, file}) do

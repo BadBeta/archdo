@@ -32,7 +32,10 @@ defmodule Archdo.Rules.Module.ModuleCohesion do
 
           # Subtract delegates — facade modules are expected to have many
           effective_count = count - delegate_count
-          diagnostics = check_count(file, module_name, effective_count, count, delegate_count, AST.line(meta))
+
+          diagnostics =
+            check_count(file, module_name, effective_count, count, delegate_count, AST.line(meta))
+
           {node, diagnostics ++ acc}
 
         node, acc ->
@@ -86,8 +89,7 @@ defmodule Archdo.Rules.Module.ModuleCohesion do
 
     builder.("6.1",
       title: "Module with too many public functions",
-      message:
-        "#{module_name} has #{total_count} public functions#{suffix}",
+      message: "#{module_name} has #{total_count} public functions#{suffix}",
       why:
         "A module with 20+ public functions usually contains multiple responsibilities glued together. " <>
           "Each function is a reason to change, and a wide public API forces every consumer to look at " <>

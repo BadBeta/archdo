@@ -122,8 +122,7 @@ defmodule Archdo.Rules.Module.UnreachableClause do
       alternatives: [
         Fix.new(
           summary: "Move `true ->` to the last clause",
-          detail:
-            "Reorder clauses so `true ->` is the final fallback, not an early exit.",
+          detail: "Reorder clauses so `true ->` is the final fallback, not an early exit.",
           applies_when: "The true clause is meant to be the default handler."
         )
       ],

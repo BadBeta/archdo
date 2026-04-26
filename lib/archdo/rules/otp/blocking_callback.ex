@@ -18,14 +18,15 @@ defmodule Archdo.Rules.OTP.BlockingCallback do
     case AST.genserver_module?(ast) do
       false ->
         []
-      true ->
-      callbacks = AST.extract_callbacks(ast)
 
-      Enum.flat_map([:handle_call, :handle_cast, :handle_info], fn cb_name ->
-        Enum.flat_map(callbacks[cb_name] || [], fn {_meta, _args, body} ->
-          check_body(file, body, cb_name)
+      true ->
+        callbacks = AST.extract_callbacks(ast)
+
+        Enum.flat_map([:handle_call, :handle_cast, :handle_info], fn cb_name ->
+          Enum.flat_map(callbacks[cb_name] || [], fn {_meta, _args, body} ->
+            check_body(file, body, cb_name)
+          end)
         end)
-      end)
     end
   end
 
@@ -89,54 +90,66 @@ defmodule Archdo.Rules.OTP.BlockingCallback do
   end
 
   defp find_http_calls(body) do
-    Enum.map(AST.find_all(body, fn
-      {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
-        mod_parts in @blocking_modules
+    Enum.map(
+      AST.find_all(body, fn
+        {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
+          mod_parts in @blocking_modules
 
-      _ ->
-        false
-    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
-      {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
-    end)
+        _ ->
+          false
+      end),
+      fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+        {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
+      end
+    )
   end
 
   defp find_blocking_func_calls(body) do
-    Enum.map(AST.find_all(body, fn
-      {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
-        Enum.any?(@blocking_funcs, fn {mod, funcs} ->
-          mod_parts == mod and func in funcs
-        end)
+    Enum.map(
+      AST.find_all(body, fn
+        {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
+          Enum.any?(@blocking_funcs, fn {mod, funcs} ->
+            mod_parts == mod and func in funcs
+          end)
 
-      _ ->
-        false
-    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
-      {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
-    end)
+        _ ->
+          false
+      end),
+      fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+        {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
+      end
+    )
   end
 
   defp find_heavy_repo_calls(body) do
-    Enum.map(AST.find_all(body, fn
-      {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
-        List.last(mod_parts) == :Repo and func in [:all, :stream, :aggregate]
+    Enum.map(
+      AST.find_all(body, fn
+        {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
+          List.last(mod_parts) == :Repo and func in [:all, :stream, :aggregate]
 
-      _ ->
-        false
-    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
-      {"#{Module.concat(mod_parts)}.#{func} (potentially large result)", AST.line(meta)}
-    end)
+        _ ->
+          false
+      end),
+      fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+        {"#{Module.concat(mod_parts)}.#{func} (potentially large result)", AST.line(meta)}
+      end
+    )
   end
 
   defp find_sleep_calls(body) do
-    Enum.map(AST.find_all(body, fn
-      {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, _, _} -> true
-      {{:., _, [:timer, :sleep]}, _, _} -> true
-      _ -> false
-    end), fn
-      {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, meta, _} ->
-        {"Process.sleep", AST.line(meta)}
+    Enum.map(
+      AST.find_all(body, fn
+        {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, _, _} -> true
+        {{:., _, [:timer, :sleep]}, _, _} -> true
+        _ -> false
+      end),
+      fn
+        {{:., _, [{:__aliases__, _, [:Process]}, :sleep]}, meta, _} ->
+          {"Process.sleep", AST.line(meta)}
 
-      {{:., _, [:timer, :sleep]}, meta, _} ->
-        {":timer.sleep", AST.line(meta)}
-    end)
+        {{:., _, [:timer, :sleep]}, meta, _} ->
+          {":timer.sleep", AST.line(meta)}
+      end
+    )
   end
 end

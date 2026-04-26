@@ -25,6 +25,7 @@ defmodule Archdo.Rules.Module.FunctionComplexity do
 
     Enum.flat_map(fns, fn {name, arity, meta, _args, body} ->
       visibility = function_visibility(ast, name, arity)
+
       check_arity(file, name, arity, meta, visibility, is_internal) ++
         check_complexity(file, name, arity, meta, body)
     end)
@@ -95,7 +96,8 @@ defmodule Archdo.Rules.Module.FunctionComplexity do
   defp complexity_diag(file, name, arity, meta, complexity, kind) do
     Diagnostic.info("6.2",
       title: "High cyclomatic complexity",
-      message: "#{name}/#{arity} has cyclomatic complexity #{complexity} (limit: #{@max_complexity})",
+      message:
+        "#{name}/#{arity} has cyclomatic complexity #{complexity} (limit: #{@max_complexity})",
       why:
         "Cyclomatic complexity counts the number of independent paths through a function. High values mean " <>
           "many branches, deeply nested case/cond/with, and a corresponding multiplication of test cases. " <>

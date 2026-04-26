@@ -15,8 +15,9 @@ defmodule Archdo.Rules.OTP.MonitorWithoutHandler do
     case AST.genserver_module?(ast) do
       false ->
         []
+
       true ->
-      check_monitors(file, ast) ++ check_trap_exit(file, ast)
+        check_monitors(file, ast) ++ check_trap_exit(file, ast)
     end
   end
 
@@ -114,7 +115,8 @@ defmodule Archdo.Rules.OTP.MonitorWithoutHandler do
       Enum.map(traps, fn {_, meta, _} ->
         Diagnostic.warning("5.20",
           title: "trap_exit without :EXIT handler",
-          message: "Process.flag(:trap_exit, true) is set but no handle_info({:EXIT, ...}) clause exists",
+          message:
+            "Process.flag(:trap_exit, true) is set but no handle_info({:EXIT, ...}) clause exists",
           why:
             "Trapping exits converts every linked process death into an `:EXIT` message. Without a handler the " <>
               "messages accumulate, the linked-process deaths are invisible, and the GenServer behaves as if " <>

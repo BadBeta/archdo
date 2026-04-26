@@ -54,7 +54,9 @@ defmodule Archdo.Integration.RealProjectTest do
 
     diagnostics = run_archdo(:oban)
     seam_findings = findings_for_rule(diagnostics, "4.17")
-    assert seam_findings == [], "Expected 0 seam integrity findings on oban, got #{length(seam_findings)}"
+
+    assert seam_findings == [],
+           "Expected 0 seam integrity findings on oban, got #{length(seam_findings)}"
   end
 
   @tag :integration
@@ -63,7 +65,9 @@ defmodule Archdo.Integration.RealProjectTest do
 
     diagnostics = run_archdo(:broadway)
     seam_findings = findings_for_rule(diagnostics, "4.17")
-    assert seam_findings == [], "Expected 0 seam integrity findings on broadway, got #{length(seam_findings)}"
+
+    assert seam_findings == [],
+           "Expected 0 seam integrity findings on broadway, got #{length(seam_findings)}"
   end
 
   @tag :integration
@@ -72,6 +76,7 @@ defmodule Archdo.Integration.RealProjectTest do
 
     diagnostics = run_archdo(:nimble_pool)
     behaviour_findings = findings_for_rule(diagnostics, "4.1")
+
     assert behaviour_findings == [],
            "Expected 0 behaviour_size findings on nimble_pool, got #{length(behaviour_findings)}"
   end
@@ -108,7 +113,8 @@ defmodule Archdo.Integration.RealProjectTest do
 
   @tag :integration
   test "nimble_options: runs without crashing" do
-    unless repo_available?(:nimble_options), do: flunk("nimble_options not at expected commit — skip")
+    unless repo_available?(:nimble_options),
+      do: flunk("nimble_options not at expected commit — skip")
 
     diagnostics = run_archdo(:nimble_options)
     assert is_list(diagnostics)
@@ -116,7 +122,8 @@ defmodule Archdo.Integration.RealProjectTest do
 
   @tag :integration
   test "phoenix_pubsub: runs without crashing" do
-    unless repo_available?(:phoenix_pubsub), do: flunk("phoenix_pubsub not at expected commit — skip")
+    unless repo_available?(:phoenix_pubsub),
+      do: flunk("phoenix_pubsub not at expected commit — skip")
 
     diagnostics = run_archdo(:phoenix_pubsub)
     assert is_list(diagnostics)

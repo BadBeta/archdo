@@ -37,10 +37,16 @@ defmodule Archdo.Mcp.Tools.Stats do
         functions: stats.total.public_fns + stats.total.private_fns,
         tests: stats.total.tests
       },
-      contexts: Enum.map(stats.contexts, fn ctx ->
-        %{name: ctx.name, modules: ctx.modules, cohesion: ctx.cohesion,
-          coupling: ctx.coupling, leak_calls: ctx.leak_calls}
-      end)
+      contexts:
+        Enum.map(stats.contexts, fn ctx ->
+          %{
+            name: ctx.name,
+            modules: ctx.modules,
+            cohesion: ctx.cohesion,
+            coupling: ctx.coupling,
+            leak_calls: ctx.leak_calls
+          }
+        end)
     }
   end
 

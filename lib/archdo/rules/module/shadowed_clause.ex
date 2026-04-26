@@ -361,9 +361,21 @@ defmodule Archdo.Rules.Module.ShadowedClause do
 
   # Type-check guards that are mutually exclusive
   @type_guards [
-    :is_atom, :is_binary, :is_bitstring, :is_boolean, :is_float,
-    :is_function, :is_integer, :is_list, :is_map, :is_nil,
-    :is_number, :is_pid, :is_port, :is_reference, :is_tuple
+    :is_atom,
+    :is_binary,
+    :is_bitstring,
+    :is_boolean,
+    :is_float,
+    :is_function,
+    :is_integer,
+    :is_list,
+    :is_map,
+    :is_nil,
+    :is_number,
+    :is_pid,
+    :is_port,
+    :is_reference,
+    :is_tuple
   ]
 
   # If both clauses have guards, they likely differentiate —
@@ -501,8 +513,15 @@ defmodule Archdo.Rules.Module.ShadowedClause do
   defp reason_text(:catch_all_before_specific), do: "catch-all pattern before specific match"
   defp reason_text(:empty_map_before_keyed_map), do: "%{} matches any map, shadows %{key: _}"
   defp reason_text(:empty_map_before_struct), do: "%{} matches any map, shadows %Struct{}"
-  defp reason_text(:broad_map_before_specific), do: "map with fewer key constraints shadows one with more"
-  defp reason_text(:broad_tuple_before_specific), do: "tuple with broader elements shadows specific tuple"
-  defp reason_text(:broad_list_before_specific), do: "list with broader head/tail shadows specific list"
+
+  defp reason_text(:broad_map_before_specific),
+    do: "map with fewer key constraints shadows one with more"
+
+  defp reason_text(:broad_tuple_before_specific),
+    do: "tuple with broader elements shadows specific tuple"
+
+  defp reason_text(:broad_list_before_specific),
+    do: "list with broader head/tail shadows specific list"
+
   defp reason_text(reason), do: "#{reason}"
 end

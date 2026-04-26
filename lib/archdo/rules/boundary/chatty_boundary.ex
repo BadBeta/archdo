@@ -12,7 +12,8 @@ defmodule Archdo.Rules.Boundary.ChattyBoundary do
   def id, do: "1.10"
 
   @impl true
-  def description, do: "Chatty boundaries — two contexts that call each other often are in the wrong place"
+  def description,
+    do: "Chatty boundaries — two contexts that call each other often are in the wrong place"
 
   @impl true
   def analyze(_file, _ast, _opts), do: []
@@ -74,7 +75,8 @@ defmodule Archdo.Rules.Boundary.ChattyBoundary do
             "If the chatter happens because every operation in one always invokes operations in the other, " <>
               "the boundary is fictional. Move the smaller context's modules into the larger one and delete " <>
               "the cross-context API.",
-          applies_when: "The chatter spans most of both contexts and merging produces a coherent whole."
+          applies_when:
+            "The chatter spans most of both contexts and merging produces a coherent whole."
         ),
         Fix.new(
           summary: "Extract a shared subdomain that both depend on",

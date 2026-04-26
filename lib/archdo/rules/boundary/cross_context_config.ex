@@ -28,20 +28,24 @@ defmodule Archdo.Rules.Boundary.CrossContextConfig do
   end
 
   defp find_foreign_config_reads(file, ast, own_context) do
-    Enum.map(AST.find_all(ast, fn
-      # Application.get_env(:other_app, OtherContext.Key)
-      {{:., _, [{:__aliases__, _, [:Application]}, func]}, _, [_app, {:__aliases__, _, aliases} | _]}
-      when func in [:get_env, :fetch_env, :fetch_env!, :compile_env, :compile_env!] ->
-        foreign_context?(aliases, own_context)
+    Enum.map(
+      AST.find_all(ast, fn
+        # Application.get_env(:other_app, OtherContext.Key)
+        {{:., _, [{:__aliases__, _, [:Application]}, func]}, _,
+         [_app, {:__aliases__, _, aliases} | _]}
+        when func in [:get_env, :fetch_env, :fetch_env!, :compile_env, :compile_env!] ->
+          foreign_context?(aliases, own_context)
 
-      # Application.get_env(:app, :other_context_key)
-      # Hard to detect without naming conventions — skip
+        # Application.get_env(:app, :other_context_key)
+        # Hard to detect without naming conventions — skip
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), own_context)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), own_context)
+      end
+    )
   end
 
   defp foreign_context?(aliases, own_context) when is_list(aliases) and length(aliases) >= 2 do

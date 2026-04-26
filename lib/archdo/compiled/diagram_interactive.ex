@@ -33,7 +33,9 @@ defmodule Archdo.Compiled.DiagramInteractive do
     })
   end
 
-  defp elixir_module?(mod) when is_atom(mod), do: String.starts_with?(Atom.to_string(mod), "Elixir.")
+  defp elixir_module?(mod) when is_atom(mod),
+    do: String.starts_with?(Atom.to_string(mod), "Elixir.")
+
   defp elixir_module?(_), do: false
 
   defp safe_short_name(mod) do
@@ -59,14 +61,29 @@ defmodule Archdo.Compiled.DiagramInteractive do
         |> Enum.map(fn dep_mod ->
           dep_name = safe_short_name(dep_mod)
           dep_ctx = Map.get(membership, dep_mod, "Uncategorized")
-          %{name: dep_name, module: AST.module_name(dep_mod), type: "dependency", context: dep_ctx}
+
+          %{
+            name: dep_name,
+            module: AST.module_name(dep_mod),
+            type: "dependency",
+            context: dep_ctx
+          }
         end)
 
       exports =
         info.exports
         |> Enum.reject(fn {name, _} ->
-          name in [:__struct__, :__schema__, :__changeset__, :__impl__, :__protocol__,
-                   :__info__, :__using__, :behaviour_info, :module_info]
+          name in [
+            :__struct__,
+            :__schema__,
+            :__changeset__,
+            :__impl__,
+            :__protocol__,
+            :__info__,
+            :__using__,
+            :behaviour_info,
+            :module_info
+          ]
         end)
         |> Enum.take(15)
         |> Enum.map(fn {name, arity} ->
@@ -81,8 +98,8 @@ defmodule Archdo.Compiled.DiagramInteractive do
       is_boundary =
         mod
         |> Module.split()
-        |> Enum.join(".")
-        == ctx
+        |> Enum.join(".") ==
+          ctx
 
       %{
         id: mod_name,

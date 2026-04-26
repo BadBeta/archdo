@@ -13,7 +13,8 @@ defmodule Archdo.Rules.Boundary.ParallelHierarchies do
   def id, do: "4.11"
 
   @impl true
-  def description, do: "Parallel hierarchies — feature additions creating thin files in many directories"
+  def description,
+    do: "Parallel hierarchies — feature additions creating thin files in many directories"
 
   @impl true
   def analyze(_file, _ast, _opts), do: []
@@ -38,10 +39,13 @@ defmodule Archdo.Rules.Boundary.ParallelHierarchies do
       # Only flag if files are spread across distinct parallel-style directories
       if length(directories) >= @min_thin_parallel and parallel_dirs?(directories) do
         thin_files =
-          Enum.filter(files_with_ast, fn {_file, ast} -> AST.ast_size(ast) < @thin_node_threshold end)
+          Enum.filter(files_with_ast, fn {_file, ast} ->
+            AST.ast_size(ast) < @thin_node_threshold
+          end)
 
         if length(thin_files) >= @min_thin_parallel do
           {first_file, _} = hd(thin_files)
+
           locations =
             thin_files
             |> Enum.map(fn {f, _} -> Path.dirname(f) end)
@@ -108,5 +112,4 @@ defmodule Archdo.Rules.Boundary.ParallelHierarchies do
 
     Enum.count(dirs, fn d -> d in parallel_keywords end) >= 2
   end
-
 end

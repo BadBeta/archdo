@@ -17,7 +17,8 @@ defmodule Archdo.Rules.Module.PretentiousName do
   def id, do: "6.7"
 
   @impl true
-  def description, do: "Pretentious module names — Manager/Helper/Util/Service hide what the module does"
+  def description,
+    do: "Pretentious module names — Manager/Helper/Util/Service hide what the module does"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -36,13 +37,15 @@ defmodule Archdo.Rules.Module.PretentiousName do
             aliases
             |> List.last()
             |> Atom.to_string()
+
           full = AST.module_name(Module.concat(aliases))
 
           if pretentious?(last_part) do
             diag =
               Diagnostic.info("6.7",
                 title: "Pretentious module name",
-                message: "Module #{full} ends in `#{last_part}` — a generic suffix that doesn't describe its job",
+                message:
+                  "Module #{full} ends in `#{last_part}` — a generic suffix that doesn't describe its job",
                 why:
                   "Suffixes like `Manager`, `Helper`, `Util`, `Service`, `Processor` are placeholders that " <>
                     "tell the reader nothing about what the module does. They're a sign that the module wasn't " <>

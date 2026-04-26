@@ -9,7 +9,8 @@ defmodule Archdo.Rules.Module.MissingRescueAtBoundary do
 
   @impl true
   def description,
-    do: "System boundary calls (external data, process calls) need rescue/catch, not just ok/error"
+    do:
+      "System boundary calls (external data, process calls) need rescue/catch, not just ok/error"
 
   @impl true
   def analyze(file, ast, _opts) do

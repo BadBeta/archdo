@@ -71,7 +71,8 @@ defmodule Archdo.Rules.EventSourcing.PureAggregateApply do
           end
           ```
           """,
-          applies_when: "The side effect should fire when the command is processed, not on replay."
+          applies_when:
+            "The side effect should fire when the command is processed, not on replay."
         ),
         Fix.new(
           summary: "Move the side effect to a process manager subscribed to the event",
@@ -102,23 +103,31 @@ defmodule Archdo.Rules.EventSourcing.PureAggregateApply do
   defp find_side_effects(body) do
     # Check for known side-effect calls
     module_calls =
-      Enum.map(AST.find_all(body, fn
-        {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _} ->
-          Enum.any?(@side_effect_patterns, fn
-            {mod, nil} -> List.last(mod_parts) in mod
-            {mod, funcs} -> mod_parts == mod and func in funcs
-          end)
-        _ -> false
-      end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
-        {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
-      end)
+      Enum.map(
+        AST.find_all(body, fn
+          {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _} ->
+            Enum.any?(@side_effect_patterns, fn
+              {mod, nil} -> List.last(mod_parts) in mod
+              {mod, funcs} -> mod_parts == mod and func in funcs
+            end)
+
+          _ ->
+            false
+        end),
+        fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+          {"#{Enum.join(mod_parts, ".")}.#{func}", AST.line(meta)}
+        end
+      )
 
     # Check for send/2
     sends =
-      Enum.map(AST.find_all(body, fn
-        {:send, _, [_, _]} -> true
-        _ -> false
-      end), fn {_, meta, _} -> {"send/2", AST.line(meta)} end)
+      Enum.map(
+        AST.find_all(body, fn
+          {:send, _, [_, _]} -> true
+          _ -> false
+        end),
+        fn {_, meta, _} -> {"send/2", AST.line(meta)} end
+      )
 
     module_calls ++ sends
   end
@@ -128,7 +137,9 @@ defmodule Archdo.Rules.EventSourcing.PureAggregateApply do
       {:use, _, [{:__aliases__, _, aliases} | _]} ->
         mod = Module.concat(aliases)
         mod == Commanded.Aggregates.Aggregate
-      _ -> false
+
+      _ ->
+        false
     end) or has_execute_and_apply?(ast)
   end
 

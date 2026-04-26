@@ -32,39 +32,45 @@ defmodule Archdo.Rules.Module.CollectionPerf do
   # --- Enum.count(list, fun) > 0 → Enum.any?(list, fun) ---
 
   defp find_count_gt_zero(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # Enum.count(x, fun) > 0
-      {:>, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, [_, _]},
-        val
-      ]} ->
-        zero_literal?(val)
+    Enum.map(
+      AST.find_all(ast, fn
+        # Enum.count(x, fun) > 0
+        {:>, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, [_, _]},
+           val
+         ]} ->
+          zero_literal?(val)
 
-      # Enum.count(x, fun) != 0
-      {:!=, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, [_, _]},
-        val
-      ]} ->
-        zero_literal?(val)
+        # Enum.count(x, fun) != 0
+        {:!=, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, [_, _]},
+           val
+         ]} ->
+          zero_literal?(val)
 
-      # Enum.count(x, fun) == 0  (inverse — should be !Enum.any?)
-      {:==, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, [_, _]},
-        val
-      ]} ->
-        zero_literal?(val)
+        # Enum.count(x, fun) == 0  (inverse — should be !Enum.any?)
+        {:==, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, [_, _]},
+           val
+         ]} ->
+          zero_literal?(val)
 
-      _ ->
-        false
-    end), fn {op, meta, _} ->
-      replacement =
-        case op do
-          :== -> "not Enum.any?(collection, fun)"
-          _ -> "Enum.any?(collection, fun)"
-        end
+        _ ->
+          false
+      end),
+      fn {op, meta, _} ->
+        replacement =
+          case op do
+            :== -> "not Enum.any?(collection, fun)"
+            _ -> "Enum.any?(collection, fun)"
+          end
 
-      build_diagnostic(file, AST.line(meta), :count_vs_any, replacement)
-    end)
+        build_diagnostic(file, AST.line(meta), :count_vs_any, replacement)
+      end
+    )
   end
 
   defp zero_literal?(0), do: true
@@ -74,62 +80,78 @@ defmodule Archdo.Rules.Module.CollectionPerf do
   # --- Enum.filter |> Enum.map → for comprehension ---
 
   defp find_filter_then_map(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # x |> Enum.filter(...) |> Enum.map(...)  — outer pipe
-      {:|>, _, [
-        {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, filter_fn]}, _, _}]},
-        {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}
-      ]} when filter_fn in [:filter, :reject] ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # x |> Enum.filter(...) |> Enum.map(...)  — outer pipe
+        {:|>, _,
+         [
+           {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, filter_fn]}, _, _}]},
+           {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}
+         ]}
+        when filter_fn in [:filter, :reject] ->
+          true
 
-      # Enum.map(Enum.filter(list, f), g) — nested call form
-      {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, filter_fn]}, _, _} | _
-      ]} when filter_fn in [:filter, :reject] ->
-        true
+        # Enum.map(Enum.filter(list, f), g) — nested call form
+        {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, filter_fn]}, _, _} | _
+         ]}
+        when filter_fn in [:filter, :reject] ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :filter_then_map, nil)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :filter_then_map, nil)
+      end
+    )
   end
 
   # --- Enum.sort |> hd / Enum.sort |> Enum.take(1) → Enum.min ---
 
   defp find_sort_then_first(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # x |> Enum.sort() |> hd()  — 3-step pipe
-      {:|>, _, [
-        {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, sort_fn]}, _, _}]},
-        {:hd, _, _}
-      ]} when sort_fn in [:sort, :sort_by] ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # x |> Enum.sort() |> hd()  — 3-step pipe
+        {:|>, _,
+         [
+           {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, sort_fn]}, _, _}]},
+           {:hd, _, _}
+         ]}
+        when sort_fn in [:sort, :sort_by] ->
+          true
 
-      # Enum.sort(list) |> hd()  — 2-step pipe
-      {:|>, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, sort_fn]}, _, _},
-        {:hd, _, _}
-      ]} when sort_fn in [:sort, :sort_by] ->
-        true
+        # Enum.sort(list) |> hd()  — 2-step pipe
+        {:|>, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, sort_fn]}, _, _},
+           {:hd, _, _}
+         ]}
+        when sort_fn in [:sort, :sort_by] ->
+          true
 
-      # hd(Enum.sort(list))
-      {:hd, _, [{{:., _, [{:__aliases__, _, [:Enum]}, sort_fn]}, _, _}]}
-      when sort_fn in [:sort, :sort_by] ->
-        true
+        # hd(Enum.sort(list))
+        {:hd, _, [{{:., _, [{:__aliases__, _, [:Enum]}, sort_fn]}, _, _}]}
+        when sort_fn in [:sort, :sort_by] ->
+          true
 
-      # x |> Enum.sort() |> Enum.take(1)  — 3-step pipe
-      {:|>, _, [
-        {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, sort_fn]}, _, _}]},
-        {{:., _, [{:__aliases__, _, [:Enum]}, :take]}, _, [val]}
-      ]} when sort_fn in [:sort, :sort_by] ->
-        one_literal?(val)
+        # x |> Enum.sort() |> Enum.take(1)  — 3-step pipe
+        {:|>, _,
+         [
+           {:|>, _, [_, {{:., _, [{:__aliases__, _, [:Enum]}, sort_fn]}, _, _}]},
+           {{:., _, [{:__aliases__, _, [:Enum]}, :take]}, _, [val]}
+         ]}
+        when sort_fn in [:sort, :sort_by] ->
+          one_literal?(val)
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :sort_then_first, nil)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :sort_then_first, nil)
+      end
+    )
   end
 
   defp one_literal?(1), do: true
@@ -139,28 +161,34 @@ defmodule Archdo.Rules.Module.CollectionPerf do
   # --- Enum.reverse(Enum.reverse(list)) — identity ---
 
   defp find_double_reverse(file, ast) do
-    Enum.map(AST.find_all(ast, fn
-      # Enum.reverse(Enum.reverse(x))
-      {{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, [
-        {{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, _}
-      ]} ->
-        true
+    Enum.map(
+      AST.find_all(ast, fn
+        # Enum.reverse(Enum.reverse(x))
+        {{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _,
+         [
+           {{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, _}
+         ]} ->
+          true
 
-      # x |> Enum.reverse() |> Enum.reverse()
-      {:|>, _, [
-        {:|>, _, [
-          _,
-          {{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, _}
-        ]},
-        {{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, _}
-      ]} ->
-        true
+        # x |> Enum.reverse() |> Enum.reverse()
+        {:|>, _,
+         [
+           {:|>, _,
+            [
+              _,
+              {{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, _}
+            ]},
+           {{:., _, [{:__aliases__, _, [:Enum]}, :reverse]}, _, _}
+         ]} ->
+          true
 
-      _ ->
-        false
-    end), fn {_, meta, _} ->
-      build_diagnostic(file, AST.line(meta), :double_reverse, nil)
-    end)
+        _ ->
+          false
+      end),
+      fn {_, meta, _} ->
+        build_diagnostic(file, AST.line(meta), :double_reverse, nil)
+      end
+    )
   end
 
   # --- Enum.member? on list inside a loop ---
@@ -190,8 +218,9 @@ defmodule Archdo.Rules.Module.CollectionPerf do
       alternatives: [
         Fix.new(
           summary: "Use Enum.any?/2 or Enum.all?/2",
-          detail: "`Enum.count(list, fun) > 0` -> `Enum.any?(list, fun)`\n" <>
-            "`Enum.count(list, fun) == 0` -> `not Enum.any?(list, fun)`",
+          detail:
+            "`Enum.count(list, fun) > 0` -> `Enum.any?(list, fun)`\n" <>
+              "`Enum.count(list, fun) == 0` -> `not Enum.any?(list, fun)`",
           applies_when: "You only need to know if any/no elements match."
         )
       ],
@@ -212,8 +241,9 @@ defmodule Archdo.Rules.Module.CollectionPerf do
       alternatives: [
         Fix.new(
           summary: "Use a for comprehension",
-          detail: "`list |> Enum.filter(&pred/1) |> Enum.map(&transform/1)` ->\n" <>
-            "`for item <- list, pred(item), do: transform(item)`",
+          detail:
+            "`list |> Enum.filter(&pred/1) |> Enum.map(&transform/1)` ->\n" <>
+              "`for item <- list, pred(item), do: transform(item)`",
           applies_when: "The filter and map are independent operations on the same collection."
         ),
         Fix.new(
@@ -238,8 +268,9 @@ defmodule Archdo.Rules.Module.CollectionPerf do
       alternatives: [
         Fix.new(
           summary: "Use Enum.min/max or Enum.min_by/max_by",
-          detail: "`Enum.sort(list) |> hd()` -> `Enum.min(list)`\n" <>
-            "`Enum.sort_by(list, &fun/1) |> hd()` -> `Enum.min_by(list, &fun/1)`",
+          detail:
+            "`Enum.sort(list) |> hd()` -> `Enum.min(list)`\n" <>
+              "`Enum.sort_by(list, &fun/1) |> hd()` -> `Enum.min_by(list, &fun/1)`",
           applies_when: "You only need the smallest or largest element."
         )
       ],
@@ -273,7 +304,8 @@ defmodule Archdo.Rules.Module.CollectionPerf do
   defp build_diagnostic(file, line, :member_in_loop, _) do
     Diagnostic.warning("6.51",
       title: "Enum.member? on list inside loop",
-      message: "Enum.member?/2 is O(n) per call — build a MapSet before the loop for O(1) lookups",
+      message:
+        "Enum.member?/2 is O(n) per call — build a MapSet before the loop for O(1) lookups",
       why:
         "Enum.member? does a linear scan of the list for every call. Inside a loop " <>
           "of m iterations over a list of n elements, this is O(m*n). " <>
@@ -282,8 +314,9 @@ defmodule Archdo.Rules.Module.CollectionPerf do
       alternatives: [
         Fix.new(
           summary: "Build a MapSet before the loop",
-          detail: "`set = MapSet.new(list)` before the loop,\n" <>
-            "then `MapSet.member?(set, item)` inside the loop.",
+          detail:
+            "`set = MapSet.new(list)` before the loop,\n" <>
+              "then `MapSet.member?(set, item)` inside the loop.",
           applies_when: "The list being checked doesn't change during the loop."
         )
       ],

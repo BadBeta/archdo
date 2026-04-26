@@ -37,6 +37,7 @@ defmodule Archdo.Rules.Module.UnprotectedExternalCall do
 
     for {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} <- calls do
       service = Enum.map_join(mod_parts, ".", &to_string/1)
+
       non_bang =
         func
         |> to_string()
@@ -44,8 +45,7 @@ defmodule Archdo.Rules.Module.UnprotectedExternalCall do
 
       Diagnostic.warning("4.20",
         title: "External service call uses bang function",
-        message:
-          "#{service}.#{func}() will raise on failure instead of returning an error tuple",
+        message: "#{service}.#{func}() will raise on failure instead of returning an error tuple",
         why:
           "Bang functions raise exceptions when the external service returns an error or is " <>
             "unreachable. In production, external services fail regularly — DNS timeouts, 503s, " <>

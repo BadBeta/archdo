@@ -41,11 +41,12 @@ defmodule Archdo.Mcp.Tools.PerfAudit do
         {level, %{count: length(diags), findings: Enum.map(diags, &Encoder.diagnostic_to_map/1)}}
       end)
 
-    {:ok, %{
-      total: length(diagnostics),
-      by_impact: by_impact,
-      summary: impact_summary(diagnostics)
-    }}
+    {:ok,
+     %{
+       total: length(diagnostics),
+       by_impact: by_impact,
+       summary: impact_summary(diagnostics)
+     }}
   end
 
   defp impact_level(%{severity: :warning}), do: "high"

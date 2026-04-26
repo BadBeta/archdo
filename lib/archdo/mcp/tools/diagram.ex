@@ -45,21 +45,34 @@ defmodule Archdo.Mcp.Tools.Diagram do
         end
 
       {:error, reason} ->
-        {:error, "Compiled analysis failed: #{reason}. Run `mix compile` in the target project first."}
+        {:error,
+         "Compiled analysis failed: #{reason}. Run `mix compile` in the target project first."}
     end
   end
 
   def call(_), do: {:error, "Missing required arguments: project_path, type"}
 
-  defp generate(graph, "overview", _), do: {:ok, Archdo.Compiled.Diagram.architecture_overview(graph)}
-  defp generate(graph, "modules", _), do: {:ok, Archdo.Compiled.Diagram.module_dependencies(graph)}
-  defp generate(graph, "delta", _), do: {:ok, Archdo.Compiled.Diagram.dependency_delta(graph, ["lib"])}
-  defp generate(graph, "system", _), do: {:ok, Archdo.Compiled.DiagramSystem.system_diagram(graph)}
+  defp generate(graph, "overview", _),
+    do: {:ok, Archdo.Compiled.Diagram.architecture_overview(graph)}
 
-  defp generate(_graph, "context", nil), do: {:error, "context type requires a 'target' argument (context name)"}
-  defp generate(graph, "context", name), do: {:ok, Archdo.Compiled.Diagram.context_detail(graph, name)}
+  defp generate(graph, "modules", _),
+    do: {:ok, Archdo.Compiled.Diagram.module_dependencies(graph)}
 
-  defp generate(_graph, "blast", nil), do: {:error, "blast type requires a 'target' argument (module name)"}
+  defp generate(graph, "delta", _),
+    do: {:ok, Archdo.Compiled.Diagram.dependency_delta(graph, ["lib"])}
+
+  defp generate(graph, "system", _),
+    do: {:ok, Archdo.Compiled.DiagramSystem.system_diagram(graph)}
+
+  defp generate(_graph, "context", nil),
+    do: {:error, "context type requires a 'target' argument (context name)"}
+
+  defp generate(graph, "context", name),
+    do: {:ok, Archdo.Compiled.Diagram.context_detail(graph, name)}
+
+  defp generate(_graph, "blast", nil),
+    do: {:error, "blast type requires a 'target' argument (module name)"}
+
   defp generate(graph, "blast", name) do
     module = String.to_atom("Elixir." <> name)
     {:ok, Archdo.Compiled.Diagram.blast_radius(graph, module)}

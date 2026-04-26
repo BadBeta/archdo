@@ -38,30 +38,33 @@ defmodule Archdo.Mcp.Tools.ExplainFinding do
         # Find the diagnostic at or closest to the target line
         case find_nearest(diagnostics, target_line) do
           nil ->
-            {:ok, %{
-              file: file,
-              line: target_line,
-              finding: nil,
-              message: "No finding at or near line #{target_line} in #{file}",
-              code_context: read_context(file, target_line)
-            }}
+            {:ok,
+             %{
+               file: file,
+               line: target_line,
+               finding: nil,
+               message: "No finding at or near line #{target_line} in #{file}",
+               code_context: read_context(file, target_line)
+             }}
 
           diagnostic ->
-            {:ok, %{
-              file: file,
-              line: diagnostic.line,
-              finding: %{
-                rule_id: diagnostic.rule_id,
-                severity: diagnostic.severity,
-                title: diagnostic.title,
-                message: diagnostic.message,
-                why: diagnostic.why,
-                fixes: Enum.map(diagnostic.alternatives, fn fix ->
-                  %{summary: fix.summary, detail: fix.detail, applies_when: fix.applies_when}
-                end)
-              },
-              code_context: read_context(file, diagnostic.line)
-            }}
+            {:ok,
+             %{
+               file: file,
+               line: diagnostic.line,
+               finding: %{
+                 rule_id: diagnostic.rule_id,
+                 severity: diagnostic.severity,
+                 title: diagnostic.title,
+                 message: diagnostic.message,
+                 why: diagnostic.why,
+                 fixes:
+                   Enum.map(diagnostic.alternatives, fn fix ->
+                     %{summary: fix.summary, detail: fix.detail, applies_when: fix.applies_when}
+                   end)
+               },
+               code_context: read_context(file, diagnostic.line)
+             }}
         end
 
       false ->
