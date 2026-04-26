@@ -13,6 +13,7 @@ defmodule Archdo.Formatter do
     case Keyword.get(opts, :format, :summary) do
       :summary -> format_summary(diagnostics)
       :text -> format_text(diagnostics)
+      :brief -> format_brief(diagnostics)
       :json -> format_json(diagnostics)
       :compact -> format_compact(diagnostics)
       :llm -> format_llm(diagnostics)
@@ -37,13 +38,17 @@ defmodule Archdo.Formatter do
   end
 
   defp format_summary(diagnostics) do
-    {errors, warnings, infos} = counts(diagnostics)
+    {actionable, passed} = split_passed(diagnostics)
+    {errors, warnings, infos} = counts(actionable)
+    passed_n = length(passed)
     total = errors + warnings + infos
 
-    IO.puts("\nArchdo — #{total} findings (#{errors} errors, #{warnings} warnings, #{infos} info)\n")
+    IO.puts(
+      "\nArchdo — #{total} findings (#{errors} errors, #{warnings} warnings, #{infos} info, #{passed_n} passed)\n"
+    )
 
     by_rule =
-      diagnostics
+      actionable
       |> Enum.group_by(fn d -> {d.rule_id, d.severity, d.title} end)
       |> Enum.map(fn {{rule_id, severity, title}, diags} ->
         tags = diags |> List.first() |> Map.get(:tags, [])
@@ -69,8 +74,10 @@ defmodule Archdo.Formatter do
       tag_str = Enum.map_join(r.tags, ",", &Atom.to_string/1)
 
       base =
-        "| " <> String.pad_trailing(sev, 7) <>
-          " | " <> String.pad_trailing(r.rule_id, 5) <>
+        "| " <>
+          String.pad_trailing(sev, 7) <>
+          " | " <>
+          String.pad_trailing(r.rule_id, 5) <>
           " | " <> String.pad_leading(Integer.to_string(r.count), 5)
 
       case has_tags do
@@ -111,51 +118,116 @@ defmodule Archdo.Formatter do
     |> Enum.sort_by(fn {cat, _} -> category_order(cat) end)
     |> Enum.each(fn {category, diags} ->
       IO.puts("#{category}")
-
-      Enum.each(diags, fn d ->
-        severity_str = format_severity(d.severity)
-        IO.puts("  #{severity_str} [#{d.rule_id}] #{d.title}")
-        IO.puts("         #{d.message}")
-        IO.puts("         in #{AST.relative_path(d.file)}:#{d.line}")
-
-        if is_non_empty_string(d.why) do
-          d.why
-          |> wrap(80)
-          |> Enum.each(fn line -> IO.puts("         why: #{line}") end)
-        end
-
-        case d.alternatives do
-          [] ->
-            :ok
-
-          alts ->
-            IO.puts("         fixes:")
-
-            alts
-            |> Enum.with_index(1)
-            |> Enum.each(fn {%Fix{} = fix, idx} ->
-              IO.puts("           #{idx}. #{fix.summary}")
-
-              if is_non_empty_string(fix.detail) do
-                fix.detail
-                |> wrap(76)
-                |> Enum.each(fn line -> IO.puts("              #{line}") end)
-              end
-
-              if is_non_empty_string(fix.applies_when) do
-                IO.puts("              when: #{fix.applies_when}")
-              end
-            end)
-        end
-
-        IO.puts("")
-      end)
+      Enum.each(diags, &print_full_diagnostic/1)
     end)
 
     {errors, warnings, infos} = counts(diagnostics)
     IO.puts("Found #{errors} errors, #{warnings} warnings, #{infos} info.\n")
     IO.puts(@llm_instruction)
     exit_code(errors, warnings)
+  end
+
+  # ───────────────────────────────────────────── :brief ────────────────────────────────────────────
+
+  # Verbose for warns/errors (full why+fixes), info elided to a count line.
+  # Right shape for CI runs that want fixes for actionable findings without
+  # the noise of every info-level finding.
+  defp format_brief([]) do
+    IO.puts("\nArchdo — no issues found.\n")
+    0
+  end
+
+  defp format_brief(diagnostics) do
+    {non_passed, passed} = split_passed(diagnostics)
+    {actionable, infos} = Enum.split_with(non_passed, fn d -> d.severity != :info end)
+    passed_n = length(passed)
+
+    case actionable do
+      [] ->
+        :ok
+
+      _ ->
+        IO.puts("\nArchdo — Architectural Quality Check\n")
+
+        actionable
+        |> Enum.group_by(&category/1)
+        |> Enum.sort_by(fn {cat, _} -> category_order(cat) end)
+        |> Enum.each(fn {category, diags} ->
+          IO.puts("#{category}")
+          Enum.each(diags, &print_full_diagnostic/1)
+        end)
+    end
+
+    {errors, warnings, _} = counts(actionable)
+    info_count = length(infos)
+
+    IO.puts(
+      "Found #{errors} errors, #{warnings} warnings, #{info_count} info, #{passed_n} passed.\n"
+    )
+
+    case info_count do
+      0 ->
+        :ok
+
+      n ->
+        IO.puts(
+          "(#{n} info finding(s) elided — run `mix archdo --format text` for full detail)\n"
+        )
+    end
+
+    IO.puts(@llm_instruction)
+    exit_code(errors, warnings)
+  end
+
+  # Split diagnostics into {non_passed, passed} based on the :passed tag.
+  # Positive findings (e.g., "fully mockable") carry tags: [:passed] so they
+  # don't clutter the actionable counts in summary/brief output.
+  defp split_passed(diagnostics) do
+    Enum.split_with(diagnostics, fn d -> :passed not in (d.tags || []) end)
+  end
+
+  defp print_full_diagnostic(d) do
+    severity_str = format_severity(d.severity)
+    IO.puts("  #{severity_str} [#{d.rule_id}] #{d.title}")
+    IO.puts("         #{d.message}")
+    IO.puts("         in #{AST.relative_path(d.file)}:#{d.line}")
+
+    case see_also_for(d.rule_id) do
+      nil -> :ok
+      pointer -> IO.puts("         see also: #{pointer}")
+    end
+
+    if is_non_empty_string(d.why) do
+      d.why
+      |> wrap(80)
+      |> Enum.each(fn line -> IO.puts("         why: #{line}") end)
+    end
+
+    case d.alternatives do
+      [] ->
+        :ok
+
+      alts ->
+        IO.puts("         fixes:")
+
+        alts
+        |> Enum.with_index(1)
+        |> Enum.each(fn {%Fix{} = fix, idx} ->
+          IO.puts("           #{idx}. #{fix.summary}")
+
+          if is_non_empty_string(fix.detail) do
+            fix.detail
+            |> wrap(76)
+            |> Enum.each(fn line -> IO.puts("              #{line}") end)
+          end
+
+          if is_non_empty_string(fix.applies_when) do
+            IO.puts("              when: #{fix.applies_when}")
+          end
+        end)
+    end
+
+    IO.puts("")
   end
 
   # ───────────────────────────────────────────── :compact ──────────────────────────────────────────
@@ -244,7 +316,8 @@ defmodule Archdo.Formatter do
       end)
 
     sarif = %{
-      "$schema" => "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+      "$schema" =>
+        "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
       version: "2.1.0",
       runs: [
         %{
@@ -287,6 +360,7 @@ defmodule Archdo.Formatter do
     summary_rows =
       Enum.map_join(by_rule, "\n", fn r ->
         sev_class = Atom.to_string(r.severity)
+
         "<tr class=\"#{sev_class}\"><td>#{r.severity}</td><td>#{r.rule_id}</td>" <>
           "<td>#{r.count}</td><td>#{r.title}</td></tr>"
       end)
@@ -294,7 +368,9 @@ defmodule Archdo.Formatter do
     detail_rows =
       Enum.map_join(diagnostics, "\n", fn d ->
         sev_class = Atom.to_string(d.severity)
-        why_html = if d.why && d.why != "", do: "<p class=\"why\">#{escape_html(d.why)}</p>", else: ""
+
+        why_html =
+          if d.why && d.why != "", do: "<p class=\"why\">#{escape_html(d.why)}</p>", else: ""
 
         "<tr class=\"#{sev_class}\">" <>
           "<td>#{d.severity}</td><td>#{d.rule_id}</td>" <>
@@ -437,6 +513,42 @@ defmodule Archdo.Formatter do
   defp format_severity(:error), do: IO.ANSI.format([:red, "error  "])
   defp format_severity(:warning), do: IO.ANSI.format([:yellow, "warning"])
   defp format_severity(:info), do: IO.ANSI.format([:cyan, "info   "])
+
+  # Per-rule cross-references — point Layer 2 (the Elixir/rust-nif skill) at the
+  # exact section that explains the trade-off behind the rule. Mapped by rule_id
+  # prefix so a single line covers a whole category. Returns nil for prefixes
+  # without a known pointer (no see-also line emitted).
+  # Topic-only references (no §-numbers): topic names survive document
+  # renumbering, so these don't need to chase skill revisions.
+  @spec see_also_for(String.t()) :: String.t() | nil
+  defp see_also_for("11." <> _), do: "rust-nif skill (NIF module shapes)"
+
+  defp see_also_for("5." <> _),
+    do: "elixir-implementing (OTP key decisions); elixir-reviewing (OTP checklist)"
+
+  defp see_also_for("4." <> _),
+    do: "elixir-planning (architecture-patterns); elixir-reviewing (architecture checklist)"
+
+  defp see_also_for("1." <> _),
+    do: "elixir-planning (data-ownership); elixir-reviewing (boundaries checklist)"
+
+  defp see_also_for("3." <> _), do: "elixir-implementing (config strategy / Config module)"
+
+  defp see_also_for("6." <> _),
+    do: "elixir-implementing (anti-patterns); elixir-reviewing (control-flow)"
+
+  defp see_also_for("7." <> _), do: "elixir-implementing (TDD workflow / testing-patterns)"
+  defp see_also_for("8." <> _), do: "event-sourcing skill"
+
+  defp see_also_for("9." <> _),
+    do: "state-machine skill; elixir-implementing (gen_statem callback modes)"
+
+  defp see_also_for("10." <> _), do: "elixir-implementing (architecture key decisions)"
+
+  defp see_also_for("2." <> _),
+    do: "elixir-implementing (context modules); elixir-reviewing (public-api)"
+
+  defp see_also_for(_), do: nil
 
   defp category(%Diagnostic{rule_id: "5." <> _}), do: "OTP Process Architecture"
   defp category(%Diagnostic{rule_id: "2." <> _}), do: "Public API"

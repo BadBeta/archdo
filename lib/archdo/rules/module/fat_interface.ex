@@ -117,7 +117,11 @@ defmodule Archdo.Rules.Module.FatInterface do
     # children that would reset the flag.
     {_, {_, impl_fns}} =
       Macro.prewalk(ast, {false, MapSet.new()}, fn
+        # Match both bare `true` and the literal_encoder-wrapped form.
         {:@, _, [{:impl, _, [true]}]} = node, {_, fns} ->
+          {node, {true, fns}}
+
+        {:@, _, [{:impl, _, [{:__block__, _, [true]}]}]} = node, {_, fns} ->
           {node, {true, fns}}
 
         {:@, _, [{:impl, _, _}]} = node, {_, fns} ->
@@ -147,7 +151,7 @@ defmodule Archdo.Rules.Module.FatInterface do
     normalized in @noop_bodies or empty_collection?(normalized) or raise_not_implemented?(actual)
   end
 
-  defp unwrap_do([do: body]), do: body
+  defp unwrap_do(do: body), do: body
   defp unwrap_do(body), do: body
 
   defp normalize_body({:__block__, _, [single]}), do: {:__block__, normalize_body(single)}
@@ -176,6 +180,7 @@ defmodule Archdo.Rules.Module.FatInterface do
 
   defp build_diagnostic(impl, behaviour, stubs, _behaviour_defs) do
     stub_names = Enum.map_join(stubs, ", ", fn s -> "#{s.name}/#{s.arity}" end)
+
     first_line =
       stubs
       |> Enum.map(& &1.line)

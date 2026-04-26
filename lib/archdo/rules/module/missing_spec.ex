@@ -133,7 +133,9 @@ defmodule Archdo.Rules.Module.MissingSpec do
   defp impl?(body, _name) do
     # Check if @impl true appears (covers all callback implementations)
     AST.contains?(body, fn
+      # Match both bare `true` and the literal_encoder-wrapped form.
       {:@, _, [{:impl, _, [true]}]} -> true
+      {:@, _, [{:impl, _, [{:__block__, _, [true]}]}]} -> true
       {:@, _, [{:impl, _, [{:__aliases__, _, _}]}]} -> true
       _ -> false
     end)
@@ -150,5 +152,4 @@ defmodule Archdo.Rules.Module.MissingSpec do
 
   defp spec_args(0), do: ""
   defp spec_args(n), do: Enum.map_join(1..n, ", ", fn _ -> "term()" end)
-
 end

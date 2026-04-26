@@ -41,4 +41,81 @@ defmodule Archdo.Rules.NIF.NifBehindBehaviourTest do
       assert_clean(NifBehindBehaviour, code)
     end
   end
+
+  describe "Shape A: wrapper + @moduledoc false stub on disk" do
+    setup do
+      root = Path.join(System.tmp_dir!(), "archdo_nbb_#{:rand.uniform(1_000_000)}")
+      File.mkdir_p!(Path.join(root, "lib/relix_array"))
+      File.write!(Path.join(root, "mix.exs"), ~s|defmodule Foo.MixProject do
+  use Mix.Project
+  def project, do: [app: :foo, version: "0.1.0"]
+end|)
+      on_exit(fn -> File.rm_rf!(root) end)
+      %{root: root}
+    end
+
+    test "skips internal NIF stub when sibling wrapper file exists", %{root: root} do
+      File.write!(
+        Path.join(root, "lib/relix_array.ex"),
+        "defmodule RelixArray do\n  @moduledoc \"public api\"\n  def x, do: RelixArray.Native.x()\nend"
+      )
+
+      stub = ~S"""
+      defmodule RelixArray.Native do
+        @moduledoc false
+        use Rustler, otp_app: :relix_array
+
+        def x, do: :erlang.nif_error(:nif_not_loaded)
+      end
+      """
+
+      File.write!(Path.join(root, "lib/relix_array/native.ex"), stub)
+
+      assert_clean(NifBehindBehaviour, stub, file: Path.join(root, "lib/relix_array/native.ex"))
+    end
+
+    test "still flags internal NIF stub when no wrapper exists", %{root: root} do
+      stub = ~S"""
+      defmodule RelixArray.Native do
+        @moduledoc false
+        use Rustler, otp_app: :relix_array
+
+        def x, do: :erlang.nif_error(:nif_not_loaded)
+      end
+      """
+
+      File.write!(Path.join(root, "lib/relix_array/native.ex"), stub)
+
+      diags =
+        assert_flagged(NifBehindBehaviour, stub,
+          file: Path.join(root, "lib/relix_array/native.ex")
+        )
+
+      assert hd(diags).rule_id == "11.1"
+    end
+
+    test "still flags non-internal NIF (no @moduledoc false) even with wrapper", %{root: root} do
+      File.write!(
+        Path.join(root, "lib/relix_array.ex"),
+        "defmodule RelixArray do\n  def x, do: :ok\nend"
+      )
+
+      stub = ~S"""
+      defmodule RelixArray.Native do
+        use Rustler, otp_app: :relix_array
+
+        def x, do: :erlang.nif_error(:nif_not_loaded)
+      end
+      """
+
+      File.write!(Path.join(root, "lib/relix_array/native.ex"), stub)
+
+      diags =
+        assert_flagged(NifBehindBehaviour, stub,
+          file: Path.join(root, "lib/relix_array/native.ex")
+        )
+
+      assert hd(diags).rule_id == "11.1"
+    end
+  end
 end

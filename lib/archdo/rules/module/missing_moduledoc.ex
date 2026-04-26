@@ -81,7 +81,9 @@ defmodule Archdo.Rules.Module.MissingModuledoc do
   defp protocol_impl?(body) do
     AST.contains?(body, fn
       {:defimpl, _, _} -> true
+      # Match both bare `true` and the literal_encoder-wrapped form.
       {:@, _, [{:impl, _, [true]}]} -> true
+      {:@, _, [{:impl, _, [{:__block__, _, [true]}]}]} -> true
       _ -> false
     end)
   end
@@ -91,5 +93,4 @@ defmodule Archdo.Rules.Module.MissingModuledoc do
     |> Atom.to_string()
     |> String.starts_with?("Elixir.Mix.Tasks.")
   end
-
 end

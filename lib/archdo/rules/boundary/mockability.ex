@@ -77,7 +77,8 @@ defmodule Archdo.Rules.Boundary.Mockability do
               "swap one mock instead of many ad-hoc patches.",
           alternatives: [
             Fix.new(
-              summary: "Define a behaviour for each external library and inject the implementation",
+              summary:
+                "Define a behaviour for each external library and inject the implementation",
               detail:
                 "For each library used here, declare a behaviour exposing only the operations this code needs. " <>
                   "Implement an adapter that delegates to the library, configure via Application env, and use " <>
@@ -124,6 +125,15 @@ defmodule Archdo.Rules.Boundary.Mockability do
           ratio < 0.3 -> :warning
           ratio < 0.7 -> :info
           true -> :info
+        end
+
+      # The fully-positive cases are tagged :passed so summary/brief tally them
+      # in their own column rather than as actionable info findings.
+      passed_tags =
+        case {direct_count, ratio} do
+          {0, _} -> [:passed]
+          {_, :infinity} -> [:passed]
+          _ -> []
         end
 
       message =
@@ -186,8 +196,13 @@ defmodule Archdo.Rules.Boundary.Mockability do
           context: %{
             direct_io_count: direct_count,
             behaviour_count: behaviour_count,
-            ratio: (case ratio do :infinity -> nil; r -> r end)
+            ratio:
+              case ratio do
+                :infinity -> nil
+                r -> r
+              end
           },
+          tags: passed_tags,
           file: "project",
           line: 0
         )
@@ -196,36 +211,44 @@ defmodule Archdo.Rules.Boundary.Mockability do
   end
 
   defp find_external_io_calls(ast, caller_module) do
-    Enum.map(AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
-        mod_parts in @external_io_libraries and
-          not AST.self_call?(caller_module, mod_parts)
+    Enum.map(
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
+          mod_parts in @external_io_libraries and
+            not AST.self_call?(caller_module, mod_parts)
 
-      _ ->
-        false
-    end), fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
-      {AST.module_name(Module.concat(mod_parts)), func, AST.line(meta)}
-    end)
+        _ ->
+          false
+      end),
+      fn {{:., _, [{:__aliases__, _, mod_parts}, func]}, meta, _} ->
+        {AST.module_name(Module.concat(mod_parts)), func, AST.line(meta)}
+      end
+    )
   end
 
   defp count_behaviours_used(ast) do
-    length(AST.find_all(ast, fn
-      {:@, _, [{:behaviour, _, _}]} -> true
-      _ -> false
-    end))
+    length(
+      AST.find_all(ast, fn
+        {:@, _, [{:behaviour, _, _}]} -> true
+        _ -> false
+      end)
+    )
   end
 
   defp count_behaviour_definitions(ast) do
-    case length(AST.find_all(ast, fn
-      {:@, _, [{:callback, _, _}]} -> true
-      _ -> false
-    end)) do
+    case length(
+           AST.find_all(ast, fn
+             {:@, _, [{:callback, _, _}]} -> true
+             _ -> false
+           end)
+         ) do
       0 -> 0
       _ -> 1
     end
   end
 
   defp adapter_or_test?(file) do
+    # Tooling — not domain code
     String.contains?(file, "/test/") or
       String.starts_with?(file, "test/") or
       String.contains?(file, "/adapter") or
@@ -235,7 +258,6 @@ defmodule Archdo.Rules.Boundary.Mockability do
       String.ends_with?(file, "_client.ex") or
       String.ends_with?(file, "_adapter.ex") or
       String.ends_with?(file, "/mailer.ex") or
-      # Tooling — not domain code
       String.contains?(file, "/mix/") or
       String.contains?(file, "/tasks/") or
       String.ends_with?(file, "/release.ex") or

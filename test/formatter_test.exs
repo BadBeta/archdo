@@ -24,9 +24,10 @@ defmodule Archdo.FormatterTest do
 
   describe "format/2 exit codes" do
     test "returns 0 for empty diagnostics" do
-      output = capture_io(fn ->
-        assert 0 = Formatter.format([], format: :text)
-      end)
+      output =
+        capture_io(fn ->
+          assert 0 = Formatter.format([], format: :text)
+        end)
 
       assert output =~ "no issues found"
     end
@@ -98,6 +99,95 @@ defmodule Archdo.FormatterTest do
         end)
 
       assert output =~ "Elixir skill"
+    end
+
+    test "includes per-rule see-also pointer for OTP rule (5.x)" do
+      output =
+        capture_io(fn -> Formatter.format([@sample_diag], format: :text) end)
+
+      assert output =~ "see also:"
+      assert output =~ "elixir-implementing"
+    end
+
+    test "includes per-rule see-also pointer for NIF rule (11.x)" do
+      nif_diag =
+        Diagnostic.warning("11.1",
+          title: "NIF without behaviour",
+          message: "x",
+          why: "y",
+          file: "lib/n.ex",
+          line: 1
+        )
+
+      output = capture_io(fn -> Formatter.format([nif_diag], format: :text) end)
+      assert output =~ "see also:"
+      assert output =~ "rust-nif"
+    end
+  end
+
+  describe ":passed channel" do
+    @passed_diag Diagnostic.info("4.8",
+                   title: "Project mockability summary",
+                   message: "fully mockable",
+                   why: "all good",
+                   tags: [:passed],
+                   file: "project",
+                   line: 0
+                 )
+
+    test "summary format separates passed from info in tally" do
+      output = capture_io(fn -> Formatter.format([@passed_diag], format: :summary) end)
+      assert output =~ "0 info"
+      assert output =~ "1 passed"
+    end
+
+    test "summary format omits :passed-tagged findings from the rule table" do
+      output = capture_io(fn -> Formatter.format([@passed_diag], format: :summary) end)
+      refute output =~ "Project mockability summary"
+    end
+
+    test "text format still shows :passed findings (they're informational)" do
+      output = capture_io(fn -> Formatter.format([@passed_diag], format: :text) end)
+      assert output =~ "Project mockability summary"
+    end
+
+    test "brief format omits :passed findings from output but counts them" do
+      output = capture_io(fn -> Formatter.format([@passed_diag], format: :brief) end)
+      refute output =~ "Project mockability summary"
+      assert output =~ "1 passed"
+    end
+  end
+
+  describe ":brief format" do
+    @info_diag Diagnostic.info("4.8",
+                 title: "Mockability",
+                 message: "fully mockable",
+                 why: "explanation",
+                 file: "project",
+                 line: 0
+               )
+
+    test "renders warn diagnostics with fixes" do
+      output = capture_io(fn -> Formatter.format([@sample_diag], format: :brief) end)
+      assert output =~ "5.14"
+      assert output =~ "Silent handle_info catch-all"
+      assert output =~ "fixes:"
+      assert output =~ "Delete the catch-all"
+    end
+
+    test "elides info detail (no why/fixes blocks for info)" do
+      output = capture_io(fn -> Formatter.format([@info_diag], format: :brief) end)
+      refute output =~ "explanation"
+      refute output =~ "fixes:"
+      assert output =~ "0 errors, 0 warnings, 1 info"
+    end
+
+    test "exit code matches text format semantics" do
+      capture_io(fn ->
+        send(self(), {:exit_code, Formatter.format([@sample_diag], format: :brief)})
+      end)
+
+      assert_received {:exit_code, 1}
     end
   end
 

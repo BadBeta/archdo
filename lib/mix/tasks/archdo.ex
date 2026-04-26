@@ -8,7 +8,7 @@ defmodule Mix.Tasks.Archdo do
 
   ## Options
 
-    * `--format` - Output format: `summary` (default), `text`, `json`, `compact`, `llm`, `sarif`, `html`
+    * `--format` - Output format: `summary` (default), `text`, `brief`, `json`, `compact`, `llm`, `sarif`, `html`
     * `--only` - Comma-separated rule IDs to check (e.g., `--only 5.11,5.12`)
     * `--ignore` - Comma-separated rule IDs to skip
     * `--paths` - Comma-separated paths to check (default: `lib`)
@@ -154,7 +154,18 @@ defmodule Mix.Tasks.Archdo do
     functions = Keyword.get(opts, :functions, true)
     compiled = Keyword.get(opts, :compiled, false)
 
-    maybe_add([format: format, ignore: ignore, boundaries: boundaries, tests: tests, functions: functions, compiled: compiled], :only, only)
+    maybe_add(
+      [
+        format: format,
+        ignore: ignore,
+        boundaries: boundaries,
+        tests: tests,
+        functions: functions,
+        compiled: compiled
+      ],
+      :only,
+      only
+    )
   end
 
   defp run_diagram(diagram_type, paths) do
@@ -188,11 +199,17 @@ defmodule Mix.Tasks.Archdo do
     end
   end
 
-  defp generate_diagram(graph, "overview"), do: Archdo.Compiled.Diagram.architecture_overview(graph)
+  defp generate_diagram(graph, "overview"),
+    do: Archdo.Compiled.Diagram.architecture_overview(graph)
+
   defp generate_diagram(graph, "modules"), do: Archdo.Compiled.Diagram.module_dependencies(graph)
   defp generate_diagram(graph, "api"), do: Archdo.Compiled.Diagram.api_surface(graph)
-  defp generate_diagram(graph, "delta"), do: Archdo.Compiled.Diagram.dependency_delta(graph, ["lib"])
-  defp generate_diagram(graph, "delta-only"), do: Archdo.Compiled.Diagram.dependency_delta_only(graph, ["lib"])
+
+  defp generate_diagram(graph, "delta"),
+    do: Archdo.Compiled.Diagram.dependency_delta(graph, ["lib"])
+
+  defp generate_diagram(graph, "delta-only"),
+    do: Archdo.Compiled.Diagram.dependency_delta_only(graph, ["lib"])
 
   defp generate_diagram(graph, "dataflow:" <> module_name) do
     mod = String.to_atom("Elixir.#{module_name}")
@@ -395,7 +412,8 @@ defmodule Mix.Tasks.Archdo do
 
   defp changed_files_since(ref, base_paths) do
     case System.cmd("git", ["diff", "--name-only", "--diff-filter=ACMR", ref, "--"] ++ base_paths,
-           stderr_to_stdout: true) do
+           stderr_to_stdout: true
+         ) do
       {output, 0} ->
         files =
           output
@@ -415,7 +433,11 @@ defmodule Mix.Tasks.Archdo do
   defp run_fix(opts, paths) do
     dry_run = Keyword.get(opts, :dry_run, true)
 
-    IO.puts(:standard_error, "[archdo] --fix is experimental. Use --fix --no-dry-run to apply changes.")
+    IO.puts(
+      :standard_error,
+      "[archdo] --fix is experimental. Use --fix --no-dry-run to apply changes."
+    )
+
     run_opts = build_run_opts(opts)
     files = Archdo.collect_files(paths)
     diagnostics = Archdo.Runner.analyze(files, run_opts)
@@ -432,10 +454,14 @@ defmodule Mix.Tasks.Archdo do
         case dry_run do
           true ->
             Enum.each(fixable, fn d ->
-              IO.puts("  [#{d.rule_id}] #{Archdo.AST.relative_path(d.file)}:#{d.line} — #{d.title}")
+              IO.puts(
+                "  [#{d.rule_id}] #{Archdo.AST.relative_path(d.file)}:#{d.line} — #{d.title}"
+              )
             end)
 
-            IO.puts("\nDry run — #{length(fixable)} fixes would be applied. Use --fix without --dry-run to apply.\n")
+            IO.puts(
+              "\nDry run — #{length(fixable)} fixes would be applied. Use --fix without --dry-run to apply.\n"
+            )
 
           false ->
             fixed_count =
@@ -492,7 +518,9 @@ defmodule Mix.Tasks.Archdo do
     idx = line - 1
 
     case Enum.at(lines, idx) do
-      nil -> :skip
+      nil ->
+        :skip
+
       line_content ->
         case String.contains?(line_content, "alias ") do
           true -> {:fixed, List.delete_at(lines, idx)}
@@ -540,7 +568,10 @@ defmodule Mix.Tasks.Archdo do
   end
 
   # Rewrite single pipe: "  x |> func(args)" → "  func(x, args)"
-  defp apply_single_fix(%{rule_id: "6.33", title: "Code slop: single-step pipeline" <> _, line: line}, lines) do
+  defp apply_single_fix(
+         %{rule_id: "6.33", title: "Code slop: single-step pipeline" <> _, line: line},
+         lines
+       ) do
     idx = line - 1
 
     case Enum.at(lines, idx) do
@@ -596,7 +627,10 @@ defmodule Mix.Tasks.Archdo do
         "#{func_name}(#{new_args})"
 
       _ ->
-        case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/, String.trim(call)) do
+        case Regex.run(
+               ~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/,
+               String.trim(call)
+             ) do
           [_, func_name] -> "#{func_name}(#{input})"
           _ -> nil
         end
@@ -658,6 +692,7 @@ defmodule Mix.Tasks.Archdo do
 
   defp parse_format("summary"), do: :summary
   defp parse_format("text"), do: :text
+  defp parse_format("brief"), do: :brief
   defp parse_format("json"), do: :json
   defp parse_format("compact"), do: :compact
   defp parse_format("llm"), do: :llm

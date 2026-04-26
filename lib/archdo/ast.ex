@@ -63,8 +63,11 @@ defmodule Archdo.AST do
           literal_encoder: &{:ok, {:__block__, &2, [&1]}}
         )
         |> case do
-          {:ok, ast} -> {:ok, ast}
-          {:error, {location, msg, token}} -> {:error, "#{file}:#{location[:line]}: #{msg}#{token}"}
+          {:ok, ast} ->
+            {:ok, ast}
+
+          {:error, {location, msg, token}} ->
+            {:error, "#{file}:#{location[:line]}: #{msg}#{token}"}
         end
 
       {:error, reason} ->
@@ -193,7 +196,14 @@ defmodule Archdo.AST do
     {_, result} =
       Macro.prewalk(ast, callbacks, fn
         {:def, meta, [{callback_name, _, args} | _] = clause_parts} = node, acc
-        when callback_name in [:init, :handle_call, :handle_cast, :handle_info, :handle_continue, :terminate] ->
+        when callback_name in [
+               :init,
+               :handle_call,
+               :handle_cast,
+               :handle_info,
+               :handle_continue,
+               :terminate
+             ] ->
           body = find_body(clause_parts)
           entry = {meta, args || [], body}
           {node, Map.update!(acc, callback_name, &[entry | &1])}
@@ -216,11 +226,13 @@ defmodule Archdo.AST do
   def ast_size(nil), do: 0
   def ast_size({a, b, c}), do: 1 + ast_size(a) + ast_size(b) + ast_size(c)
   def ast_size({a, b}), do: 1 + ast_size(a) + ast_size(b)
+
   def ast_size(list) when is_list(list) do
     list
     |> Enum.map(&ast_size/1)
     |> Enum.sum()
   end
+
   def ast_size(_), do: 1
 
   @doc """
@@ -251,6 +263,7 @@ defmodule Archdo.AST do
       target_parts
       |> hd()
       |> to_string()
+
     caller_root == target_root
   end
 
@@ -343,9 +356,98 @@ defmodule Archdo.AST do
   @spec internal_module?(Macro.t()) :: boolean()
   def internal_module?(ast) do
     contains?(ast, fn
+      # Production parse_file/1 uses literal_encoder, which wraps `false` as
+      # `{:__block__, _, [false]}`. Code.string_to_quoted/1 (no encoder, used by
+      # some tests) keeps the bare form. Match both so the rule fires either way.
       {:@, _, [{:moduledoc, _, [false]}]} -> true
+      {:@, _, [{:moduledoc, _, [{:__block__, _, [false]}]}]} -> true
       _ -> false
     end)
+  end
+
+  @doc """
+  Walk up from `file` to find the nearest `mix.exs`. Returns the project root
+  directory (the one containing `mix.exs`) or `nil` if none found before /.
+  """
+  @spec find_mix_root(String.t()) :: String.t() | nil
+  def find_mix_root(file) when is_binary(file) do
+    file
+    |> Path.expand()
+    |> Path.dirname()
+    |> walk_up_for_mix()
+  end
+
+  defp walk_up_for_mix("/"), do: nil
+
+  defp walk_up_for_mix(dir) do
+    case File.exists?(Path.join(dir, "mix.exs")) do
+      true -> dir
+      false -> walk_up_for_mix(Path.dirname(dir))
+    end
+  end
+
+  @doc """
+  Extract the `:test_paths` list from a project's `mix.exs`. Returns
+  `["test"]` (the Mix default) when not declared or when mix.exs cannot
+  be parsed. Reads from disk; safe to call repeatedly.
+  """
+  @spec test_paths_from_mix(String.t() | nil) :: [String.t()]
+  def test_paths_from_mix(nil), do: ["test"]
+
+  def test_paths_from_mix(project_root) do
+    mix_file = Path.join(project_root, "mix.exs")
+
+    with {:ok, content} <- File.read(mix_file),
+         {:ok, ast} <- Code.string_to_quoted(content) do
+      extract_test_paths(ast) || ["test"]
+    else
+      _ -> ["test"]
+    end
+  end
+
+  defp extract_test_paths(ast) do
+    {_, found} =
+      Macro.prewalk(ast, nil, fn
+        # Match a literal list of strings keyed under :test_paths within any keyword pair.
+        {:test_paths, paths} = node, _ when is_list(paths) ->
+          {node, list_of_strings(paths)}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found
+  end
+
+  defp list_of_strings(list) do
+    case Enum.all?(list, &is_binary/1) do
+      true -> list
+      false -> nil
+    end
+  end
+
+  @doc """
+  Detect whether a project is shaped as a publishable library: its `mix.exs`
+  declares either a `package:` keyword in `project/0` or a `package/0` function.
+  Returns `false` when no `mix.exs` is found or it can't be parsed.
+  """
+  @spec library?(String.t() | nil) :: boolean()
+  def library?(nil), do: false
+
+  def library?(project_root) do
+    mix_file = Path.join(project_root, "mix.exs")
+
+    with {:ok, content} <- File.read(mix_file),
+         {:ok, ast} <- Code.string_to_quoted(content) do
+      contains?(ast, fn
+        {:package, _} -> true
+        {:def, _, [{:package, _, _} | _]} -> true
+        {:defp, _, [{:package, _, _} | _]} -> true
+        _ -> false
+      end)
+    else
+      _ -> false
+    end
   end
 
   defp defines_genserver_callbacks?(ast) do

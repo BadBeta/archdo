@@ -51,9 +51,11 @@ defmodule Archdo.Rules.Testing.UntestedModule do
   end
 
   defp test_file_exists?(file) do
-    file
-    |> source_to_test_path()
-    |> File.exists?()
+    project_root = AST.find_mix_root(file)
+    test_paths = AST.test_paths_from_mix(project_root)
+    candidates = candidate_test_paths(file, test_paths, project_root)
+
+    Enum.any?(candidates, &File.exists?/1)
   end
 
   @doc """
@@ -70,6 +72,39 @@ defmodule Archdo.Rules.Testing.UntestedModule do
     |> String.replace_prefix("lib/", "test/")
     |> String.replace_suffix(".ex", "_test.exs")
   end
+
+  @doc """
+  Build candidate test file paths for `file` given the project's test_paths
+  list. Generates one nested candidate (mirrors lib/ structure under each
+  test_path) and one flat candidate (basename only) per test_path. Optional
+  `project_root` rebases the candidates so on-disk lookup works for absolute
+  source paths.
+  """
+  @spec candidate_test_paths(String.t(), [String.t()], String.t() | nil) :: [String.t()]
+  def candidate_test_paths(file, test_paths, project_root \\ nil) do
+    rel_under_lib =
+      case Path.split(rel_to_root(file, project_root)) do
+        ["lib" | rest] -> Path.join(rest)
+        other -> Path.join(other)
+      end
+
+    basename_test = Path.basename(file, ".ex") <> "_test.exs"
+    rel_test = String.replace_suffix(rel_under_lib, ".ex", "_test.exs")
+
+    Enum.flat_map(test_paths, fn tp ->
+      [
+        join_under_root(project_root, Path.join(tp, rel_test)),
+        join_under_root(project_root, Path.join(tp, basename_test))
+      ]
+    end)
+    |> Enum.uniq()
+  end
+
+  defp rel_to_root(file, nil), do: file
+  defp rel_to_root(file, root), do: Path.relative_to(file, root)
+
+  defp join_under_root(nil, p), do: p
+  defp join_under_root(root, p), do: Path.join(root, p)
 
   defp untested_diagnostic(file, ast) do
     module_name = AST.extract_module_name(ast)

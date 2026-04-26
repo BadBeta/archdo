@@ -19,15 +19,31 @@ defmodule Archdo.Rules.Module.MissingTelemetry do
   `lib/app/foo/` directory (indicating it's the public API for that context).
   """
   def analyze_project(file_asts) do
-    # Build a set of directories that have sub-modules
-    dirs_with_children =
-      file_asts
-      |> Enum.map(fn {file, _} -> Path.dirname(file) end)
-      |> MapSet.new()
+    case skip_for_library_with_nif?(file_asts) do
+      true ->
+        []
 
-    file_asts
-    |> Enum.filter(fn {file, _} -> context_facade?(file, dirs_with_children) end)
-    |> Enum.flat_map(fn {file, ast} -> check_telemetry(file, ast) end)
+      false ->
+        # Build a set of directories that have sub-modules
+        dirs_with_children =
+          file_asts
+          |> Enum.map(fn {file, _} -> Path.dirname(file) end)
+          |> MapSet.new()
+
+        file_asts
+        |> Enum.filter(fn {file, _} -> context_facade?(file, dirs_with_children) end)
+        |> Enum.flat_map(fn {file, ast} -> check_telemetry(file, ast) end)
+    end
+  end
+
+  # Telemetry on a low-level library that ships a NIF is overhead, not value:
+  # the consumer should instrument at THEIR boundary, not pay 1–2µs span cost
+  # on every nanosecond-scale NIF call. Skip 4.19 in that shape.
+  defp skip_for_library_with_nif?([]), do: false
+
+  defp skip_for_library_with_nif?([{first_file, _} | _] = file_asts) do
+    project_root = AST.find_mix_root(first_file)
+    AST.library?(project_root) and Enum.any?(file_asts, fn {_, ast} -> AST.nif_module?(ast) end)
   end
 
   defp context_facade?(file, dirs_with_children) do
@@ -44,8 +60,12 @@ defmodule Archdo.Rules.Module.MissingTelemetry do
     fn_count = length(public_fns)
 
     cond do
-      fn_count < 2 -> []
-      has_telemetry_call?(ast) -> []
+      fn_count < 2 ->
+        []
+
+      has_telemetry_call?(ast) ->
+        []
+
       true ->
         module_name = AST.extract_module_name(ast)
 
@@ -89,15 +109,21 @@ defmodule Archdo.Rules.Module.MissingTelemetry do
   defp has_telemetry_call?(ast) do
     AST.contains?(ast, fn
       # :telemetry.execute(...) or :telemetry.span(...) — bare atom
-      {{:., _, [:telemetry, func]}, _, _} when func in [:execute, :span] -> true
+      {{:., _, [:telemetry, func]}, _, _} when func in [:execute, :span] ->
+        true
+
       # :telemetry wrapped by literal_encoder as {:__block__, _, [:telemetry]}
       {{:., _, [{:__block__, _, [:telemetry]}, func]}, _, _}
-      when func in [:execute, :span] -> true
+      when func in [:execute, :span] ->
+        true
+
       # Telemetry.execute(...) via alias
       {{:., _, [{:__aliases__, _, aliases}, func]}, _, _}
       when func in [:execute, :span] ->
         List.last(aliases) == :Telemetry
-      _ -> false
+
+      _ ->
+        false
     end)
   end
 

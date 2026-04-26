@@ -176,6 +176,37 @@ defmodule Archdo.ASTTest do
     end
   end
 
+  describe "internal_module?/1 with production parse_file (literal_encoder)" do
+    # The production parse path wraps literals as {:__block__, _, [literal]}.
+    # Patterns matching the bare literal silently miss; the rule then
+    # falsely reports this is NOT an internal module.
+    test "detects @moduledoc false in a file parsed by parse_file/1" do
+      path = Path.join(System.tmp_dir!(), "ast_internal_#{:rand.uniform(100_000)}.ex")
+      File.write!(path, "defmodule Foo do\n  @moduledoc false\n  def bar, do: :ok\nend")
+
+      try do
+        assert {:ok, ast} = AST.parse_file(path)
+
+        assert AST.internal_module?(ast),
+               "internal_module?/1 must detect @moduledoc false on a parse_file/1 AST"
+      after
+        File.rm(path)
+      end
+    end
+
+    test "returns false for a module that has a real @moduledoc string" do
+      path = Path.join(System.tmp_dir!(), "ast_internal_#{:rand.uniform(100_000)}.ex")
+      File.write!(path, ~s|defmodule Foo do\n  @moduledoc "real docs"\n  def bar, do: :ok\nend|)
+
+      try do
+        assert {:ok, ast} = AST.parse_file(path)
+        refute AST.internal_module?(ast)
+      after
+        File.rm(path)
+      end
+    end
+  end
+
   describe "extract_callbacks/1" do
     test "groups callbacks by name" do
       {:ok, ast} =
