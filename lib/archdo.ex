@@ -2,11 +2,50 @@ defmodule Archdo do
   @moduledoc """
   Architectural quality checker for Elixir.
 
-  144 rules across 11 categories checking OTP patterns, module boundaries,
-  test architecture, event sourcing, NIF safety, and more — the gap that
-  Credo (style), Dialyzer (types), and Sobelow (security) don't cover.
+  Archdo fills the gap left by `Credo` (style), `Dialyzer` (types), and
+  `Sobelow` (security) — the architecture-and-design layer: OTP discipline,
+  context boundaries, coupling, test architecture, NIF safety, event
+  sourcing, state machines, and module quality.
+
+  ## Two-layer review
+
+  Archdo is **Layer 1**: a fast, mechanical scan that produces structured
+  findings. **Layer 2** is the human (or an LLM with a domain skill loaded)
+  who decides which findings represent intentional trade-offs and which
+  warrant action. Every output format ends with a pointer to the relevant
+  Elixir/rust-nif skill section so the hand-off is concrete.
+
+  ## What it ships
+
+    * **203 rules** across 11 categories (boundaries, coupling, OTP, module
+      quality, single-source-of-truth, testing, event sourcing, state
+      machines, composition, native interop, public API).
+    * **8 output formats**: `summary` (default tally table), `text` (full
+      why+fixes), `brief` (warns/errors with fixes, info elided), `compact`
+      (one-line per finding), `json`, `llm` (NDJSON for tooling), `sarif`
+      (GitHub Code Scanning), `html`.
+    * **MCP server** (`mix archdo.mcp`) exposing 13 JSON-RPC 2.0 tools so
+      LLMs can analyze, explain, diagram, and (experimentally) auto-fix.
+    * **Baseline / freeze workflow** for adopting Archdo on a legacy
+      codebase: `mix archdo --freeze` captures current violations as a
+      baseline; subsequent runs report only NEW violations.
+    * **Compiled-beam analysis** (`--compiled`) for dead code, transitive
+      dead code, macro-aware behaviour checks, and a precise call graph.
+    * **Architecture diagrams** (`--diagram`) — Mermaid context overviews,
+      module dependencies, blast-radius views, and an interactive
+      LabVIEW-style HTML viewer.
+    * **Per-finding suppression** via `# archdo:allow RULE_ID` comments.
 
   Uses JSV for JSON Schema validation at the MCP boundary.
+
+  ## Quick start
+
+      $ mix archdo                 # Phase 1 scan against ./lib
+      $ mix archdo --format text   # full why+fixes per finding
+      $ mix archdo --freeze        # accept current violations as baseline
+      $ mix archdo --explain 11.1  # explain a specific rule
+
+  See `mix help archdo` for the full CLI surface.
   """
 
   alias Archdo.{AST, Config, Diagnostic, Formatter, Freeze, FunctionGraph, Graph, Metrics, Runner}
