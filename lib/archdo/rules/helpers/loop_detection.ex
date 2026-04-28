@@ -203,35 +203,65 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
   """
   @spec find_in_recursive_fns(Macro.t(), (Macro.t() -> boolean())) :: [{Macro.t(), keyword()}]
   def find_in_recursive_fns(ast, predicate) do
-    # extract_functions returns {name, arity, meta, args, body} per clause
+    # Per-clause analysis: only flag matches inside a clause that itself
+    # contains a *looping* self-call. A "looping" self-call passes at least
+    # one non-literal argument — that's what enables iteration.
+    #
+    # This excludes the catch-all-fallback dispatch pattern:
+    #
+    #   defp css("default"), do: "x" <> "y"   # has <> but no self-call
+    #   defp css("outline"), do: "a" <> "b"   # has <> but no self-call
+    #   defp css(_), do: css("default")       # has self-call but all-literal arg
+    #
+    # None of these clauses qualifies, so the `<>`s aren't flagged. Real
+    # iterative recursion (`build([h|t], acc), do: build(t, acc <> f(h))`)
+    # still fires because the self-call passes the non-literal `t`.
     fns = AST.extract_functions(ast)
 
-    # Group by {name, arity} to find all clauses of each function
-    grouped =
-      Enum.group_by(fns, fn {name, arity, _meta, _args, _body} -> {name, arity} end)
-
-    Enum.flat_map(grouped, fn {{name, arity}, clauses} ->
-      # Check if ANY clause is recursive
-      is_recursive =
-        Enum.any?(clauses, fn {_name, _arity, _meta, _args, body} ->
-          body_ast = extract_body_ast(body)
-          body_ast != nil and AST.has_self_call?(body_ast, name, arity)
-        end)
-
-      case is_recursive do
-        true ->
-          Enum.flat_map(clauses, fn {_name, _arity, _meta, _args, body} ->
-            case extract_body_ast(body) do
-              nil -> []
-              body_ast -> find_matches(body_ast, predicate)
-            end
-          end)
-
-        false ->
+    Enum.flat_map(fns, fn {name, arity, _meta, _args, body} ->
+      case extract_body_ast(body) do
+        nil ->
           []
+
+        body_ast ->
+          if looping_self_call?(body_ast, name, arity) do
+            find_matches(body_ast, predicate)
+          else
+            []
+          end
       end
     end)
   end
+
+  # True if the body contains a self-call whose argument list includes at
+  # least one non-literal value. Plain dispatch (`f(_), do: f("default")`)
+  # has only literal args and terminates after one redirect — does not loop.
+  defp looping_self_call?(body, name, arity) do
+    {_, found?} =
+      Macro.prewalk(body, false, fn
+        node, true ->
+          {node, true}
+
+        {^name, _, args} = node, false when is_list(args) ->
+          case length(args) == arity and Enum.any?(args, &non_literal_arg?/1) do
+            true -> {node, true}
+            false -> {node, false}
+          end
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found?
+  end
+
+  defp non_literal_arg?(arg) when is_atom(arg) or is_number(arg) or is_binary(arg), do: false
+
+  # Production parse_file/1 wraps literals as {:__block__, _, [literal]}.
+  defp non_literal_arg?({:__block__, _, [inner]}) when is_atom(inner) or is_number(inner) or is_binary(inner),
+    do: false
+
+  defp non_literal_arg?(_), do: true
 
   defp extract_body_ast(nil), do: nil
   defp extract_body_ast(do: body), do: body

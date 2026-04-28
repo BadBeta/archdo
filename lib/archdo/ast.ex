@@ -163,6 +163,20 @@ defmodule Archdo.AST do
   def extract_functions(ast, visibility \\ :all) do
     {_, fns} =
       Macro.prewalk(ast, [], fn
+        # Guarded clauses wrap the head in a `:when` tuple:
+        #   {:def, _, [{:when, _, [{name, _, args}, _guard]}, body]}
+        # Match those FIRST — otherwise the catch-all clauses below pick up
+        # `:when` as the function name and the guard's arg list as the args.
+        {:def, meta, [{:when, _, [{name, _, args} | _]}, body]} = node, acc
+        when visibility in [:all, :public] ->
+          arity = length(args || [])
+          {node, [{name, arity, meta, args || [], body} | acc]}
+
+        {:defp, meta, [{:when, _, [{name, _, args} | _]}, body]} = node, acc
+        when visibility in [:all, :private] ->
+          arity = length(args || [])
+          {node, [{name, arity, meta, args || [], body} | acc]}
+
         {:def, meta, [{name, _, args}, body]} = node, acc when visibility in [:all, :public] ->
           arity = length(args || [])
           {node, [{name, arity, meta, args || [], body} | acc]}

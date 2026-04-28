@@ -64,6 +64,43 @@ defmodule Archdo.Rules.Module.StringConcatInLoopTest do
       assert_clean(StringConcatInLoop, code)
     end
 
+    test "does NOT flag multi-clause helper with catch-all literal-arg fallback" do
+      # The `defp css(_), do: css("default")` clause is technically a self-call,
+      # but it dispatches once with a literal argument and terminates. The `<>`
+      # in the named clauses is a 2-string-literal concat, not a loop. Flagging
+      # this is the BUG-3 false positive seen in PhiaUI's CSS-class helpers.
+      code = ~S"""
+      defmodule MyApp.Css do
+        defp css("default") do
+          "rounded-md bg-primary " <>
+            "focus-visible:ring-2 " <>
+            "px-4 py-2"
+        end
+
+        defp css("outline") do
+          "border border-input " <>
+            "px-4 py-2"
+        end
+
+        defp css(_), do: css("default")
+      end
+      """
+
+      assert_clean(StringConcatInLoop, code)
+    end
+
+    test "still flags real iterative recursion with <> on accumulator" do
+      code = ~S"""
+      defmodule MyApp.Builder do
+        defp build([], acc), do: acc
+        defp build([h | t], acc), do: build(t, acc <> to_string(h))
+      end
+      """
+
+      diagnostics = assert_flagged(StringConcatInLoop, code)
+      assert hd(diagnostics).rule_id == "6.46"
+    end
+
     test "skips test files" do
       code = ~S"""
       defmodule MyApp.BuilderTest do

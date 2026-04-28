@@ -158,6 +158,57 @@ defmodule Archdo.Rules.Module.SequentialWhereParallelTest do
       assert_clean(SequentialWhereParallel, code)
     end
 
+    test "does not flag Map.put inside Enum.map (constant-time data op, not I/O)" do
+      code = ~S"""
+      defmodule MyApp.Charts do
+        def with_widths(items) do
+          Enum.map(items, fn item ->
+            Map.put(item, :width_pct, item.value / 100)
+          end)
+        end
+      end
+      """
+
+      assert_clean(SequentialWhereParallel, code)
+    end
+
+    test "does not flag Map.get / Keyword.get inside Enum.flat_map" do
+      code = ~S"""
+      defmodule MyApp.Stats do
+        def collect(stats) do
+          Enum.flat_map(stats, fn s -> Map.get(s, :outliers, []) end)
+        end
+
+        def options(opts_list) do
+          Enum.map(opts_list, fn opts -> Keyword.get(opts, :timeout, 5_000) end)
+        end
+      end
+      """
+
+      assert_clean(SequentialWhereParallel, code)
+    end
+
+    test "does not flag List/Enum/Stream/MapSet operations" do
+      code = ~S"""
+      defmodule MyApp.Lists do
+        def take_each(lists), do: Enum.map(lists, fn l -> List.first(l) end)
+        def heads(lists), do: Enum.map(lists, &List.first/1)
+      end
+      """
+
+      assert_clean(SequentialWhereParallel, code)
+    end
+
+    test "does not flag Enum.map with capture to a pure-data function" do
+      code = ~S"""
+      defmodule MyApp.Picker do
+        def keys(maps), do: Enum.map(maps, &Map.fetch!(&1, :id))
+      end
+      """
+
+      assert_clean(SequentialWhereParallel, code)
+    end
+
     test "does not flag sequential dependent bindings" do
       code = ~S"""
       defmodule MyApp.Pipeline do

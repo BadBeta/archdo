@@ -69,6 +69,27 @@ defmodule Archdo.ASTTest do
       refute :private_one in names
     end
 
+    test "extracts the actual function name from guarded clauses (not :when)" do
+      {:ok, ast} =
+        Code.string_to_quoted("""
+        defmodule Foo do
+          defp normalize(s) when is_binary(s), do: %{value: s}
+          defp guard_only(x) when is_integer(x) and x > 0, do: x
+        end
+        """)
+
+      fns = AST.extract_functions(ast, :all)
+      names = Enum.map(fns, fn {name, _, _, _, _} -> name end)
+
+      assert :normalize in names, "expected :normalize, got #{inspect(names)}"
+      assert :guard_only in names, "expected :guard_only, got #{inspect(names)}"
+      refute :when in names, "guard keyword must not surface as a function name"
+
+      # Arity must reflect the head, not include the guard expression
+      {:normalize, arity, _, _, _} = Enum.find(fns, fn {n, _, _, _, _} -> n == :normalize end)
+      assert arity == 1
+    end
+
     test "extracts all functions with :all" do
       {:ok, ast} =
         Code.string_to_quoted("""

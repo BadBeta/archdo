@@ -35,6 +35,20 @@ defmodule Archdo.Rules.Module.SequentialWhereParallel do
     request request!
   )a
 
+  # Pure-data stdlib modules — `Map.put`, `Keyword.get`, `List.first`, etc. are
+  # constant-time data operations, NOT I/O. The verb-only heuristic
+  # (`io_function?/1`) matches `:get`/`:put`/`:fetch`/`:update` against
+  # @io_function_patterns and would otherwise false-positive on every chart
+  # component that maps `Map.put` over a list. Suppress the verb-only signal
+  # for these modules; calls qualified by them are never I/O.
+  @pure_data_modules ~w(
+    Map Keyword List Enum Stream MapSet Tuple
+    String Integer Float Atom Range Bitwise
+    Path URI Base Regex
+    Date Time DateTime NaiveDateTime Calendar
+    Decimal
+  )
+
   defp find_sequential_io(file, ast) do
     collection_io = find_collection_io(file, ast)
     sequential_independent = find_sequential_independent(file, ast)
@@ -132,19 +146,15 @@ defmodule Archdo.Rules.Module.SequentialWhereParallel do
        ) do
     mod_name = Enum.join(mod_parts, ".")
 
-    case io_module?(mod_name) or io_function?(func) do
+    case io_call?(mod_name, func) do
       true -> {true, "#{mod_name}.#{func}"}
       false -> false
     end
   end
 
-  # Function capture: &func/arity (local)
-  defp callback_has_io?({:&, _, [{:/, _, [{func, _, _}, _arity]}]}) when is_atom(func) do
-    case io_function?(func) do
-      true -> {true, "#{func}"}
-      false -> false
-    end
-  end
+  # Local-function captures (`&fetch/1`) are too weak a signal — any private
+  # `defp get/1` or `defp fetch!/2` would fire. Skip.
+  defp callback_has_io?({:&, _, [{:/, _, [{func, _, _}, _arity]}]}) when is_atom(func), do: false
 
   defp callback_has_io?(_), do: false
 
@@ -155,7 +165,7 @@ defmodule Archdo.Rules.Module.SequentialWhereParallel do
         {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _args} = node, acc ->
           mod_name = Enum.join(mod_parts, ".")
 
-          case io_module?(mod_name) or io_function?(func) do
+          case io_call?(mod_name, func) do
             true -> {node, {true, "#{mod_name}.#{func}"}}
             false -> {node, acc}
           end
@@ -186,7 +196,7 @@ defmodule Archdo.Rules.Module.SequentialWhereParallel do
         when is_atom(var_name) ->
           mod_name = Enum.join(mod_parts, ".")
 
-          case io_module?(mod_name) or io_function?(func) do
+          case io_call?(mod_name, func) do
             true ->
               arg_vars = extract_var_refs(args)
               [{var_name, idx, "#{mod_name}.#{func}", arg_vars}]
@@ -245,9 +255,30 @@ defmodule Archdo.Rules.Module.SequentialWhereParallel do
     vars
   end
 
+  # A call counts as I/O if EITHER:
+  #   - the module is an explicitly-known I/O module (Repo, HTTPoison, File, …)
+  #   - OR the function name is an I/O verb AND the module is not a known
+  #     pure-data module (Map, Keyword, List, String, …)
+  # The deny-list prevents `Map.put`/`Keyword.get`/`List.first` etc. from
+  # tripping the verb-only heuristic — they're constant-time data ops, not I/O.
+  defp io_call?(mod_name, func) do
+    cond do
+      io_module?(mod_name) -> true
+      pure_data_module?(mod_name) -> false
+      io_function?(func) -> true
+      true -> false
+    end
+  end
+
   defp io_module?(mod_name) do
     Enum.any?(@io_modules, fn io_mod ->
       mod_name == io_mod or String.ends_with?(mod_name, ".#{io_mod}")
+    end)
+  end
+
+  defp pure_data_module?(mod_name) do
+    Enum.any?(@pure_data_modules, fn pure ->
+      mod_name == pure or String.ends_with?(mod_name, ".#{pure}")
     end)
   end
 
