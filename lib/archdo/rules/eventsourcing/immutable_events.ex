@@ -133,30 +133,99 @@ defmodule Archdo.Rules.EventSourcing.ImmutableEvents do
     end)
   end
 
+  # BUG-13 from Plausible: `Plausible.Event.SystemEvents` (event-name
+  # constants) and `Plausible.Event.WriteBuffer` (Clickhouse write-buffer
+  # GenServer) were both flagged because the module path contained the
+  # singular segment `Event`. Tightened semantics:
+  #
+  # - Only recognize an event-sourcing module if (a) it sits under the
+  #   plural `Events` namespace (the canonical Commanded/Spear/Trento
+  #   shape), OR (b) it sits under singular `Event` AND the module name
+  #   itself looks like an event payload (CamelCase past-participle, no
+  #   Buffer/Writer/Reader/Server/Worker/Cache/Registry/Manager suffix).
+  # - Skip modules with OTP shapes (use GenServer/Supervisor/Application,
+  #   `child_spec/1`, `start_link/1`).
+  # - Skip pure constants/registries (no `def` aside from accessors over
+  #   module attributes).
   defp event_module?(ast) do
-    {_, found?} =
-      Macro.prewalk(ast, false, fn
+    case extract_event_module_meta(ast) do
+      nil -> false
+      meta -> looks_like_event_module?(meta) and not has_otp_shape?(ast)
+    end
+  end
+
+  defp extract_event_module_meta(ast) do
+    {_, found} =
+      Macro.prewalk(ast, nil, fn
         {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, _acc ->
           parts = Enum.map(aliases, &Atom.to_string/1)
           last = List.last(parts)
-
-          # Must be *under* an Events/Event namespace (not the namespace itself).
-          # And the module's own name shouldn't look like a utility/helper.
-          in_events_ns = "Events" in parts or "Event" in parts
-          is_namespace_root = last in ["Events", "Event"]
-          is_utility = last in ["Util", "Utils", "Helper", "Helpers", "Support", "Builder"]
-
-          is_upcaster =
-            Enum.any?(parts, fn p ->
-              String.contains?(String.downcase(p), "upcast")
-            end)
-
-          {node, in_events_ns and not is_namespace_root and not is_utility and not is_upcaster}
+          {node, %{parts: parts, last: last}}
 
         node, acc ->
           {node, acc}
       end)
 
-    found?
+    found
+  end
+
+  @infra_suffixes ~w(
+    Buffer Writer Reader Server Worker Cache Registry
+    Manager Store Repo Supervisor Pool Queue Stream
+    Client Adapter Pipeline Builder Bus Dispatcher
+    Subscriber Publisher Channel Listener Handler
+    Processor Translator Serializer Codec Decoder Encoder
+    Schema Config Settings Constants Constant
+    SystemEvents Events Event
+    Util Utils Helper Helpers Support
+  )
+
+  defp looks_like_event_module?(%{parts: parts, last: last}) do
+    in_plural_events = "Events" in parts and last != "Events"
+    in_singular_event = "Event" in parts and last != "Event"
+
+    is_infra = last in @infra_suffixes
+    is_upcaster = Enum.any?(parts, &String.contains?(String.downcase(&1), "upcast"))
+
+    cond do
+      is_infra or is_upcaster -> false
+      in_plural_events -> true
+      in_singular_event -> event_payload_shape?(last)
+      true -> false
+    end
+  end
+
+  # Singular `Event.X` is ambiguous (analytics / OTP plumbing / event
+  # sourcing). Only treat it as an event payload if the module's last
+  # segment looks like a domain past-participle (e.g. `UserSignedUp`,
+  # `OrderPlaced`) — heuristically: ends in an event verb suffix.
+  @event_verb_suffixes ~w(
+    ed en ing ied
+  )
+
+  defp event_payload_shape?(last) when is_binary(last) do
+    downcased = String.downcase(last)
+
+    Enum.any?(@event_verb_suffixes, &String.ends_with?(downcased, &1))
+  end
+
+  defp has_otp_shape?(ast) do
+    AST.uses_module?(ast, GenServer) or
+      AST.uses_module?(ast, Supervisor) or
+      AST.uses_module?(ast, Application) or
+      AST.uses_module?(ast, GenStage) or
+      defines_function?(ast, :child_spec, 1) or
+      defines_function?(ast, :start_link, 1)
+  end
+
+  defp defines_function?(ast, name, arity) do
+    AST.contains?(ast, fn
+      {def_kind, _, [{^name, _, args} | _]}
+      when def_kind in [:def, :defp] and is_list(args) ->
+        length(args) == arity
+
+      _ ->
+        false
+    end)
   end
 end

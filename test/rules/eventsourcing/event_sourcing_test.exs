@@ -131,5 +131,48 @@ defmodule Archdo.Rules.EventSourcing.EventSourcingTest do
 
       assert_clean(ImmutableEvents, code)
     end
+
+    test "does not flag GenServer modules in Event/Events namespace (BUG-13)" do
+      # Plausible.Event.WriteBuffer — a clickhouse write buffer GenServer
+      # in the singular `Event` namespace. The rule's `event_module?`
+      # heuristic over-matched on namespace presence; fixed by skipping
+      # modules with OTP shapes.
+      code = ~S"""
+      defmodule MyApp.Event.WriteBuffer do
+        @moduledoc false
+        def child_spec(opts), do: %{id: __MODULE__, start: {__MODULE__, :start_link, [opts]}}
+        def start_link(opts), do: {:ok, opts}
+      end
+      """
+
+      assert_clean(ImmutableEvents, code, file: "lib/my_app/event/write_buffer.ex")
+    end
+
+    test "does not flag constants/registry modules in Event namespace (BUG-13)" do
+      # Plausible.Event.SystemEvents — module attributes only, no functions
+      # that look like event business logic. Singular `Event` namespace
+      # over-matched.
+      code = ~S"""
+      defmodule MyApp.Event.SystemEvents do
+        @moduledoc "Event-name registry — strings only, not event-sourcing payloads"
+        @pageview "pageview"
+        @engagement "engagement"
+        def all, do: [@pageview, @engagement]
+      end
+      """
+
+      assert_clean(ImmutableEvents, code, file: "lib/my_app/event/system_events.ex")
+    end
+
+    test "still flags real event-sourcing module under plural Events namespace" do
+      code = ~S"""
+      defmodule MyApp.Events.UserSignedUp do
+        def new(attrs), do: Map.new(attrs)
+      end
+      """
+
+      diags = assert_flagged(ImmutableEvents, code, file: "lib/my_app/events/user_signed_up.ex")
+      assert hd(diags).rule_id == "8.3"
+    end
   end
 end
