@@ -101,20 +101,43 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
     end)
   end
 
-  # Find function-call-like patterns in HEEx text: `name(` or `name(`
+  # Find function-call-like patterns in HEEx text:
+  #   - `name(`  — function-call form
+  #   - `<.name`  — Phoenix function-component tag form (`<.foo />`,
+  #     `<.foo class="x">`, `<.foo attr={value}>...</.foo>`). Without this,
+  #     every private LiveView function component looks dead, since the
+  #     parens-form check never matches a tag invocation.
   defp extract_function_refs_from_heex(text) do
-    Regex.scan(~r/\b([a-z_][a-z0-9_]*[!?]?)\s*\(/, text)
+    paren_calls = Regex.scan(~r/\b([a-z_][a-z0-9_]*[!?]?)\s*\(/, text)
+    tag_calls = Regex.scan(~r/<\.([a-z_][a-z0-9_]*[!?]?)\b/, text)
+
+    (paren_calls ++ tag_calls)
     |> Enum.reduce(MapSet.new(), fn
       [_, name], acc ->
-        atom = String.to_atom(name)
+        # Only consider references to atoms that already exist — i.e. names
+        # the BEAM has already seen as function names elsewhere. Unknown
+        # names can't refer to a private function we're checking, so dropping
+        # them is correct AND avoids atom-table exhaustion on adversarial
+        # source (skill: §7.7).
+        case safe_to_existing_atom(name) do
+          {:ok, atom} ->
+            Enum.reduce(0..6, acc, fn arity, set ->
+              MapSet.put(set, {atom, arity})
+            end)
 
-        Enum.reduce(0..6, acc, fn arity, set ->
-          MapSet.put(set, {atom, arity})
-        end)
+          :error ->
+            acc
+        end
 
       _, acc ->
         acc
     end)
+  end
+
+  defp safe_to_existing_atom(name) do
+    {:ok, String.to_existing_atom(name)}
+  rescue
+    ArgumentError -> :error
   end
 
   defp collect_calls_in_body(body, acc) do

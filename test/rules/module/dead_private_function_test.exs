@@ -129,6 +129,25 @@ defmodule Archdo.Rules.Module.DeadPrivateFunctionTest do
       assert diag.message =~ "unused_defaults/0"
     end
 
+    test "does not flag private function components called via HEEx <.tag />" do
+      # Phoenix LiveView function components are defined as `defp` and called
+      # from sibling templates with `<.name />` syntax — not `name(...)`.
+      # Without HEEx tag-form recognition, the rule false-positives on every
+      # private LiveView function component (BUG-4 from hexpm field test).
+      code =
+        "defmodule MyAppWeb.Footer do\n" <>
+          "  use Phoenix.Component\n" <>
+          "  def footer(assigns) do\n" <>
+          "    ~H\"<footer><.footer_branding /><.footer_links class=\\\"mt\\\"/><.footer_copyright/></footer>\"\n" <>
+          "  end\n" <>
+          "  defp footer_branding(assigns), do: ~H\"<div>brand</div>\"\n" <>
+          "  defp footer_links(assigns), do: ~H\"<ul>links</ul>\"\n" <>
+          "  defp footer_copyright(assigns), do: ~H\"<small>c</small>\"\n" <>
+          "end\n"
+
+      assert_clean(DeadPrivateFunction, code)
+    end
+
     test "distinguishes by arity when gap is more than one" do
       code = ~S"""
       defmodule MyApp.Helpers do

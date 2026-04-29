@@ -238,7 +238,19 @@ defmodule Archdo.AST do
   """
   @spec ast_size(term()) :: non_neg_integer()
   def ast_size(nil), do: 0
+
+  # AST node shape `{form, meta, args}` — skip the `meta` keyword list.
+  # `token_metadata: true` (used by parse_file/1) makes meta huge, and
+  # counting metadata as "AST size" inflates the count by 5-15× over logical
+  # complexity. Discriminator: AST nodes always have a list metadata.
+  def ast_size({form, meta, args})
+      when (is_atom(form) or is_tuple(form)) and is_list(meta) do
+    1 + ast_size(form) + ast_size(args)
+  end
+
+  # Generic 3-tuple (data values like `{1, 2, 3}`)
   def ast_size({a, b, c}), do: 1 + ast_size(a) + ast_size(b) + ast_size(c)
+
   def ast_size({a, b}), do: 1 + ast_size(a) + ast_size(b)
 
   def ast_size(list) when is_list(list) do

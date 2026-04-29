@@ -4,7 +4,9 @@ defmodule Archdo.Rules.Testing.LongTest do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
-  @max_test_nodes 1200
+  # Recalibrated 2026-04-29: ast_size/1 no longer counts token metadata
+  # (BUG-6 fix in archdo/ast.ex). Old threshold 1200 was metadata-inflated.
+  @max_test_nodes 250
 
   @impl true
   def id, do: "7.12"

@@ -177,6 +177,51 @@ defmodule Archdo.ASTTest do
     end
   end
 
+  describe "ast_size/1" do
+    test "does not count token_metadata as part of node count" do
+      # Production parse_file/1 uses `token_metadata: true` which attaches
+      # rich line/column/token info to every node. ast_size MUST count only
+      # the logical AST shape — not the metadata bloat. Without this, a
+      # trivial controller action like `def foo, do: bar()` reports as
+      # 60+ AST nodes (BUG-6 from hexpm field test); the 1.15 large-action
+      # rule then trips on every action.
+      path = Path.join(System.tmp_dir!(), "ast_size_#{:rand.uniform(1_000_000)}.ex")
+      File.write!(path, "defmodule Foo do\n  def bar(x), do: x + 1\nend")
+
+      try do
+        {:ok, ast} = AST.parse_file(path)
+        size = AST.ast_size(ast)
+
+        # The logical shape: defmodule, alias, def-head, args, +, x, 1.
+        # Around a dozen nodes. Definitely not in the hundreds.
+        assert size < 30,
+               "ast_size of `def bar(x), do: x + 1` should be < 30 (got #{size}); " <>
+                 "metadata is being counted"
+      after
+        File.rm(path)
+      end
+    end
+
+    test "still counts function-body complexity meaningfully" do
+      # Even after stripping metadata, a body with more nodes should report
+      # a higher size than a trivial body.
+      {:ok, small} = Code.string_to_quoted("def f(x), do: x")
+
+      {:ok, big} =
+        Code.string_to_quoted("""
+        def f(x) do
+          if x > 0 do
+            x * 2 + 1
+          else
+            -x - 1
+          end
+        end
+        """)
+
+      assert AST.ast_size(big) > AST.ast_size(small)
+    end
+  end
+
   describe "find_all/2" do
     test "collects all matching nodes" do
       {:ok, ast} =

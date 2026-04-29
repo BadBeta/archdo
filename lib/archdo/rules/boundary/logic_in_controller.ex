@@ -4,7 +4,10 @@ defmodule Archdo.Rules.Boundary.LogicInController do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
-  @max_controller_action_nodes 300
+  # Recalibrated 2026-04-29: ast_size/1 no longer counts token metadata
+  # (BUG-6 fix in archdo/ast.ex). Old threshold 300 was metadata-inflated
+  # ~5×. The new value targets ~15-20 line actions with branching.
+  @max_controller_action_nodes 100
 
   @impl true
   def id, do: "1.15"

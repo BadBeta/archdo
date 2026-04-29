@@ -33,39 +33,93 @@ defmodule Archdo.Rules.Module.ShadowedClause do
   # ================================================================
 
   defp find_shadowed_function_clauses(file, ast) do
-    # Only extract top-level function clauses — skip functions inside
-    # quote blocks (macro-generated) and compile-time conditionals (if/else).
-    fns = extract_top_level_functions(ast)
-
-    # Group by {name, arity}
-    fns
-    |> Enum.group_by(fn {name, arity, _meta, _args, _body} -> {name, arity} end)
-    |> Enum.flat_map(fn {_key, clauses} ->
-      check_clause_ordering(file, clauses)
+    # Each defmodule is an independent scope: a `def foo` in `MyApp.Inner`
+    # does not shadow `def foo` in the outer `MyApp`. Process each module
+    # body separately so cross-module same-named defs don't conflate.
+    ast
+    |> collect_module_bodies([])
+    |> Enum.flat_map(fn module_body ->
+      module_body
+      |> extract_defs_in_scope([])
+      |> Enum.reverse()
+      |> Enum.group_by(fn {name, arity, _meta, _args, _guards} -> {name, arity} end)
+      |> Enum.flat_map(fn {_key, clauses} -> check_clause_ordering(file, clauses) end)
     end)
   end
 
-  # Extract def/defp at the module body level.
-  # Returns {name, arity, meta, args, guards} where guards is the guard AST or nil.
-  defp extract_top_level_functions(ast) do
-    {_, fns} =
-      Macro.prewalk(ast, [], fn
-        # Guarded clause: def f(args) when guard, do: body
-        {kind, meta, [{:when, _, [{name, _, args} | guards]}, _body]} = node, acc
-        when kind in [:def, :defp] and is_atom(name) and is_list(args) ->
-          {node, [{name, length(args), meta, args, guards} | acc]}
-
-        # Unguarded clause
-        {kind, meta, [{name, _, args}, _body]} = node, acc
-        when kind in [:def, :defp] and is_atom(name) and is_list(args) ->
-          {node, [{name, length(args), meta, args, nil} | acc]}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    Enum.reverse(fns)
+  # Walk the AST and collect the body of every `defmodule` (top-level and
+  # nested). Each body is analyzed for shadowing in isolation.
+  defp collect_module_bodies({:defmodule, _, [_alias, [do: body]]}, acc) do
+    # Add THIS module's body, then recurse INTO it to find nested defmodules.
+    [body | collect_module_bodies(body, acc)]
   end
+
+  defp collect_module_bodies({_form, _meta, args}, acc) when is_list(args) do
+    Enum.reduce(args, acc, &collect_module_bodies/2)
+  end
+
+  defp collect_module_bodies(list, acc) when is_list(list) do
+    Enum.reduce(list, acc, &collect_module_bodies/2)
+  end
+
+  defp collect_module_bodies({a, b}, acc) do
+    acc |> then(&collect_module_bodies(a, &1)) |> then(&collect_module_bodies(b, &1))
+  end
+
+  defp collect_module_bodies(_, acc), do: acc
+
+  # Extract def/defp at the current module body's scope, returning
+  # {name, arity, meta, args, guards} per clause.
+  #
+  # Scope-aware: does NOT descend into nodes that introduce a separate scope
+  # or a compile-time-mutually-exclusive branch:
+  #   - `defimpl Protocol, for: Type do ... end` — separate impl module per :for
+  #   - `defprotocol`, nested `defmodule` — separate modules (analyzed in their
+  #     own pass via `collect_module_bodies/2`)
+  #   - `if`, `unless`, `case`, `cond` — only one branch compiles, so two `def`s
+  #     across branches are alternatives, not shadowing siblings
+  #   - `quote do ... end` — macro-generated AST, not direct module content
+  #
+  # Without these stops, the rule false-positives on identical function names
+  # across `defimpl`s for different types, across `if Mix.env()` branches, and
+  # across nested defmodules in the same file (BUG-5 from hexpm field test).
+
+  defp extract_defs_in_scope(
+         {kind, meta, [{:when, _, [{name, _, args} | guards]}, _body]},
+         acc
+       )
+       when kind in [:def, :defp] and is_atom(name) and is_list(args) do
+    [{name, length(args), meta, args, guards} | acc]
+  end
+
+  defp extract_defs_in_scope({kind, meta, [{name, _, args}, _body]}, acc)
+       when kind in [:def, :defp] and is_atom(name) and is_list(args) do
+    [{name, length(args), meta, args, nil} | acc]
+  end
+
+  # Scope barriers — do not descend.
+  defp extract_defs_in_scope({:defmodule, _, _}, acc), do: acc
+  defp extract_defs_in_scope({:defimpl, _, _}, acc), do: acc
+  defp extract_defs_in_scope({:defprotocol, _, _}, acc), do: acc
+  defp extract_defs_in_scope({:quote, _, _}, acc), do: acc
+  defp extract_defs_in_scope({:if, _, _}, acc), do: acc
+  defp extract_defs_in_scope({:unless, _, _}, acc), do: acc
+  defp extract_defs_in_scope({:case, _, _}, acc), do: acc
+  defp extract_defs_in_scope({:cond, _, _}, acc), do: acc
+
+  defp extract_defs_in_scope({_form, _meta, args}, acc) when is_list(args) do
+    Enum.reduce(args, acc, &extract_defs_in_scope/2)
+  end
+
+  defp extract_defs_in_scope(list, acc) when is_list(list) do
+    Enum.reduce(list, acc, &extract_defs_in_scope/2)
+  end
+
+  defp extract_defs_in_scope({a, b}, acc) do
+    acc |> then(&extract_defs_in_scope(a, &1)) |> then(&extract_defs_in_scope(b, &1))
+  end
+
+  defp extract_defs_in_scope(_, acc), do: acc
 
   defp check_clause_ordering(_file, clauses) when length(clauses) < 2, do: []
 

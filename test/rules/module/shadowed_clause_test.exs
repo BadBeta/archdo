@@ -229,6 +229,40 @@ defmodule Archdo.Rules.Module.ShadowedClauseTest do
     end
   end
 
+  describe "scope-aware extraction (BUG-5 from hexpm)" do
+    test "does not conflate same-named def across separate defimpl blocks" do
+      # Each defimpl creates a separate impl module; identical function names
+      # for different :for types are not shadowing each other.
+      code = ~S"""
+      defmodule MyApp.Email.Formatters do
+        defimpl MyApp.Formatter, for: MyApp.User do
+          def format(user, _opts), do: {:user, user.id}
+        end
+
+        defimpl MyApp.Formatter, for: MyApp.Email do
+          def format(email, _opts), do: {:email, email.address}
+        end
+      end
+      """
+
+      assert_clean(ShadowedClause, code)
+    end
+
+    test "does not conflate def across compile-time if Mix.env branches" do
+      code = ~S"""
+      defmodule MyApp.EnvDispatch do
+        if Mix.env() == :prod do
+          def shutdown(), do: :graceful
+        else
+          def shutdown(), do: :immediate
+        end
+      end
+      """
+
+      assert_clean(ShadowedClause, code)
+    end
+  end
+
   describe "skips test files" do
     test "ignores patterns in test files" do
       code = ~S"""
