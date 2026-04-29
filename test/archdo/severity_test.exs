@@ -131,6 +131,15 @@ defmodule Archdo.SeverityTest do
       # exceed the limit without being "logic in controller."
       assert Severity.adjust("1.15", :info, classification(:context)) == :nitpick
     end
+
+    test "M12 batch: 7 more rules cap at :nitpick" do
+      # Each is either pure style, subjective threshold, or a duplicate of
+      # what `mix compile --warnings-as-errors` already catches.
+      for rule_id <- ["4.27", "1.9", "6.41", "10.2", "6.47", "6.52", "6.7"] do
+        assert Severity.adjust(rule_id, :info, classification(:context)) == :nitpick,
+               "expected #{rule_id} :info to downgrade to :nitpick"
+      end
+    end
   end
 
   describe "adjust_diagnostic/2" do

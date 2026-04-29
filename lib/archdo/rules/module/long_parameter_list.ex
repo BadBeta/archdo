@@ -43,7 +43,10 @@ defmodule Archdo.Rules.Module.LongParameterList do
           [build_diagnostic(file, AST.line(meta), name, arity, :warning)]
 
         arity >= 5 ->
-          [build_diagnostic(file, AST.line(meta), name, arity, :info)]
+          # M12: 5-6 params is take-it-or-leave-it — extracting a struct
+          # is one of several valid choices; some callers prefer the
+          # explicit positional form. Arity 7+ stays :warning.
+          [build_diagnostic(file, AST.line(meta), name, arity, :nitpick)]
 
         true ->
           []

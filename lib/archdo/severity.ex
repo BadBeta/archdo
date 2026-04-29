@@ -43,7 +43,30 @@ defmodule Archdo.Severity do
     # Multi-clause render with options, param-validation pipelines, and
     # legitimate dispatch-table actions can exceed the limit without
     # being "logic in controller."
-    "1.15" => :nitpick
+    "1.15" => :nitpick,
+    # 4.27 UnusedAlias — duplicates `mix compile --warnings-as-errors`.
+    # Useful for one-off audit, noisy in per-PR review.
+    "4.27" => :nitpick,
+    # 1.9 TimeInjection — for some teams (financial, scheduling) clock
+    # injection matters; for most analytics/CRUD apps passing dates
+    # through is fine. Subjective per project.
+    "1.9" => :nitpick,
+    # 6.41 SingleClauseWith — pure style. `with x <- expr, do: x` and
+    # `case expr, do: ...` are both correct; team preference.
+    "6.41" => :nitpick,
+    # 10.2 ExcessiveNamespaceDepth — subjective threshold; deep
+    # namespaces (`MyApp.Domain.Subdomain.Aggregate.Event`) can be
+    # legitimate in event-sourced or hexagonal codebases.
+    "10.2" => :nitpick,
+    # 6.47 EmptyCheckViaLength — `length(x) == 0` vs `x == []`. Style.
+    # Compiler can't trip on either form.
+    "6.47" => :nitpick,
+    # 6.52 StringLengthForNonEmpty — `String.length(s) > 0` vs `s != ""`.
+    # Style.
+    "6.52" => :nitpick,
+    # 6.7 PretentiousName — "Manager", "Helper", "Service" suffixes.
+    # Subjective; some codebases use them deliberately.
+    "6.7" => :nitpick
   }
 
   @severity_rank %{nitpick: 3, info: 2, warning: 1, error: 0}
