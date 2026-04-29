@@ -336,6 +336,125 @@ text; the better approach is to walk the interpolation slots as real Elixir AST
 flattens to text and regex-extracts. Worth doing if other rules need to know
 about HEEx-interpolated calls.
 
+## defimpl-aware rules (added 2026-04-29 round 3 from Livebook)
+
+`defimpl Protocol, for: Type do ... end` defines functions whose names and
+arities are FIXED by the protocol's `defprotocol`. Treating them as ordinary
+free functions causes false positives in:
+
+| Rule | False positive | Why |
+|---|---|---|
+| **6.10** Non-bang raises | `def write(_, _, _), do: raise("not implemented")` (filesystem stub) | Protocol pins the name; `write!` would break the impl |
+| **6.34** Dead private | `defp` helpers used only inside the defimpl body | (Already fixed in BUG-5 by scope-aware extraction; verify) |
+| **6.43** Long parameter list | Protocol callback with 5+ args | Fixed by protocol; `defimpl` author can't change arity |
+| **6.10/6.16** GenServer.call patterns | If protocol callback bodies use call patterns | The contract dictates the shape |
+
+**Suggested helper:** `AST.collect_defimpl_callbacks/1` returning
+`MapSet.new([{name, arity}, ...])` — every `def` inside any `defimpl` block.
+Rules check membership and exempt. Same shape as the @impl-set in BUG-8's
+fix.
+
+**Companion topic:** the same protocol callbacks are EXPECTED to raise
+"not implemented" for partial implementations of optional callbacks. A
+rule could even POSITIVELY validate the pattern: `defimpl FileSystem,
+for: ReadOnly do def write(_, _, _), do: raise("not implemented") end`
+is the canonical "I implement only the read side" signal. Worth a rule
+of its own (or a positive note rather than a warning).
+
+## Substring-vs-namespace pitfalls (added 2026-04-29 round 3)
+
+Rule 1.26 (Reverse dependency on web layer) was found to match "Web"
+substring rather than the `*Web` namespace tail segment. Same class of
+bug likely lurks in:
+
+| Rule | Substring match likely wrong on |
+|---|---|
+| 1.26 reverse dep on web | `Livebook.Teams.WebSocket`, `MyApp.Webhook`, `MyApp.WebrtcClient` |
+| Any "is this a web module?" check | same |
+| Test/migration/config classifiers | `MyApp.Migrator` (not migration), `MyApp.Tester` (not test) |
+
+**Fix pattern:** classify by last namespace segment OR full namespace
+prefix, never substring. A `MyApp.Foo.Web` module IS web layer; a
+`MyApp.Web.Foo` module IS web layer (prefix); a `MyApp.Foo.WebSocket`
+module is NOT web layer (just contains the substring).
+
+Companion topic: **supervisor / application files exempt from boundary
+rules**. `lib/my_app/application.ex` and similar legitimately reference
+every supervised child including the Web Endpoint. Rule 1.26 (and
+likely several 4.x rules) should skip files that contain `use
+Application` or are at the path `lib/<app>/application.ex`. Add to
+`Phoenix.classify_file/1` if implemented.
+
+## Phoenix.classify_file/1 — promote to a cross-cutting helper (added 2026-04-29 round 4)
+
+After fixing BUG-7 through BUG-10, six rules now need to know "what kind of
+file is this?" — and each implements its own ad-hoc check:
+
+| Rule | What it asks | Current detection |
+|---|---|---|
+| 1.26 reverse dep on web | "Is this an app supervisor?" | `Path.basename(file) == "application.ex"` + `AST.uses_module?(ast, Application)` (BUG-10) |
+| 6.34 dead private | "Is this a Phoenix component with embed_templates?" | AST scan for `embed_templates` calls (BUG-7) |
+| 6.34 / 6.10 / 6.43 | "Is this def inside a defimpl?" | Walk-and-collect into MapSet (BUG-9) |
+| 7.25 untested module | "Is this a controller / view / live module?" | Path substring `_web/`, `controllers/`, `live/` |
+| 4.19 missing telemetry | "Is this a context facade?" | Path-based heuristic |
+| (proposed N+1) | "Is this a LiveView module?" | `use Phoenix.LiveView` AST check |
+
+**Suggested API:**
+
+```elixir
+Phoenix.classify_file(file, ast) :: %{
+  layer: :application_root | :web | :live_view | :component | :controller |
+         :view | :router | :context | :schema | :migration | :test | :other,
+  uses: %{phoenix_live_view?: bool, ecto_schema?: bool, application?: bool, ...},
+  embed_templates: [String.t()],   # the globs declared via `embed_templates`
+  defimpl_callbacks: MapSet.t({atom(), arity()}),  # name+arity inside defimpls
+  impl_callbacks: MapSet.t({atom(), arity()}),     # name+arity with @impl
+}
+```
+
+Compute once per file, pass via `opts`. Each rule reads what it needs.
+Eliminates 4-5 duplicate AST walks per file at scan time, centralizes the
+Phoenix-shape knowledge in one place, and makes the next BUG-N similar fix a
+one-line addition to the classifier.
+
+## Cross-project finding density (added 2026-04-29 round 4 — methodology)
+
+After 4 field-test cycles, finding density per 1k LoC settled at:
+
+| Project | Type | LoC | Findings | Density |
+|---|---|---:|---:|---:|
+| PhiaUI | UI library (stateless components) | 127k | 932 | **7/k** |
+| phoenix_live_dashboard | Live UI controls | 7k | 98 | **14/k** |
+| Livebook | Phoenix app (after this round's fixes) | 67k | 1851 | **28/k** |
+| hexpm | Phoenix prod app | 34k | 1192 | **35/k** |
+
+**Pattern:** density correlates with statefulness and architectural surface
+area. UI libraries (mostly pure functions) find few issues; production
+Phoenix apps (controllers, contexts, supervision, OTP) find many. The
+Layer 1 mechanical scan exposes more rules per kLoC the more your code
+participates in the Phoenix/OTP runtime.
+
+**Implication for new rules:** target the dense end of the spectrum. A
+LiveView-specific rule is more likely to find real issues per analysis
+second than a generic style rule.
+
+## Field-test cycle as a development practice (added 2026-04-29 round 4)
+
+Every cycle has surfaced 1-3 new false-positive classes that weren't visible
+in self-analysis:
+
+| Cycle | Project | Bugs surfaced | Pattern |
+|---|---|---|---|
+| 1 | PhiaUI | BUG-1 (`when/N` name), BUG-2 (Map.put as I/O), BUG-3 (multi-clause recursion) | UI-library idioms |
+| 2 | hexpm | BUG-4 (HEEx invocations), BUG-5 (defimpl/Mix.env scoping), BUG-6 (metadata bloat) | Production Phoenix |
+| 3 | PLD | BUG-7 (embed_templates), BUG-8 (@impl callbacks) | Live UI control idioms |
+| 4 | Livebook | BUG-9 (defimpl callbacks), BUG-10 (Web namespace + app supervisor) | Heavy protocol/supervisor code |
+
+**Conclusion:** self-analysis confirms correctness; field tests reveal
+blind spots. Both are necessary. Recommend running Archdo against at least
+one project per category (UI library, Phoenix app, OTP-heavy app, embedded
+Nerves app) before each release.
+
 ## Open questions for designing rules
 
 - Should LiveView-specific rules live under category 1.x (boundary), 4.x (coupling), or get a new category 12.x (Phoenix/LiveView)?
