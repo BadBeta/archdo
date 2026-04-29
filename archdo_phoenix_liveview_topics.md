@@ -455,6 +455,73 @@ blind spots. Both are necessary. Recommend running Archdo against at least
 one project per category (UI library, Phoenix app, OTP-heavy app, embedded
 Nerves app) before each release.
 
+## Type accessor `Module.t()` is not a runtime call (added 2026-04-29 round 5 from otel)
+
+`Module.t()` is the Dialyzer type accessor — it returns the `@type t :: ...`
+definition at compile time, not a runtime call into the implementation.
+Found on otel: `Otel.OTLP.Encoder` calls `Otel.SDK.Trace.Span.t()` only as
+a `@spec` reference, but Rule 4.17 (Direct call bypasses @behaviour seam)
+flagged it as a runtime bypass.
+
+**Affected rules:**
+- 4.17 seam bypass — fixed in BUG-12 with `type_accessor?(:t, [])` skip
+- Likely other rules walking remote calls: 1.26 (already covered by web-namespace work), 1.7 (cross-context calls), 4.17 (seam), 4.4 (external service)
+
+**Pattern:** any rule that walks `{{:., _, [{:__aliases__, _, parts}, func]}, _, args}`
+remote-call AST nodes should consider exempting `func == :t and args in [[], nil]`.
+Add an `AST.type_accessor?/2` helper if a third rule needs it.
+
+## AST helpers, promoted: impl_callbacks + defimpl_callbacks (added 2026-04-29 round 5)
+
+Predicted in round 4's `Phoenix.classify_file/1` section. After BUG-11 made
+the third rule needing the same `@impl` and `defimpl` extraction, these are
+now real shared helpers in `lib/archdo/ast.ex`:
+
+```elixir
+AST.impl_callbacks(ast) :: MapSet.t({atom(), arity()})
+AST.defimpl_callbacks(ast) :: MapSet.t({atom(), arity()})
+```
+
+**Currently consumed by:**
+- Rule 6.10 (Non-bang raises) — exempt `@impl` and `defimpl` callbacks
+- Rule 6.43 (Long parameter list) — exempt framework-fixed arity
+
+**Likely next consumers:**
+- Rule 6.34 (Dead private function) — `@impl true defp` callbacks shouldn't be flagged dead even with no in-module call (they're dispatched via the protocol/behaviour table)
+- Rule 1.27 (Business logic in handle_event) — `handle_event/3` is itself an @impl LiveView callback; the threshold should be aware
+- Rule 4.18 (External call without timeout) — protocol callbacks (`call/2,3`) have shapes the implementer can't change
+- Rule 5.37 (GenServer without handle_info) — could verify `@impl true` on the existing callbacks
+
+The "extract once, consume widely" pattern from these helpers is the
+template for the future `Phoenix.classify_file/1` super-helper.
+
+## Round 5 cumulative: 12 bugs found, 12 fixed across 5 cycles (added 2026-04-29)
+
+| Cycle | Project | Type | Bugs |
+|---|---|---|---|
+| 1 | PhiaUI | UI library, 127k LoC | BUG-1 (when/N), BUG-2 (Map.put I/O), BUG-3 (multi-clause recursion) |
+| 2 | hexpm | Phoenix prod, 34k LoC | BUG-4 (HEEx invocations), BUG-5 (defimpl/Mix.env scoping), BUG-6 (metadata bloat) |
+| 3 | PLD | Live UI controls, 7k LoC | BUG-7 (embed_templates), BUG-8 (@impl callbacks) |
+| 4 | Livebook | Interactive LV, 67k LoC | BUG-9 (defimpl callbacks), BUG-10 (Web namespace + app supervisor) |
+| 5 | otel | Pure library, 23k LoC | BUG-11 (6.43 framework callbacks), BUG-12 (Module.t() type accessor) |
+
+**Pattern:** each new project category surfaces a different blind spot:
+- UI library → AST encoder edge cases
+- Phoenix prod app → cross-file template references, scoping
+- Live UI controls → embed_templates, @impl
+- Interactive LV → defimpl, namespace classification
+- Pure library → framework-callback arity, type accessors
+
+**Implication:** the bug-rate per project is not slowing — each new category
+is still finding 1-3 new false-positive classes. Recommend adding 1-2 more
+project categories to the routine field-test rotation before Archdo is
+considered "stable for general use." Candidates:
+- Embedded Nerves project (firmware, hardware)
+- Ecto-heavy app (multi-schema, complex migrations)
+- Umbrella project (multi-app)
+- GenStage/Broadway pipeline
+- Ash Framework app
+
 ## Open questions for designing rules
 
 - Should LiveView-specific rules live under category 1.x (boundary), 4.x (coupling), or get a new category 12.x (Phoenix/LiveView)?
