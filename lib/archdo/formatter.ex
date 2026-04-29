@@ -39,9 +39,9 @@ defmodule Archdo.Formatter do
 
   defp format_summary(diagnostics) do
     {actionable, passed} = split_passed(diagnostics)
-    {errors, warnings, infos} = counts(actionable)
+    {errors, warnings, infos, nitpicks} = counts(actionable)
     passed_n = length(passed)
-    total = errors + warnings + infos
+    total = errors + warnings + infos + nitpicks
 
     IO.puts(
       "\nArchdo — #{total} findings (#{errors} errors, #{warnings} warnings, #{infos} info, #{passed_n} passed)\n"
@@ -98,10 +98,12 @@ defmodule Archdo.Formatter do
   defp severity_sort(:error), do: 0
   defp severity_sort(:warning), do: 1
   defp severity_sort(:info), do: 2
+  defp severity_sort(:nitpick), do: 3
 
   defp severity_label(:error), do: "error"
   defp severity_label(:warning), do: "warn"
   defp severity_label(:info), do: "info"
+  defp severity_label(:nitpick), do: "nit"
 
   # ───────────────────────────────────────────── :text ─────────────────────────────────────────────
 
@@ -121,8 +123,11 @@ defmodule Archdo.Formatter do
       Enum.each(diags, &print_full_diagnostic/1)
     end)
 
-    {errors, warnings, infos} = counts(diagnostics)
-    IO.puts("Found #{errors} errors, #{warnings} warnings, #{infos} info.\n")
+    {errors, warnings, infos, nitpicks} = counts(diagnostics)
+
+    IO.puts(
+      "Found #{errors} errors, #{warnings} warnings, #{infos} info, #{nitpicks} nitpicks.\n"
+    )
     IO.puts(@llm_instruction)
     exit_code(errors, warnings)
   end
@@ -139,7 +144,7 @@ defmodule Archdo.Formatter do
 
   defp format_brief(diagnostics) do
     {non_passed, passed} = split_passed(diagnostics)
-    {actionable, infos} = Enum.split_with(non_passed, fn d -> d.severity != :info end)
+    {actionable, infos} = Enum.split_with(non_passed, fn d -> d.severity not in [:info, :nitpick] end)
     passed_n = length(passed)
 
     case actionable do
@@ -158,7 +163,7 @@ defmodule Archdo.Formatter do
         end)
     end
 
-    {errors, warnings, _} = counts(actionable)
+    {errors, warnings, _, _} = counts(actionable)
     info_count = length(infos)
 
     IO.puts(
@@ -241,7 +246,7 @@ defmodule Archdo.Formatter do
 
     if match?([_ | _], diagnostics), do: IO.puts(@llm_instruction)
 
-    {errors, warnings, _} = counts(diagnostics)
+    {errors, warnings, _, _} = counts(diagnostics)
     exit_code(errors, warnings)
   end
 
@@ -254,7 +259,7 @@ defmodule Archdo.Formatter do
     }
 
     IO.puts(Jason.encode!(payload, pretty: true))
-    {errors, warnings, _} = counts(diagnostics)
+    {errors, warnings, _, _} = counts(diagnostics)
     exit_code(errors, warnings)
   end
 
@@ -278,7 +283,7 @@ defmodule Archdo.Formatter do
       |> IO.puts()
     end)
 
-    {errors, warnings, _} = counts(diagnostics)
+    {errors, warnings, _, _} = counts(diagnostics)
     exit_code(errors, warnings)
   end
 
@@ -335,19 +340,21 @@ defmodule Archdo.Formatter do
     }
 
     IO.puts(Jason.encode!(sarif, pretty: true))
-    {errors, warnings, _} = counts(diagnostics)
+    {errors, warnings, _, _} = counts(diagnostics)
     exit_code(errors, warnings)
   end
 
   defp sarif_level(:error), do: "error"
   defp sarif_level(:warning), do: "warning"
   defp sarif_level(:info), do: "note"
+  # SARIF spec only defines none/note/warning/error — map :nitpick to note.
+  defp sarif_level(:nitpick), do: "note"
 
   # ───────────────────────────────────────────── :html ─────────────────────────────────────────────
 
   defp format_html(diagnostics) do
-    {errors, warnings, infos} = counts(diagnostics)
-    total = errors + warnings + infos
+    {errors, warnings, infos, nitpicks} = counts(diagnostics)
+    total = errors + warnings + infos + nitpicks
 
     by_rule =
       diagnostics
@@ -489,15 +496,23 @@ defmodule Archdo.Formatter do
   defp maybe_refs(refs), do: "**References:** " <> Enum.join(refs, ", ")
 
   defp summary_map(diagnostics) do
-    {errors, warnings, infos} = counts(diagnostics)
-    %{errors: errors, warnings: warnings, infos: infos, total: errors + warnings + infos}
+    {errors, warnings, infos, nitpicks} = counts(diagnostics)
+
+    %{
+      errors: errors,
+      warnings: warnings,
+      infos: infos,
+      nitpicks: nitpicks,
+      total: errors + warnings + infos + nitpicks
+    }
   end
 
   defp counts(diagnostics) do
-    Enum.reduce(diagnostics, {0, 0, 0}, fn
-      %{severity: :error}, {e, w, i} -> {e + 1, w, i}
-      %{severity: :warning}, {e, w, i} -> {e, w + 1, i}
-      %{severity: :info}, {e, w, i} -> {e, w, i + 1}
+    Enum.reduce(diagnostics, {0, 0, 0, 0}, fn
+      %{severity: :error}, {e, w, i, n} -> {e + 1, w, i, n}
+      %{severity: :warning}, {e, w, i, n} -> {e, w + 1, i, n}
+      %{severity: :info}, {e, w, i, n} -> {e, w, i + 1, n}
+      %{severity: :nitpick}, {e, w, i, n} -> {e, w, i, n + 1}
       _, acc -> acc
     end)
   end
@@ -513,6 +528,7 @@ defmodule Archdo.Formatter do
   defp format_severity(:error), do: IO.ANSI.format([:red, "error  "])
   defp format_severity(:warning), do: IO.ANSI.format([:yellow, "warning"])
   defp format_severity(:info), do: IO.ANSI.format([:cyan, "info   "])
+  defp format_severity(:nitpick), do: IO.ANSI.format([:light_black, "nitpick"])
 
   # Per-rule cross-references — point Layer 2 (the Elixir/rust-nif skill) at the
   # exact section that explains the trade-off behind the rule. Mapped by rule_id

@@ -16,8 +16,8 @@ defmodule Archdo.SeverityTest do
       assert Severity.adjust("8.3", :error, classification(:test)) == :error
     end
 
-    test "leaves :info as :info" do
-      assert Severity.adjust("6.33", :info, classification(:test)) == :info
+    test "leaves :info as :info for non-overridden rules" do
+      assert Severity.adjust("1.26", :info, classification(:test)) == :info
     end
   end
 
@@ -98,6 +98,24 @@ defmodule Archdo.SeverityTest do
       # If a rule ever emits :error, the override should not silently downgrade
       # an explicit error — error wins.
       assert Severity.adjust("4.5", :error, classification(:context)) == :error
+    end
+  end
+
+  describe "adjust/3 — :nitpick (M10)" do
+    test "preserves :nitpick at every layer" do
+      for layer <- [:test, :other, :context, :web, :live_view, :operational] do
+        assert Severity.adjust("6.33", :nitpick, classification(layer)) == :nitpick
+      end
+    end
+
+    test "preserves :nitpick with nil classification" do
+      assert Severity.adjust("6.33", :nitpick, nil) == :nitpick
+    end
+
+    test "rule override can map :warning down to :nitpick (not just :info)" do
+      # 6.33 single-step pipeline is a canonical nitpick. If a rule emits
+      # :warning by mistake, the override table can cap it at :nitpick.
+      assert Severity.adjust("6.33", :warning, classification(:context)) == :nitpick
     end
   end
 

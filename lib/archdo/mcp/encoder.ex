@@ -39,15 +39,22 @@ defmodule Archdo.Mcp.Encoder do
   defp fix_to_map(%Fix{} = fix), do: Fix.to_map(fix)
 
   defp summary(diagnostics) do
-    {errors, warnings, infos} =
-      Enum.reduce(diagnostics, {0, 0, 0}, fn
-        %{severity: :error}, {e, w, i} -> {e + 1, w, i}
-        %{severity: :warning}, {e, w, i} -> {e, w + 1, i}
-        %{severity: :info}, {e, w, i} -> {e, w, i + 1}
+    {errors, warnings, infos, nitpicks} =
+      Enum.reduce(diagnostics, {0, 0, 0, 0}, fn
+        %{severity: :error}, {e, w, i, n} -> {e + 1, w, i, n}
+        %{severity: :warning}, {e, w, i, n} -> {e, w + 1, i, n}
+        %{severity: :info}, {e, w, i, n} -> {e, w, i + 1, n}
+        %{severity: :nitpick}, {e, w, i, n} -> {e, w, i, n + 1}
         _, acc -> acc
       end)
 
-    %{errors: errors, warnings: warnings, infos: infos, total: errors + warnings + infos}
+    %{
+      errors: errors,
+      warnings: warnings,
+      infos: infos,
+      nitpicks: nitpicks,
+      total: errors + warnings + infos + nitpicks
+    }
   end
 
   # Context maps may contain MapSets, atoms, or other Jason-unfriendly terms.

@@ -31,8 +31,13 @@ defmodule Archdo.Severity do
     "6.3" => :info,
     # 6.8 ZoneOfPain — Martin metric. Long-term architectural concern,
     # not a per-PR review item.
-    "6.8" => :info
+    "6.8" => :info,
+    # 6.33 Code slop: single-step pipeline — pure stylistic preference;
+    # `name |> String.upcase()` vs `String.upcase(name)`. Take-it-or-leave-it.
+    "6.33" => :nitpick
   }
+
+  @severity_rank %{nitpick: 3, info: 2, warning: 1, error: 0}
 
   @doc """
   Adjust a base severity for the layer the finding lives in.
@@ -57,18 +62,34 @@ defmodule Archdo.Severity do
   @spec adjust(String.t(), severity(), Phoenix.classification() | %{layer: atom()} | nil) ::
           severity()
   def adjust(_rule_id, :error, _classification), do: :error
-  def adjust(_rule_id, :info, _classification), do: :info
+  def adjust(_rule_id, :nitpick, _classification), do: :nitpick
+
+  def adjust(rule_id, :info, _classification) do
+    # An :info finding can be capped further down to :nitpick by the
+    # override table, but never escalated.
+    case Map.get(@rule_max_severity, rule_id) do
+      :nitpick -> :nitpick
+      _ -> :info
+    end
+  end
 
   def adjust(rule_id, :warning, classification) do
-    case Map.get(@rule_max_severity, rule_id) do
-      :info ->
-        :info
+    layer_downgraded =
+      case layer_of(classification) do
+        l when l in [:test, :other, :operational, :application_root] -> :info
+        _ -> :warning
+      end
 
-      _ ->
-        case layer_of(classification) do
-          l when l in [:test, :other, :operational, :application_root] -> :info
-          _ -> :warning
-        end
+    cap_at(layer_downgraded, Map.get(@rule_max_severity, rule_id))
+  end
+
+  # `cap_at/2`: returns the lower (less severe) of the two tiers. nil cap = no cap.
+  defp cap_at(severity, nil), do: severity
+
+  defp cap_at(severity, cap) do
+    case Map.get(@severity_rank, cap, 0) > Map.get(@severity_rank, severity, 0) do
+      true -> cap
+      false -> severity
     end
   end
 
