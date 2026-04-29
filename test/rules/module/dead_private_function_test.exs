@@ -129,6 +129,39 @@ defmodule Archdo.Rules.Module.DeadPrivateFunctionTest do
       assert diag.message =~ "unused_defaults/0"
     end
 
+    test "does not flag private functions called from embed_templates .heex files" do
+      # `embed_templates "path/*"` compiles separate .heex files into the
+      # module. Functions defined in the embedding module (often defp) are
+      # referenced from those external templates. The dead-code check must
+      # follow the glob and scan those .heex files as call sites — otherwise
+      # every helper used only from a template appears dead.
+      # (BUG-7 from phoenix_live_dashboard.)
+      tmp = Path.join(System.tmp_dir!(), "archdo_embed_#{:rand.uniform(1_000_000)}")
+      File.mkdir_p!(Path.join(tmp, "lib/layouts"))
+      module_path = Path.join(tmp, "lib/layout_view.ex")
+      template_path = Path.join(tmp, "lib/layouts/dash.html.heex")
+
+      File.write!(module_path, """
+      defmodule LayoutView do
+        use Phoenix.Component
+        embed_templates "layouts/*"
+
+        defp csp_nonce(conn, type), do: conn.assigns[type]
+        defp asset_path(conn, kind), do: "/assets/\#{kind}"
+      end
+      """)
+
+      File.write!(template_path, """
+      <link rel="stylesheet" nonce={csp_nonce(@conn, :style)} href={asset_path(@conn, :css)} />
+      """)
+
+      try do
+        assert_clean(DeadPrivateFunction, File.read!(module_path), file: module_path)
+      after
+        File.rm_rf!(tmp)
+      end
+    end
+
     test "does not flag private function components called via HEEx <.tag />" do
       # Phoenix LiveView function components are defined as `defp` and called
       # from sibling templates with `<.name />` syntax — not `name(...)`.

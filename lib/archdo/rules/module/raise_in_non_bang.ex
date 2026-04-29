@@ -37,11 +37,22 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
 
   defp find_raises_in_non_bang(file, ast) do
     fns = AST.extract_functions(ast, :public)
+    impl_set = impl_marked_functions(ast)
 
     fns
-    |> Enum.reject(fn {name, _arity, _meta, _args, _body} ->
+    |> Enum.reject(fn {name, arity, _meta, _args, _body} ->
       not is_atom(name) or bang_function?(name) or name in @raise_ok_contexts or
-        name in @framework_callbacks
+        name in @framework_callbacks or
+        # Skip behaviour callbacks: a function annotated with `@impl true` or
+        # `@impl SomeBehaviour` has a fixed name defined by the behaviour and
+        # CANNOT be renamed with `!`. Raising on misconfiguration is the
+        # framework-defined contract for many of these (LiveView's mount/3,
+        # GenServer's init/1, etc.). BUG-8 from phoenix_live_dashboard.
+        MapSet.member?(impl_set, {name, arity}) or
+        # Dunder names (`__options__`, `__using__`, `__before_compile__`)
+        # are framework/macro convention — fixed names, raising-on-misconfig
+        # is idiomatic.
+        dunder_name?(name)
     end)
     |> Enum.filter(fn {_name, _arity, _meta, _args, body} ->
       body != nil and contains_raise?(body) and not has_rescue?(body)
@@ -51,10 +62,103 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
     end)
   end
 
+  # Walk the module body in declaration order, tracking the `@impl ...` →
+  # `def` adjacency. `@spec` / `@doc` and other `@` attributes between `@impl`
+  # and the def preserve the flag. Returns a MapSet of {name, arity} pairs
+  # for every def annotated with `@impl ...`.
+  defp impl_marked_functions(ast) do
+    ast
+    |> all_module_bodies([])
+    |> Enum.reduce(MapSet.new(), fn body, acc ->
+      MapSet.union(acc, scan_impl_marks(body_statements(body), false, MapSet.new()))
+    end)
+  end
+
+  # Find every `defmodule ... do ... end` body in the file, including
+  # multiple top-level modules and nested ones. Handles both bare keyword
+  # `[do: body]` (Code.string_to_quoted without encoder) and the
+  # literal_encoder-wrapped form `[{{:__block__, _, [:do]}, body}]`
+  # (production parse_file).
+  defp all_module_bodies({:defmodule, _, [_alias, kw]} = node, acc) when is_list(kw) do
+    case do_body(kw) do
+      nil -> recurse_children(node, acc)
+      body -> all_module_bodies(body, [body | acc])
+    end
+  end
+
+  defp all_module_bodies({_form, _meta, args}, acc) when is_list(args) do
+    Enum.reduce(args, acc, &all_module_bodies/2)
+  end
+
+  defp all_module_bodies(list, acc) when is_list(list) do
+    Enum.reduce(list, acc, &all_module_bodies/2)
+  end
+
+  defp all_module_bodies({a, b}, acc) do
+    acc |> then(&all_module_bodies(a, &1)) |> then(&all_module_bodies(b, &1))
+  end
+
+  defp all_module_bodies(_, acc), do: acc
+
+  defp recurse_children({_form, _meta, args}, acc) when is_list(args) do
+    Enum.reduce(args, acc, &all_module_bodies/2)
+  end
+
+  defp recurse_children(_, acc), do: acc
+
+  # Pluck the body from a defmodule's `do:` keyword in either form.
+  defp do_body(kw) do
+    Enum.find_value(kw, fn
+      {:do, body} -> body
+      {{:__block__, _, [:do]}, body} -> body
+      _ -> nil
+    end)
+  end
+
+  defp body_statements({:__block__, _, statements}), do: statements
+  defp body_statements(single), do: [single]
+
+  defp scan_impl_marks([], _flag, acc), do: acc
+
+  # `@impl true` or `@impl SomeBehaviour` sets the flag for the next def.
+  defp scan_impl_marks([{:@, _, [{:impl, _, [_value]}]} | rest], _flag, acc) do
+    scan_impl_marks(rest, true, acc)
+  end
+
+  # Other module attributes (`@spec`, `@doc`, etc.) preserve the flag.
+  defp scan_impl_marks([{:@, _, _} | rest], flag, acc) do
+    scan_impl_marks(rest, flag, acc)
+  end
+
+  # def/defp under the impl flag — record and clear.
+  defp scan_impl_marks(
+         [{kind, _, [{:when, _, [{name, _, args} | _]}, _body]} | rest],
+         true,
+         acc
+       )
+       when kind in [:def, :defp] and is_atom(name) and is_list(args) do
+    scan_impl_marks(rest, false, MapSet.put(acc, {name, length(args)}))
+  end
+
+  defp scan_impl_marks([{kind, _, [{name, _, args}, _body]} | rest], true, acc)
+       when kind in [:def, :defp] and is_atom(name) and is_list(args) do
+    scan_impl_marks(rest, false, MapSet.put(acc, {name, length(args)}))
+  end
+
+  # Any other statement clears the flag.
+  defp scan_impl_marks([_ | rest], _flag, acc) do
+    scan_impl_marks(rest, false, acc)
+  end
+
   defp bang_function?(name) do
     name
     |> Atom.to_string()
     |> String.ends_with?("!")
+  end
+
+  defp dunder_name?(name) do
+    name_str = Atom.to_string(name)
+    String.starts_with?(name_str, "__") and String.ends_with?(name_str, "__")
   end
 
   defp contains_raise?(body) do

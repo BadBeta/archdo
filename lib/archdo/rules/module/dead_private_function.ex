@@ -21,7 +21,7 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
   defp find_dead_privates(file, ast) do
     private_fns = AST.extract_functions(ast, :private)
     private_defs = unique_private_defs(private_fns)
-    call_set = collect_calls(ast)
+    call_set = collect_calls(file, ast)
 
     private_defs
     |> Enum.reject(&skip_function?/1)
@@ -60,18 +60,95 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
   end
 
   # Collect all function calls from function bodies and HEEx templates.
-  defp collect_calls(ast) do
+  defp collect_calls(file, ast) do
     all_fns = AST.extract_functions(ast, :all)
+    # Also scan macro bodies — `defmacro` / `defmacrop` can call private
+    # functions defined in the same module. Without this, helpers used only
+    # from a macro body look dead. (Found 2026-04-29 on phoenix_live_dashboard:
+    # `expand_alias/2` called from `defmacro live_dashboard`.)
+    macro_bodies = extract_macro_bodies(ast)
 
     body_calls =
-      Enum.reduce(all_fns, MapSet.new(), fn {_name, _arity, _meta, _args, body}, acc ->
+      Enum.reduce(all_fns ++ macro_bodies, MapSet.new(), fn {_n, _a, _m, _args, body}, acc ->
         collect_calls_in_body(body, acc)
       end)
 
     # Also scan ~H sigils for function references (Phoenix HEEx templates)
     heex_calls = collect_heex_calls(ast)
 
-    MapSet.union(body_calls, heex_calls)
+    # And follow `embed_templates "<glob>"` to scan external .heex/.eex files
+    # (Phoenix idiom — function components or layouts compiled from disk).
+    embedded_calls = collect_embed_template_calls(file, ast)
+
+    body_calls
+    |> MapSet.union(heex_calls)
+    |> MapSet.union(embedded_calls)
+  end
+
+  # Phoenix's `embed_templates "<glob>"` compiles separate template files into
+  # the module. Functions defined in the embedding module (often `defp`) are
+  # called from those templates — we must scan them as additional call sites.
+  # BUG-7 from phoenix_live_dashboard.
+  defp collect_embed_template_calls(file, ast) do
+    case is_binary(file) and File.exists?(file) do
+      false ->
+        MapSet.new()
+
+      true ->
+        module_dir = Path.dirname(file)
+
+        ast
+        |> find_embed_template_globs()
+        |> Enum.flat_map(fn glob -> Path.wildcard(Path.join(module_dir, glob)) end)
+        |> Enum.filter(&template_file?/1)
+        |> Enum.reduce(MapSet.new(), fn template_path, acc ->
+          case File.read(template_path) do
+            {:ok, text} -> MapSet.union(acc, extract_function_refs_from_heex(text))
+            {:error, _} -> acc
+          end
+        end)
+    end
+  end
+
+  defp find_embed_template_globs(ast) do
+    {_, globs} =
+      Macro.prewalk(ast, [], fn
+        # `embed_templates "path/*"` — bare string (no encoder)
+        {:embed_templates, _, [glob]} = node, acc when is_binary(glob) ->
+          {node, [glob | acc]}
+
+        # `embed_templates "path/*"` — literal_encoder-wrapped string
+        {:embed_templates, _, [{:__block__, _, [glob]}]} = node, acc when is_binary(glob) ->
+          {node, [glob | acc]}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    globs
+  end
+
+  defp template_file?(path) do
+    String.ends_with?(path, ".heex") or String.ends_with?(path, ".eex")
+  end
+
+  # Extract macro bodies in the same shape as AST.extract_functions returns.
+  defp extract_macro_bodies(ast) do
+    {_, macros} =
+      Macro.prewalk(ast, [], fn
+        {kind, meta, [{:when, _, [{name, _, args} | _]}, body]} = node, acc
+        when kind in [:defmacro, :defmacrop] and is_atom(name) and is_list(args) ->
+          {node, [{name, length(args), meta, args, body} | acc]}
+
+        {kind, meta, [{name, _, args}, body]} = node, acc
+        when kind in [:defmacro, :defmacrop] and is_atom(name) and is_list(args) ->
+          {node, [{name, length(args), meta, args, body} | acc]}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    Enum.reverse(macros)
   end
 
   # Scan ~H"""...""" sigil bodies for function name references.
@@ -102,16 +179,19 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
   end
 
   # Find function-call-like patterns in HEEx text:
-  #   - `name(`  — function-call form
+  #   - `name(`   — function-call form
   #   - `<.name`  — Phoenix function-component tag form (`<.foo />`,
   #     `<.foo class="x">`, `<.foo attr={value}>...</.foo>`). Without this,
   #     every private LiveView function component looks dead, since the
   #     parens-form check never matches a tag invocation.
+  #   - `&name/N` — Elixir function capture inside `{...}` interpolations
+  #     (e.g. `<.live_table row_fetcher={&fetch_applications/2}>`).
   defp extract_function_refs_from_heex(text) do
     paren_calls = Regex.scan(~r/\b([a-z_][a-z0-9_]*[!?]?)\s*\(/, text)
     tag_calls = Regex.scan(~r/<\.([a-z_][a-z0-9_]*[!?]?)\b/, text)
+    capture_calls = Regex.scan(~r/&([a-z_][a-z0-9_]*[!?]?)\/\d+/, text)
 
-    (paren_calls ++ tag_calls)
+    (paren_calls ++ tag_calls ++ capture_calls)
     |> Enum.reduce(MapSet.new(), fn
       [_, name], acc ->
         # Only consider references to atoms that already exist — i.e. names

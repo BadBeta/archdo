@@ -70,6 +70,56 @@ defmodule Archdo.Rules.Module.RaiseInNonBangTest do
       assert_clean(RaiseInNonBang, code)
     end
 
+    test "does not flag @impl true callbacks (framework-defined contract)" do
+      # mount/3, handle_event/3 etc. have fixed names defined by Phoenix
+      # LiveView; they CAN'T be renamed with `!`. Raising on misconfiguration
+      # is documented framework behaviour. (BUG-8 from phoenix_live_dashboard.)
+      code = ~S"""
+      defmodule MyAppWeb.PageLive do
+        use Phoenix.LiveView
+
+        @impl true
+        def mount(%{"id" => id}, _session, socket) do
+          if id == nil do
+            raise "missing id"
+          else
+            {:ok, assign(socket, id: id)}
+          end
+        end
+      end
+      """
+
+      assert_clean(RaiseInNonBang, code)
+    end
+
+    test "does not flag @impl SomeBehaviour callbacks" do
+      code = ~S"""
+      defmodule MyApp.Worker do
+        @behaviour MyApp.WorkerBehaviour
+
+        @impl MyApp.WorkerBehaviour
+        def perform(args) do
+          unless args, do: raise("args required")
+        end
+      end
+      """
+
+      assert_clean(RaiseInNonBang, code)
+    end
+
+    test "still flags non-callback function that raises" do
+      code = ~S"""
+      defmodule MyApp.Helper do
+        def parse(input) do
+          raise "bad input"
+        end
+      end
+      """
+
+      diags = assert_flagged(RaiseInNonBang, code)
+      assert hd(diags).rule_id == "6.10"
+    end
+
     test "skips private functions" do
       code = ~S"""
       defmodule MyApp.Internal do
