@@ -41,5 +41,19 @@ defmodule Archdo.Rules.Module.TimeInjectionTest do
 
       assert_clean(TimeInjection, code, file: "lib/my_app/clock.ex")
     end
+
+    test "allows DateTime.utc_now in Mix tasks (operational layer)" do
+      code = ~S"""
+      defmodule Mix.Tasks.MyApp.Backfill do
+        use Mix.Task
+        def run(_) do
+          now = DateTime.utc_now()
+          IO.inspect(now)
+        end
+      end
+      """
+
+      assert_clean(TimeInjection, code, file: "lib/mix/tasks/my_app.backfill.ex")
+    end
   end
 end

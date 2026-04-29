@@ -2,7 +2,10 @@ defmodule Archdo.Rules.Module.TimeInjection do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks run once; injecting a clock for testability is unnecessary.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @time_calls [
     {[:DateTime], :utc_now},
@@ -22,11 +25,17 @@ defmodule Archdo.Rules.Module.TimeInjection do
   def description, do: "Time/date should be injectable for testability"
 
   @impl true
-  def analyze(file, ast, _opts) do
-    if AST.test_file?(file) or infrastructure_file?(file) do
-      []
-    else
-      find_uninjected_time(file, ast)
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case AST.test_file?(file) or infrastructure_file?(file) or
+           Phoenix.operational?(classification) do
+      true -> []
+      false -> find_uninjected_time(file, ast)
     end
   end
 

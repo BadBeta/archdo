@@ -2,7 +2,11 @@ defmodule Archdo.Rules.Module.LibConfigViaArgs do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks and release scripts ARE the configuration boundary; reading
+  # Application env directly is fine.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "3.3"
@@ -12,11 +16,17 @@ defmodule Archdo.Rules.Module.LibConfigViaArgs do
     do: "Scattered Application.get_env calls — centralize configuration in a Config module"
 
   @impl true
-  def analyze(file, ast, _opts) do
-    if AST.test_file?(file) or application_module?(ast) or config_module?(file, ast) do
-      []
-    else
-      find_app_get_env(file, ast)
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case AST.test_file?(file) or application_module?(ast) or config_module?(file, ast) or
+           Phoenix.operational?(classification) do
+      true -> []
+      false -> find_app_get_env(file, ast)
     end
   end
 

@@ -157,5 +157,28 @@ end|)
         file: Path.join(root, "lib/foo.ex")
       )
     end
+
+    test "skips Mix tasks (operational layer)" do
+      code = ~S"""
+      defmodule Mix.Tasks.MyApp.Sync do
+        @moduledoc "sync the world"
+        use Mix.Task
+        def run(_), do: :ok
+      end
+      """
+
+      assert_clean(UntestedModule, code, file: "lib/mix/tasks/my_app.sync.ex")
+    end
+
+    test "skips release.ex (operational layer)" do
+      code = ~S"""
+      defmodule MyApp.Release do
+        @moduledoc "release helpers"
+        def migrate, do: :ok
+      end
+      """
+
+      assert_clean(UntestedModule, code, file: "lib/my_app/release.ex")
+    end
   end
 end

@@ -2,7 +2,11 @@ defmodule Archdo.Rules.Module.UnprotectedExternalCall do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks should fail-fast on bad fetches; bang functions are correct
+  # at the system entry point.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "4.20"
@@ -21,8 +25,14 @@ defmodule Archdo.Rules.Module.UnprotectedExternalCall do
   ]
 
   @impl true
-  def analyze(file, ast, _opts) do
-    case test_or_adapter?(file) do
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case test_or_adapter?(file) or Phoenix.operational?(classification) do
       true -> []
       false -> find_bang_calls(file, ast)
     end

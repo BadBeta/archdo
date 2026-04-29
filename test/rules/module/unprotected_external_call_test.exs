@@ -72,6 +72,21 @@ defmodule Archdo.Rules.Module.UnprotectedExternalCallTest do
     assert diags == []
   end
 
+  test "skips Mix tasks (operational layer)" do
+    diags =
+      analyze(
+        """
+          defmodule Mix.Tasks.MyApp.Download do
+            use Mix.Task
+            def run(_), do: HTTPoison.get!("http://example.com")
+          end
+        """,
+        "lib/mix/tasks/my_app.download.ex"
+      )
+
+    assert diags == []
+  end
+
   test "flags ExAws.request!" do
     diags =
       analyze("""

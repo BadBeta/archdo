@@ -2,7 +2,11 @@ defmodule Archdo.Rules.Testing.UntestedModule do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks, release scripts, and seeds aren't unit-tested in isolation;
+  # they're integration boundaries.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "7.25"
@@ -11,26 +15,33 @@ defmodule Archdo.Rules.Testing.UntestedModule do
   def description, do: "Source module has no corresponding test file"
 
   @impl true
-  def analyze(file, ast, _opts) do
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
     case AST.test_file?(file) do
       true -> []
-      false -> check_for_test_file(file, ast)
+      false -> check_for_test_file(file, ast, classification)
     end
   end
 
-  defp check_for_test_file(file, ast) do
+  defp check_for_test_file(file, ast, classification) do
     cond do
-      skip_file?(file, ast) -> []
+      skip_file?(file, ast, classification) -> []
       test_file_exists?(file) -> []
       true -> [untested_diagnostic(file, ast)]
     end
   end
 
-  defp skip_file?(file, ast) do
+  defp skip_file?(file, ast, classification) do
     AST.internal_module?(ast) or
       migration_file?(file) or
       generated_file?(file) or
-      config_file?(file)
+      config_file?(file) or
+      Phoenix.operational?(classification)
   end
 
   defp migration_file?(file), do: String.contains?(file, "/migrations/")

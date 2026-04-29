@@ -55,5 +55,19 @@ defmodule Archdo.Rules.Module.ConfigRulesTest do
 
       assert_clean(LibConfigViaArgs, code)
     end
+
+    test "allows Application.get_env in Mix tasks (operational layer)" do
+      code = ~S"""
+      defmodule Mix.Tasks.MyApp.Sync do
+        use Mix.Task
+        def run(_) do
+          config = Application.get_env(:my_app, :sync)
+          IO.inspect(config)
+        end
+      end
+      """
+
+      assert_clean(LibConfigViaArgs, code, file: "lib/mix/tasks/my_app.sync.ex")
+    end
   end
 end
