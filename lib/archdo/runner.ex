@@ -263,9 +263,13 @@ defmodule Archdo.Runner do
       {:ok, ast} ->
         # §§ elixir-planning: §6 — classify once, reuse across rules.
         # Avoids each boundary rule re-deriving Phoenix layer from path/AST.
-        opts = Keyword.put(opts, :phoenix, Archdo.Phoenix.classify_file(file, ast))
-        diagnostics = Enum.flat_map(rules, &safe_analyze(&1, file, ast, opts))
-        filter_suppressed(diagnostics, file)
+        classification = Archdo.Phoenix.classify_file(file, ast)
+        opts = Keyword.put(opts, :phoenix, classification)
+
+        rules
+        |> Enum.flat_map(&safe_analyze(&1, file, ast, opts))
+        |> Enum.map(&Archdo.Severity.adjust_diagnostic(&1, classification))
+        |> filter_suppressed(file)
 
       {:error, _reason} ->
         []
