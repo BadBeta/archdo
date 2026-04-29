@@ -202,6 +202,50 @@ defmodule Archdo.Rules.Boundary.SeamIntegrityTest do
     end
   end
 
+  describe "type accessor t/0 (BUG-12)" do
+    test "does not flag Module.t() — Dialyzer type accessor, not a runtime call" do
+      behaviour =
+        parse(
+          """
+            defmodule MyApp.Span do
+              @callback name(t()) :: String.t()
+              @type t :: %{}
+            end
+          """,
+          "lib/my_app/span.ex"
+        )
+
+      implementation =
+        parse(
+          """
+            defmodule MyApp.SDK.Span do
+              @behaviour MyApp.Span
+              defstruct [:name]
+              @type t :: %__MODULE__{}
+              def name(span), do: span.name
+            end
+          """,
+          "lib/my_app/sdk/span.ex"
+        )
+
+      # `MyApp.SDK.Span.t()` is the type accessor — it returns the type AST
+      # at compile time. NOT a runtime call to the implementation. Flagging
+      # it as a seam bypass is wrong.
+      caller =
+        parse(
+          """
+            defmodule MyApp.Encoder do
+              @spec encode(MyApp.SDK.Span.t()) :: binary()
+              def encode(span), do: span.name
+            end
+          """,
+          "lib/my_app/encoder.ex"
+        )
+
+      assert analyze([behaviour, implementation, caller]) == []
+    end
+  end
+
   describe "no seams in project" do
     test "returns empty when no behaviours or protocols exist" do
       module_a =

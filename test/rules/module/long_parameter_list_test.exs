@@ -69,6 +69,45 @@ defmodule Archdo.Rules.Module.LongParameterListTest do
       assert_clean(LongParameterList, code, file: "test/my_app/service_test.exs")
     end
 
+    test "does not flag @impl callbacks (framework-fixed arity) — BUG-11" do
+      # Behaviour callbacks have arity defined by the @callback declaration —
+      # implementations can't change it. Found on otel: should_sample/7 (an
+      # OtelApi.Sampler @impl true callback) was wrongly flagged.
+      code = ~S"""
+      defmodule MyApp.Sampler do
+        @behaviour MyApp.SamplerBehaviour
+
+        @impl true
+        def should_sample(ctx, trace_id, links, name, kind, attributes, config) do
+          {ctx, trace_id, links, name, kind, attributes, config}
+        end
+      end
+      """
+
+      assert_clean(LongParameterList, code)
+    end
+
+    test "does not flag def inside defimpl (protocol-fixed arity) — BUG-11" do
+      code = ~S"""
+      defimpl MyApp.Codec, for: MyApp.Frame do
+        def encode(a, b, c, d, e, f, g, h), do: {a, b, c, d, e, f, g, h}
+      end
+      """
+
+      assert_clean(LongParameterList, code)
+    end
+
+    test "still flags non-callback function with 5+ params" do
+      code = ~S"""
+      defmodule MyApp.Service do
+        def doit(a, b, c, d, e, f), do: {a, b, c, d, e, f}
+      end
+      """
+
+      diags = assert_flagged(LongParameterList, code)
+      assert hd(diags).rule_id == "6.43"
+    end
+
     test "does not flag private functions" do
       code = ~S"""
       defmodule MyApp.Service do

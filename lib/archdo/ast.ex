@@ -476,6 +476,158 @@ defmodule Archdo.AST do
     end
   end
 
+  @doc """
+  Collect every `def` annotated with `@impl ...` in the AST.
+
+  Walks each `defmodule` body in declaration order, tracking the
+  `@impl ... → def` adjacency. `@spec`/`@doc` and other attributes
+  between `@impl` and the def preserve the flag. Any non-attribute,
+  non-def statement clears it.
+
+  Returns a `MapSet` of `{name, arity}` pairs. Useful for any rule
+  that needs to know "is this function a behaviour callback whose
+  name+arity are framework-defined?" — e.g. exempting framework
+  callbacks from naming/arity/raise conventions.
+
+  Handles both bare `[do: body]` and the literal_encoder-wrapped
+  `[{{:__block__, _, [:do]}, body}]` form used by `parse_file/1`.
+  """
+  @spec impl_callbacks(Macro.t()) :: MapSet.t({atom(), arity()})
+  def impl_callbacks(ast) do
+    ast
+    |> all_module_bodies([])
+    |> Enum.reduce(MapSet.new(), fn body, acc ->
+      MapSet.union(acc, scan_impl_marks(body_statements(body), false, MapSet.new()))
+    end)
+  end
+
+  @doc """
+  Collect every `def` defined inside any `defimpl Protocol, for: Type do ... end`
+  block in the AST.
+
+  Returns a `MapSet` of `{name, arity}` pairs. Functions inside `defimpl`
+  have names FIXED by the protocol's `defprotocol` declaration, so rules
+  about naming, arity, or raising conventions should typically exempt them.
+  """
+  @spec defimpl_callbacks(Macro.t()) :: MapSet.t({atom(), arity()})
+  def defimpl_callbacks(ast) do
+    {_, set} =
+      Macro.prewalk(ast, MapSet.new(), fn
+        {:defimpl, _, args} = node, acc when is_list(args) ->
+          {node, MapSet.union(acc, defs_in_defimpl(args))}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    set
+  end
+
+  # --- private helpers for the two functions above ---
+
+  defp all_module_bodies({:defmodule, _, [_alias, kw]} = node, acc) when is_list(kw) do
+    case do_body(kw) do
+      nil -> recurse_module_children(node, acc)
+      body -> all_module_bodies(body, [body | acc])
+    end
+  end
+
+  defp all_module_bodies({_form, _meta, args}, acc) when is_list(args) do
+    Enum.reduce(args, acc, &all_module_bodies/2)
+  end
+
+  defp all_module_bodies(list, acc) when is_list(list) do
+    Enum.reduce(list, acc, &all_module_bodies/2)
+  end
+
+  defp all_module_bodies({a, b}, acc) do
+    acc |> then(&all_module_bodies(a, &1)) |> then(&all_module_bodies(b, &1))
+  end
+
+  defp all_module_bodies(_, acc), do: acc
+
+  defp recurse_module_children({_form, _meta, args}, acc) when is_list(args) do
+    Enum.reduce(args, acc, &all_module_bodies/2)
+  end
+
+  defp recurse_module_children(_, acc), do: acc
+
+  defp do_body(kw) do
+    Enum.find_value(kw, fn
+      {:do, body} -> body
+      {{:__block__, _, [:do]}, body} -> body
+      _ -> nil
+    end)
+  end
+
+  defp body_statements({:__block__, _, statements}), do: statements
+  defp body_statements(single), do: [single]
+
+  defp scan_impl_marks([], _flag, acc), do: acc
+
+  defp scan_impl_marks([{:@, _, [{:impl, _, [_value]}]} | rest], _flag, acc) do
+    scan_impl_marks(rest, true, acc)
+  end
+
+  # Other module attributes (`@spec`, `@doc`, etc.) preserve the flag.
+  defp scan_impl_marks([{:@, _, _} | rest], flag, acc) do
+    scan_impl_marks(rest, flag, acc)
+  end
+
+  defp scan_impl_marks(
+         [{kind, _, [{:when, _, [{name, _, args} | _]}, _body]} | rest],
+         true,
+         acc
+       )
+       when kind in [:def, :defp] and is_atom(name) and is_list(args) do
+    scan_impl_marks(rest, false, MapSet.put(acc, {name, length(args)}))
+  end
+
+  defp scan_impl_marks([{kind, _, [{name, _, args}, _body]} | rest], true, acc)
+       when kind in [:def, :defp] and is_atom(name) and is_list(args) do
+    scan_impl_marks(rest, false, MapSet.put(acc, {name, length(args)}))
+  end
+
+  defp scan_impl_marks([_ | rest], _flag, acc) do
+    scan_impl_marks(rest, false, acc)
+  end
+
+  defp defs_in_defimpl(args) do
+    args
+    |> Enum.find_value(fn
+      kw when is_list(kw) -> do_body(kw)
+      _ -> nil
+    end)
+    |> case do
+      nil -> MapSet.new()
+      body -> collect_def_arities(body, MapSet.new())
+    end
+  end
+
+  defp collect_def_arities({:def, _, [{:when, _, [{name, _, args} | _]}, _]}, acc)
+       when is_atom(name) and is_list(args) do
+    MapSet.put(acc, {name, length(args)})
+  end
+
+  defp collect_def_arities({:def, _, [{name, _, args}, _]}, acc)
+       when is_atom(name) and is_list(args) do
+    MapSet.put(acc, {name, length(args)})
+  end
+
+  defp collect_def_arities({_form, _meta, args}, acc) when is_list(args) do
+    Enum.reduce(args, acc, &collect_def_arities/2)
+  end
+
+  defp collect_def_arities(list, acc) when is_list(list) do
+    Enum.reduce(list, acc, &collect_def_arities/2)
+  end
+
+  defp collect_def_arities({a, b}, acc) do
+    acc |> then(&collect_def_arities(a, &1)) |> then(&collect_def_arities(b, &1))
+  end
+
+  defp collect_def_arities(_, acc), do: acc
+
   defp defines_genserver_callbacks?(ast) do
     callbacks = extract_callbacks(ast)
 

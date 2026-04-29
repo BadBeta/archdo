@@ -37,8 +37,8 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
 
   defp find_raises_in_non_bang(file, ast) do
     fns = AST.extract_functions(ast, :public)
-    impl_set = impl_marked_functions(ast)
-    defimpl_set = defimpl_callbacks(ast)
+    impl_set = AST.impl_callbacks(ast)
+    defimpl_set = AST.defimpl_callbacks(ast)
 
     fns
     |> Enum.reject(fn {name, arity, _meta, _args, _body} ->
@@ -69,94 +69,6 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
     end)
   end
 
-  # Walk the module body in declaration order, tracking the `@impl ...` →
-  # `def` adjacency. `@spec` / `@doc` and other `@` attributes between `@impl`
-  # and the def preserve the flag. Returns a MapSet of {name, arity} pairs
-  # for every def annotated with `@impl ...`.
-  defp impl_marked_functions(ast) do
-    ast
-    |> all_module_bodies([])
-    |> Enum.reduce(MapSet.new(), fn body, acc ->
-      MapSet.union(acc, scan_impl_marks(body_statements(body), false, MapSet.new()))
-    end)
-  end
-
-  # Find every `defmodule ... do ... end` body in the file, including
-  # multiple top-level modules and nested ones. Handles both bare keyword
-  # `[do: body]` (Code.string_to_quoted without encoder) and the
-  # literal_encoder-wrapped form `[{{:__block__, _, [:do]}, body}]`
-  # (production parse_file).
-  defp all_module_bodies({:defmodule, _, [_alias, kw]} = node, acc) when is_list(kw) do
-    case do_body(kw) do
-      nil -> recurse_children(node, acc)
-      body -> all_module_bodies(body, [body | acc])
-    end
-  end
-
-  defp all_module_bodies({_form, _meta, args}, acc) when is_list(args) do
-    Enum.reduce(args, acc, &all_module_bodies/2)
-  end
-
-  defp all_module_bodies(list, acc) when is_list(list) do
-    Enum.reduce(list, acc, &all_module_bodies/2)
-  end
-
-  defp all_module_bodies({a, b}, acc) do
-    acc |> then(&all_module_bodies(a, &1)) |> then(&all_module_bodies(b, &1))
-  end
-
-  defp all_module_bodies(_, acc), do: acc
-
-  defp recurse_children({_form, _meta, args}, acc) when is_list(args) do
-    Enum.reduce(args, acc, &all_module_bodies/2)
-  end
-
-  defp recurse_children(_, acc), do: acc
-
-  # Pluck the body from a defmodule's `do:` keyword in either form.
-  defp do_body(kw) do
-    Enum.find_value(kw, fn
-      {:do, body} -> body
-      {{:__block__, _, [:do]}, body} -> body
-      _ -> nil
-    end)
-  end
-
-  defp body_statements({:__block__, _, statements}), do: statements
-  defp body_statements(single), do: [single]
-
-  defp scan_impl_marks([], _flag, acc), do: acc
-
-  # `@impl true` or `@impl SomeBehaviour` sets the flag for the next def.
-  defp scan_impl_marks([{:@, _, [{:impl, _, [_value]}]} | rest], _flag, acc) do
-    scan_impl_marks(rest, true, acc)
-  end
-
-  # Other module attributes (`@spec`, `@doc`, etc.) preserve the flag.
-  defp scan_impl_marks([{:@, _, _} | rest], flag, acc) do
-    scan_impl_marks(rest, flag, acc)
-  end
-
-  # def/defp under the impl flag — record and clear.
-  defp scan_impl_marks(
-         [{kind, _, [{:when, _, [{name, _, args} | _]}, _body]} | rest],
-         true,
-         acc
-       )
-       when kind in [:def, :defp] and is_atom(name) and is_list(args) do
-    scan_impl_marks(rest, false, MapSet.put(acc, {name, length(args)}))
-  end
-
-  defp scan_impl_marks([{kind, _, [{name, _, args}, _body]} | rest], true, acc)
-       when kind in [:def, :defp] and is_atom(name) and is_list(args) do
-    scan_impl_marks(rest, false, MapSet.put(acc, {name, length(args)}))
-  end
-
-  # Any other statement clears the flag.
-  defp scan_impl_marks([_ | rest], _flag, acc) do
-    scan_impl_marks(rest, false, acc)
-  end
-
   defp bang_function?(name) do
     name
     |> Atom.to_string()
@@ -167,69 +79,6 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
     name_str = Atom.to_string(name)
     String.starts_with?(name_str, "__") and String.ends_with?(name_str, "__")
   end
-
-  # Collect {name, arity} for every `def` defined inside a `defimpl` block.
-  # The protocol fixes both name and arity, so renaming with `!` would break
-  # the impl contract. BUG-9 from Livebook.
-  defp defimpl_callbacks(ast) do
-    {_, set} =
-      Macro.prewalk(ast, MapSet.new(), fn
-        {:defimpl, _, args} = node, acc when is_list(args) ->
-          {node, MapSet.union(acc, defs_in_defimpl(args))}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    set
-  end
-
-  # `defimpl Protocol, for: Type, do: body` or `defimpl Protocol, for: Type do ... end`.
-  # We just need the body; the structure is `[..., kw]` where `kw` is a
-  # keyword list containing `:do`. Both bare and literal_encoder-wrapped forms.
-  defp defs_in_defimpl(args) do
-    args
-    |> Enum.find_value(fn
-      kw when is_list(kw) -> do_body_for_defimpl(kw)
-      _ -> nil
-    end)
-    |> case do
-      nil -> MapSet.new()
-      body -> collect_def_arities(body, MapSet.new())
-    end
-  end
-
-  defp do_body_for_defimpl(kw) do
-    Enum.find_value(kw, fn
-      {:do, body} -> body
-      {{:__block__, _, [:do]}, body} -> body
-      _ -> nil
-    end)
-  end
-
-  defp collect_def_arities({:def, _, [{:when, _, [{name, _, args} | _]}, _]}, acc)
-       when is_atom(name) and is_list(args) do
-    MapSet.put(acc, {name, length(args)})
-  end
-
-  defp collect_def_arities({:def, _, [{name, _, args}, _]}, acc)
-       when is_atom(name) and is_list(args) do
-    MapSet.put(acc, {name, length(args)})
-  end
-
-  defp collect_def_arities({_form, _meta, args}, acc) when is_list(args) do
-    Enum.reduce(args, acc, &collect_def_arities/2)
-  end
-
-  defp collect_def_arities(list, acc) when is_list(list) do
-    Enum.reduce(list, acc, &collect_def_arities/2)
-  end
-
-  defp collect_def_arities({a, b}, acc) do
-    acc |> then(&collect_def_arities(a, &1)) |> then(&collect_def_arities(b, &1))
-  end
-
-  defp collect_def_arities(_, acc), do: acc
 
   defp contains_raise?(body) do
     AST.contains?(body, fn

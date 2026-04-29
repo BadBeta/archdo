@@ -147,9 +147,10 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
           false
       end)
 
-    for {{:., _, [{:__aliases__, _, parts}, func]}, meta, _} <- calls,
+    for {{:., _, [{:__aliases__, _, parts}, func]}, meta, args} <- calls,
         target = join_module(parts),
         MapSet.member?(protected, target),
+        not type_accessor?(func, args),
         not legitimate?(caller, target, registry) do
       seams =
         Map.get(registry.impl_to_behaviour, target, []) ++
@@ -160,6 +161,15 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
       bypass_diagnostic(file, AST.line(meta), caller, target, func, seam, is_behaviour)
     end
   end
+
+  # `Module.t()` is the canonical Dialyzer type accessor — it returns the
+  # `@type t :: ...` definition at compile time, NOT a runtime call into the
+  # implementation. Skip it. Same applies to typespec-only functions like
+  # `Module.t/0` reachable from `@spec encode(MyImpl.t()) :: ...`.
+  # BUG-12 from otel: `Otel.OTLP.Encoder` was flagged for calling
+  # `Otel.SDK.Trace.Span.t()` even though it's just a type reference.
+  defp type_accessor?(:t, args) when args == [] or is_nil(args), do: true
+  defp type_accessor?(_, _), do: false
 
   # --- Phase 3: Filter legitimate calls ---
 

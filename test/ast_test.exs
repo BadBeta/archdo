@@ -177,6 +177,126 @@ defmodule Archdo.ASTTest do
     end
   end
 
+  describe "impl_callbacks/1" do
+    test "returns {name, arity} for every def annotated with @impl" do
+      {:ok, ast} =
+        Code.string_to_quoted("""
+        defmodule MyApp.Server do
+          @impl true
+          def init(arg), do: {:ok, arg}
+
+          @impl GenServer
+          def handle_call(:ping, _from, state), do: {:reply, :pong, state}
+
+          # Plain def — not annotated
+          def helper(x), do: x * 2
+        end
+        """)
+
+      set = AST.impl_callbacks(ast)
+      assert MapSet.member?(set, {:init, 1})
+      assert MapSet.member?(set, {:handle_call, 3})
+      refute MapSet.member?(set, {:helper, 1})
+    end
+
+    test "preserves the impl flag across @spec/@doc between @impl and def" do
+      {:ok, ast} =
+        Code.string_to_quoted("""
+        defmodule MyApp.Server do
+          @impl true
+          @spec init(term()) :: {:ok, term()}
+          @doc "Initializes the server."
+          def init(arg), do: {:ok, arg}
+        end
+        """)
+
+      assert MapSet.member?(AST.impl_callbacks(ast), {:init, 1})
+    end
+
+    test "handles multiple top-level defmodules per file" do
+      {:ok, ast} =
+        Code.string_to_quoted("""
+        defmodule MyApp.NotFound do
+          defexception [:message]
+        end
+
+        defmodule MyApp.PageLive do
+          @impl true
+          def mount(_, _, socket), do: {:ok, socket}
+        end
+        """)
+
+      assert MapSet.member?(AST.impl_callbacks(ast), {:mount, 3})
+    end
+
+    test "non-impl other module attributes do not set the flag" do
+      {:ok, ast} =
+        Code.string_to_quoted("""
+        defmodule MyApp.X do
+          @doc "not an impl"
+          def foo(x), do: x
+        end
+        """)
+
+      refute MapSet.member?(AST.impl_callbacks(ast), {:foo, 1})
+    end
+  end
+
+  describe "defimpl_callbacks/1" do
+    test "returns {name, arity} for every def inside a defimpl block" do
+      {:ok, ast} =
+        Code.string_to_quoted("""
+        defmodule MyApp.ReadOnly do
+          defstruct [:path]
+        end
+
+        defimpl MyApp.FileSystem, for: MyApp.ReadOnly do
+          def read(fs, path), do: File.read(Path.join(fs.path, path))
+          def write(_, _, _), do: raise("not implemented")
+        end
+        """)
+
+      set = AST.defimpl_callbacks(ast)
+      assert MapSet.member?(set, {:read, 2})
+      assert MapSet.member?(set, {:write, 3})
+    end
+
+    test "ignores defs outside defimpl blocks" do
+      {:ok, ast} =
+        Code.string_to_quoted("""
+        defmodule MyApp.X do
+          def outer(x), do: x
+        end
+
+        defimpl MyApp.Y, for: MyApp.X do
+          def inner(_), do: :ok
+        end
+        """)
+
+      set = AST.defimpl_callbacks(ast)
+      assert MapSet.member?(set, {:inner, 1})
+      refute MapSet.member?(set, {:outer, 1})
+    end
+
+    test "handles multiple defimpls in one file (different :for types)" do
+      {:ok, ast} =
+        Code.string_to_quoted("""
+        defimpl MyApp.Codec, for: MyApp.A do
+          def encode(x), do: x
+        end
+
+        defimpl MyApp.Codec, for: MyApp.B do
+          def encode(x), do: x
+          def decode(x, opts), do: {x, opts}
+        end
+        """)
+
+      set = AST.defimpl_callbacks(ast)
+      assert MapSet.member?(set, {:encode, 1})
+      assert MapSet.member?(set, {:decode, 2})
+    end
+  end
+
   describe "ast_size/1" do
     test "does not count token_metadata as part of node count" do
       # Production parse_file/1 uses `token_metadata: true` which attaches

@@ -20,14 +20,33 @@ defmodule Archdo.Rules.Module.LongParameterList do
   end
 
   defp find_long_params(file, ast) do
+    # Behaviour callbacks (`@impl true` defs) and protocol implementations
+    # (`def`s inside `defimpl`) have arity FIXED by the behaviour/protocol
+    # contract. The implementer can't shorten the parameter list. Exempt
+    # them. BUG-11 from otel: `should_sample/7` (an OtelApi.Sampler @impl)
+    # was flagged on every implementation. Same shape as 6.10's exemption.
+    impl_set = AST.impl_callbacks(ast)
+    defimpl_set = AST.defimpl_callbacks(ast)
+
     ast
     |> AST.extract_functions(:public)
     |> Enum.flat_map(fn {name, arity, meta, _args, _body} ->
-      case {generated?(name), arity} do
-        {true, _} -> []
-        {false, a} when a >= 7 -> [build_diagnostic(file, AST.line(meta), name, a, :warning)]
-        {false, a} when a >= 5 -> [build_diagnostic(file, AST.line(meta), name, a, :info)]
-        _ -> []
+      cond do
+        generated?(name) ->
+          []
+
+        MapSet.member?(impl_set, {name, arity}) or
+            MapSet.member?(defimpl_set, {name, arity}) ->
+          []
+
+        arity >= 7 ->
+          [build_diagnostic(file, AST.line(meta), name, arity, :warning)]
+
+        arity >= 5 ->
+          [build_diagnostic(file, AST.line(meta), name, arity, :info)]
+
+        true ->
+          []
       end
     end)
   end
