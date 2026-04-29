@@ -2,7 +2,11 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks and release scripts touch ETS tables to bootstrap or backfill;
+  # they aren't asserting separate ETS ownership.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "1.33"
@@ -36,7 +40,8 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
     # Collect {table_name, context, file, line, operation} tuples
     accesses =
       Enum.flat_map(file_asts, fn {file, ast} ->
-        case AST.test_file?(file) do
+        case AST.test_file?(file) or
+               Phoenix.operational?(Phoenix.classify_file(file, ast)) do
           true -> []
           false -> extract_ets_accesses(file, ast)
         end

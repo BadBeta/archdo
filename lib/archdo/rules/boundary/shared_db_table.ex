@@ -2,7 +2,11 @@ defmodule Archdo.Rules.Boundary.SharedDbTable do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # data_migration scripts and Mix tasks often define a local schema mirroring
+  # the real owning context's table — they aren't asserting separate ownership.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "1.31"
@@ -22,7 +26,10 @@ defmodule Archdo.Rules.Boundary.SharedDbTable do
     # Collect all {table_name, context, file, line} tuples
     schemas =
       Enum.flat_map(file_asts, fn {file, ast} ->
-        extract_schema_tables(file, ast)
+        case Phoenix.operational?(Phoenix.classify_file(file, ast)) do
+          true -> []
+          false -> extract_schema_tables(file, ast)
+        end
       end)
 
     # Group by table name, find tables with schemas in multiple contexts
