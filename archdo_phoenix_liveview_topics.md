@@ -236,6 +236,106 @@ Adding a `Phoenix.classify_file/1` helper that returns `:component | :live_view 
 
 ---
 
+## Cross-file template scanning (added 2026-04-29 from phoenix_live_dashboard)
+
+Several Phoenix idioms move code OUT of the `.ex` file:
+
+| Directive | What it does | What Archdo can't see |
+|---|---|---|
+| `embed_templates "path/*"` | Compiles all matching `.heex`/`.eex` files into the module as function components | References inside the templates to functions in the embedding module — flagged as dead (BUG-7) |
+| `<.live_component module={Foo} />` in HEEx | Calls `Foo.update/2` and `Foo.handle_event/3` | The `update`/`handle_event` callbacks may look unused if `update` is overridden but the explicit `update/2` clause isn't recognized as a behaviour callback |
+| `pipe_through: :pipeline_name` in router scopes | Reference to a pipeline | Cross-pipeline reasoning — does this scope have auth, CSRF? |
+| `live_render(@socket, MyLive, ...)` in HEEx | Mounts a child LiveView | Lifecycle and assigns flow into the child |
+| Phoenix.Token.sign / verify across modules | Asymmetric flow (one signs, another verifies) | The pair must agree on `max_age` etc. |
+
+**Tooling implication:** Archdo currently treats one `.ex` file as the full unit of analysis (per-rule analyze/3) plus optional whole-project asts (analyze_project/1). For Phoenix it needs a third primitive: **module-with-its-templates** — given a module that uses `embed_templates`, resolve the glob and parse those .heex files alongside the module's own AST. The same primitive serves at least 5 rules (dead-private, undefined-function-in-template, missing-attr, etc.).
+
+## Framework-callback awareness (added 2026-04-29)
+
+Several rules need to know "this function name is a framework callback I can't rename":
+
+| Function family | Framework | Rules currently mis-firing |
+|---|---|---|
+| `mount/3`, `handle_event/3`, `handle_info/2`, `handle_async/3`, `render/1`, `update/2`, `terminate/2` | Phoenix LiveView | 6.10 (non-bang raises), 1.27 (large handle_event) — both should treat these as fixed-name |
+| `init/1`, `handle_call/3`, `handle_cast/2`, `handle_info/2`, `handle_continue/2`, `terminate/2` | GenServer | 6.10 |
+| `cast/2`, `dump/1`, `load/1`, `embed_as/1`, `equal?/2` | Ecto.Type | 6.10 |
+| `__options__/1`, `__using__/1`, `__before_compile__/1` | Phoenix/Elixir macros | 6.10 |
+| `child_spec/1`, `start_link/1` | Supervision | 6.10 sometimes (raise is normal for misconfig) |
+
+**Cleanest implementation:** when extracting functions, also capture the immediately-preceding `@impl ...` annotation (if any). Pass that to the rule. Rule 6.10 (and others) then treats `@impl`-annotated functions as having a framework-defined contract — raising on bad input is the documented behaviour, naming is fixed.
+
+## Production-AST quirks (added 2026-04-29 round 2 from phoenix_live_dashboard)
+
+The production parser (`AST.parse_file/1`) uses `token_metadata: true` AND
+`literal_encoder: &{:ok, {:__block__, &2, [&1]}}`. This shifts AST shapes in
+non-obvious ways. Rules that hand-walk the AST need to handle BOTH forms:
+
+| Construct | Code.string_to_quoted (no encoder) | parse_file/1 (production) |
+|---|---|---|
+| `[do: body]` keyword | `[{:do, body}]` | `[{{:__block__, _, [:do]}, body}]` |
+| Literal `false` in `@impl false` | `[false]` | `[{:__block__, _, [false]}]` |
+| String literal `"foo"` | `"foo"` | `{:__block__, _, ["foo"]}` |
+| Integer arity in `&fn/2` | `2` | `{:__block__, _, [2]}` |
+| Atom literal `:ok` | `:ok` | `{:__block__, _, [:ok]}` |
+
+**Concrete impact:** BUG-1 (Rule 3.1 wrong function name on guarded clauses),
+BUG-2/3 (rule false positives from over-broad detectors), BUG-5 (multiple
+top-level defmodules per file — common Phoenix/Ecto pattern with a tiny
+exception module beside the main module), BUG-8 (`extract_module_body/1` not
+handling wrapped `:do` keyword). Each was a missing branch for the wrapped form.
+
+**Fix pattern:** wherever a rule pattern-matches an AST literal, add a
+parallel clause for `{:__block__, _, [literal]}`. Or — preferred — extract
+helpers in `AST` module: `unwrap_literal/1`, `do_body/1`, etc., and use them
+everywhere.
+
+## Multiple modules per file (added 2026-04-29 round 2)
+
+Phoenix and Ecto idioms commonly put 2-4 modules in one file:
+- `defmodule MyLive.NotFound do defexception ... end` next to the main LiveView
+- Ecto schemas with their changeset module beside
+- `defmodule Inner do ... end` for a private helper namespace
+- Multiple `defimpl` blocks for the same protocol, different types
+
+**Rules that need to be scope-aware:**
+- 6.54 Shadowed clause — fixed in BUG-5
+- 6.10 Non-bang raises — needed a multi-defmodule walker for `@impl` extraction (fixed in BUG-8)
+- 4.x boundary rules (context cohesion, etc.) — still need verification
+- 6.4 Module file too long — currently uses raw line count; may want to know per-defmodule sizes
+
+**Suggested helper:** `AST.collect_module_bodies(ast)` — returns `[{module_alias, body, meta}]` for every defmodule in the AST. Reusable by all rules that need per-module scope.
+
+## Macro bodies as call sites (added 2026-04-29 round 2)
+
+`defmacro`/`defmacrop` bodies can call functions defined in the same module.
+Without scanning macro bodies, helpers used only from a macro look dead.
+Found on phoenix_live_dashboard: `expand_alias/2` called from `defmacro
+live_dashboard`. Generalizes — any rule that walks "function bodies" should
+include macro bodies, or have an explicit reason not to.
+
+**Affected rules:**
+- 6.34 Dead private — fixed in BUG-7 round 2
+- Any future rule that asks "does this private function get called?"
+
+## HEEx attribute interpolations (added 2026-04-29 round 2)
+
+The `<.tag attr={Elixir code}>` form embeds real Elixir AST inside HEEx text.
+For external `.heex` files (read as raw text by Archdo), the interpolations
+appear as text and need regex extraction. The patterns:
+
+| Form | Regex | Example |
+|---|---|---|
+| `<.fn ...>` | `<\.([a-z_]\w*)` | `<.live_table>` |
+| `<.fn />` | (same) | `<.footer />` |
+| `&fn/N` capture | `&([a-z_]\w*)\/\d+` | `row_fetcher={&fetch_applications/2}` |
+| `fn(args)` call | `\b([a-z_]\w*)\(` | `<%= csp_nonce(@conn, :script) %>` |
+
+For inline `~H` sigils in `.ex` files, the AST already separates code from
+text; the better approach is to walk the interpolation slots as real Elixir AST
+(reusing `collect_calls_in_body/2`). Not yet implemented — rule 6.34 currently
+flattens to text and regex-extracts. Worth doing if other rules need to know
+about HEEx-interpolated calls.
+
 ## Open questions for designing rules
 
 - Should LiveView-specific rules live under category 1.x (boundary), 4.x (coupling), or get a new category 12.x (Phoenix/LiveView)?
