@@ -48,7 +48,19 @@ defmodule Archdo do
   See `mix help archdo` for the full CLI surface.
   """
 
-  alias Archdo.{AST, Config, Diagnostic, Formatter, Freeze, FunctionGraph, Graph, Metrics, Runner}
+  alias Archdo.{
+    AST,
+    Config,
+    Diagnostic,
+    Formatter,
+    Freeze,
+    FunctionGraph,
+    Graph,
+    Metrics,
+    Phoenix,
+    Runner,
+    Severity
+  }
   alias Archdo.Rules.Module.MainSequenceDistance
   alias Archdo.Rules.Testing.{CoverageGap, MissingBoundaryTests, TestMirrorsSource}
 
@@ -221,13 +233,29 @@ defmodule Archdo do
         false -> []
       end
 
+    # §§ elixir-planning: §6 — apply M8/M9 severity calibration to project-
+    # level diagnostics. Per-file rules are calibrated in Runner.analyze_file/3
+    # using the file's classification; project-level rules (graph, metrics,
+    # cross-file) classify with `nil` so per-rule overrides still fire while
+    # layer-based downgrades don't apply (no single file to classify).
     all =
-      file_ast_diagnostics ++
-        file_path_diagnostics ++
-        metrics_diagnostics ++
-        function_graph_diagnostics
+      (file_ast_diagnostics ++
+         file_path_diagnostics ++
+         metrics_diagnostics ++
+         function_graph_diagnostics)
+      |> Enum.map(&calibrate_project_diagnostic(&1, file_asts))
 
     filter_diagnostics(all, opts)
+  end
+
+  defp calibrate_project_diagnostic(diag, file_asts) do
+    classification =
+      case Enum.find(file_asts, fn {file, _} -> file == diag.file end) do
+        {_file, ast} -> Phoenix.classify_file(diag.file, ast)
+        nil -> nil
+      end
+
+    Severity.adjust_diagnostic(diag, classification)
   end
 
   defp run_metrics_rules(file_asts) do

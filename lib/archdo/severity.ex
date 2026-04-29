@@ -12,6 +12,28 @@ defmodule Archdo.Severity do
 
   @type severity :: Diagnostic.severity()
 
+  # M9 audit on Plausible identified rules where the base severity is
+  # systematically over-warned regardless of context. These get a hard
+  # cap at `:info` — style/subjective/long-term-metric findings that
+  # don't merit blocking review.
+  #
+  # Promotion is not allowed via this table; only downgrades. To
+  # escalate a rule, change its base severity in the rule module.
+  @rule_max_severity %{
+    # 4.5 ImportBreadth — broad imports are a readability choice, not a
+    # correctness issue. Plausible self-audit: 34 findings, all style.
+    "4.5" => :info,
+    # 6.4 ModuleLength — purely subjective threshold; depends on module
+    # type (boundary modules legitimately accumulate clauses).
+    "6.4" => :info,
+    # 6.3 StructFieldCount — same reasoning as 6.4; structs that mirror
+    # external API payloads are legitimately wide.
+    "6.3" => :info,
+    # 6.8 ZoneOfPain — Martin metric. Long-term architectural concern,
+    # not a per-PR review item.
+    "6.8" => :info
+  }
+
   @doc """
   Adjust a base severity for the layer the finding lives in.
 
@@ -37,10 +59,16 @@ defmodule Archdo.Severity do
   def adjust(_rule_id, :error, _classification), do: :error
   def adjust(_rule_id, :info, _classification), do: :info
 
-  def adjust(_rule_id, :warning, classification) do
-    case layer_of(classification) do
-      l when l in [:test, :other, :operational, :application_root] -> :info
-      _ -> :warning
+  def adjust(rule_id, :warning, classification) do
+    case Map.get(@rule_max_severity, rule_id) do
+      :info ->
+        :info
+
+      _ ->
+        case layer_of(classification) do
+          l when l in [:test, :other, :operational, :application_root] -> :info
+          _ -> :warning
+        end
     end
   end
 

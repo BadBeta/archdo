@@ -248,13 +248,14 @@ defmodule Archdo.Runner do
 
       graph = Graph.build(file_asts)
 
-      Enum.flat_map(enabled_rules, fn rule ->
-        if function_exported?(rule, :analyze_graph, 2) do
-          rule.analyze_graph(graph, config)
-        else
-          []
+      enabled_rules
+      |> Enum.flat_map(fn rule ->
+        case function_exported?(rule, :analyze_graph, 2) do
+          true -> rule.analyze_graph(graph, config)
+          false -> []
         end
       end)
+      |> Enum.map(&Archdo.Severity.adjust_diagnostic(&1, nil))
     end
   end
 

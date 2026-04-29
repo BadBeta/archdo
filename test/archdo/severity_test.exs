@@ -65,6 +65,42 @@ defmodule Archdo.SeverityTest do
     end
   end
 
+  describe "adjust/3 — per-rule overrides (M9)" do
+    test "downgrades 4.5 ImportBreadth to :info (style/subjective)" do
+      assert Severity.adjust("4.5", :warning, classification(:context)) == :info
+    end
+
+    test "downgrades 6.4 ModuleLength to :info (subjective)" do
+      assert Severity.adjust("6.4", :warning, classification(:context)) == :info
+    end
+
+    test "downgrades 6.3 StructFieldCount to :info (subjective)" do
+      assert Severity.adjust("6.3", :warning, classification(:context)) == :info
+    end
+
+    test "downgrades 6.8 ZoneOfPain to :info (long-term metric)" do
+      assert Severity.adjust("6.8", :warning, classification(:context)) == :info
+    end
+
+    test "1.26 ReverseDependency stays :warning in production layer" do
+      assert Severity.adjust("1.26", :warning, classification(:context)) == :warning
+    end
+
+    test "override applies even with nil classification" do
+      assert Severity.adjust("4.5", :warning, nil) == :info
+    end
+
+    test "override does not promote :info findings" do
+      assert Severity.adjust("4.5", :info, classification(:context)) == :info
+    end
+
+    test "override does not affect :error severity" do
+      # If a rule ever emits :error, the override should not silently downgrade
+      # an explicit error — error wins.
+      assert Severity.adjust("4.5", :error, classification(:context)) == :error
+    end
+  end
+
   describe "adjust_diagnostic/2" do
     test "rewrites severity in a Diagnostic struct" do
       diag = %Archdo.Diagnostic{
