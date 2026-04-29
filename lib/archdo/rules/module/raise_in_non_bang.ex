@@ -38,6 +38,7 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
   defp find_raises_in_non_bang(file, ast) do
     fns = AST.extract_functions(ast, :public)
     impl_set = impl_marked_functions(ast)
+    defimpl_set = defimpl_callbacks(ast)
 
     fns
     |> Enum.reject(fn {name, arity, _meta, _args, _body} ->
@@ -49,6 +50,12 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
         # framework-defined contract for many of these (LiveView's mount/3,
         # GenServer's init/1, etc.). BUG-8 from phoenix_live_dashboard.
         MapSet.member?(impl_set, {name, arity}) or
+        # Skip protocol callback implementations: functions inside
+        # `defimpl Protocol, for: Type` have names FIXED by the protocol —
+        # `def write/3, do: raise("not implemented")` is the canonical
+        # signal for partial implementations and can't be renamed `write!`.
+        # BUG-9 from Livebook.
+        MapSet.member?(defimpl_set, {name, arity}) or
         # Dunder names (`__options__`, `__using__`, `__before_compile__`)
         # are framework/macro convention — fixed names, raising-on-misconfig
         # is idiomatic.
@@ -160,6 +167,69 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
     name_str = Atom.to_string(name)
     String.starts_with?(name_str, "__") and String.ends_with?(name_str, "__")
   end
+
+  # Collect {name, arity} for every `def` defined inside a `defimpl` block.
+  # The protocol fixes both name and arity, so renaming with `!` would break
+  # the impl contract. BUG-9 from Livebook.
+  defp defimpl_callbacks(ast) do
+    {_, set} =
+      Macro.prewalk(ast, MapSet.new(), fn
+        {:defimpl, _, args} = node, acc when is_list(args) ->
+          {node, MapSet.union(acc, defs_in_defimpl(args))}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    set
+  end
+
+  # `defimpl Protocol, for: Type, do: body` or `defimpl Protocol, for: Type do ... end`.
+  # We just need the body; the structure is `[..., kw]` where `kw` is a
+  # keyword list containing `:do`. Both bare and literal_encoder-wrapped forms.
+  defp defs_in_defimpl(args) do
+    args
+    |> Enum.find_value(fn
+      kw when is_list(kw) -> do_body_for_defimpl(kw)
+      _ -> nil
+    end)
+    |> case do
+      nil -> MapSet.new()
+      body -> collect_def_arities(body, MapSet.new())
+    end
+  end
+
+  defp do_body_for_defimpl(kw) do
+    Enum.find_value(kw, fn
+      {:do, body} -> body
+      {{:__block__, _, [:do]}, body} -> body
+      _ -> nil
+    end)
+  end
+
+  defp collect_def_arities({:def, _, [{:when, _, [{name, _, args} | _]}, _]}, acc)
+       when is_atom(name) and is_list(args) do
+    MapSet.put(acc, {name, length(args)})
+  end
+
+  defp collect_def_arities({:def, _, [{name, _, args}, _]}, acc)
+       when is_atom(name) and is_list(args) do
+    MapSet.put(acc, {name, length(args)})
+  end
+
+  defp collect_def_arities({_form, _meta, args}, acc) when is_list(args) do
+    Enum.reduce(args, acc, &collect_def_arities/2)
+  end
+
+  defp collect_def_arities(list, acc) when is_list(list) do
+    Enum.reduce(list, acc, &collect_def_arities/2)
+  end
+
+  defp collect_def_arities({a, b}, acc) do
+    acc |> then(&collect_def_arities(a, &1)) |> then(&collect_def_arities(b, &1))
+  end
+
+  defp collect_def_arities(_, acc), do: acc
 
   defp contains_raise?(body) do
     AST.contains?(body, fn

@@ -15,9 +15,18 @@ defmodule Archdo.Rules.Boundary.ReverseDependency do
     cond do
       AST.test_file?(file) -> []
       web_file?(file) -> []
+      application_supervisor?(file, ast) -> []
       domain_file?(file) -> find_web_references(file, ast)
       true -> []
     end
+  end
+
+  # Application supervisors (`lib/<app>/application.ex` or any module with
+  # `use Application`) legitimately reference every supervised child —
+  # including `MyAppWeb.Endpoint`. Flagging this is a Phoenix-wide false
+  # positive class. BUG-10 from Livebook.
+  defp application_supervisor?(file, ast) do
+    Path.basename(file) == "application.ex" or AST.uses_module?(ast, Application)
   end
 
   defp web_file?(file) do
@@ -68,12 +77,19 @@ defmodule Archdo.Rules.Boundary.ReverseDependency do
     end)
   end
 
+  # A "web module" lives in a `*Web` namespace segment — e.g. `LivebookWeb.X`,
+  # `MyAppWeb.Endpoint`, `MyApp.Web.Foo`. The discriminator is namespace-tail
+  # match, not substring: `Livebook.Teams.WebSocket` is NOT a web module
+  # (the segment `WebSocket` ends with "Socket"). BUG-10 from Livebook.
   defp web_module?(parts) when is_list(parts) do
     Enum.any?(parts, fn
-      part when is_atom(part) -> part |> Atom.to_string() |> String.contains?("Web")
+      part when is_atom(part) -> web_namespace_segment?(Atom.to_string(part))
       _ -> false
     end)
   end
+
+  defp web_namespace_segment?("Web"), do: true
+  defp web_namespace_segment?(segment), do: String.ends_with?(segment, "Web")
 
   defp build_diagnostic(file, meta, parts, kind) do
     module_name = Enum.map_join(parts, ".", &to_string/1)

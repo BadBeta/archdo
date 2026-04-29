@@ -107,6 +107,26 @@ defmodule Archdo.Rules.Module.RaiseInNonBangTest do
       assert_clean(RaiseInNonBang, code)
     end
 
+    test "does not flag def inside defimpl (protocol-fixed contract)" do
+      # `defimpl Protocol, for: Type do def write(...) end` — the function name
+      # is fixed by the protocol, can't be renamed `write!`. The "raise not
+      # implemented" pattern is the canonical signal for partial protocol
+      # implementations. (BUG-9 from Livebook.)
+      code = ~S"""
+      defmodule MyApp.ReadOnly do
+        defstruct [:path]
+      end
+
+      defimpl MyApp.FileSystem, for: MyApp.ReadOnly do
+        def read(fs, path), do: File.read(Path.join(fs.path, path))
+        def write(_fs, _path, _content), do: raise("not implemented")
+        def delete(_fs, _path), do: raise("not implemented")
+      end
+      """
+
+      assert_clean(RaiseInNonBang, code)
+    end
+
     test "still flags non-callback function that raises" do
       code = ~S"""
       defmodule MyApp.Helper do
