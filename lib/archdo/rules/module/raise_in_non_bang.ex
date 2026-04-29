@@ -2,7 +2,11 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks, release scripts, and seed files legitimately raise on bad
+  # arguments at the system entry point.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "6.10"
@@ -27,11 +31,16 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
   )a
 
   @impl true
-  def analyze(file, ast, _opts) do
-    if AST.test_file?(file) do
-      []
-    else
-      find_raises_in_non_bang(file, ast)
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case AST.test_file?(file) or Phoenix.operational?(classification) do
+      true -> []
+      false -> find_raises_in_non_bang(file, ast)
     end
   end
 

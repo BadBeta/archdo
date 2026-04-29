@@ -148,6 +148,47 @@ defmodule Archdo.Rules.Boundary.ReverseDependencyTest do
       assert hd(diags).rule_id == "1.26"
     end
 
+    test "does not flag Mix task referencing web Endpoint (operational layer)" do
+      # Mix tasks legitimately bridge layers — they orchestrate the system from
+      # outside the request cycle. Path-based + `use Mix.Task` carve-out via
+      # Phoenix.classify_file/2.
+      code = ~S"""
+      defmodule Mix.Tasks.MyApp.WarmCache do
+        use Mix.Task
+
+        def run(_) do
+          MyAppWeb.Endpoint.broadcast("cache", "warm", %{})
+        end
+      end
+      """
+
+      assert_clean(ReverseDependency, code, file: "lib/mix/tasks/my_app.warm_cache.ex")
+    end
+
+    test "does not flag release.ex referencing web Endpoint (operational layer)" do
+      code = ~S"""
+      defmodule MyApp.Release do
+        def migrate do
+          MyAppWeb.Endpoint.url()
+        end
+      end
+      """
+
+      assert_clean(ReverseDependency, code, file: "lib/my_app/release.ex")
+    end
+
+    test "does not flag data_migration scripts referencing web layer" do
+      code = ~S"""
+      defmodule MyApp.DataMigration.BackfillUrls do
+        def run do
+          MyAppWeb.Router.Helpers.user_url(MyAppWeb.Endpoint, :show, 1)
+        end
+      end
+      """
+
+      assert_clean(ReverseDependency, code, file: "lib/my_app/data_migration/backfill_urls.ex")
+    end
+
     test "skips test files" do
       code = ~S"""
       defmodule MyApp.AccountsTest do

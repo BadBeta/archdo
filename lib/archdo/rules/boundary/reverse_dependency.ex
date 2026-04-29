@@ -2,7 +2,12 @@ defmodule Archdo.Rules.Boundary.ReverseDependency do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — boundary rule consumes Archdo.Phoenix layer
+  # classification rather than re-deriving "is this an application supervisor /
+  # operational tool / web file?" via local heuristics. M1 carve-out for
+  # operational code.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "1.26"
@@ -10,32 +15,35 @@ defmodule Archdo.Rules.Boundary.ReverseDependency do
   @impl true
   def description, do: "Domain modules must not reference web layer modules"
 
+  # Layers whose code legitimately bridges architectural boundaries.
+  @bridge_layers [:application_root, :operational, :test]
+
   @impl true
-  def analyze(file, ast, _opts) do
+  def analyze(file, ast, opts) do
+    classification = phoenix_classification(file, ast, opts)
+
     cond do
-      AST.test_file?(file) -> []
-      web_file?(file) -> []
-      application_supervisor?(file, ast) -> []
+      classification.layer in @bridge_layers -> []
+      web_layer?(classification.layer) -> []
       domain_file?(file) -> find_web_references(file, ast)
       true -> []
     end
   end
 
-  # Application supervisors (`lib/<app>/application.ex` or any module with
-  # `use Application`) legitimately reference every supervised child —
-  # including `MyAppWeb.Endpoint`. Flagging this is a Phoenix-wide false
-  # positive class. BUG-10 from Livebook.
-  defp application_supervisor?(file, ast) do
-    Path.basename(file) == "application.ex" or AST.uses_module?(ast, Application)
+  defp phoenix_classification(file, ast, opts) do
+    case Keyword.get(opts, :phoenix) do
+      %{layer: _} = c -> c
+      _ -> Phoenix.classify_file(file, ast)
+    end
   end
 
-  defp web_file?(file) do
-    String.contains?(file, "_web/") or String.ends_with?(file, "_web.ex")
+  defp web_layer?(layer) do
+    layer in [:web, :live_view, :component, :controller, :router]
   end
 
   defp domain_file?(file) do
     (String.contains?(file, "/lib/") or String.starts_with?(file, "lib/")) and
-      not web_file?(file)
+      not (String.contains?(file, "_web/") or String.ends_with?(file, "_web.ex"))
   end
 
   defp find_web_references(file, ast) do

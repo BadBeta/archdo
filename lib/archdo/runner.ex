@@ -261,6 +261,9 @@ defmodule Archdo.Runner do
   defp analyze_file(file, rules, opts) do
     case AST.parse_file(file) do
       {:ok, ast} ->
+        # §§ elixir-planning: §6 — classify once, reuse across rules.
+        # Avoids each boundary rule re-deriving Phoenix layer from path/AST.
+        opts = Keyword.put(opts, :phoenix, Archdo.Phoenix.classify_file(file, ast))
         diagnostics = Enum.flat_map(rules, &safe_analyze(&1, file, ast, opts))
         filter_suppressed(diagnostics, file)
 
