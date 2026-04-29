@@ -90,6 +90,35 @@ defmodule Archdo.Rules.Module.UnboundedExternalCallTest do
     assert diags == []
   end
 
+  test "skips Mix tasks calling external services without explicit timeout (operational)" do
+    diags =
+      analyze(
+        """
+          defmodule Mix.Tasks.MyApp.Backfill do
+            use Mix.Task
+            def run(_), do: HTTPoison.get("http://api.example.com")
+          end
+        """,
+        "lib/mix/tasks/my_app.backfill.ex"
+      )
+
+    assert diags == []
+  end
+
+  test "skips release scripts" do
+    diags =
+      analyze(
+        """
+          defmodule MyApp.Release do
+            def fetch, do: Req.get("http://api.example.com")
+          end
+        """,
+        "lib/my_app/release.ex"
+      )
+
+    assert diags == []
+  end
+
   test "skips test files" do
     diags =
       analyze(

@@ -2,7 +2,12 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviour do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks, release scripts, and seed files legitimately call external
+  # services directly without an adapter — they're orchestrating the system,
+  # not embedding I/O in business logic.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "4.4"
@@ -33,11 +38,17 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviour do
   ]
 
   @impl true
-  def analyze(file, ast, _opts) do
-    if AST.test_file?(file) or adapter_file?(file) or infrastructure_file?(file) do
-      []
-    else
-      find_direct_external_calls(file, ast)
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case AST.test_file?(file) or adapter_file?(file) or infrastructure_file?(file) or
+           Phoenix.operational?(classification) do
+      true -> []
+      false -> find_direct_external_calls(file, ast)
     end
   end
 

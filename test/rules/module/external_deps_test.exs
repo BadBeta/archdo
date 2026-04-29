@@ -29,6 +29,32 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviourTest do
     assert_clean(ExternalDepsNoBehaviour, code, file: "lib/my_app/adapters/email_verifier.ex")
   end
 
+  test "does not flag Mix tasks calling external services directly (operational layer)" do
+    code = ~S"""
+    defmodule Mix.Tasks.MyApp.Sync do
+      use Mix.Task
+
+      def run(_) do
+        Req.get!("https://api.example.com/sync")
+      end
+    end
+    """
+
+    assert_clean(ExternalDepsNoBehaviour, code, file: "lib/mix/tasks/my_app.sync.ex")
+  end
+
+  test "does not flag release scripts calling external services" do
+    code = ~S"""
+    defmodule MyApp.Release do
+      def warm do
+        Req.get!("https://api.example.com/warm")
+      end
+    end
+    """
+
+    assert_clean(ExternalDepsNoBehaviour, code, file: "lib/my_app/release.ex")
+  end
+
   test "ignores test files" do
     code = ~S"""
     defmodule MyApp.AccountsTest do

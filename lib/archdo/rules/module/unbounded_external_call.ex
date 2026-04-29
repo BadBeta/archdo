@@ -2,7 +2,11 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks and release scripts run once at the system entry point; an
+  # implicit timeout there is fine — there's no caller stack to back up.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "4.18"
@@ -20,8 +24,14 @@ defmodule Archdo.Rules.Module.UnboundedExternalCall do
   @http_methods ~w(get post put patch delete head options request)a
 
   @impl true
-  def analyze(file, ast, _opts) do
-    case AST.test_file?(file) do
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case AST.test_file?(file) or Phoenix.operational?(classification) do
       true -> []
       false -> find_unbounded_http(file, ast) ++ find_unbounded_genserver_call(file, ast)
     end
