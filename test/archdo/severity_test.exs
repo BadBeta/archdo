@@ -117,6 +117,20 @@ defmodule Archdo.SeverityTest do
       # :warning by mistake, the override table can cap it at :nitpick.
       assert Severity.adjust("6.33", :warning, classification(:context)) == :nitpick
     end
+
+    test "7.25 UntestedModule downgraded :info → :nitpick" do
+      # Path-based test-file mirroring is a coverage TODO list, not a
+      # per-PR review item. Modules tested via integration/feature tests
+      # would be flagged falsely.
+      assert Severity.adjust("7.25", :info, classification(:context)) == :nitpick
+    end
+
+    test "1.15 LargeControllerAction downgraded :info → :nitpick" do
+      # AST-node threshold for controller action size is subjective —
+      # multi-clause render or param-validation pipelines can legitimately
+      # exceed the limit without being "logic in controller."
+      assert Severity.adjust("1.15", :info, classification(:context)) == :nitpick
+    end
   end
 
   describe "adjust_diagnostic/2" do
