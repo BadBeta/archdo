@@ -2,7 +2,10 @@ defmodule Archdo.Rules.Boundary.DirectProcessCall do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks and release scripts orchestrate across contexts intentionally.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "1.30"
@@ -12,8 +15,14 @@ defmodule Archdo.Rules.Boundary.DirectProcessCall do
     do: "Direct GenServer.call to another context's process — use the context's public API"
 
   @impl true
-  def analyze(file, ast, _opts) do
-    case AST.test_file?(file) do
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case AST.test_file?(file) or Phoenix.operational?(classification) do
       true -> []
       false -> find_direct_process_calls(file, ast)
     end

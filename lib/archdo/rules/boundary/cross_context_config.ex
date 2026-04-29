@@ -2,7 +2,11 @@ defmodule Archdo.Rules.Boundary.CrossContextConfig do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Release scripts and Mix tasks read configs across contexts to bootstrap
+  # the system.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "1.32"
@@ -11,8 +15,14 @@ defmodule Archdo.Rules.Boundary.CrossContextConfig do
   def description, do: "Module reads another context's Application config keys"
 
   @impl true
-  def analyze(file, ast, _opts) do
-    case AST.test_file?(file) or config_file?(file) do
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case AST.test_file?(file) or config_file?(file) or Phoenix.operational?(classification) do
       true -> []
       false -> find_cross_context_config(file, ast)
     end

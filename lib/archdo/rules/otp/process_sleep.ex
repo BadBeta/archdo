@@ -2,7 +2,10 @@ defmodule Archdo.Rules.OTP.ProcessSleep do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks and release scripts legitimately sleep for backoff/polling.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "5.30"
@@ -11,11 +14,16 @@ defmodule Archdo.Rules.OTP.ProcessSleep do
   def description, do: "No Process.sleep in production code"
 
   @impl true
-  def analyze(file, ast, _opts) do
-    if AST.test_file?(file) or script_file?(file) do
-      []
-    else
-      find_process_sleep(file, ast) ++ find_timer_sleep(file, ast)
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case AST.test_file?(file) or script_file?(file) or Phoenix.operational?(classification) do
+      true -> []
+      false -> find_process_sleep(file, ast) ++ find_timer_sleep(file, ast)
     end
   end
 

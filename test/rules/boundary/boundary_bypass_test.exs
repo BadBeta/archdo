@@ -140,6 +140,24 @@ defmodule Archdo.Rules.Boundary.BoundaryBypassTest do
 
       assert diags == []
     end
+
+    test "clean: Mix task calling cross-context server (operational layer)" do
+      diags =
+        analyze(
+          Archdo.Rules.Boundary.DirectProcessCall,
+          """
+          defmodule Mix.Tasks.MyApp.Sync do
+            use Mix.Task
+            def run(_) do
+              GenServer.call(MyApp.Accounts.CreditServer, {:check, 1})
+            end
+          end
+          """,
+          "lib/mix/tasks/my_app.sync.ex"
+        )
+
+      assert diags == []
+    end
   end
 
   # --- 1.32: Cross-Context Config ---
@@ -174,6 +192,23 @@ defmodule Archdo.Rules.Boundary.BoundaryBypassTest do
           end
           """,
           "lib/my_app/billing/pricer.ex"
+        )
+
+      assert diags == []
+    end
+
+    test "clean: release.ex reading any context config (operational)" do
+      diags =
+        analyze(
+          Archdo.Rules.Boundary.CrossContextConfig,
+          """
+          defmodule MyApp.Release do
+            def warm do
+              Application.get_env(:my_app, MyApp.Accounts.Config)
+            end
+          end
+          """,
+          "lib/my_app/release.ex"
         )
 
       assert diags == []

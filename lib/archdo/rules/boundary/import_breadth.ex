@@ -2,7 +2,10 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks legitimately `import Ecto.Query` and similar broad imports.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "4.5"
@@ -23,11 +26,17 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
   ]
 
   @impl true
-  def analyze(file, ast, _opts) do
-    if AST.test_file?(file) or phoenix_macro_file?(file) do
-      []
-    else
-      find_broad_imports(file, ast) ++ find_coupling_fanout(file, ast)
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case AST.test_file?(file) or phoenix_macro_file?(file) or
+           Phoenix.operational?(classification) do
+      true -> []
+      false -> find_broad_imports(file, ast) ++ find_coupling_fanout(file, ast)
     end
   end
 

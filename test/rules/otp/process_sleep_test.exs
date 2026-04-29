@@ -31,6 +31,32 @@ defmodule Archdo.Rules.OTP.ProcessSleepTest do
     assert hd(diags).message =~ ":timer.sleep"
   end
 
+  test "ignores Mix tasks (operational layer)" do
+    code = ~S"""
+    defmodule Mix.Tasks.MyApp.Backfill do
+      use Mix.Task
+      def run(_) do
+        Process.sleep(500)
+        :ok
+      end
+    end
+    """
+
+    assert_clean(ProcessSleep, code, file: "lib/mix/tasks/my_app.backfill.ex")
+  end
+
+  test "ignores release.ex (operational layer)" do
+    code = ~S"""
+    defmodule MyApp.Release do
+      def migrate do
+        :timer.sleep(1000)
+      end
+    end
+    """
+
+    assert_clean(ProcessSleep, code, file: "lib/my_app/release.ex")
+  end
+
   test "ignores test files" do
     code = ~S"""
     defmodule MyApp.WorkerTest do

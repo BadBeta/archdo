@@ -45,4 +45,17 @@ defmodule Archdo.Rules.OTP.DynamicAtomNameTest do
 
     assert_clean(DynamicAtomName, code)
   end
+
+  test "ignores Mix tasks parsing CLI args (operational layer)" do
+    code = ~S"""
+    defmodule Mix.Tasks.MyApp.Sync do
+      use Mix.Task
+      def run([flag | _]) do
+        String.to_atom(flag)
+      end
+    end
+    """
+
+    assert_clean(DynamicAtomName, code, file: "lib/mix/tasks/my_app.sync.ex")
+  end
 end

@@ -2,7 +2,11 @@ defmodule Archdo.Rules.OTP.DynamicAtomName do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Mix tasks parse CLI args into atoms — bounded by argv length, not user
+  # input — and run once.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "5.24"
@@ -11,8 +15,17 @@ defmodule Archdo.Rules.OTP.DynamicAtomName do
   def description, do: "No dynamic atom creation for process names"
 
   @impl true
-  def analyze(file, ast, _opts) do
-    find_string_to_atom(file, ast) ++ find_atom_interpolation(file, ast)
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    case Phoenix.operational?(classification) do
+      true -> []
+      false -> find_string_to_atom(file, ast) ++ find_atom_interpolation(file, ast)
+    end
   end
 
   defp find_string_to_atom(file, ast) do

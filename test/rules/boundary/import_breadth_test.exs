@@ -66,4 +66,16 @@ defmodule Archdo.Rules.Boundary.ImportBreadthTest do
 
     assert_clean(ImportBreadth, code, file: "test/accounts_test.exs")
   end
+
+  test "ignores Mix tasks (operational layer)" do
+    code = ~S"""
+    defmodule Mix.Tasks.MyApp.Sync do
+      use Mix.Task
+      import Ecto.Query
+      def run(_), do: :ok
+    end
+    """
+
+    assert_clean(ImportBreadth, code, file: "lib/mix/tasks/my_app.sync.ex")
+  end
 end
