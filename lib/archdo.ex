@@ -58,6 +58,7 @@ defmodule Archdo do
     Graph,
     Metrics,
     Phoenix,
+    Quadrant,
     Runner,
     Severity
   }
@@ -431,7 +432,47 @@ defmodule Archdo do
     |> format_metrics_table()
     |> IO.write()
 
+    print_quadrant_distributions(file_asts)
+
     0
+  end
+
+  # §§ elixir-planning: §6 — Quadrant rules surface their cell distribution
+  # alongside the Martin metrics table. Each registered quadrant rule
+  # contributes a small per-cell count map, aggregated across analyzed
+  # files. Empty section when no quadrant rules exist (current state until
+  # CE-2/3 lands), so the column shape is in place from M14 onward.
+  defp print_quadrant_distributions(file_asts) do
+    rules =
+      (Runner.phase1_rules() ++ Runner.graph_rules())
+      |> Quadrant.list_rules()
+
+    case rules do
+      [] ->
+        :ok
+
+      _ ->
+        IO.puts("\nArchdo — Quadrant Rule Cell Distributions\n")
+
+        Enum.each(rules, fn rule ->
+          totals =
+            Enum.reduce(file_asts, %{}, fn {file, ast}, acc ->
+              rule
+              |> Quadrant.distribution_for(file, ast, [])
+              |> Map.merge(acc, fn _cell, a, b -> a + b end)
+            end)
+
+          IO.puts("  #{rule.id()} — #{rule.description()}")
+
+          totals
+          |> Enum.sort_by(fn {cell, _} -> inspect(cell) end)
+          |> Enum.each(fn {cell, count} ->
+            IO.puts("    #{inspect(cell)}: #{count}")
+          end)
+
+          IO.puts("")
+        end)
+    end
   end
 
   defp format_metrics_table([]), do: "\nArchdo — no modules analyzed.\n"
