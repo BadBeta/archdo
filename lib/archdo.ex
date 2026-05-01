@@ -206,7 +206,9 @@ defmodule Archdo do
     MissingBoundaryTests,
     Archdo.Rules.Boundary.SharedDbTable,
     Archdo.Rules.Boundary.SharedEtsTable,
-    Archdo.Rules.CE.WrapperOverFramework
+    Archdo.Rules.CE.WrapperOverFramework,
+    Archdo.Rules.CE.UnanchoredModule,
+    Archdo.Rules.CE.UnanchoredIsland
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).
