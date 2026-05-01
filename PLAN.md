@@ -154,6 +154,34 @@ plugins, plug pipelines built from a list, etc.).
 CE-30 noise becomes blocking, or (b) the same pattern shows up in
 field-test cohort findings.
 
+### M-Aux2 — CE-50: broaden detection via data-flow on discarded value
+**Triggered by M18.** CE-50's v1 detection requires `{:ok, _} = X.call(...)`
+followed by a bare `:ok` return. Field-tested across hexpm / Plausible /
+Livebook / otel: zero hits. The narrow shape is correct (no false
+positives) but misses cases like:
+
+- `Repo.insert!(struct); :ok` — bang call returns the struct, gets
+  thrown away.
+- `def foo do; result = X.fetch(); process(result); :ok end` — value
+  passed through a side-effect chain then discarded.
+- `Mailer.deliver(email); :ok` — single-call discarded result.
+
+**Fix shape:** track binding flow — when a function's body has a
+non-trivial last-call whose return type (per `@spec` if present, or
+known-tuple-returning-module heuristic) is richer than `:ok`, AND that
+return value is bound to a variable that's never used downstream OR
+not used in the function's actual return value, fire.
+
+Requires light data-flow analysis (which bindings escape vs which are
+unused). Not pattern-matching only.
+
+**Tests:** 4-6 — bang-call-then-ok, bound-but-unused, transitively
+threaded result, the existing pattern-match shape.
+
+**Effort:** medium (~half day). Defer until CE-50 missed-finding
+reports come in from field testing or the cohort grows to surface
+more cases.
+
 ## Deferred (not in this plan)
 
 - Metadata-aware volatility refinement (mix.lock + Hex.pm metadata) —
