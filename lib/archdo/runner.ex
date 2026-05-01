@@ -179,7 +179,9 @@ defmodule Archdo.Runner do
     # Change Economy rules (file-level)
     Archdo.Rules.CE.CatchAllRescue,
     Archdo.Rules.CE.OkLosesInfo,
-    Archdo.Rules.CE.AcquireRelease
+    Archdo.Rules.CE.AcquireRelease,
+    Archdo.Rules.CE.HardcodedVolatileDeps,
+    Archdo.Rules.CE.MixedModuleSplit
   ]
 
   @graph_rules [
