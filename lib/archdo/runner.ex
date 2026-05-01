@@ -172,7 +172,10 @@ defmodule Archdo.Runner do
     Archdo.Rules.Boundary.CrossContextConfig,
     # Resilience rules
     Archdo.Rules.Module.UnprotectedExternalCall,
-    Archdo.Rules.Module.UnboundedExternalCall
+    Archdo.Rules.Module.UnboundedExternalCall,
+    # Change Economy rules (file-level)
+    Archdo.Rules.CE.CatchAllRescue,
+    Archdo.Rules.CE.OkLosesInfo
   ]
 
   @graph_rules [
