@@ -311,6 +311,12 @@ defmodule Archdo.Runner do
   end
 
   defp filter_rules(rules, opts) do
+    rules
+    |> filter_rules_for_packs(packs_from_opts(opts))
+    |> apply_only_ignore(opts)
+  end
+
+  defp apply_only_ignore(rules, opts) do
     case Keyword.get(opts, :only) do
       nil ->
         case Keyword.get(opts, :ignore) do
@@ -320,6 +326,28 @@ defmodule Archdo.Runner do
 
       ids ->
         Enum.filter(rules, &(&1.id() in ids))
+    end
+  end
+
+  # §§ elixir-planning: §6 — Pack abstraction (M13). Filters the rule list to
+  # rules whose declared `@pack` is in `enabled_packs`. Rules without a
+  # `pack/0` callback default to `:core` via `Archdo.Rule.pack_of/1`.
+  @doc """
+  Filter `rules` to those whose pack is in `enabled_packs`.
+
+  Public so tests can exercise it without the runner pipeline; called
+  internally from `filter_rules/2`.
+  """
+  @spec filter_rules_for_packs([module()], [Archdo.Rule.pack()]) :: [module()]
+  def filter_rules_for_packs(rules, enabled_packs) when is_list(enabled_packs) do
+    enabled_set = MapSet.new(enabled_packs)
+    Enum.filter(rules, &MapSet.member?(enabled_set, Archdo.Rule.pack_of(&1)))
+  end
+
+  defp packs_from_opts(opts) do
+    case Keyword.get(opts, :packs) do
+      nil -> [:core]
+      list when is_list(list) -> list
     end
   end
 

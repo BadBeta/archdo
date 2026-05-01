@@ -11,6 +11,11 @@ defmodule Mix.Tasks.Archdo do
     * `--format` - Output format: `summary` (default), `text`, `brief`, `json`, `compact`, `llm`, `sarif`, `html`
     * `--only` - Comma-separated rule IDs to check (e.g., `--only 5.11,5.12`)
     * `--ignore` - Comma-separated rule IDs to skip
+    * `--packs` - Comma-separated optional packs to enable. `:core` is always
+      implied; declare additional packs to opt in. Known packs:
+      `core`, `ce_compliance`, `ce_privacy`, `ce_composability`.
+    * `--list-packs` - Print the pack roster (which rules belong to each pack)
+      and exit.
     * `--paths` - Comma-separated paths to check (default: `lib`)
     * `--since` - Only analyze files changed since this git ref (e.g., `--since main`)
     * `--explain` - Explain a rule by ID (e.g., `--explain 6.50`)
@@ -66,6 +71,8 @@ defmodule Mix.Tasks.Archdo do
           format: :string,
           only: :string,
           ignore: :string,
+          packs: :string,
+          list_packs: :boolean,
           paths: :string,
           since: :string,
           explain: :string,
@@ -103,6 +110,10 @@ defmodule Mix.Tasks.Archdo do
       Keyword.get(opts, :stats, false) ->
         stats = Archdo.Stats.collect(paths)
         Mix.shell().info(Archdo.Stats.format(stats))
+        :ok
+
+      Keyword.get(opts, :list_packs, false) ->
+        run_list_packs()
         :ok
 
       Keyword.get(opts, :coverage, false) ->
@@ -149,23 +160,75 @@ defmodule Mix.Tasks.Archdo do
     format = parse_format(Keyword.get(opts, :format, "summary"))
     only = parse_nullable_list(Keyword.get(opts, :only))
     ignore = parse_nullable_list(Keyword.get(opts, :ignore)) || []
+    packs = parse_packs(Keyword.get(opts, :packs))
     boundaries = Keyword.get(opts, :boundaries, true)
     tests = Keyword.get(opts, :tests, false)
     functions = Keyword.get(opts, :functions, true)
     compiled = Keyword.get(opts, :compiled, false)
 
-    maybe_add(
-      [
-        format: format,
-        ignore: ignore,
-        boundaries: boundaries,
-        tests: tests,
-        functions: functions,
-        compiled: compiled
-      ],
-      :only,
-      only
-    )
+    [
+      format: format,
+      ignore: ignore,
+      packs: packs,
+      boundaries: boundaries,
+      tests: tests,
+      functions: functions,
+      compiled: compiled
+    ]
+    |> maybe_add(:only, only)
+  end
+
+  # §§ elixir-planning: §6 — Pack abstraction (M13). CLI parses
+  # `--packs core,ce_composability` into a list of atoms. Validates against
+  # `Archdo.Rule.known_packs/0` so a typo (e.g. `--packs ce_composabilty`)
+  # crashes at parse time with a useful message rather than silently
+  # excluding every rule.
+  defp run_list_packs do
+    rules = Archdo.Runner.phase1_rules() ++ Archdo.Runner.graph_rules()
+    by_pack = Enum.group_by(rules, &Archdo.Rule.pack_of/1)
+
+    Mix.shell().info("Archdo packs:\n")
+
+    for pack <- Archdo.Rule.known_packs() do
+      members = Map.get(by_pack, pack, [])
+      Mix.shell().info("  #{pack} (#{length(members)} rules)")
+
+      members
+      |> Enum.sort_by(& &1.id())
+      |> Enum.each(fn rule ->
+        Mix.shell().info("    #{rule.id()} — #{rule.description()}")
+      end)
+
+      Mix.shell().info("")
+    end
+  end
+
+  defp parse_packs(nil), do: [:core]
+
+  defp parse_packs(str) when is_binary(str) do
+    known = Archdo.Rule.known_packs()
+
+    str
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.map(fn name ->
+      atom = String.to_existing_atom(name)
+
+      case atom in known do
+        true ->
+          atom
+
+        false ->
+          Mix.raise(
+            "Unknown pack: #{inspect(atom)}. Known packs: #{inspect(known)}"
+          )
+      end
+    end)
+  rescue
+    ArgumentError ->
+      Mix.raise(
+        "Unknown pack name in --packs #{inspect(str)}. Known packs: #{inspect(Archdo.Rule.known_packs())}"
+      )
   end
 
   defp run_diagram(diagram_type, paths) do

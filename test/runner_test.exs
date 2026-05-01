@@ -37,6 +37,95 @@ defmodule Archdo.RunnerTest do
     end
   end
 
+  describe "pack filtering (M13)" do
+    defmodule CorePackRule do
+      @behaviour Archdo.Rule
+      @impl true
+      def id, do: "PACKTEST.CORE"
+      @impl true
+      def description, do: "core pack"
+      @impl true
+      def analyze(file, _ast, _opts) do
+        [
+          %Archdo.Diagnostic{
+            rule_id: id(),
+            severity: :info,
+            title: "core fired",
+            message: "core fired",
+            why: "test",
+            file: file,
+            line: 1
+          }
+        ]
+      end
+      @impl true
+      def pack, do: :core
+    end
+
+    defmodule ComposabilityPackRule do
+      @behaviour Archdo.Rule
+      @impl true
+      def id, do: "PACKTEST.COMPOSABILITY"
+      @impl true
+      def description, do: "composability pack"
+      @impl true
+      def analyze(file, _ast, _opts) do
+        [
+          %Archdo.Diagnostic{
+            rule_id: id(),
+            severity: :info,
+            title: "composability fired",
+            message: "composability fired",
+            why: "test",
+            file: file,
+            line: 1
+          }
+        ]
+      end
+      @impl true
+      def pack, do: :ce_composability
+    end
+
+    test "default packs ([:core]) excludes :ce_composability rules" do
+      rules = [CorePackRule, ComposabilityPackRule]
+      kept = Runner.filter_rules_for_packs(rules, [:core])
+
+      assert CorePackRule in kept
+      refute ComposabilityPackRule in kept
+    end
+
+    test "explicit [:core, :ce_composability] includes both" do
+      rules = [CorePackRule, ComposabilityPackRule]
+      kept = Runner.filter_rules_for_packs(rules, [:core, :ce_composability])
+
+      assert CorePackRule in kept
+      assert ComposabilityPackRule in kept
+    end
+
+    test "[:ce_composability] (no :core) excludes core rules" do
+      rules = [CorePackRule, ComposabilityPackRule]
+      kept = Runner.filter_rules_for_packs(rules, [:ce_composability])
+
+      refute CorePackRule in kept
+      assert ComposabilityPackRule in kept
+    end
+
+    test "rules without @pack default to :core for filtering" do
+      defmodule NoPackRule do
+        @behaviour Archdo.Rule
+        @impl true
+        def id, do: "PACKTEST.NOPACK"
+        @impl true
+        def description, do: "no pack callback"
+        @impl true
+        def analyze(_, _, _), do: []
+      end
+
+      assert NoPackRule in Runner.filter_rules_for_packs([NoPackRule], [:core])
+      refute NoPackRule in Runner.filter_rules_for_packs([NoPackRule], [:ce_compliance])
+    end
+  end
+
   describe "analyze/2" do
     test "returns empty list for non-existent file" do
       diagnostics = Runner.analyze(["non_existent_file_#{:rand.uniform(100_000)}.ex"])
