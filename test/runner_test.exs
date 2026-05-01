@@ -37,6 +37,59 @@ defmodule Archdo.RunnerTest do
     end
   end
 
+  describe "volatility classification wiring (M15)" do
+    defmodule VolatilityProbeRule do
+      @moduledoc false
+      @behaviour Archdo.Rule
+      @impl true
+      def id, do: "VOLPROBE"
+      @impl true
+      def description, do: "emits the seen :volatility classification as a diagnostic"
+      @impl true
+      def analyze(file, _ast, opts) do
+        case Keyword.get(opts, :volatility) do
+          nil ->
+            []
+
+          v ->
+            [
+              %Archdo.Diagnostic{
+                rule_id: id(),
+                severity: :info,
+                title: "volatility seen",
+                message: inspect(v.tag),
+                why: "test probe",
+                file: file,
+                line: 1,
+                context: v
+              }
+            ]
+        end
+      end
+    end
+
+    @tag :tmp_dir
+    test "Runner.analyze/2 puts a Volatility classification in opts[:volatility]",
+         %{tmp_dir: tmp_dir} do
+      file = Path.join(tmp_dir, "sample.ex")
+
+      File.write!(file, """
+      defmodule Sample do
+        def go(url), do: Tesla.get(url)
+      end
+      """)
+
+      # `:rules` overrides the registered phase1_rules — a test seam so we
+      # can drive the per-file pipeline with our probe.
+      [diag] = Runner.analyze([file], rules: [VolatilityProbeRule])
+
+      seen = diag.context
+      assert is_map(seen)
+      assert seen.tag == :volatile
+      assert {Tesla, :get, 1} in seen.evidence.volatile_calls
+    end
+  end
+
   describe "pack filtering (M13)" do
     defmodule CorePackRule do
       @behaviour Archdo.Rule

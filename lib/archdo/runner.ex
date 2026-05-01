@@ -202,7 +202,8 @@ defmodule Archdo.Runner do
   """
   @spec analyze([String.t()], keyword()) :: [Archdo.Diagnostic.t()]
   def analyze(files, opts \\ []) do
-    enabled_rules = filter_rules(@phase1_rules, opts)
+    base_rules = Keyword.get(opts, :rules, @phase1_rules)
+    enabled_rules = filter_rules(base_rules, opts)
 
     files
     |> Task.async_stream(
@@ -263,13 +264,20 @@ defmodule Archdo.Runner do
     case AST.parse_file(file) do
       {:ok, ast} ->
         # §§ elixir-planning: §6 — classify once, reuse across rules.
-        # Avoids each boundary rule re-deriving Phoenix layer from path/AST.
-        classification = Archdo.Phoenix.classify_file(file, ast)
-        opts = Keyword.put(opts, :phoenix, classification)
+        # Phoenix lens decides "what kind of file is this?" (operational /
+        # web / context / ...). Volatility lens decides "what kind of
+        # dependencies does it have?". Both threaded into rule opts.
+        phoenix = Archdo.Phoenix.classify_file(file, ast)
+        volatility = Archdo.Volatility.classify_module(file, ast, opts)
+
+        opts =
+          opts
+          |> Keyword.put(:phoenix, phoenix)
+          |> Keyword.put(:volatility, volatility)
 
         rules
         |> Enum.flat_map(&safe_analyze(&1, file, ast, opts))
-        |> Enum.map(&Archdo.Severity.adjust_diagnostic(&1, classification))
+        |> Enum.map(&Archdo.Severity.adjust_diagnostic(&1, phoenix))
         |> filter_suppressed(file)
 
       {:error, _reason} ->
