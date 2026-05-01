@@ -175,7 +175,8 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.UnboundedExternalCall,
     # Change Economy rules (file-level)
     Archdo.Rules.CE.CatchAllRescue,
-    Archdo.Rules.CE.OkLosesInfo
+    Archdo.Rules.CE.OkLosesInfo,
+    Archdo.Rules.CE.AcquireRelease
   ]
 
   @graph_rules [
