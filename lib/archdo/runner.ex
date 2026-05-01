@@ -181,7 +181,9 @@ defmodule Archdo.Runner do
     Archdo.Rules.CE.OkLosesInfo,
     Archdo.Rules.CE.AcquireRelease,
     Archdo.Rules.CE.HardcodedVolatileDeps,
-    Archdo.Rules.CE.MixedModuleSplit
+    Archdo.Rules.CE.MixedModuleSplit,
+    Archdo.Rules.CE.VolatileCallNoTimeout,
+    Archdo.Rules.CE.VolatileNoRetry
   ]
 
   @graph_rules [
