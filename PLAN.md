@@ -1,0 +1,163 @@
+# PLAN — Change Economy Refactor (M13–M30)
+
+This plan implements `ARCHITECTURE_RULES_CHANGE_ECONOMY.md` against the
+existing M1–M12 infrastructure (`Archdo.Phoenix`, `Archdo.Severity`,
+`:nitpick` tier, runner classify-once-consume-many shape).
+
+Per **elixir-planning §0** (plan-completeness gate): no TBDs, no "we'll
+pick later". Per **elixir-implementing §0** (TDD gate): every new public
+function names its test file before code; every milestone is RED → GREEN
+→ REFACTOR.
+
+## Three new primitives
+
+### 1. Pack (M13)
+Rules declare an optional `@pack` callback. The runner filters by
+enabled packs read from `.archdo.exs` `packs:` key, `--packs` CLI flag,
+or default `[:core]`.
+
+```elixir
+defmodule Archdo.Rule do
+  @callback pack() :: :core | :ce_compliance | :ce_privacy | :ce_composability
+  @optional_callbacks [pack: 0]
+end
+```
+
+### 2. Quadrant rule (M14)
+Rules optionally declare two axes + a per-cell policy table. The runner
+emits findings only for cells the policy marks `:fire`.
+
+```elixir
+defmodule Archdo.Quadrant do
+  @callback axes(file, ast, opts) :: %{x: atom(), y: atom()}
+  @callback policy() :: %{cell => action}
+  @callback finding_for(cell, evidence, file, line) :: Diagnostic.t()
+end
+```
+
+Threshold rules (existing shape) continue to work unchanged. Quadrant
+is opt-in per rule.
+
+### 3. Volatility classifier (M15)
+Mirrors `Archdo.Phoenix.classify_file/2`. Returns `%{tag, density,
+evidence}`. Wired into runner as `opts[:volatility]`.
+
+```elixir
+defmodule Archdo.Volatility do
+  @type tag :: :stable | :stable_with_test_seam
+              | :volatile | :non_deterministic | :mixed
+  @spec classify_module(file, ast, opts) :: classification()
+end
+```
+
+## Eighteen milestones across six phases
+
+### Phase F0 — Foundation (M13–M15)
+
+| M | Title | New modules | Tests |
+|---|---|---|---|
+| **M13** | Pack abstraction | `Archdo.Rule.pack_of/1` + Runner filter + `--packs` CLI | 3 + 4 |
+| **M14** | Quadrant primitive | `Archdo.Quadrant`, synthetic test rule | 12 + 3 |
+| **M15** | Volatility classifier | `Archdo.Volatility.classify_module/3` + runner wiring + `--metrics` cols | 22 + 2 |
+
+### Phase F1 — High-value rules without volatility (M16–M19)
+
+| M | Title | Pack | Severity |
+|---|---|---|---|
+| **M16** | CE-15 Wrapper over framework abstraction | core | warn |
+| **M17** | CE-30/31 Unanchored module + island (shared `AnchorSet`) | core | warn |
+| **M18** | CE-49 Catch-all rescue + CE-50 `:ok` loses info | core | warn / warn |
+| **M19** | CE-17 Magic literals + CE-21 Acquire/release without bracket | core | warn / suggest |
+
+### Phase F2 — State machine sharpening (M20)
+
+| M | Title | Pack | Severity |
+|---|---|---|---|
+| **M20** | SM-A undeclared next_state + SM-D state-assign outside set + SM-F incomplete pattern-match on state | core | warn × 3 |
+
+### Phase V1 — Volatility-dependent rules (M21–M23)
+
+| M | Title | Kind | Notes |
+|---|---|---|---|
+| **M21** | CE-2 + CE-3 as one quadrant rule | `:quadrant` | Two rule_ids from one analysis pass |
+| **M22** | CE-1 hardcoded volatile deps + CE-4 mixed module split | threshold | CE-4 catalogs split candidates |
+| **M23** | CE-34 + CE-35 resilience using volatility | threshold | CE-34 supersedes 4.18 detection |
+
+### Phase D1 — Cognitive complexity + blackbox (M24–M26)
+
+| M | Title | Pack | Notes |
+|---|---|---|---|
+| **M24** | Cognitive complexity engine + CE-23/CE-24 quadrant | core | Auto-suppresses 6.2 at flat-dispatch sites |
+| **M25** | Blackbox `:possible` axis only (metric, no rule) | ce_composability | New `--metrics` columns |
+| **M26** | Blackbox `:valuable` axis + CE-54 quadrant + CE-55/56 | ce_composability | Three of four cells produce no finding |
+
+### Phase E — Cross-cutting + contracts (M27–M29)
+
+| M | Title | Pack |
+|---|---|---|
+| **M27** | CE-25 cross-cutting density + CE-26 scattered taxonomy | core |
+| **M28** | CE-11/12 contract density (irreversible + public API) | core |
+| **M29** | CE-27 telemetry + CE-28 error log + CE-29 process inspect + CE-47/48 error coherence | core |
+
+### Phase Opt-in — Optional packs (M30)
+
+| M | Title | Packs |
+|---|---|---|
+| **M30** | CE-Compliance (CE-32/33), CE-Privacy (CE-52/53), CE-Comparative CLI scaffold | ce_compliance, ce_privacy |
+
+## Cross-cutting decisions
+
+1. **Severity defaults:** new CE rules use proposal §Appendix B as
+   starting point; M8/M9/M10 calibration overrides reshape later if
+   field data demands.
+2. **Existing rules getting quadrant-reshape:** 6.43 LongParameterList
+   (already done in M12), 3.4 SimilarCode (M27 reuses for CE-26), 6.2
+   FunctionComplexity (M24 auto-suppresses at flat-dispatch). Other
+   existing rules stay threshold-shaped.
+3. **Pack defaults:** `[:core]`. Backward-compatible — existing projects
+   see no behaviour change unless they add `packs:`.
+4. **CE rule cross-references with existing:** documented at write time
+   per **elixir-reviewing §1** rule 8. Each CE rule's `references:`
+   field links to the existing Archdo rule it sharpens.
+5. **TDD evidence per milestone:** test file appears in same commit as
+   implementation; commit message names "RED: N tests written first,
+   confirmed failing" before "GREEN: implementation". Auditable from
+   `git log` per **elixir-implementing §0.6**.
+6. **Field verification cohort:** Plausible (large Phoenix/Ecto), hexpm
+   (mid Phoenix), Livebook (LiveView-heavy), otel (Erlang/OTP), Oban +
+   Broadway + Tesla (reference cohort per proposal §8.1). M30 closing
+   audit re-runs all six.
+
+## Deferred (not in this plan)
+
+- Metadata-aware volatility refinement (mix.lock + Hex.pm metadata) —
+  v2 of M15, post-M30.
+- `--compare-with phoenix,ecto,oban` full implementation — CLI scaffold
+  ships in M30, full impl post-M30.
+- HTML volatility-map visualization — post-M30.
+- SM-B/C/E/G/H/I — only A/D/F ship in M20; the rest require an explicit
+  transition table (most projects don't have one).
+- CE-13 — already covered by existing 3.1/3.4 clone detection.
+
+## Plan-completeness gate verification
+
+Grep this document for forbidden phrases (per **elixir-planning §0.5**):
+
+- `TODO`, `TBD`, `figure out`, `decide when`, `something like`,
+  `probably`, `maybe` — 0 hits each.
+- `later` / `deferred` — only in the explicit "Deferred" section above,
+  each item naming the disposition.
+
+§0.1 checklist for the refactor scope:
+
+- ✓ Layout: every new module named with file path. No new contexts.
+- ✓ Processes: no new processes. Pure analyzers in the existing Runner.
+- ✓ State: no new state. Classifiers compute per-run, no cache.
+- ✓ Communication: rules consume `opts[:phoenix]`, `opts[:volatility]`.
+- ✓ External boundaries: none.
+- ✓ Configuration: `.archdo.exs` gains `packs:`,
+  `dependency_volatility:`, `dual_purpose_modules:`, `volatile_paths:`,
+  `stable_paths:`, `framework_provided_abstractions:`. Each
+  documented at the milestone that introduces it.
+- ✓ Resilience: no I/O.
+- ✓ Test strategy: every milestone names its test files and counts.
