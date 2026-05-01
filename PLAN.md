@@ -128,6 +128,32 @@ end
    Broadway + Tesla (reference cohort per proposal §8.1). M30 closing
    audit re-runs all six.
 
+## Follow-ups discovered during execution
+
+### M-Aux1 — Graph: capture module-attribute registry edges
+**Triggered by M17.** `Archdo.Graph` extracts edges from `alias` /
+`import` / `use` / remote-call AST nodes only. The module-attribute
+registry pattern — `@project_file_ast_rules [Foo, Bar, ...]` followed
+by `Enum.each/Enum.flat_map(@project_file_ast_rules, &...)` — is
+invisible to the walker, so modules referenced only through such a
+registry appear as `CE-30` orphans even when transitively reached.
+
+**Fix shape:** in `Graph.extract_edges/2`, when a module attribute
+is defined as a list literal containing only module aliases, track
+the attribute name; when the same attribute is later passed to an
+enumeration call (`Enum.*`, `for ... <- @attr`, `Stream.*`), emit a
+synthetic `:registry` edge from the host module to each listed
+module. Targets the Archdo-self-analysis CE-30 false-positive class
++ any project that uses the same dispatch pattern (Phoenix-app
+plugins, plug pipelines built from a list, etc.).
+
+**Tests:** 4 — list-only attribute (no edges), list + Enum.each
+(edges), list + non-enumeration use (no edges), nested-attribute case.
+
+**Effort:** small (~2-3 hours). Defer until either (a) self-analysis
+CE-30 noise becomes blocking, or (b) the same pattern shows up in
+field-test cohort findings.
+
 ## Deferred (not in this plan)
 
 - Metadata-aware volatility refinement (mix.lock + Hex.pm metadata) —
