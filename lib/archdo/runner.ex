@@ -129,6 +129,9 @@ defmodule Archdo.Runner do
     Archdo.Rules.StateMachine.ImplicitBooleanState,
     Archdo.Rules.StateMachine.StateReachability,
     Archdo.Rules.StateMachine.TerminalStateIntegrity,
+    Archdo.Rules.StateMachine.UndeclaredNextState,
+    Archdo.Rules.StateMachine.StateAssignOutsideSet,
+    Archdo.Rules.StateMachine.IncompleteStateMatch,
     # Testing rules
     Archdo.Rules.Testing.MocksNeedBehaviours,
     Archdo.Rules.Testing.RepoInTests,
