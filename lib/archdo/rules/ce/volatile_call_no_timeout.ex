@@ -36,7 +36,7 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
 
   @impl true
   def analyze(file, ast, opts) do
-    classification = classification_for(file, ast, opts)
+    classification = Volatility.classification_for(file, ast, opts)
 
     httpish_findings =
       case classification.tag == :volatile do
@@ -48,15 +48,6 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
     # implicit-timeout problem is intrinsic to that API shape.
     httpish_findings ++ find_unbounded_genserver_call(file, ast)
   end
-
-  defp classification_for(file, ast, opts) when is_list(opts) do
-    case Keyword.get(opts, :volatility) do
-      nil -> Volatility.classify_module(file, ast)
-      c -> c
-    end
-  end
-
-  defp classification_for(file, ast, _), do: Volatility.classify_module(file, ast)
 
   # --- HTTP client calls ---
 

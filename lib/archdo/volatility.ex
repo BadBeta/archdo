@@ -152,6 +152,22 @@ defmodule Archdo.Volatility do
   def mixed?(%{tag: :mixed}), do: true
   def mixed?(_), do: false
 
+  @doc """
+  Resolve a per-file volatility classification, preferring the
+  cached `opts[:volatility]` from the runner over a fresh
+  `classify_module/2` walk. Used by all CE rules that need a
+  per-file volatility tag.
+  """
+  @spec classification_for(String.t(), Macro.t(), keyword() | term()) :: classification()
+  def classification_for(file, ast, opts) when is_list(opts) do
+    case Keyword.get(opts, :volatility) do
+      nil -> classify_module(file, ast)
+      c -> c
+    end
+  end
+
+  def classification_for(file, ast, _), do: classify_module(file, ast)
+
   # --- author override (@archdo_volatility) ---
 
   defp author_override(ast) do

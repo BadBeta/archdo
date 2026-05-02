@@ -27,22 +27,13 @@ defmodule Archdo.Rules.CE.VolatileNoRetry do
 
   @impl true
   def analyze(file, ast, opts) do
-    classification = classification_for(file, ast, opts)
+    classification = Volatility.classification_for(file, ast, opts)
 
     case classification.tag == :volatile do
       true -> find_unprotected_calls(file, ast, classification)
       false -> []
     end
   end
-
-  defp classification_for(file, ast, opts) when is_list(opts) do
-    case Keyword.get(opts, :volatility) do
-      nil -> Volatility.classify_module(file, ast)
-      c -> c
-    end
-  end
-
-  defp classification_for(file, ast, _), do: Volatility.classify_module(file, ast)
 
   defp find_unprotected_calls(file, ast, classification) do
     targets = MapSet.new(classification.evidence.volatile_calls, &elem(&1, 0))

@@ -22,20 +22,11 @@ defmodule Archdo.Rules.CE.MixedModuleSplit do
 
   @impl true
   def analyze(file, ast, opts) do
-    case classification(file, ast, opts) do
+    case Volatility.classification_for(file, ast, opts) do
       %{tag: :mixed} = c -> [build_diagnostic(file, ast, c)]
       _ -> []
     end
   end
-
-  defp classification(file, ast, opts) when is_list(opts) do
-    case Keyword.get(opts, :volatility) do
-      nil -> Volatility.classify_module(file, ast)
-      c -> c
-    end
-  end
-
-  defp classification(file, ast, _), do: Volatility.classify_module(file, ast)
 
   defp build_diagnostic(file, ast, classification) do
     module = AST.extract_module_name(ast)

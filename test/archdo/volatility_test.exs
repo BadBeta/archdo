@@ -316,4 +316,30 @@ defmodule Archdo.VolatilityTest do
       refute Volatility.mixed?(%{tag: :volatile})
     end
   end
+
+  describe "classification_for/3" do
+    test "uses cached opts[:volatility] when present (no re-walk)" do
+      cached = %{tag: :stable, evidence: :cached_marker}
+      {file, ast} = parse("defmodule X do; def f(x), do: x; end")
+      assert Volatility.classification_for(file, ast, volatility: cached) == cached
+    end
+
+    test "falls back to classify_module/2 when opts has no :volatility" do
+      {file, ast} =
+        parse("""
+        defmodule MyApp.Sample do
+          def go(url), do: Tesla.get(url)
+        end
+        """)
+
+      result = Volatility.classification_for(file, ast, [])
+      assert result.tag == :volatile
+    end
+
+    test "falls back to classify_module/2 when opts is not a list" do
+      {file, ast} = parse("defmodule X do; def f(x), do: x; end")
+      result = Volatility.classification_for(file, ast, nil)
+      assert result.tag in [:stable, :mixed, :volatile, :non_deterministic]
+    end
+  end
 end
