@@ -2,6 +2,7 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
   @moduledoc false
   @behaviour Archdo.Rule
 
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
   alias Archdo.{Diagnostic, Fix}
 
@@ -21,7 +22,7 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
   """
   @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
   def analyze_compiled(%Graph{} = graph) do
-    contexts = Graph.discover_contexts(graph)
+    contexts = Compiled.discover_contexts(graph)
 
     # Build a context-level adjacency map: context_name => [dependent_context_names]
     adjacency = build_context_adjacency(graph, contexts)

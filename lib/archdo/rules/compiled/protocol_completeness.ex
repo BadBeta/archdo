@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -20,7 +21,7 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
     # verify it exports all required callbacks
     Enum.flat_map(modules, fn {module, info} ->
       Enum.flat_map(info.behaviours, fn behaviour ->
-        required_callbacks = Graph.callbacks_for(graph, behaviour)
+        required_callbacks = Compiled.callbacks_for(graph, behaviour)
 
         case required_callbacks do
           [] ->

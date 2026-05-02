@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -57,7 +58,7 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
   end
 
   defp widely_used?(graph, mod) do
-    dependents = Graph.module_dependents(graph, mod)
+    dependents = Compiled.module_dependents(graph, mod)
     length(dependents) > @widely_used_threshold
   end
 

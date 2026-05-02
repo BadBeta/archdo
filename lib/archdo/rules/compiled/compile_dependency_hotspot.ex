@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.CompileDependencyHotspot do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -22,7 +23,7 @@ defmodule Archdo.Rules.Compiled.CompileDependencyHotspot do
     modules
     |> Map.keys()
     |> Enum.map(fn mod ->
-      dependents = Graph.module_dependents(graph, mod)
+      dependents = Compiled.module_dependents(graph, mod)
       {mod, length(dependents), dependents}
     end)
     |> Enum.filter(fn {_mod, count, _deps} -> count > @dependent_threshold end)

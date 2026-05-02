@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
   alias Archdo.Rules.Compiled.Helpers
 
@@ -27,7 +28,7 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
 
       case total_exports >= @min_exports do
         true ->
-          usage = Graph.external_usage(graph, module)
+          usage = Compiled.external_usage(graph, module)
 
           externally_used =
             Enum.count(usage, fn {_fa, count} -> count > 0 end)

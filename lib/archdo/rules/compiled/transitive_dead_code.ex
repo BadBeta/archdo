@@ -2,6 +2,7 @@ defmodule Archdo.Rules.Compiled.TransitiveDeadCode do
   @moduledoc false
   @behaviour Archdo.Rule
 
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
   alias Archdo.{Diagnostic, Fix}
 
@@ -21,7 +22,7 @@ defmodule Archdo.Rules.Compiled.TransitiveDeadCode do
 
     dead_roots =
       graph
-      |> Graph.dead_functions()
+      |> Compiled.dead_functions()
       |> MapSet.new(fn %{module: m, function: f, arity: a} -> {m, f, a} end)
 
     # Walk outward from dead roots: if ALL callers of a function are dead,
@@ -38,7 +39,7 @@ defmodule Archdo.Rules.Compiled.TransitiveDeadCode do
       dead_set
       |> MapSet.difference(visited)
       |> Enum.flat_map(fn mfa ->
-        Graph.callees_of(graph, mfa)
+        Compiled.callees_of(graph, mfa)
         |> Enum.map(& &1.callee)
         |> Enum.filter(fn {mod, _f, _a} = callee ->
           MapSet.member?(project_modules, mod) and
@@ -60,7 +61,7 @@ defmodule Archdo.Rules.Compiled.TransitiveDeadCode do
   end
 
   defp all_callers_dead?(graph, mfa, dead_set) do
-    callers = Graph.callers_of(graph, mfa)
+    callers = Compiled.callers_of(graph, mfa)
 
     case callers do
       [] -> false

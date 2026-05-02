@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -22,7 +23,7 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
   @cohesion_threshold 0.3
   @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
   def analyze_compiled(%Graph{} = graph) do
-    contexts = Graph.discover_contexts(graph)
+    contexts = Compiled.discover_contexts(graph)
 
     context_diagnostics =
       contexts

@@ -489,6 +489,34 @@ borderline. If FP rate > 30%, recalibrate the warn/error thresholds
 
 ### M-Plan19 — Compiled.Graph split: builder vs query (Stats leaks fix)
 
+**Status (2026-05-03):** PHASE 1 SHIPPED. New `Archdo.Compiled.Query`
+module (delegates to `Compiled.Graph`); new `Archdo.Compiled` facade
+defdelegates 15 query functions; 11 rule modules + `Archdo.Stats`
+migrated from `Graph.X` calls to `Compiled.X` (the boundary). Tests:
+9 added in `query_test.exs`; suite 1463/1463. Field check: Compiled
+context leak count dropped 27 → 21 (6-leak reduction). Remaining 21
+leaks are non-call-site references — `%Graph{}` struct matches in 11
+rule function heads, plus builder helpers (`extract_function_clauses`,
+`collect_exports_from_forms`) called from rules that genuinely need
+the build path. Phase 2 below addresses both.
+
+**Phase 2 (deferred):** physically move the 15 query function bodies
+out of `Compiled.Graph` and into `Compiled.Query` (currently Query is
+a defdelegate facade — the impl still lives in Graph). After Phase 2:
+`Compiled.Graph` contains only `defstruct`, `analyze/1` (build I/O),
+Tarjan SCC, and ingest helpers (~400 lines). `Compiled.Query` owns
+~500 lines of read accessors. To reach near-zero leaks, also:
+(a) consider exposing the struct as `%Compiled.Graph{}` opaquely (or
+move it onto a Compiled-owned type), so rule heads can pattern-match
+on the boundary instead of an internal; (b) re-export the two
+build-side helpers (`extract_function_clauses`, `collect_exports_from_forms`)
+from `Compiled` so the 5 rules calling them go through the boundary.
+Phase 2 is a pure refactor — no test changes, no behaviour change.
+
+**Original spec retained below.**
+
+
+
 **Problem (May 2026 stats audit):** The `Compiled` context shows 27
 boundary leaks. Inspection confirmed all are `Archdo.Rules.Compiled.*`
 rule modules `alias Archdo.Compiled.Graph` and calling

@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -31,8 +32,8 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
   end
 
   defp orphan?(%Graph{} = graph, mod) do
-    Graph.module_dependencies(graph, mod) == [] and
-      Graph.module_dependents(graph, mod) == []
+    Compiled.module_dependencies(graph, mod) == [] and
+      Compiled.module_dependents(graph, mod) == []
   end
 
   # Behaviour definitions are implemented by other modules, not called directly.

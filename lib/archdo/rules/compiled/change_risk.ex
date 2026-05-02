@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.ChangeRisk do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -23,7 +24,7 @@ defmodule Archdo.Rules.Compiled.ChangeRisk do
   def analyze_compiled(%Graph{modules: modules} = graph) do
     modules
     |> Map.keys()
-    |> Enum.map(fn mod -> Graph.blast_radius(graph, mod) end)
+    |> Enum.map(fn mod -> Compiled.blast_radius(graph, mod) end)
     |> Enum.filter(fn report ->
       report.total_affected > @total_threshold or
         report.max_depth > @depth_threshold

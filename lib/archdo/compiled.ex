@@ -14,7 +14,28 @@ defmodule Archdo.Compiled do
   #   - Dead code detection (exported functions never called)
   #   - Complete behaviour callback lists (including @optional_callbacks)
 
-  alias Archdo.Compiled.Graph
+  alias Archdo.Compiled.{Graph, Query}
+
+  # §§ M-Plan19 — public read API of the Compiled context. The 15
+  # query functions live in `Compiled.Query`; this facade re-exports
+  # them so callers can write `Compiled.callers_of(graph, mfa)`
+  # without aliasing an internal module. `analyze/1` (below) is the
+  # only function that performs I/O.
+  defdelegate callers_of(graph, mfa), to: Query
+  defdelegate callees_of(graph, mfa), to: Query
+  defdelegate module_dependencies(graph, module), to: Query
+  defdelegate module_dependents(graph, module), to: Query
+  defdelegate dead_functions(graph), to: Query
+  defdelegate strongly_connected_components(graph), to: Query
+  defdelegate external_usage(graph, module), to: Query
+  defdelegate callbacks_for(graph, behaviour), to: Query
+  defdelegate transitive_dependents(graph, module), to: Query
+  defdelegate blast_radius(graph, module), to: Query
+  defdelegate knows_about(graph, module), to: Query
+  defdelegate known_by(graph, module), to: Query
+  defdelegate context_knows_about(graph, context_name), to: Query
+  defdelegate context_known_by(graph, context_name), to: Query
+  defdelegate discover_contexts(graph), to: Query
 
   @doc """
   Analyze a project directory by reading compiled beam files and building

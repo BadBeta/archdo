@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -17,7 +18,7 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
   @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
   def analyze_compiled(%Graph{} = graph) do
     graph
-    |> Graph.strongly_connected_components()
+    |> Compiled.strongly_connected_components()
     |> Enum.filter(&cross_module_cycle?/1)
     |> Enum.map(&build_diagnostic/1)
   end

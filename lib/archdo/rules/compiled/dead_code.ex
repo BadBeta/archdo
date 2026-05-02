@@ -2,6 +2,7 @@ defmodule Archdo.Rules.Compiled.DeadCode do
   @moduledoc false
   @behaviour Archdo.Rule
 
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
   alias Archdo.{Diagnostic, Fix}
 
@@ -21,7 +22,7 @@ defmodule Archdo.Rules.Compiled.DeadCode do
   @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
   def analyze_compiled(%Graph{} = graph) do
     graph
-    |> Graph.dead_functions()
+    |> Compiled.dead_functions()
     |> Enum.map(&build_diagnostic/1)
   end
 
