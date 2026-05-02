@@ -190,23 +190,21 @@ defmodule Archdo.Compiled.DiagramInteractive do
     end)
   end
 
+  @interface_substrings ~w(Controller Live Channel Router Endpoint Plug)
+  @infrastructure_substrings ~w(Repo Mailer Adapter Client)
+  @otp_behaviours [Supervisor, GenServer, Agent, :gen_statem]
+
   defp classify_layer(mod_name, info) do
     cond do
-      String.contains?(mod_name, "Controller") or String.contains?(mod_name, "Live") or
-        String.contains?(mod_name, "Channel") or String.contains?(mod_name, "Router") or
-        String.contains?(mod_name, "Endpoint") or String.contains?(mod_name, "Plug") ->
-        "interface"
-
-      String.contains?(mod_name, "Repo") or String.contains?(mod_name, "Mailer") or
-        String.contains?(mod_name, "Adapter") or String.contains?(mod_name, "Client") ->
-        "infrastructure"
-
-      Enum.any?(info.behaviours, &(&1 in [Supervisor, GenServer, Agent, :gen_statem])) ->
-        "otp"
-
-      true ->
-        "domain"
+      contains_any?(mod_name, @interface_substrings) -> "interface"
+      contains_any?(mod_name, @infrastructure_substrings) -> "infrastructure"
+      Enum.any?(info.behaviours, &(&1 in @otp_behaviours)) -> "otp"
+      true -> "domain"
     end
+  end
+
+  defp contains_any?(name, substrings) do
+    Enum.any?(substrings, &String.contains?(name, &1))
   end
 
   # --- HTML Template ---

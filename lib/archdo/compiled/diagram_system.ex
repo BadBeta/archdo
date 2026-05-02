@@ -227,52 +227,43 @@ defmodule Archdo.Compiled.DiagramSystem do
 
   # --- Inside tools detection ---
 
-  defp detect_inside_tools(_modules, %Graph{calls: calls}) do
-    # Detect calls to known infrastructure modules
-    tools = %{
-      database: false,
-      pubsub: false,
-      ets: false,
-      http_client: false,
-      mailer: false,
-      file_system: false,
-      cache: false
-    }
+  @repo_fns [:get, :get!, :all, :insert, :update, :delete, :one, :transaction]
+  @file_fns [:read, :read!, :write, :write!, :ls, :mkdir_p]
 
-    Enum.reduce(calls, tools, fn call, acc ->
+  defp detect_inside_tools(_modules, %Graph{calls: calls}) do
+    calls
+    |> Enum.reduce(MapSet.new(), fn call, acc ->
       callee_mod = elem(call.callee, 0)
-      callee_mod_str = Atom.to_string(callee_mod)
       callee_fn = elem(call.callee, 1)
 
-      cond do
-        String.contains?(callee_mod_str, "Repo") and
-            callee_fn in [:get, :get!, :all, :insert, :update, :delete, :one, :transaction] ->
-          %{acc | database: true}
-
-        callee_mod_str =~ "PubSub" ->
-          %{acc | pubsub: true}
-
-        callee_mod == :ets ->
-          %{acc | ets: true}
-
-        callee_mod_str =~ ~r/(Req|HTTPoison|Finch|Tesla)/ ->
-          %{acc | http_client: true}
-
-        callee_mod_str =~ ~r/(Mailer|Swoosh|Bamboo)/ ->
-          %{acc | mailer: true}
-
-        callee_mod == File and callee_fn in [:read, :read!, :write, :write!, :ls, :mkdir_p] ->
-          %{acc | file_system: true}
-
-        callee_mod_str =~ ~r/(Cachex|ConCache)/ ->
-          %{acc | cache: true}
-
-        true ->
-          acc
+      case classify_tool_call(callee_mod, Atom.to_string(callee_mod), callee_fn) do
+        nil -> acc
+        tag -> MapSet.put(acc, tag)
       end
     end)
-    |> Enum.filter(fn {_tool, used} -> used end)
-    |> Enum.map(fn {tool, _} -> tool end)
+    |> MapSet.to_list()
+  end
+
+  defp classify_tool_call(_mod, mod_str, fn_atom)
+       when fn_atom in @repo_fns do
+    case String.contains?(mod_str, "Repo") do
+      true -> :database
+      false -> tool_by_module_string(mod_str)
+    end
+  end
+
+  defp classify_tool_call(:ets, _mod_str, _fn), do: :ets
+  defp classify_tool_call(File, _mod_str, fn_atom) when fn_atom in @file_fns, do: :file_system
+  defp classify_tool_call(_mod, mod_str, _fn), do: tool_by_module_string(mod_str)
+
+  defp tool_by_module_string(mod_str) do
+    cond do
+      mod_str =~ "PubSub" -> :pubsub
+      mod_str =~ ~r/(Req|HTTPoison|Finch|Tesla)/ -> :http_client
+      mod_str =~ ~r/(Mailer|Swoosh|Bamboo)/ -> :mailer
+      mod_str =~ ~r/(Cachex|ConCache)/ -> :cache
+      true -> nil
+    end
   end
 
   # --- Outside connection detection ---
@@ -283,41 +274,20 @@ defmodule Archdo.Compiled.DiagramSystem do
       |> Map.keys()
       |> Enum.map(&Atom.to_string/1)
 
-    connections = []
-
-    connections =
-      case Enum.any?(mod_strings, &String.contains?(&1, "Endpoint")) do
-        true -> [:http | connections]
-        false -> connections
-      end
-
-    connections =
-      case Enum.any?(mod_strings, &String.contains?(&1, "Channel")) do
-        true -> [:websocket | connections]
-        false -> connections
-      end
-
-    connections =
-      case Enum.any?(mod_strings, &String.contains?(&1, "Live.")) or
-             Enum.any?(mod_strings, &String.contains?(&1, "LiveView")) do
-        true -> [:liveview | connections]
-        false -> connections
-      end
-
-    connections =
-      case Enum.any?(mod_strings, &String.contains?(&1, "Mix.Tasks.")) do
-        true -> [:cli | connections]
-        false -> connections
-      end
-
-    connections =
-      case Enum.any?(mod_strings, &(String.contains?(&1, "API") or String.contains?(&1, "Api"))) do
-        true -> [:api | connections]
-        false -> connections
-      end
-
-    connections
+    [:http, :websocket, :liveview, :cli, :api]
+    |> Enum.filter(&Enum.any?(mod_strings, fn s -> outside_signal?(&1, s) end))
   end
+
+  defp outside_signal?(:http, mod_str), do: String.contains?(mod_str, "Endpoint")
+  defp outside_signal?(:websocket, mod_str), do: String.contains?(mod_str, "Channel")
+
+  defp outside_signal?(:liveview, mod_str),
+    do: String.contains?(mod_str, "Live.") or String.contains?(mod_str, "LiveView")
+
+  defp outside_signal?(:cli, mod_str), do: String.contains?(mod_str, "Mix.Tasks.")
+
+  defp outside_signal?(:api, mod_str),
+    do: String.contains?(mod_str, "API") or String.contains?(mod_str, "Api")
 
   # --- Layout computation ---
 
