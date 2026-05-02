@@ -192,7 +192,11 @@ defmodule Mix.Tasks.Archdo do
   # crashes at parse time with a useful message rather than silently
   # excluding every rule.
   defp run_list_packs do
-    rules = Archdo.Runner.phase1_rules() ++ Archdo.Runner.graph_rules()
+    rules =
+      Archdo.Runner.phase1_rules() ++
+        Archdo.Runner.graph_rules() ++
+        Archdo.project_rules()
+
     by_pack = Enum.group_by(rules, &Archdo.Rule.pack_of/1)
 
     Mix.shell().info("Archdo packs:\n")

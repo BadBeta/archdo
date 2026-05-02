@@ -215,7 +215,8 @@ defmodule Archdo do
     Archdo.Rules.CE.ContractDensity,
     Archdo.Rules.CE.ContractDensitySpecs,
     Archdo.Rules.CE.ReturnShapeDrift,
-    Archdo.Rules.CE.ErrorCategoryDrift
+    Archdo.Rules.CE.ErrorCategoryDrift,
+    Archdo.Rules.CE.MissingTraceability
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).
@@ -224,6 +225,10 @@ defmodule Archdo do
     AnemicContext
   ]
 
+  @doc "All project-level rules combined — used by --list-packs."
+  @spec project_rules() :: [module()]
+  def project_rules, do: @project_file_ast_rules ++ @project_file_path_rules
+
   defp run_project_arch_rules(paths, opts) do
     source_files = collect_files(paths)
 
@@ -231,7 +236,7 @@ defmodule Archdo do
       for file <- source_files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
 
     file_ast_diagnostics =
-      Enum.flat_map(@project_file_ast_rules, & &1.analyze_project(file_asts))
+      Enum.flat_map(@project_file_ast_rules, &invoke_project_rule(&1, file_asts, opts))
 
     file_path_diagnostics =
       Enum.flat_map(@project_file_path_rules, & &1.analyze_project(source_files))
@@ -257,6 +262,15 @@ defmodule Archdo do
       |> Enum.map(&calibrate_project_diagnostic(&1, file_asts))
 
     filter_diagnostics(all, opts)
+  end
+
+  # Project rules may take 1 or 2 args. Newer rules accept opts; older
+  # rules don't. Dispatch by arity so existing rules keep working.
+  defp invoke_project_rule(rule, file_asts, opts) do
+    case function_exported?(rule, :analyze_project, 2) do
+      true -> rule.analyze_project(file_asts, opts)
+      false -> rule.analyze_project(file_asts)
+    end
   end
 
   defp calibrate_project_diagnostic(diag, file_asts) do
