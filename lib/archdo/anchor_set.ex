@@ -17,7 +17,11 @@ defmodule Archdo.AnchorSet do
     {[:Phoenix, :Router], "Phoenix router (HTTP route table)"},
     {[:Phoenix, :LiveView], "Phoenix LiveView (route-mounted)"},
     {[:Oban, :Worker], "Oban worker (queue-driven)"},
-    {[:Phoenix, :Channel], "Phoenix channel (websocket route)"}
+    {[:Phoenix, :Channel], "Phoenix channel (websocket route)"},
+    # M-Plan8b: nested supervisors are themselves anchors. Their
+    # children are extracted via add_supervisor_children/2.
+    {[:Supervisor], "Supervisor (nested under app supervision tree)"},
+    {[:DynamicSupervisor], "DynamicSupervisor (nested under app supervision tree)"}
   ]
 
   @doc """
@@ -114,10 +118,14 @@ defmodule Archdo.AnchorSet do
     end
   end
 
-  # --- supervisor children inside Application.start/2 ---
+  # --- supervisor children inside Application.start/2 OR nested
+  # `use Supervisor` / `use DynamicSupervisor` modules.
+  # M-Plan8b: previously gated on `use Application` only; nested
+  # sub-supervisors were invisible. Anchors flow transitively from
+  # the top supervisor down through every supervised child.
 
   defp add_supervisor_children(acc, ast) do
-    case uses_application?(ast) do
+    case is_supervisor_module?(ast) do
       false ->
         acc
 
@@ -128,9 +136,14 @@ defmodule Archdo.AnchorSet do
     end
   end
 
-  defp uses_application?(ast) do
+  # §§ elixir-implementing: §2.1 — multi-clause membership match. A
+  # module IS a supervisor when its body uses Application (top-level),
+  # Supervisor, or DynamicSupervisor.
+  defp is_supervisor_module?(ast) do
     AST.contains?(ast, fn
       {:use, _, [{:__aliases__, _, [:Application]} | _]} -> true
+      {:use, _, [{:__aliases__, _, [:Supervisor]} | _]} -> true
+      {:use, _, [{:__aliases__, _, [:DynamicSupervisor]} | _]} -> true
       _ -> false
     end)
   end

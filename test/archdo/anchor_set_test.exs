@@ -135,6 +135,68 @@ defmodule Archdo.AnchorSetTest do
 
       assert AnchorSet.compute(file_asts) |> MapSet.member?("MyAppWeb.PageLive")
     end
+
+    test "M-Plan8b: detects child in nested `use Supervisor` init/1" do
+      # Nested sub-supervisor (NOT use Application) — its children
+      # were previously invisible to AnchorSet. They're real anchor
+      # candidates because the nesting supervisor is itself anchored.
+      file_asts = [
+        parse(
+          """
+          defmodule MyApp.WorkersSupervisor do
+            use Supervisor
+
+            def start_link(opts) do
+              Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
+            end
+
+            @impl true
+            def init(_opts) do
+              children = [
+                MyApp.RateLimiter,
+                MyApp.Cache,
+                {MyApp.QueueWorker, queue: :default}
+              ]
+              Supervisor.init(children, strategy: :one_for_one)
+            end
+          end
+          """,
+          "lib/my_app/workers_supervisor.ex"
+        )
+      ]
+
+      anchors = AnchorSet.compute(file_asts)
+      assert MapSet.member?(anchors, "MyApp.RateLimiter")
+      assert MapSet.member?(anchors, "MyApp.Cache")
+      assert MapSet.member?(anchors, "MyApp.QueueWorker")
+    end
+
+    test "M-Plan8b: detects child in `use DynamicSupervisor` init/1" do
+      file_asts = [
+        parse(
+          """
+          defmodule MyApp.JobSupervisor do
+            use DynamicSupervisor
+
+            def start_link(arg) do
+              DynamicSupervisor.start_link(__MODULE__, arg, name: __MODULE__)
+            end
+
+            @impl true
+            def init(_arg) do
+              DynamicSupervisor.init(strategy: :one_for_one, extra_arguments: [MyApp.Job])
+            end
+          end
+          """,
+          "lib/my_app/job_supervisor.ex"
+        )
+      ]
+
+      # The supervisor module itself is an anchor (use Supervisor /
+      # DynamicSupervisor).
+      anchors = AnchorSet.compute(file_asts)
+      assert MapSet.member?(anchors, "MyApp.JobSupervisor")
+    end
   end
 
   describe "closure/2 — transitive reachability from anchors" do
