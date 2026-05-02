@@ -12,7 +12,7 @@ defmodule Archdo.Blackbox do
   # M26 will add the second axis (`:valuable`) and CE-54/55/56 quadrant
   # rules.
 
-  alias Archdo.AST
+  alias Archdo.{AST, InputGuard}
 
   @type components :: %{
           input_closure: float(),
@@ -140,17 +140,27 @@ defmodule Archdo.Blackbox do
 
   # --- M-Aux4 module + context verdicts ---
 
+  @type leak_reason :: float() | :unguarded_input
   @type module_verdict ::
           :building_block
-          | {:leaks_at, [{atom(), arity(), float()}]}
+          | {:leaks_at, [{atom(), arity(), leak_reason()}]}
 
   @building_block_threshold 0.9
 
   @doc """
-  Module-level verdict using min-not-mean across public function scores.
-  A module IS a building block only when EVERY public function scores
-  ≥ #{@building_block_threshold}. The first failure (or set of failures)
-  is reported via `{:leaks_at, [{name, arity, score}, ...]}`.
+  Module-level verdict combining structural Blackbox score (min-not-mean
+  across public function scores) AND input-guard analysis (M-Plan6).
+
+  A module IS a building block only when:
+    1. EVERY public function scores ≥ #{@building_block_threshold}
+       on the structural six-component check, AND
+    2. EVERY public function (with arity > 0) constrains its input
+       domain (guard, all-specific patterns, or `{:error, _}` fallback).
+
+  Failures are reported via `{:leaks_at, [{name, arity, reason}, ...]}`
+  where `reason` is either a `float()` (structural score below threshold)
+  or `:unguarded_input` (passes the structural check but accepts any
+  input — flagged by Archdo.InputGuard).
 
   Modules with no public functions are vacuously building blocks.
   """
@@ -161,12 +171,32 @@ defmodule Archdo.Blackbox do
         :building_block
 
       scores ->
-        leaks =
+        structural_leaks =
           scores
           |> Enum.filter(fn {_n, _a, score, _c} -> score < @building_block_threshold end)
           |> Enum.map(fn {n, a, score, _c} -> {n, a, score} end)
 
-        case leaks do
+        # §§ elixir-implementing: §2.1 — multi-step shape resolution.
+        # Combine structural leaks with input-safety leaks. The input
+        # check only runs on functions that PASSED the structural check
+        # (otherwise their structural failure is the dominant story).
+        structural_leak_keys = MapSet.new(structural_leaks, fn {n, a, _} -> {n, a} end)
+        clauses_by_key = InputGuard.collect_clauses(ast)
+
+        input_leaks =
+          scores
+          |> Enum.filter(fn {n, a, score, _c} ->
+            score >= @building_block_threshold and a > 0 and
+              not MapSet.member?(structural_leak_keys, {n, a})
+          end)
+          |> Enum.flat_map(fn {n, a, _score, _c} ->
+            case InputGuard.any_unconstrained?(Map.get(clauses_by_key, {n, a}, [])) do
+              true -> [{n, a, :unguarded_input}]
+              false -> []
+            end
+          end)
+
+        case structural_leaks ++ input_leaks do
           [] -> :building_block
           list -> {:leaks_at, list}
         end

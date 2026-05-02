@@ -25,7 +25,7 @@ defmodule Archdo.Rules.CE.UnguardedBuildingBlock do
   # Pack: `:ce_composability` — joins CE-54/55/56 covering different
   # facets of building-block readiness.
 
-  alias Archdo.{AST, Blackbox, Diagnostic, Fix}
+  alias Archdo.{AST, Blackbox, Diagnostic, Fix, InputGuard}
 
   @candidate_threshold 0.9
 
@@ -51,7 +51,7 @@ defmodule Archdo.Rules.CE.UnguardedBuildingBlock do
 
   defp find_unguarded_candidates(file, ast) do
     scores = Blackbox.score_module(ast)
-    clauses_by_key = collect_clauses(ast)
+    clauses_by_key = InputGuard.collect_clauses(ast)
 
     scores
     |> Enum.filter(fn {_n, arity, score, _c} ->
@@ -61,76 +61,12 @@ defmodule Archdo.Rules.CE.UnguardedBuildingBlock do
       key = {name, arity}
       clauses = Map.get(clauses_by_key, key, [])
 
-      case any_unconstrained?(clauses) do
+      case InputGuard.any_unconstrained?(clauses) do
         true -> [build_diagnostic(file, name, arity, hd(clauses).meta)]
         false -> []
       end
     end)
   end
-
-  # Walk the AST collecting all `def name(...) [when ...] do ... end`
-  # clauses. Returns %{{name, arity} => [%{args, guard?, body, meta}, ...]}.
-  defp collect_clauses(ast) do
-    {_, by_key} =
-      Macro.prewalk(ast, %{}, fn
-        # Guarded def: {:def, meta, [{:when, _, [{name, _, args}, _guard]}, body]}
-        {:def, meta, [{:when, _, [{name, _, args} | _]}, body]} = node, acc
-        when is_atom(name) and is_list(args) ->
-          clause = %{args: args, guard?: true, body: body, meta: meta}
-          {node, Map.update(acc, {name, length(args)}, [clause], &(&1 ++ [clause]))}
-
-        # Plain def: {:def, meta, [{name, _, args}, body]}
-        {:def, meta, [{name, _, args}, body]} = node, acc
-        when is_atom(name) and is_list(args) ->
-          clause = %{args: args, guard?: false, body: body, meta: meta}
-          {node, Map.update(acc, {name, length(args)}, [clause], &(&1 ++ [clause]))}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    by_key
-  end
-
-  defp any_unconstrained?(clauses) do
-    Enum.any?(clauses, &unconstrained?/1)
-  end
-
-  defp unconstrained?(%{guard?: true}), do: false
-  defp unconstrained?(%{args: args, body: body}) do
-    not all_specific_args?(args) and not returns_error_tuple?(body)
-  end
-
-  # All arguments are specific patterns (atoms, structs, tuples,
-  # literal numbers, etc.) — NO bare variables. A single bare variable
-  # arg breaks the constraint.
-  defp all_specific_args?(args) when is_list(args) do
-    Enum.all?(args, &specific_arg?/1)
-  end
-
-  defp specific_arg?({:_, _, ctx}) when is_atom(ctx), do: false
-  defp specific_arg?({var, _, ctx}) when is_atom(var) and is_atom(ctx), do: false
-  defp specific_arg?(_), do: true
-
-  # The clause body's last expression is a literal `{:error, _}` tuple.
-  # Handles bare-parser and literal_encoder-wrapped shapes.
-  defp returns_error_tuple?(body) do
-    case last_expression(body) do
-      {{:__block__, _, [:error]}, _} -> true
-      {:error, _} -> true
-      _ -> false
-    end
-  end
-
-  defp last_expression(body) when is_list(body) do
-    case AST.do_body(body) do
-      {:__block__, _, statements} -> List.last(statements)
-      single -> single
-    end
-  end
-
-  defp last_expression({:__block__, _, statements}), do: List.last(statements)
-  defp last_expression(single), do: single
 
   defp build_diagnostic(file, name, arity, meta) do
     Diagnostic.info("CE-57",

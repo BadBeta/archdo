@@ -153,13 +153,15 @@ defmodule Archdo.BlackboxTest do
 
   describe "module_verdict/1 (M-Aux4 — min not mean)" do
     test "all-pure module returns :building_block" do
+      # M-Plan6: combined verdict now requires input safety. Guards
+      # constrain the input domain, satisfying the InputGuard check.
       ast =
         parse_def("""
         defmodule M do
           @spec a(integer()) :: integer()
-          def a(x), do: x
+          def a(x) when is_integer(x), do: x
           @spec b(integer()) :: integer()
-          def b(x), do: x * 2
+          def b(x) when is_integer(x), do: x * 2
         end
         """)
 
@@ -171,7 +173,7 @@ defmodule Archdo.BlackboxTest do
         parse_def("""
         defmodule M do
           @spec a(integer()) :: integer()
-          def a(x), do: x
+          def a(x) when is_integer(x), do: x
           @spec b(integer()) :: :ok
           def b(_x) do
             Logger.info("leak")
@@ -181,7 +183,7 @@ defmodule Archdo.BlackboxTest do
         """)
 
       assert {:leaks_at, leaks} = Blackbox.module_verdict(ast)
-      assert Enum.any?(leaks, fn {name, _arity, _score} -> name == :b end)
+      assert Enum.any?(leaks, fn {name, _arity, _reason} -> name == :b end)
     end
 
     test "module with no public functions is vacuously a building block" do
@@ -195,17 +197,58 @@ defmodule Archdo.BlackboxTest do
 
       assert Blackbox.module_verdict(ast) == :building_block
     end
+
+    test "M-Plan6: pure module with guarded inputs is :building_block" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec a(integer()) :: integer()
+          def a(x) when is_integer(x), do: x
+
+          @spec b(integer(), integer()) :: integer()
+          def b(x, y) when is_integer(x) and is_integer(y), do: x + y
+        end
+        """)
+
+      assert Blackbox.module_verdict(ast) == :building_block
+    end
+
+    test "M-Plan6: pure module with one unguarded fn leaks via :unguarded_input" do
+      # `def a(x), do: x * 2` is structurally pure but accepts any x —
+      # `a("foo")` crashes deep with ArithmeticError. The verdict
+      # must surface this as an input-safety leak.
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec a(integer()) :: integer()
+          def a(x), do: x * 2
+
+          @spec b(integer()) :: integer()
+          def b(x) when is_integer(x), do: x + 1
+        end
+        """)
+
+      assert {:leaks_at, leaks} = Blackbox.module_verdict(ast)
+
+      assert Enum.any?(leaks, fn
+               {:a, 1, :unguarded_input} -> true
+               _ -> false
+             end),
+             "expected {:a, 1, :unguarded_input} in leaks, got #{inspect(leaks)}"
+    end
   end
 
   describe "context_verdict/2 (M-Aux4 — namespace aggregation)" do
     test "context with all-pure modules returns :building_block" do
+      # M-Plan6: input-safety added — fixtures use guards to satisfy
+      # the combined verdict.
       file_asts = [
         {"lib/myapp/accounts.ex",
          elem(
            Code.string_to_quoted("""
            defmodule MyApp.Accounts do
              @spec name(map()) :: String.t()
-             def name(u), do: u.name
+             def name(u) when is_map(u), do: u.name
            end
            """),
            1
@@ -215,7 +258,7 @@ defmodule Archdo.BlackboxTest do
            Code.string_to_quoted("""
            defmodule MyApp.Accounts.User do
              @spec greet(map()) :: String.t()
-             def greet(u), do: "hi " <> u.name
+             def greet(u) when is_map(u), do: "hi " <> u.name
            end
            """),
            1
@@ -232,7 +275,7 @@ defmodule Archdo.BlackboxTest do
            Code.string_to_quoted("""
            defmodule MyApp.Accounts do
              @spec name(map()) :: String.t()
-             def name(u), do: u.name
+             def name(u) when is_map(u), do: u.name
            end
            """),
            1
