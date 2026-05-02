@@ -50,18 +50,23 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
     # Build diagnostics
     Enum.flat_map(duplicates, fn {_hash, infos} ->
       [first | rest] = Enum.sort_by(infos, & &1.file)
-      build_diagnostics(first, rest)
+      build_diagnostics(first, rest, infos)
     end)
   end
 
-  defp build_diagnostics(first, rest) do
+  # §§ elixir-implementing: §2.1 — multi-clause dispatch on the
+  # umbrella-shape predicate. Cross-app clones in an umbrella are
+  # often deliberate (parallel implementations across deployables);
+  # downgrade to :info. Same-app clones stay :warning.
+  defp build_diagnostics(first, rest, all_infos) do
     other_locations =
       Enum.map_join(rest, ", ", fn info -> "#{Path.basename(info.file)}:#{info.line}" end)
 
     count = length(rest) + 1
+    builder = severity_builder_for(all_infos)
 
     [
-      Diagnostic.warning("3.1",
+      builder.("3.1",
         title: "Structurally identical function clone",
         message:
           "#{first.name}/#{first.arity} (#{first.size} AST nodes) is structurally identical to #{count - 1} other function(s): #{other_locations}",
@@ -113,6 +118,32 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
     files = Enum.uniq(Enum.map(infos, & &1.file))
     length(files) == 1
   end
+
+  # When all clones share the same umbrella app prefix → :warning
+  # (within-app duplication is real architectural debt).
+  # When they span different sibling apps → :info (often deliberate).
+  defp severity_builder_for(infos) do
+    apps = infos |> Enum.map(&umbrella_app/1) |> Enum.uniq()
+
+    case apps do
+      [nil] -> &Diagnostic.warning/2
+      [_single_app] -> &Diagnostic.warning/2
+      _ -> &Diagnostic.info/2
+    end
+  end
+
+  # Returns the umbrella sibling app name (e.g. "api" for
+  # `apps/api/lib/api/foo.ex`) or nil for non-umbrella paths.
+  defp umbrella_app(%{file: file}) do
+    case String.split(file, "/") do
+      ["apps", app | _] -> app
+      [_ | _] = parts -> Enum.find_index(parts, &(&1 == "apps")) |> apps_segment_after(parts)
+      _ -> nil
+    end
+  end
+
+  defp apps_segment_after(nil, _parts), do: nil
+  defp apps_segment_after(idx, parts), do: Enum.at(parts, idx + 1)
 
   defp extract_functions_with_hashes(file, ast) do
     fns = AST.extract_functions(ast, :all)

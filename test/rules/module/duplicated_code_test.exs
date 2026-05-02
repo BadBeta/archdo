@@ -175,4 +175,102 @@ defmodule Archdo.Rules.Module.DuplicatedCodeTest do
       assert diags == []
     end
   end
+
+  describe "umbrella sibling clones (D12)" do
+    test "downgrades to :info when clones live in different umbrella sibling apps" do
+      # Same code in two umbrella sibling apps. The duplication is
+      # often deliberate (shared schema fields, parallel implementations
+      # for different runtime targets); fire as :info, not :warning.
+      shared_body = ~S"""
+        def calculate_total(items) do
+          items
+          |> Enum.map(fn item -> item.price * item.quantity end)
+          |> Enum.sum()
+          |> apply_tax(0.08)
+          |> round_to_cents()
+        end
+
+        defp apply_tax(amount, rate), do: amount * (1 + rate)
+        defp round_to_cents(amount), do: Float.round(amount, 2)
+      """
+
+      file1 =
+        parse(
+          "defmodule Api.Orders do\n#{shared_body}end\n",
+          "apps/api/lib/api/orders.ex"
+        )
+
+      file2 =
+        parse(
+          "defmodule Edge.Orders do\n#{shared_body}end\n",
+          "apps/edge/lib/edge/orders.ex"
+        )
+
+      diags = DuplicatedCode.analyze_project([file1, file2])
+      assert [diag | _] = diags
+      assert diag.severity == :info, "Expected :info, got #{diag.severity}"
+    end
+
+    test "keeps :warning when both clones live in the same umbrella sibling app" do
+      shared_body = ~S"""
+        def calculate_total(items) do
+          items
+          |> Enum.map(fn item -> item.price * item.quantity end)
+          |> Enum.sum()
+          |> apply_tax(0.08)
+          |> round_to_cents()
+        end
+
+        defp apply_tax(amount, rate), do: amount * (1 + rate)
+        defp round_to_cents(amount), do: Float.round(amount, 2)
+      """
+
+      file1 =
+        parse(
+          "defmodule Api.Orders do\n#{shared_body}end\n",
+          "apps/api/lib/api/orders.ex"
+        )
+
+      file2 =
+        parse(
+          "defmodule Api.Invoices do\n#{shared_body}end\n",
+          "apps/api/lib/api/invoices.ex"
+        )
+
+      diags = DuplicatedCode.analyze_project([file1, file2])
+      assert [diag | _] = diags
+      assert diag.severity == :warning
+    end
+
+    test "keeps :warning for non-umbrella projects (no apps/ prefix)" do
+      shared_body = ~S"""
+        def calculate_total(items) do
+          items
+          |> Enum.map(fn item -> item.price * item.quantity end)
+          |> Enum.sum()
+          |> apply_tax(0.08)
+          |> round_to_cents()
+        end
+
+        defp apply_tax(amount, rate), do: amount * (1 + rate)
+        defp round_to_cents(amount), do: Float.round(amount, 2)
+      """
+
+      file1 =
+        parse(
+          "defmodule MyApp.Orders do\n#{shared_body}end\n",
+          "lib/my_app/orders.ex"
+        )
+
+      file2 =
+        parse(
+          "defmodule MyApp.Invoices do\n#{shared_body}end\n",
+          "lib/my_app/invoices.ex"
+        )
+
+      diags = DuplicatedCode.analyze_project([file1, file2])
+      assert [diag | _] = diags
+      assert diag.severity == :warning
+    end
+  end
 end
