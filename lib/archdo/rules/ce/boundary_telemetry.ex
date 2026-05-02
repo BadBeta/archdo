@@ -25,11 +25,22 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
     do: "Architectural boundary entry point lacks :telemetry.span / :telemetry.execute"
 
   @impl true
-  def analyze(file, ast, _opts) do
+  def analyze(file, ast, opts) do
     cond do
       AST.test_file?(file) -> []
       AST.has_marker?(ast, :archdo_no_telemetry) -> []
+      # §§ M-Plan7 — project-level plug-coverage exemption. If any plug
+      # in the project emits telemetry, observability is centralized
+      # one layer up; this boundary entry is implicitly covered.
+      covering_telemetry_plug(opts) != nil -> []
       true -> find_unwrapped_boundary_entries(file, ast)
+    end
+  end
+
+  defp covering_telemetry_plug(opts) do
+    case Keyword.get(opts, :plug_coverage) do
+      %{telemetry_plugs: [plug | _]} -> plug
+      _ -> nil
     end
   end
 

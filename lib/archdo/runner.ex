@@ -1,7 +1,11 @@
 defmodule Archdo.Runner do
   @moduledoc false
 
-  alias Archdo.{AST, Config, Diagnostic, Graph}
+  alias Archdo.{AST, Config, Diagnostic, Graph, PluginCoverage}
+
+  # §§ M-Plan7 — rules that consume project-level plug-coverage state.
+  # The pre-pass only runs when at least one of these is enabled.
+  @plug_coverage_consumers ["CE-27", "CE-28"]
 
   @phase1_rules [
     # OTP rules
@@ -225,6 +229,13 @@ defmodule Archdo.Runner do
     base_rules = Keyword.get(opts, :rules, @phase1_rules)
     enabled_rules = filter_rules(base_rules, opts)
 
+    # §§ elixir-planning: §9.1 — runner pre-pass for project-level
+    # plug-coverage state. Threaded through opts so per-file rules
+    # consume it like any other context. Skipped when no consuming
+    # rule is enabled (saves the parse) or when caller pre-supplied
+    # the index (test seam + composition with analyze_with_graph/2).
+    opts = maybe_compute_plug_coverage(opts, files, enabled_rules)
+
     files
     |> Task.async_stream(
       fn file -> analyze_file(file, enabled_rules, opts) end,
@@ -278,6 +289,28 @@ defmodule Archdo.Runner do
       end)
       |> Enum.map(&Archdo.Severity.adjust_diagnostic(&1, nil))
     end
+  end
+
+  defp maybe_compute_plug_coverage(opts, files, enabled_rules) do
+    cond do
+      Keyword.has_key?(opts, :plug_coverage) ->
+        opts
+
+      not plug_coverage_needed?(enabled_rules) ->
+        opts
+
+      true ->
+        file_asts = parse_for_pre_pass(files)
+        Keyword.put(opts, :plug_coverage, PluginCoverage.scan(file_asts))
+    end
+  end
+
+  defp plug_coverage_needed?(rules) do
+    Enum.any?(rules, fn rule -> rule.id() in @plug_coverage_consumers end)
+  end
+
+  defp parse_for_pre_pass(files) do
+    for file <- files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
   end
 
   defp analyze_file(file, rules, opts) do

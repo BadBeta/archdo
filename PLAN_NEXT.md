@@ -190,8 +190,21 @@ existing structural leaks.
 
 ### M-Plan7 — CE-27 + CE-28 cross-function call-graph walk (M1 + M2)
 
-**Status (2026-05-02):** Deferred to follow-up session. Architectural
-barrier identified: CE-27 and CE-28 are file-level rules
+**Status (2026-05-02):** SHIPPED via Path 2 (runner pre-pass). New
+module `Archdo.PluginCoverage` scans file_asts once per `Runner.analyze/2`
+invocation (only when CE-27 or CE-28 is enabled), producing
+`%{telemetry_plugs: [String.t()], log_plugs: [String.t()]}`. The index
+is threaded via `opts[:plug_coverage]` to every per-file rule. CE-27
+and CE-28 each take an early-out: if the index lists any covering plug,
+skip the diagnostic. Tests on disk: 7 `plugin_coverage_test.exs`,
+2 added to `boundary_telemetry_test.exs`, 2 added to
+`error_path_without_log_test.exs`. 1454/1454 suite green; no dialyzer
+regression (8/8 baseline preserved).
+
+**Original analysis below kept for cross-reference / future rules
+that need the same plumbing.**
+
+Architectural barrier identified: CE-27 and CE-28 are file-level rules
 (`analyze/3`) registered in `@phase1_rules`. Implementing the
 "covering plug" check requires PROJECT-level state — the set of plug
 modules that emit telemetry / log — that the file-level dispatch

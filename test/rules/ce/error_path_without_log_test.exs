@@ -71,6 +71,43 @@ defmodule Archdo.Rules.CE.ErrorPathWithoutLogTest do
       assert_clean(ErrorPathWithoutLog, code)
     end
 
+    test "does NOT fire when project has a covering log plug (M-Plan7)" do
+      code = ~S"""
+      defmodule MyApp.Service do
+        def call(x) do
+          if x < 0 do
+            {:error, :invalid}
+          else
+            do_work(x)
+          end
+        end
+      end
+      """
+
+      coverage = %{telemetry_plugs: [], log_plugs: ["MyAppWeb.Plugs.ErrorLog"]}
+
+      assert_clean(ErrorPathWithoutLog, code, plug_coverage: coverage)
+    end
+
+    test "fires when project has plug_coverage but no log plugs (M-Plan7)" do
+      code = ~S"""
+      defmodule MyApp.Service do
+        def call(x) do
+          if x < 0 do
+            {:error, :invalid}
+          else
+            do_work(x)
+          end
+        end
+      end
+      """
+
+      coverage = %{telemetry_plugs: ["MyAppWeb.Plugs.Telemetry"], log_plugs: []}
+
+      diags = assert_flagged(ErrorPathWithoutLog, code, plug_coverage: coverage)
+      assert hd(diags).rule_id == "CE-28"
+    end
+
     test "does NOT fire on plain ok/error pass-through (no error literal originated here)" do
       code = ~S"""
       defmodule MyApp.Pass do

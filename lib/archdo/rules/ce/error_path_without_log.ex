@@ -25,10 +25,22 @@ defmodule Archdo.Rules.CE.ErrorPathWithoutLog do
     do: "Function returns {:error, _} or has rescue without an in-scope Logger call"
 
   @impl true
-  def analyze(file, ast, _opts) do
-    case AST.test_file?(file) or AST.has_marker?(ast, :archdo_silent_error) do
-      true -> []
-      false -> find_unlogged_errors(file, ast)
+  def analyze(file, ast, opts) do
+    cond do
+      AST.test_file?(file) -> []
+      AST.has_marker?(ast, :archdo_silent_error) -> []
+      # §§ M-Plan7 — project-level log-plug exemption. If any plug in
+      # the project emits Logger calls, error logging is centralized at
+      # the request boundary; per-function log calls are not required.
+      covering_log_plug(opts) != nil -> []
+      true -> find_unlogged_errors(file, ast)
+    end
+  end
+
+  defp covering_log_plug(opts) do
+    case Keyword.get(opts, :plug_coverage) do
+      %{log_plugs: [plug | _]} -> plug
+      _ -> nil
     end
   end
 

@@ -114,6 +114,49 @@ defmodule Archdo.Rules.CE.BoundaryTelemetryTest do
       assert analyze(BoundaryTelemetry, code, file: "lib/my_app_web/controllers/health_controller.ex") == []
     end
 
+    test "does NOT fire when project has a covering telemetry plug (M-Plan7)" do
+      code = ~S"""
+      defmodule MyAppWeb.UserController do
+        use Phoenix.Controller, namespace: MyAppWeb
+
+        def show(conn, %{"id" => id}) do
+          user = MyApp.Accounts.get_user!(id)
+          render(conn, :show, user: user)
+        end
+      end
+      """
+
+      coverage = %{telemetry_plugs: ["MyAppWeb.Plugs.Telemetry"], log_plugs: []}
+
+      assert analyze(BoundaryTelemetry, code,
+               file: "lib/my_app_web/controllers/user_controller.ex",
+               plug_coverage: coverage
+             ) == []
+    end
+
+    test "fires when project has plug_coverage but no telemetry plugs (M-Plan7)" do
+      code = ~S"""
+      defmodule MyAppWeb.UserController do
+        use Phoenix.Controller, namespace: MyAppWeb
+
+        def show(conn, %{"id" => id}) do
+          render(conn, :show, id: id)
+        end
+      end
+      """
+
+      coverage = %{telemetry_plugs: [], log_plugs: ["MyAppWeb.Plugs.ErrorLog"]}
+
+      diags =
+        analyze(BoundaryTelemetry, code,
+          file: "lib/my_app_web/controllers/user_controller.ex",
+          plug_coverage: coverage
+        )
+
+      assert [diag] = diags
+      assert diag.rule_id == "CE-27"
+    end
+
     test "does NOT fire on LiveView handle_event (Phoenix emits its own telemetry)" do
       code = ~S"""
       defmodule MyAppWeb.PageLive do
