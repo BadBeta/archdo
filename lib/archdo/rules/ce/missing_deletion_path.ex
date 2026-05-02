@@ -45,11 +45,11 @@ defmodule Archdo.Rules.CE.MissingDeletionPath do
   end
 
   defp maybe_diagnostic({file, ast}, deletion_targets) do
-    cond do
-      AST.has_marker?(ast, :archdo_gdpr_exempt) ->
+    case AST.has_marker?(ast, :archdo_gdpr_exempt) do
+      true ->
         []
 
-      true ->
+      false ->
         case PiiSchema.schema_info(ast) do
           nil ->
             []

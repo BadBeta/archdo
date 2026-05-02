@@ -35,12 +35,10 @@ defmodule Archdo.Rules.CE.ErrorCategoryDrift do
       surfaces = occs |> Enum.map(fn {a, _, _, _, _} -> a end) |> Enum.uniq()
       modules = occs |> Enum.map(fn {_, _, m, _, _} -> m end) |> Enum.uniq()
 
-      cond do
-        length(surfaces) >= @min_cluster_distinct and length(modules) >= @min_cluster_modules ->
-          [build_diagnostic(canon, surfaces, occs)]
-
-        true ->
-          []
+      case length(surfaces) >= @min_cluster_distinct and
+             length(modules) >= @min_cluster_modules do
+        true -> [build_diagnostic(canon, surfaces, occs)]
+        false -> []
       end
     end)
   end

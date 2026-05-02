@@ -112,67 +112,12 @@ defmodule Archdo.Rules.Boundary.Mockability do
     if total_files == 0 do
       []
     else
-      ratio =
-        case direct_count do
-          0 -> :infinity
-          n -> behaviour_count / n
-        end
-
-      severity =
-        cond do
-          direct_count == 0 -> :info
-          ratio == :infinity -> :info
-          ratio < 0.3 -> :warning
-          ratio < 0.7 -> :info
-          true -> :info
-        end
-
-      # The fully-positive cases are tagged :passed so summary/brief tally them
-      # in their own column rather than as actionable info findings.
-      passed_tags =
-        case {direct_count, ratio} do
-          {0, _} -> [:passed]
-          {_, :infinity} -> [:passed]
-          _ -> []
-        end
-
-      message =
-        cond do
-          direct_count == 0 ->
-            "Mockability: no direct external IO calls detected — fully mockable"
-
-          ratio == :infinity ->
-            "Mockability: #{behaviour_count} behaviour seams, 0 direct IO surfaces"
-
-          true ->
-            ratio_str = :erlang.float_to_binary(ratio * 1.0, decimals: 2)
-
-            "Mockability: #{direct_count} direct IO surfaces vs #{behaviour_count} behaviour seams (ratio #{ratio_str})"
-        end
-
-      suggestion =
-        cond do
-          direct_count == 0 ->
-            "External IO is entirely behind behaviours — tests can mock everything via Mox"
-
-          ratio == :infinity ->
-            "All external IO is behind behaviours — ideal mockability"
-
-          ratio < 0.3 ->
-            "Many direct IO calls, few behaviour seams. Mocking real-world input is hard. Define behaviours for HTTP, email, etc."
-
-          ratio < 0.7 ->
-            "Some direct IO calls bypass behaviour seams. Aim for 1:1 — every IO library wrapped by a behaviour."
-
-          true ->
-            "Most external IO is behind behaviours. Look at the flagged files to find the remaining direct calls."
-        end
-
-      builder =
-        case severity do
-          :warning -> &Diagnostic.warning/2
-          _ -> &Diagnostic.info/2
-        end
+      ratio = mockability_ratio(direct_count, behaviour_count)
+      severity = mockability_severity(direct_count, ratio)
+      passed_tags = mockability_tags(direct_count, ratio)
+      message = mockability_message(direct_count, behaviour_count, ratio)
+      suggestion = mockability_suggestion(direct_count, ratio)
+      builder = Diagnostic.builder_for(severity)
 
       [
         builder.("4.8",
@@ -209,6 +154,50 @@ defmodule Archdo.Rules.Boundary.Mockability do
       ]
     end
   end
+
+  defp mockability_ratio(0, _), do: :infinity
+  defp mockability_ratio(direct_count, behaviour_count), do: behaviour_count / direct_count
+
+  defp mockability_severity(0, _), do: :info
+  defp mockability_severity(_, :infinity), do: :info
+  defp mockability_severity(_, ratio) when ratio < 0.3, do: :warning
+  defp mockability_severity(_, _), do: :info
+
+  # Fully-positive cases get :passed so summary tallies them in their own
+  # column rather than as actionable info findings.
+  defp mockability_tags(0, _), do: [:passed]
+  defp mockability_tags(_, :infinity), do: [:passed]
+  defp mockability_tags(_, _), do: []
+
+  defp mockability_message(0, _, _),
+    do: "Mockability: no direct external IO calls detected — fully mockable"
+
+  defp mockability_message(_, behaviour_count, :infinity),
+    do: "Mockability: #{behaviour_count} behaviour seams, 0 direct IO surfaces"
+
+  defp mockability_message(direct_count, behaviour_count, ratio) do
+    ratio_str = :erlang.float_to_binary(ratio * 1.0, decimals: 2)
+
+    "Mockability: #{direct_count} direct IO surfaces vs #{behaviour_count} behaviour seams (ratio #{ratio_str})"
+  end
+
+  defp mockability_suggestion(0, _),
+    do: "External IO is entirely behind behaviours — tests can mock everything via Mox"
+
+  defp mockability_suggestion(_, :infinity),
+    do: "All external IO is behind behaviours — ideal mockability"
+
+  defp mockability_suggestion(_, ratio) when ratio < 0.3,
+    do:
+      "Many direct IO calls, few behaviour seams. Mocking real-world input is hard. Define behaviours for HTTP, email, etc."
+
+  defp mockability_suggestion(_, ratio) when ratio < 0.7,
+    do:
+      "Some direct IO calls bypass behaviour seams. Aim for 1:1 — every IO library wrapped by a behaviour."
+
+  defp mockability_suggestion(_, _),
+    do:
+      "Most external IO is behind behaviours. Look at the flagged files to find the remaining direct calls."
 
   defp find_external_io_calls(ast, caller_module) do
     Enum.map(
@@ -247,22 +236,32 @@ defmodule Archdo.Rules.Boundary.Mockability do
     end
   end
 
+  # Path fragments that classify a file as tooling/adapter/test rather
+  # than domain code. Matched via `String.contains?` for substring
+  # markers and `String.ends_with?` for filename-suffix markers.
+  @adapter_substrings [
+    "/test/",
+    "/adapter",
+    "/adapters/",
+    "/clients/",
+    "/infrastructure/",
+    "/mix/",
+    "/tasks/",
+    "/hot_upgrade",
+    "/seeds"
+  ]
+
+  @adapter_suffixes [
+    "_client.ex",
+    "_adapter.ex",
+    "/mailer.ex",
+    "/release.ex",
+    "/helpers.ex"
+  ]
+
   defp adapter_or_test?(file) do
-    # Tooling — not domain code
-    String.contains?(file, "/test/") or
-      String.starts_with?(file, "test/") or
-      String.contains?(file, "/adapter") or
-      String.contains?(file, "/adapters/") or
-      String.contains?(file, "/clients/") or
-      String.contains?(file, "/infrastructure/") or
-      String.ends_with?(file, "_client.ex") or
-      String.ends_with?(file, "_adapter.ex") or
-      String.ends_with?(file, "/mailer.ex") or
-      String.contains?(file, "/mix/") or
-      String.contains?(file, "/tasks/") or
-      String.ends_with?(file, "/release.ex") or
-      String.ends_with?(file, "/helpers.ex") or
-      String.contains?(file, "/hot_upgrade") or
-      String.contains?(file, "/seeds")
+    String.starts_with?(file, "test/") or
+      Enum.any?(@adapter_substrings, &String.contains?(file, &1)) or
+      Enum.any?(@adapter_suffixes, &String.ends_with?(file, &1))
   end
 end

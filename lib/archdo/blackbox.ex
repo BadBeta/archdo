@@ -479,9 +479,9 @@ defmodule Archdo.Blackbox do
   def value(nil, _name, _layer), do: 0.0
 
   def value(body, name, phoenix_layer) do
-    cond do
-      orchestrator_name?(name) -> 0.0
-      true -> substance_score(body) + layer_boost(phoenix_layer)
+    case orchestrator_name?(name) do
+      true -> 0.0
+      false -> substance_score(body) + layer_boost(phoenix_layer)
     end
     |> min(1.0)
   end

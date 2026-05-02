@@ -36,9 +36,9 @@ defmodule Archdo.Rules.CE.UntestedBuildingBlock do
   end
 
   defp module_diagnostics({file, ast}, property_calls) do
-    cond do
-      AST.has_marker?(ast, :archdo_no_property) -> []
-      true -> find_untested_blocks(file, ast, property_calls)
+    case AST.has_marker?(ast, :archdo_no_property) do
+      true -> []
+      false -> find_untested_blocks(file, ast, property_calls)
     end
   end
 

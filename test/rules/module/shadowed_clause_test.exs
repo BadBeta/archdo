@@ -222,7 +222,7 @@ defmodule Archdo.Rules.Module.ShadowedClauseTest do
       # Our rule will see same type guards (not disjoint) and check patterns.
       # Both have bare variable `n` — but both are guarded, so the unguarded
       # catch-all check won't fire for the first clause.
-      # TODO: this is an edge case where deeper guard analysis would help.
+      # Limitation: this is an edge case where deeper guard analysis would help.
       # For now: guarded clauses with overlapping types but different additional
       # constraints are accepted because the earlier one has a guard.
       assert_clean(ShadowedClause, code)

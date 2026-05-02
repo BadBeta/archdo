@@ -32,11 +32,11 @@ defmodule Archdo.Rules.CE.PiiFieldHandling do
   end
 
   defp module_diagnostics({file, ast}) do
-    cond do
-      AST.has_marker?(ast, :archdo_pii_handled) ->
+    case AST.has_marker?(ast, :archdo_pii_handled) do
+      true ->
         []
 
-      true ->
+      false ->
         case PiiSchema.schema_info(ast) do
           nil -> []
           info -> maybe_diagnostic(file, ast, info)

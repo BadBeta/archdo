@@ -36,8 +36,8 @@ defmodule Archdo.Severity do
     # `name |> String.upcase()` vs `String.upcase(name)`. Take-it-or-leave-it.
     "6.33" => :nitpick,
     # 7.25 UntestedModule — path-based test-file mirror is a coverage
-    # TODO list, not a per-PR review item. Modules tested via integration
-    # / feature / channel tests are wrongly flagged.
+    # backlog signal, not a per-PR review item. Modules tested via
+    # integration / feature / channel tests are wrongly flagged.
     "7.25" => :nitpick,
     # 1.15 LargeControllerAction — AST-node threshold is subjective.
     # Multi-clause render with options, param-validation pipelines, and
