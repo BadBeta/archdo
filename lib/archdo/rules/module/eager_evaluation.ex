@@ -127,7 +127,7 @@ defmodule Archdo.Rules.Module.EagerEvaluation do
            {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, count_args}
          ]} ->
           # Enum.count() with no predicate — just counting mapped elements
-          length(count_args || []) == 0
+          count_args in [nil, []]
 
         # list |> Enum.map(f) |> length()
         {:|>, _,
@@ -143,7 +143,7 @@ defmodule Archdo.Rules.Module.EagerEvaluation do
            {{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _},
            {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, count_args}
          ]} ->
-          length(count_args || []) == 0
+          count_args in [nil, []]
 
         _ ->
           false
@@ -173,7 +173,7 @@ defmodule Archdo.Rules.Module.EagerEvaluation do
            {{:., _, [{:__aliases__, _, aliases}, :all]}, _, _},
            {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, count_args}
          ]} ->
-          repo_module?(aliases) and length(count_args || []) == 0
+          repo_module?(aliases) and count_args in [nil, []]
 
         # length(Repo.all(query))
         {:length, _, [{{:., _, [{:__aliases__, _, aliases}, :all]}, _, _}]} ->

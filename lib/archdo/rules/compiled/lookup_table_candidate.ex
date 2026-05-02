@@ -202,9 +202,7 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
   end
 
   defp format_literal_list(args) do
-    args
-    |> Enum.map(&format_literal/1)
-    |> Enum.join(", ")
+    Enum.map_join(args, ", ", &format_literal/1)
   end
 
   defp format_literal({:atom, _, val}), do: ":#{val}"

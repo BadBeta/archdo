@@ -6,27 +6,27 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
   alias Archdo.Compiled.Graph
 
   alias Archdo.Rules.Compiled.{
+    ApiSurfaceWeight,
+    ChangeRisk,
+    CircularContextDeps,
+    CircularFunctionCalls,
+    CompileDependencyHotspot,
+    ContextQuality,
+    CrossBoundaryCall,
     DeadCode,
+    DegenerateFunction,
+    InconsistentApiReturn,
+    InternalModuleLeak,
+    LookupTableCandidate,
+    NonExhaustiveApi,
+    OrphanModule,
+    PhantomDependency,
+    ProtocolCompleteness,
+    RepoBypass,
+    TestOnlyPublic,
     TransitiveDeadCode,
     UnusedImports,
-    CompileDependencyHotspot,
-    WeakDependency,
-    TestOnlyPublic,
-    ApiSurfaceWeight,
-    CircularFunctionCalls,
-    ProtocolCompleteness,
-    ChangeRisk,
-    NonExhaustiveApi,
-    InconsistentApiReturn,
-    CrossBoundaryCall,
-    InternalModuleLeak,
-    PhantomDependency,
-    RepoBypass,
-    DegenerateFunction,
-    LookupTableCandidate,
-    ContextQuality,
-    CircularContextDeps,
-    OrphanModule
+    WeakDependency
   }
 
   setup_all do
@@ -164,7 +164,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
   describe "DeadCode (6.24)" do
     test "finds dead public functions in Archdo", %{graph: graph} do
       diagnostics = DeadCode.analyze_compiled(graph)
-      assert length(diagnostics) > 0
+      assert diagnostics != []
       assert Enum.all?(diagnostics, &(&1.rule_id == "6.24"))
     end
 
@@ -222,7 +222,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
   describe "CompileDependencyHotspot (1.18)" do
     test "flags modules with many dependents", %{graph: graph} do
       diagnostics = CompileDependencyHotspot.analyze_compiled(graph)
-      assert length(diagnostics) > 0
+      assert diagnostics != []
       assert Enum.all?(diagnostics, &(&1.rule_id == "1.18"))
     end
 
@@ -306,7 +306,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
   describe "ChangeRisk (1.20)" do
     test "flags high blast radius modules", %{graph: graph} do
       diagnostics = ChangeRisk.analyze_compiled(graph)
-      assert length(diagnostics) > 0
+      assert diagnostics != []
       assert Enum.all?(diagnostics, &(&1.rule_id == "1.20"))
     end
 
@@ -328,7 +328,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
   describe "NonExhaustiveApi (6.27)" do
     test "finds non-exhaustive public functions", %{graph: graph} do
       diagnostics = NonExhaustiveApi.analyze_compiled(graph)
-      assert length(diagnostics) > 0
+      assert diagnostics != []
       assert Enum.all?(diagnostics, &(&1.rule_id == "6.27"))
     end
 
@@ -385,7 +385,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
         assert is_integer(depth)
         assert depth > 0
         assert is_list(mods)
-        assert length(mods) > 0
+        assert mods != []
       end)
     end
   end
@@ -474,7 +474,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     test "finds phantom dependencies", %{graph: graph} do
       diagnostics = PhantomDependency.analyze_compiled(graph)
       assert is_list(diagnostics)
-      assert length(diagnostics) > 0
+      assert diagnostics != []
       assert Enum.all?(diagnostics, &(&1.rule_id == "4.26"))
     end
 
@@ -487,7 +487,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
         end)
 
       # Formatter references %Diagnostic{} struct but doesn't call Diagnostic functions
-      assert length(struct_phantoms) > 0
+      assert struct_phantoms != []
     end
 
     test "does not flag @behaviour as phantom", %{graph: graph} do
@@ -536,7 +536,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
   describe "LookupTableCandidate (6.31)" do
     test "finds lookup table candidates in Archdo", %{graph: graph} do
       diagnostics = LookupTableCandidate.analyze_compiled(graph)
-      assert length(diagnostics) > 0
+      assert diagnostics != []
       assert Enum.all?(diagnostics, &(&1.rule_id == "6.31"))
     end
 
@@ -588,7 +588,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     test "discovers contexts from Archdo's own beam files", %{graph: graph} do
       contexts = Graph.discover_contexts(graph)
       assert is_list(contexts)
-      assert length(contexts) > 0
+      assert contexts != []
 
       # Each context has the expected fields
       [ctx | _] = contexts

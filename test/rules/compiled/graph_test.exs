@@ -36,7 +36,7 @@ defmodule Archdo.Compiled.GraphTest do
     end
 
     test "calls list is non-empty", %{graph: graph} do
-      assert length(graph.calls) > 0
+      assert graph.calls != []
     end
   end
 
@@ -160,7 +160,7 @@ defmodule Archdo.Compiled.GraphTest do
     test "returns modules the given module calls", %{graph: graph} do
       entries = Graph.knows_about(graph, Archdo.Runner)
       assert is_list(entries)
-      assert length(entries) > 0
+      assert entries != []
 
       # Runner calls AST.parse_file
       ast_entry = Enum.find(entries, fn e -> e.module == Archdo.AST end)
@@ -207,7 +207,7 @@ defmodule Archdo.Compiled.GraphTest do
     test "returns contexts the given context depends on", %{graph: graph} do
       entries = Graph.context_knows_about(graph, "Archdo.Rules")
       assert is_list(entries)
-      assert length(entries) > 0
+      assert entries != []
 
       Enum.each(entries, fn e ->
         assert is_binary(e.context)

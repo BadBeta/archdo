@@ -692,11 +692,9 @@ defmodule Archdo.Compiled.Diagram do
   end
 
   defp string_to_module(str) when is_binary(str) do
-    try do
-      Module.concat([str])
-    rescue
-      _ -> nil
-    end
+    Module.concat([str])
+  rescue
+    _ -> nil
   end
 
   # --- Dataflow Diagram (LabVIEW/Grasshopper inspired) ---
@@ -753,7 +751,7 @@ defmodule Archdo.Compiled.Diagram do
     export_list =
       exports
       |> Enum.take(15)
-      |> Enum.map(fn fn_info ->
+      |> Enum.map_join(", ", fn fn_info ->
         clause_tag =
           case fn_info.has_catch_all do
             true -> ""
@@ -764,7 +762,6 @@ defmodule Archdo.Compiled.Diagram do
 
         "#{fn_info.name}/#{fn_info.arity}#{clause_tag} → #{return_tag}"
       end)
-      |> Enum.join(", ")
 
     more_exports =
       case length(exports) > 15 do

@@ -157,7 +157,7 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
           # Only count if all parts are atoms (proper module ref)
           case Enum.all?(parts, &is_atom/1) do
             true ->
-              joined = parts |> Enum.map(&Atom.to_string/1) |> Enum.join(".")
+              joined = Enum.map_join(parts, ".", &Atom.to_string/1)
               last = parts |> List.last() |> Atom.to_string()
               {node, [joined, last | acc]}
 

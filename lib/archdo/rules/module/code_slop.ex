@@ -187,8 +187,9 @@ defmodule Archdo.Rules.Module.CodeSlop do
       end)
 
     all_pipes
-    |> Enum.reject(fn {line, _} -> MapSet.member?(inner_pipes, line) end)
-    |> Enum.reject(fn {_, {:|>, _, [left, _]}} -> match?({:|>, _, _}, left) end)
+    |> Enum.reject(fn {line, {:|>, _, [left, _]}} ->
+      MapSet.member?(inner_pipes, line) or match?({:|>, _, _}, left)
+    end)
     |> Enum.map(fn {_, {:|>, meta, _}} ->
       build_diagnostic(file, AST.line(meta), :single_pipe, %{})
     end)

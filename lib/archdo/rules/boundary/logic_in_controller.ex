@@ -28,9 +28,8 @@ defmodule Archdo.Rules.Boundary.LogicInController do
     fns = AST.extract_functions(ast, :public)
 
     fns
-    |> Enum.filter(fn {_name, arity, _, _, _} -> arity == 2 end)
-    |> Enum.filter(fn {_name, _, _, _, body} ->
-      body != nil and AST.ast_size(body) > @max_controller_action_nodes
+    |> Enum.filter(fn {_name, arity, _, _, body} ->
+      arity == 2 and body != nil and AST.ast_size(body) > @max_controller_action_nodes
     end)
     |> Enum.map(fn {name, arity, meta, _, body} ->
       size = AST.ast_size(body)

@@ -209,7 +209,7 @@ defmodule Archdo.Rules.RegressionTest do
 
       diags = Archdo.Rules.Module.InefficientListOperation.analyze("lib/foo.ex", ast, [])
       concat_diags = Enum.filter(diags, fn d -> d.title =~ "++" end)
-      assert length(concat_diags) > 0
+      assert concat_diags != []
     end
   end
 

@@ -43,9 +43,9 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
     mod_name = AST.module_name(module)
 
     pattern_summary =
-      fn_info.clauses
-      |> Enum.map(fn clause -> summarize_patterns(clause.patterns) end)
-      |> Enum.join(" | ")
+      Enum.map_join(fn_info.clauses, " | ", fn clause ->
+        summarize_patterns(clause.patterns)
+      end)
 
     Diagnostic.info("6.27",
       title: "Non-exhaustive public API",
@@ -94,9 +94,7 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
   end
 
   defp summarize_patterns(args) do
-    args
-    |> Enum.map(&summarize_pattern/1)
-    |> Enum.join(", ")
+    Enum.map_join(args, ", ", &summarize_pattern/1)
   end
 
   defp summarize_pattern({:atom, _, value}), do: ":#{value}"
@@ -111,8 +109,6 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
   defp summarize_pattern(_), do: "?"
 
   defp catch_all_args(arity) do
-    1..arity
-    |> Enum.map(fn _ -> "_" end)
-    |> Enum.join(", ")
+    Enum.map_join(1..arity, ", ", fn _ -> "_" end)
   end
 end

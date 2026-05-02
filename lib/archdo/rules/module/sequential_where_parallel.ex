@@ -367,9 +367,7 @@ defmodule Archdo.Rules.Module.SequentialWhereParallel do
     line = AST.line(meta)
 
     calls =
-      group
-      |> Enum.map(fn {var, _idx, call, _deps} -> "#{var} = #{call}(...)" end)
-      |> Enum.join(", ")
+      Enum.map_join(group, ", ", fn {var, _idx, call, _deps} -> "#{var} = #{call}(...)" end)
 
     count = length(group)
 

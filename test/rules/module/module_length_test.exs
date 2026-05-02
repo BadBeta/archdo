@@ -25,7 +25,7 @@ defmodule Archdo.Rules.Module.ModuleLengthTest do
         )
 
       diags = ModuleLength.analyze(path, ast, [])
-      assert length(diags) > 0
+      assert diags != []
       assert hd(diags).rule_id == "6.4"
     end
 

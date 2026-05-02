@@ -40,11 +40,9 @@ defmodule Archdo.Rules.Boundary.LogicInLiveview do
   defp check_handle_events(file, ast) do
     ast
     |> AST.extract_functions(:public)
-    |> Enum.filter(fn {name, arity, _, _, _} ->
-      name == :handle_event and arity == 3
-    end)
-    |> Enum.filter(fn {_, _, _, _, body} ->
-      body != nil and count_non_assign_nodes(body) > @max_handle_event_nodes
+    |> Enum.filter(fn {name, arity, _, _, body} ->
+      name == :handle_event and arity == 3 and
+        body != nil and count_non_assign_nodes(body) > @max_handle_event_nodes
     end)
     |> Enum.map(fn {name, arity, meta, _, body} ->
       node_count = count_non_assign_nodes(body)

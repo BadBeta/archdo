@@ -1031,11 +1031,9 @@ defmodule Archdo.Compiled.Graph do
   end
 
   defp impl_protocol(mod) do
-    try do
-      mod.__impl__(:protocol)
-    rescue
-      _ -> nil
-    end
+    mod.__impl__(:protocol)
+  rescue
+    _ -> nil
   end
 
   defp build_behaviour_fns(modules) do

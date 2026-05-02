@@ -113,8 +113,7 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
     shape_strs =
       shapes
       |> Enum.uniq()
-      |> Enum.map(&format_shape/1)
-      |> Enum.join(", ")
+      |> Enum.map_join(", ", &format_shape/1)
 
     Diagnostic.warning("6.28",
       title: "Inconsistent API return shapes",

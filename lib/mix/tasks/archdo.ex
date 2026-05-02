@@ -516,8 +516,7 @@ defmodule Mix.Tasks.Archdo do
         files =
           output
           |> String.split("\n", trim: true)
-          |> Enum.filter(&String.ends_with?(&1, ".ex"))
-          |> Enum.filter(&File.exists?/1)
+          |> Enum.filter(&(String.ends_with?(&1, ".ex") and File.exists?(&1)))
 
         {:ok, files}
 

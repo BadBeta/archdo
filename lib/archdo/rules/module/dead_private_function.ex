@@ -24,11 +24,11 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
     call_set = collect_calls(file, ast)
 
     private_defs
-    |> Enum.reject(&skip_function?/1)
-    |> Enum.reject(fn {name, arity} ->
+    |> Enum.reject(fn {name, arity} = fn_def ->
       # Direct call matches arity exactly.
       # Pipe call has arity - 1 (the pipe provides the first argument).
-      MapSet.member?(call_set, {name, arity}) or
+      skip_function?(fn_def) or
+        MapSet.member?(call_set, {name, arity}) or
         (arity > 0 and MapSet.member?(call_set, {name, arity - 1}))
     end)
     |> Enum.map(fn {name, arity} ->

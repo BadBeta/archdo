@@ -2,8 +2,8 @@ defmodule Archdo.Rules.Compiled.TestOnlyPublic do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
   alias Archdo.Compiled.Graph
+  alias Archdo.{Diagnostic, Fix}
 
   @impl true
   def id, do: "7.21"

@@ -2,8 +2,8 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
   alias Archdo.Compiled.Graph
+  alias Archdo.{Diagnostic, Fix}
 
   @impl true
   def id, do: "1.24"
@@ -52,9 +52,10 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
           |> Enum.map(fn call -> elem(call.callee, 0) end)
         end)
         |> Enum.map(fn callee_mod -> Map.get(module_to_context, callee_mod) end)
-        |> Enum.reject(&is_nil/1)
-        |> Enum.reject(fn dep_ctx -> dep_ctx == ctx.context end)
-        |> Enum.filter(fn dep_ctx -> MapSet.member?(context_names, dep_ctx) end)
+        |> Enum.filter(fn dep_ctx ->
+          dep_ctx != nil and dep_ctx != ctx.context and
+            MapSet.member?(context_names, dep_ctx)
+        end)
         |> Enum.uniq()
 
       {ctx.context, deps}

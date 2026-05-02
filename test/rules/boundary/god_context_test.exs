@@ -11,7 +11,7 @@ defmodule Archdo.Rules.Boundary.GodContextTest do
         end)
 
       diags = GodContext.analyze_project(files)
-      assert length(diags) > 0
+      assert diags != []
       assert hd(diags).rule_id == "4.7"
     end
 

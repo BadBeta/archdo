@@ -2,16 +2,16 @@ defmodule Archdo.Mcp.ToolsTest do
   use ExUnit.Case, async: true
 
   alias Archdo.Mcp.Tools.{
-    AnalyzePaths,
     AnalyzeFile,
-    Health,
+    AnalyzePaths,
     Diff,
-    PerfAudit,
-    Suggest,
     ExplainFinding,
-    Fix,
     ExplainRule,
-    ListRules
+    Fix,
+    Health,
+    ListRules,
+    PerfAudit,
+    Suggest
   }
 
   describe "archdo_health" do
@@ -100,7 +100,7 @@ defmodule Archdo.Mcp.ToolsTest do
 
       assert result.file_type in [:genserver, :module]
       assert is_list(result.suggestions)
-      assert length(result.suggestions) > 0
+      assert result.suggestions != []
     end
 
     test "returns suggestions for a test file" do

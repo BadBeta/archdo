@@ -21,10 +21,12 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
   def analyze_compiled(%Graph{} = graph) do
     graph.modules
     |> Map.keys()
-    |> Enum.filter(fn mod -> orphan?(graph, mod) end)
-    |> Enum.reject(&behaviour_definition?(&1, graph))
-    |> Enum.reject(&application_entry_point?/1)
-    |> Enum.reject(&test_support_module?/1)
+    |> Enum.filter(fn mod ->
+      orphan?(graph, mod) and
+        not behaviour_definition?(mod, graph) and
+        not application_entry_point?(mod) and
+        not test_support_module?(mod)
+    end)
     |> Enum.map(&build_diagnostic/1)
   end
 

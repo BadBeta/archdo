@@ -8,7 +8,7 @@ defmodule Archdo.Rules.Boundary.AnemicContextTest do
       files = ["/project/lib/my_app/payments/stripe.ex"]
 
       diags = AnemicContext.analyze_project(files)
-      assert length(diags) > 0
+      assert diags != []
       assert hd(diags).rule_id == "1.11"
     end
 

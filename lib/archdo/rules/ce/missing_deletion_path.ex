@@ -100,7 +100,7 @@ defmodule Archdo.Rules.CE.MissingDeletionPath do
         {:__aliases__, _, parts} = node, acc when is_list(parts) ->
           case Enum.all?(parts, &is_atom/1) do
             true ->
-              full = parts |> Enum.map(&Atom.to_string/1) |> Enum.join(".")
+              full = Enum.map_join(parts, ".", &Atom.to_string/1)
               last = parts |> List.last() |> Atom.to_string()
               {node, [full, last | acc]}
 

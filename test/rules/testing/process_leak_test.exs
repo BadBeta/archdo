@@ -35,7 +35,7 @@ defmodule Archdo.Rules.Testing.ProcessLeakTest do
       """
 
       diags = assert_flagged(ProcessLeak, code, file: "test/worker_test.exs")
-      assert length(diags) >= 1
+      assert diags != []
     end
 
     test "flags Supervisor.start_link in test file" do
@@ -51,7 +51,7 @@ defmodule Archdo.Rules.Testing.ProcessLeakTest do
       """
 
       diags = assert_flagged(ProcessLeak, code, file: "test/supervisor_test.exs")
-      assert length(diags) >= 1
+      assert diags != []
     end
 
     test "allows start_supervised! usage" do

@@ -1,7 +1,7 @@
 defmodule Archdo.Mcp.Tools.Diff do
   @moduledoc false
 
-  alias Archdo.Mcp.{Helpers, Encoder}
+  alias Archdo.Mcp.{Encoder, Helpers}
   alias Archdo.Runner
 
   def name, do: "archdo_diff"
@@ -80,8 +80,7 @@ defmodule Archdo.Mcp.Tools.Diff do
         files =
           output
           |> String.split("\n", trim: true)
-          |> Enum.filter(&String.ends_with?(&1, ".ex"))
-          |> Enum.filter(&File.exists?/1)
+          |> Enum.filter(&(String.ends_with?(&1, ".ex") and File.exists?(&1)))
 
         {:ok, files}
 

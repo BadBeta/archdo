@@ -2,8 +2,8 @@ defmodule Archdo.Rules.Compiled.TransitiveDeadCode do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
   alias Archdo.Compiled.Graph
+  alias Archdo.{Diagnostic, Fix}
 
   @impl true
   def id, do: "6.25"
@@ -40,8 +40,10 @@ defmodule Archdo.Rules.Compiled.TransitiveDeadCode do
       |> Enum.flat_map(fn mfa ->
         Graph.callees_of(graph, mfa)
         |> Enum.map(& &1.callee)
-        |> Enum.filter(fn {mod, _f, _a} -> MapSet.member?(project_modules, mod) end)
-        |> Enum.filter(fn callee -> all_callers_dead?(graph, callee, dead_set) end)
+        |> Enum.filter(fn {mod, _f, _a} = callee ->
+          MapSet.member?(project_modules, mod) and
+            all_callers_dead?(graph, callee, dead_set)
+        end)
       end)
       |> MapSet.new()
 

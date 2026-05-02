@@ -32,9 +32,9 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
     fns = AST.extract_functions(ast, :public)
 
     fns
-    |> Enum.filter(fn {_name, arity, _, _, _} -> arity == 2 end)
-    |> Enum.filter(fn {_name, _, _, args, _} -> has_params_arg?(args) end)
-    |> Enum.reject(fn {_name, _, _, _, body} -> has_validation?(body) end)
+    |> Enum.filter(fn {_name, arity, _, args, body} ->
+      arity == 2 and has_params_arg?(args) and not has_validation?(body)
+    end)
     |> Enum.map(fn {name, _, meta, _, _} ->
       build_diagnostic(file, name, 2, meta, :controller)
     end)

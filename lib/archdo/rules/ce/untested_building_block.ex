@@ -90,7 +90,7 @@ defmodule Archdo.Rules.CE.UntestedBuildingBlock do
         when is_list(parts) and is_atom(fun) and is_list(args) ->
           case Enum.all?(parts, &is_atom/1) do
             true ->
-              module = parts |> Enum.map(&Atom.to_string/1) |> Enum.join(".")
+              module = Enum.map_join(parts, ".", &Atom.to_string/1)
               {node, [{module, fun, length(args)} | acc]}
 
             false ->

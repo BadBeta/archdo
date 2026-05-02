@@ -111,8 +111,7 @@ defmodule Archdo.Quadrant do
   @spec distribution_for(module(), String.t(), Macro.t(), keyword()) ::
           %{cell() => non_neg_integer()}
   def distribution_for(rule, file, ast, opts) do
-    rule
-    |> apply(:axes, [file, ast, opts])
+    rule.axes(file, ast, opts)
     |> axes_summary(rule.policy())
   end
 end

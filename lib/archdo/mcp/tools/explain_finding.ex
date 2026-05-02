@@ -90,11 +90,10 @@ defmodule Archdo.Mcp.Tools.ExplainFinding do
         lines
         |> Enum.with_index(1)
         |> Enum.slice(start..finish)
-        |> Enum.map(fn {text, num} ->
+        |> Enum.map_join("\n", fn {text, num} ->
           marker = if num == line, do: "→ ", else: "  "
           "#{marker}#{num}: #{text}"
         end)
-        |> Enum.join("\n")
 
       {:error, _} ->
         nil

@@ -38,8 +38,7 @@ defmodule Archdo.Rules.Compiled.ChangeRisk do
     depth_by_level =
       report.transitive_dependents
       |> Enum.sort_by(fn {depth, _mods} -> depth end)
-      |> Enum.map(fn {depth, mods} -> "depth #{depth}: #{length(mods)} modules" end)
-      |> Enum.join(", ")
+      |> Enum.map_join(", ", fn {depth, mods} -> "depth #{depth}: #{length(mods)} modules" end)
 
     struct_note =
       case report.defines_struct do

@@ -29,7 +29,7 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomyTest do
       ]
 
       diags = ScatteredTaxonomy.analyze_project(file_asts)
-      assert length(diags) >= 1
+      assert diags != []
       assert hd(diags).rule_id == "CE-26"
     end
 

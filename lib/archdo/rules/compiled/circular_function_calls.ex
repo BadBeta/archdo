@@ -32,11 +32,9 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
 
   defp build_diagnostic(scc) do
     cycle_str =
-      scc
-      |> Enum.map(fn {mod, func, arity} ->
+      Enum.map_join(scc, " → ", fn {mod, func, arity} ->
         "#{AST.module_name(mod)}.#{func}/#{arity}"
       end)
-      |> Enum.join(" → ")
 
     modules_involved =
       scc
