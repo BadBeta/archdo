@@ -37,7 +37,7 @@ defmodule Archdo.Rules.CE.ContractDensity do
       file_asts
       |> Enum.reject(fn {file, _} -> AST.test_file?(file) end)
       |> Enum.filter(fn {file, ast} -> IrreversibleDecision.candidate?(file, ast, opts) end)
-      |> Enum.reject(fn {_, ast} -> skip_marker?(ast) end)
+      |> Enum.reject(fn {_, ast} -> AST.has_marker?(ast, :archdo_skip_contract_check) end)
       |> Enum.map(fn {file, ast} -> {file, ast, sub_scores(ast)} end)
       |> Enum.reject(fn {_, _, scores} -> scores == nil end)
 
@@ -58,13 +58,6 @@ defmodule Archdo.Rules.CE.ContractDensity do
           end
         end)
     end
-  end
-
-  defp skip_marker?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_skip_contract_check, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp sub_scores(ast) do

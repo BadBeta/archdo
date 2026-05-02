@@ -46,7 +46,7 @@ defmodule Archdo.Rules.CE.MissingDeletionPath do
 
   defp maybe_diagnostic({file, ast}, deletion_targets) do
     cond do
-      gdpr_exempt?(ast) ->
+      AST.has_marker?(ast, :archdo_gdpr_exempt) ->
         []
 
       true ->
@@ -65,13 +65,6 @@ defmodule Archdo.Rules.CE.MissingDeletionPath do
             end
         end
     end
-  end
-
-  defp gdpr_exempt?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_gdpr_exempt, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp last_segment(name), do: name |> String.split(".") |> List.last()

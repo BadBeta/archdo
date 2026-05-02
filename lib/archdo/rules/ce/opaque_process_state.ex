@@ -25,7 +25,7 @@ defmodule Archdo.Rules.CE.OpaqueProcessState do
     cond do
       AST.test_file?(file) -> []
       not stateful?(ast) -> []
-      opaque_marker?(ast) -> []
+      AST.has_marker?(ast, :archdo_opaque_state) -> []
       defines_format_status?(ast) -> []
       true -> [build_diagnostic(file, ast)]
     end
@@ -37,13 +37,6 @@ defmodule Archdo.Rules.CE.OpaqueProcessState do
       {:use, _, [{:__aliases__, _, parts}, _opts]} when is_list(parts) -> parts in @stateful_uses
       {:use, _, [mod]} when is_atom(mod) -> mod in @stateful_uses
       {:@, _, [{:behaviour, _, [behaviour]}]} -> behaviour in @stateful_behaviours
-      _ -> false
-    end)
-  end
-
-  defp opaque_marker?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_opaque_state, _, _}]} -> true
       _ -> false
     end)
   end

@@ -58,4 +58,18 @@ defmodule Archdo.IrreversibleDecision do
     |> AST.extract_functions(:public)
     |> Enum.any?(fn {name, arity, _, _, _} -> name == :child_spec and arity == 1 end)
   end
+
+  @doc """
+  True when the module declares `use Oban.Worker` (with or without opts).
+  Shared detector — Oban workers fall into multiple rules' candidate
+  sets (CE-27 boundary telemetry, CE-52 retention worker references).
+  """
+  @spec oban_worker?(Macro.t()) :: boolean()
+  def oban_worker?(ast) do
+    AST.contains?(ast, fn
+      {:use, _, [{:__aliases__, _, [:Oban, :Worker]}]} -> true
+      {:use, _, [{:__aliases__, _, [:Oban, :Worker]}, _opts]} -> true
+      _ -> false
+    end)
+  end
 end

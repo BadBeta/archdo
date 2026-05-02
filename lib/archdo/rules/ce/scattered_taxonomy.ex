@@ -9,7 +9,7 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
   # Downstream consumers (dashboards, log aggregators, audit pipelines)
   # must know about all variants; renaming is N changes.
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix, Naming}
 
   # Cluster fires when at least this many DISTINCT surface forms map
   # to the same canonical key across at least 2 modules.
@@ -125,7 +125,7 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
     name
     |> String.downcase()
     |> String.split(~r/[\s._\-:\/]+/, trim: true)
-    |> Enum.map(&stem/1)
+    |> Enum.map(&Naming.stem/1)
     |> tokens_to_canonical()
   end
 
@@ -136,23 +136,10 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
     |> Atom.to_string()
     |> String.downcase()
     |> String.split(~r/[\s._\-:\/]+/, trim: true)
-    |> Enum.map(&stem/1)
+    |> Enum.map(&Naming.stem/1)
   end
 
   defp atom_to_tokens(_), do: []
-
-  # Trivial English stemmer — handles created/create/creating, users/user.
-  # Strips a trailing "e" too so create / created / creating all collapse
-  # to "creat" (stem doesn't need to be a real word, only consistent).
-  defp stem(token) do
-    token
-    |> String.replace_suffix("ies", "y")
-    |> String.replace_suffix("ing", "")
-    |> String.replace_suffix("ed", "")
-    |> String.replace_suffix("es", "")
-    |> String.replace_suffix("s", "")
-    |> String.replace_suffix("e", "")
-  end
 
   defp tokens_to_canonical([]), do: nil
   defp tokens_to_canonical(tokens), do: tokens |> Enum.sort() |> Enum.uniq() |> Enum.join(" ")

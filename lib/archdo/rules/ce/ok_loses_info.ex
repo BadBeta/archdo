@@ -33,17 +33,10 @@ defmodule Archdo.Rules.CE.OkLosesInfo do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case AST.test_file?(file) or fire_and_forget?(ast) do
+    case AST.test_file?(file) or AST.has_marker?(ast, :archdo_fire_and_forget) do
       true -> []
       false -> find_lossy_ok_returns(file, ast)
     end
-  end
-
-  defp fire_and_forget?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_fire_and_forget, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp find_lossy_ok_returns(file, ast) do

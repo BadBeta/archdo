@@ -26,17 +26,10 @@ defmodule Archdo.Rules.CE.ErrorPathWithoutLog do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case AST.test_file?(file) or silent_marker?(ast) do
+    case AST.test_file?(file) or AST.has_marker?(ast, :archdo_silent_error) do
       true -> []
       false -> find_unlogged_errors(file, ast)
     end
-  end
-
-  defp silent_marker?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_silent_error, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp find_unlogged_errors(file, ast) do

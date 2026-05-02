@@ -161,6 +161,21 @@ defmodule Archdo.AST do
   def unwrap_atom(other), do: other
 
   @doc """
+  True when the AST contains a module attribute named `marker_name`
+  with any value. Use for opt-out / opt-in markers like
+  `@archdo_no_telemetry`, `@archdo_silent_error`, `@retention`, etc.
+
+  Matches the write form `@marker_name <value>`, not bare reads.
+  """
+  @spec has_marker?(Macro.t(), atom()) :: boolean()
+  def has_marker?(ast, marker_name) when is_atom(marker_name) do
+    contains?(ast, fn
+      {:@, _, [{^marker_name, _, _}]} -> true
+      _ -> false
+    end)
+  end
+
+  @doc """
   Collect all `@spec name(args) :: ret` declarations in an AST as a
   `MapSet` of `{name, arity}` pairs.
   """

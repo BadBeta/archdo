@@ -15,7 +15,7 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
   # miss cases where telemetry is centralized in a Plug or wrapper.
   # Severity v1: :info to match the spec.
 
-  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
+  alias Archdo.{AST, Diagnostic, Fix, IrreversibleDecision, Phoenix}
 
   @impl true
   def id, do: "CE-27"
@@ -28,16 +28,9 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
   def analyze(file, ast, _opts) do
     cond do
       AST.test_file?(file) -> []
-      no_telemetry_marker?(ast) -> []
+      AST.has_marker?(ast, :archdo_no_telemetry) -> []
       true -> find_unwrapped_boundary_entries(file, ast)
     end
-  end
-
-  defp no_telemetry_marker?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_no_telemetry, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp find_unwrapped_boundary_entries(file, ast) do
@@ -111,7 +104,7 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
   defp boundary_function_names(ast, _other) do
     # Oban.Worker.perform/1 — independent of layer classification
     # because workers can live anywhere under lib/.
-    case oban_worker?(ast) do
+    case IrreversibleDecision.oban_worker?(ast) do
       true -> [{:perform, 1}]
       false -> []
     end
@@ -129,14 +122,6 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
     AST.contains?(ast, fn
       {:use, _, [{:__aliases__, _, [:Mix, :Task]}]} -> true
       {:use, _, [{:__aliases__, _, [:Mix, :Task]}, _]} -> true
-      _ -> false
-    end)
-  end
-
-  defp oban_worker?(ast) do
-    AST.contains?(ast, fn
-      {:use, _, [{:__aliases__, _, [:Oban, :Worker]}]} -> true
-      {:use, _, [{:__aliases__, _, [:Oban, :Worker]}, _opts]} -> true
       _ -> false
     end)
   end

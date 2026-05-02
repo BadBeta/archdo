@@ -11,7 +11,7 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
   # containing the table name (string literal or atom). Quantum /
   # custom GenServer schedulers deferred to v2.
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix, IrreversibleDecision}
 
   defmodule SchemaInfo do
     @moduledoc false
@@ -51,7 +51,7 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
         info ->
           cond do
             referenced_by_cleaner?(info, cleaner_references) -> []
-            has_retention_attr?(ast) -> []
+            AST.has_marker?(ast, :retention) -> []
             true -> [build_diagnostic(file, ast, info)]
           end
       end
@@ -136,13 +136,6 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
   defp timestamps?({:timestamps, _, _}), do: true
   defp timestamps?(_), do: false
 
-  defp has_retention_attr?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:retention, _, _}]} -> true
-      _ -> false
-    end)
-  end
-
   # Set of names (string table names AND aliased module names) referenced
   # anywhere inside any Oban.Worker module. Conservative — false negatives
   # (worker references the schema indirectly) are preferred over false
@@ -150,7 +143,7 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
   defp collect_cleaner_references(file_asts) do
     file_asts
     |> Enum.flat_map(fn {_file, ast} ->
-      case oban_worker?(ast) do
+      case IrreversibleDecision.oban_worker?(ast) do
         true -> tables_referenced(ast) ++ aliases_referenced(ast)
         false -> []
       end
@@ -178,14 +171,6 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
       end)
 
     aliases
-  end
-
-  defp oban_worker?(ast) do
-    AST.contains?(ast, fn
-      {:use, _, [{:__aliases__, _, [:Oban, :Worker]}]} -> true
-      {:use, _, [{:__aliases__, _, [:Oban, :Worker]}, _opts]} -> true
-      _ -> false
-    end)
   end
 
   defp tables_referenced(ast) do

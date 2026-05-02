@@ -10,7 +10,7 @@ defmodule Archdo.Rules.CE.ErrorCategoryDrift do
   # change. Reuses CE-26-style token-stem clustering, scoped to the
   # error half of `{:error, _}` returns.
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix, Naming}
 
   @min_cluster_distinct 3
   @min_cluster_modules 2
@@ -105,23 +105,13 @@ defmodule Archdo.Rules.CE.ErrorCategoryDrift do
       |> String.downcase()
       |> String.split(~r/[\s._\-:\/]+/, trim: true)
       |> Enum.reject(&(&1 in @stop_words))
-      |> Enum.map(&stem/1)
+      |> Enum.map(&Naming.stem/1)
       |> Enum.reject(&(String.length(&1) < 3))
 
     case stems do
       [] -> nil
       _ -> Enum.max_by(stems, &String.length/1)
     end
-  end
-
-  defp stem(token) do
-    token
-    |> String.replace_suffix("ies", "y")
-    |> String.replace_suffix("ing", "")
-    |> String.replace_suffix("ed", "")
-    |> String.replace_suffix("es", "")
-    |> String.replace_suffix("s", "")
-    |> String.replace_suffix("e", "")
   end
 
   defp build_diagnostic(canon, surfaces, occs) do

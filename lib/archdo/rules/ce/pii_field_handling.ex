@@ -33,7 +33,7 @@ defmodule Archdo.Rules.CE.PiiFieldHandling do
 
   defp module_diagnostics({file, ast}) do
     cond do
-      pii_handled_marker?(ast) ->
+      AST.has_marker?(ast, :archdo_pii_handled) ->
         []
 
       true ->
@@ -42,13 +42,6 @@ defmodule Archdo.Rules.CE.PiiFieldHandling do
           info -> maybe_diagnostic(file, ast, info)
         end
     end
-  end
-
-  defp pii_handled_marker?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_pii_handled, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp maybe_diagnostic(file, ast, %{pii_fields: pii} = info) do

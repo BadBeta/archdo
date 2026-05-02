@@ -41,16 +41,9 @@ defmodule Archdo.Rules.CE.EffectLeak do
   def analyze(file, ast, _opts) do
     cond do
       AST.test_file?(file) -> []
-      no_property_marker?(ast) -> []
+      AST.has_marker?(ast, :archdo_no_property) -> []
       true -> find_leaks(file, ast)
     end
-  end
-
-  defp no_property_marker?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_no_property, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp find_leaks(file, ast) do

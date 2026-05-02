@@ -33,16 +33,9 @@ defmodule Archdo.Rules.CE.ContractDensitySpecs do
   defp maybe_diagnostic({file, ast}, opts) do
     cond do
       not IrreversibleDecision.candidate?(file, ast, opts) -> []
-      specs_pending?(ast) -> []
+      AST.has_marker?(ast, :archdo_specs_pending) -> []
       true -> compute_and_flag(file, ast)
     end
-  end
-
-  defp specs_pending?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_specs_pending, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp compute_and_flag(file, ast) do

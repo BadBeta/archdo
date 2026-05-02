@@ -32,7 +32,7 @@ defmodule Archdo.Rules.CE.CrossCuttingDensity do
   end
 
   defp find_dense(file, ast) do
-    aggregator? = aspect_aggregator?(ast)
+    aggregator? = AST.has_marker?(ast, :archdo_aspect_aggregator)
 
     case aggregator? do
       true ->
@@ -43,13 +43,6 @@ defmodule Archdo.Rules.CE.CrossCuttingDensity do
         |> AST.extract_functions(:public)
         |> Enum.flat_map(&maybe_diagnostic(file, &1))
     end
-  end
-
-  defp aspect_aggregator?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_aspect_aggregator, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp maybe_diagnostic(file, {name, arity, meta, _args, body}) do

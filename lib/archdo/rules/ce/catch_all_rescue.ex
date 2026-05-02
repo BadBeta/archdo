@@ -18,17 +18,10 @@ defmodule Archdo.Rules.CE.CatchAllRescue do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case AST.test_file?(file) or boundary_rescue?(ast) do
+    case AST.test_file?(file) or AST.has_marker?(ast, :archdo_boundary_rescue) do
       true -> []
       false -> find_catch_all_rescues(file, ast)
     end
-  end
-
-  defp boundary_rescue?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_boundary_rescue, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp find_catch_all_rescues(file, ast) do

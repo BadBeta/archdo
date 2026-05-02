@@ -45,7 +45,7 @@ defmodule Archdo.Rules.CE.MissingTraceability do
     cond do
       AST.test_file?(file) -> []
       not under_traceability_path?(file, paths) -> []
-      no_trace_marker?(ast) -> []
+      AST.has_marker?(ast, :archdo_no_trace) -> []
       module_level_trace?(ast) -> []
       true -> find_untraced_publics(file, ast)
     end
@@ -53,13 +53,6 @@ defmodule Archdo.Rules.CE.MissingTraceability do
 
   defp under_traceability_path?(file, paths) do
     Enum.any?(paths, &String.starts_with?(file, &1))
-  end
-
-  defp no_trace_marker?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_no_trace, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   # True when @requirement / @spec_ref / @trace appears BEFORE any def

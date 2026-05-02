@@ -44,16 +44,9 @@ defmodule Archdo.Rules.CE.UnguardedBuildingBlock do
   def analyze(file, ast, _opts) do
     cond do
       AST.test_file?(file) -> []
-      no_input_check_marker?(ast) -> []
+      AST.has_marker?(ast, :archdo_no_input_check) -> []
       true -> find_unguarded_candidates(file, ast)
     end
-  end
-
-  defp no_input_check_marker?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:archdo_no_input_check, _, _}]} -> true
-      _ -> false
-    end)
   end
 
   defp find_unguarded_candidates(file, ast) do
