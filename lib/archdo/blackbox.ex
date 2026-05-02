@@ -88,15 +88,35 @@ defmodule Archdo.Blackbox do
   @spec score_module(Macro.t()) :: [function_score()]
   def score_module(ast) do
     specs = collect_specs(ast)
+    fns = AST.extract_functions(ast, :public)
+    catch_all_set = collect_catch_alls(fns)
 
-    ast
-    |> AST.extract_functions(:public)
-    |> Enum.map(fn {name, arity, _meta, _args, body} ->
-      components = score_function(body, name, arity, specs)
+    Enum.map(fns, fn {name, arity, _meta, args, body} ->
+      components = score_function(body, name, arity, specs, args, catch_all_set)
       total = product(components)
       {name, arity, total, components}
     end)
   end
+
+  # Set of {name, arity} for which a catch-all clause exists.
+  defp collect_catch_alls(fns) do
+    fns
+    |> Enum.filter(fn {_name, _arity, _meta, args, _body} ->
+      args == nil or args_are_catch_all?(args)
+    end)
+    |> Enum.map(fn {name, arity, _, _, _} -> {name, arity} end)
+    |> MapSet.new()
+  end
+
+  # All args are bare variables / underscores (no atom / tuple / map
+  # patterns matching specific shapes).
+  defp args_are_catch_all?(args) when is_list(args) do
+    Enum.all?(args, &catch_all_arg?/1)
+  end
+
+  defp catch_all_arg?({:_, _, ctx}) when is_atom(ctx), do: true
+  defp catch_all_arg?({var, _, ctx}) when is_atom(var) and is_atom(ctx), do: true
+  defp catch_all_arg?(_), do: false
 
   @doc """
   Compute the blackbox possibility score for a single function or
@@ -118,17 +138,99 @@ defmodule Archdo.Blackbox do
   def classify(score) when score >= 0.4, do: :mixed
   def classify(_), do: :boundary
 
+  # --- M-Aux4 module + context verdicts ---
+
+  @type module_verdict ::
+          :building_block
+          | {:leaks_at, [{atom(), arity(), float()}]}
+
+  @building_block_threshold 0.9
+
+  @doc """
+  Module-level verdict using min-not-mean across public function scores.
+  A module IS a building block only when EVERY public function scores
+  ≥ #{@building_block_threshold}. The first failure (or set of failures)
+  is reported via `{:leaks_at, [{name, arity, score}, ...]}`.
+
+  Modules with no public functions are vacuously building blocks.
+  """
+  @spec module_verdict(Macro.t()) :: module_verdict()
+  def module_verdict(ast) do
+    case score_module(ast) do
+      [] ->
+        :building_block
+
+      scores ->
+        leaks =
+          scores
+          |> Enum.filter(fn {_n, _a, score, _c} -> score < @building_block_threshold end)
+          |> Enum.map(fn {n, a, score, _c} -> {n, a, score} end)
+
+        case leaks do
+          [] -> :building_block
+          list -> {:leaks_at, list}
+        end
+    end
+  end
+
+  @doc """
+  Context-level verdict: aggregate `module_verdict/1` across every
+  module whose name starts with `<context>` or `<context>.`. The
+  context IS a building block when every module in its namespace is
+  one. Otherwise returns `{:leaks_at, [module_name, ...]}`.
+
+  `file_asts` is the project's `[{file, ast}, ...]` list.
+  """
+  @spec context_verdict([{String.t(), Macro.t()}], String.t()) ::
+          :building_block | {:leaks_at, [String.t()]}
+  def context_verdict(file_asts, context_module) do
+    members =
+      file_asts
+      |> Enum.map(fn {_file, ast} -> {AST.extract_module_name(ast), ast} end)
+      |> Enum.filter(fn {name, _ast} -> in_context?(name, context_module) end)
+
+    leaks =
+      Enum.flat_map(members, fn {name, ast} ->
+        case module_verdict(ast) do
+          :building_block -> []
+          {:leaks_at, _} -> [name]
+        end
+      end)
+
+    case leaks do
+      [] -> :building_block
+      list -> {:leaks_at, Enum.sort(list)}
+    end
+  end
+
+  defp in_context?(name, context) do
+    name == context or String.starts_with?(name, context <> ".")
+  end
+
   # --- per-function scoring ---
 
-  defp score_function(body, name, arity, specs) do
+  defp score_function(body, name, arity, specs, args, catch_all_set) do
     %{
       input_closure: input_closure_score(body),
       determinism: if(contains_any?(body, all_nondeterministic()), do: 0.0, else: 1.0),
       output_completeness: spec_score(specs, {name, arity}),
-      totality: 1.0,
+      totality: totality_score(args, name, arity, catch_all_set),
       side_effect_free: if(contains_any?(body, all_side_effect()), do: 0.0, else: 1.0),
       errors_as_values: errors_as_values_score(body)
     }
+  end
+
+  # Totality = 1.0 if function is single-clause with no specific patterns
+  # (impossible to FunctionClauseError on input shape) OR has a catch-all
+  # clause; 0.5 otherwise (multi-clause without catch-all — risk of
+  # uncovered input).
+  defp totality_score(args, name, arity, catch_all_set) do
+    cond do
+      MapSet.member?(catch_all_set, {name, arity}) -> 1.0
+      args == nil or args == [] -> 1.0
+      args_are_catch_all?(args) -> 1.0
+      true -> 0.5
+    end
   end
 
   defp input_closure_score(body) do

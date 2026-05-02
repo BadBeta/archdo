@@ -16,6 +16,9 @@ defmodule Mix.Tasks.Archdo do
       `core`, `ce_compliance`, `ce_privacy`, `ce_composability`.
     * `--list-packs` - Print the pack roster (which rules belong to each pack)
       and exit.
+    * `--building-blocks` - Print modules and contexts that pass the Blackbox
+      audit (every public function scores ≥ 0.9). Tells you what's safely
+      reusable / memoizable / extractable as-is.
     * `--paths` - Comma-separated paths to check (default: `lib`)
     * `--since` - Only analyze files changed since this git ref (e.g., `--since main`)
     * `--explain` - Explain a rule by ID (e.g., `--explain 6.50`)
@@ -87,6 +90,7 @@ defmodule Mix.Tasks.Archdo do
           diagram: :string,
           stats: :boolean,
           metrics: :boolean,
+          building_blocks: :boolean,
           freeze: :boolean,
           freeze_stats: :boolean,
           show_all: :boolean,
@@ -122,6 +126,10 @@ defmodule Mix.Tasks.Archdo do
 
       Keyword.get(opts, :metrics, false) ->
         Archdo.print_metrics_matrix(paths)
+        :ok
+
+      Keyword.get(opts, :building_blocks, false) ->
+        Archdo.print_building_blocks(paths)
         :ok
 
       Keyword.get(opts, :freeze, false) ->

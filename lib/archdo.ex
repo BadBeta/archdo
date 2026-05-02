@@ -421,9 +421,97 @@ defmodule Archdo do
   end
 
   @doc """
-  Print a Martin metrics matrix (Ca/Ce/I/A/D) for the project.
-  Modules sorted by distance from main sequence (worst first).
+  M-Aux4 audit: print modules + contexts that pass the Blackbox
+  building-block verdict (every public function ≥ 0.9 possibility).
   """
+  @spec print_building_blocks([String.t()]) :: non_neg_integer()
+  def print_building_blocks(paths \\ ["lib"]) do
+    source_files = collect_files(paths)
+    file_asts = parse_many(source_files)
+
+    module_results =
+      file_asts
+      |> Enum.map(fn {file, ast} ->
+        module = AST.extract_module_name(ast)
+        verdict = Archdo.Blackbox.module_verdict(ast)
+        {module, file, verdict}
+      end)
+      |> Enum.reject(fn {module, _, _} -> module == "Unknown" end)
+
+    {blocks, leaks} =
+      Enum.split_with(module_results, fn {_, _, v} -> v == :building_block end)
+
+    IO.puts("\nArchdo — Building Block Audit (M-Aux4)\n")
+    IO.puts("Modules where EVERY public function scores ≥ 0.9 on the Blackbox\n" <>
+            "possibility metric (input_closure × determinism × output_completeness ×\n" <>
+            "totality × side_effect_free × errors_as_values).\n")
+
+    IO.puts("─── Building-block MODULES (#{length(blocks)} of #{length(module_results)}) ───\n")
+
+    case blocks do
+      [] ->
+        IO.puts("  (none — likely missing @spec coverage; see --metrics for breakdown)\n")
+
+      list ->
+        list
+        |> Enum.map(fn {m, _, _} -> m end)
+        |> Enum.sort()
+        |> Enum.each(&IO.puts("  ✓ #{&1}"))
+
+        IO.puts("")
+    end
+
+    # Context audit: for each module that classifies as a :context per
+    # Phoenix.classify_file, check whether the entire namespace is a
+    # building block.
+    context_modules =
+      file_asts
+      |> Enum.flat_map(fn {file, ast} ->
+        case Phoenix.classify_file(file, ast).layer do
+          :context -> [AST.extract_module_name(ast)]
+          _ -> []
+        end
+      end)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    case context_modules do
+      [] ->
+        :ok
+
+      contexts ->
+        verdicts =
+          Enum.map(contexts, fn ctx ->
+            {ctx, Archdo.Blackbox.context_verdict(file_asts, ctx)}
+          end)
+
+        building_block_contexts = Enum.filter(verdicts, fn {_, v} -> v == :building_block end)
+
+        IO.puts(
+          "─── Building-block CONTEXTS (#{length(building_block_contexts)} of #{length(contexts)}) ───\n"
+        )
+
+        Enum.each(verdicts, fn
+          {ctx, :building_block} ->
+            IO.puts("  ✓ #{ctx}")
+
+          {ctx, {:leaks_at, modules}} ->
+            preview = modules |> Enum.take(3) |> Enum.join(", ")
+            more = if length(modules) > 3, do: " (+#{length(modules) - 3} more)", else: ""
+            IO.puts("  ✗ #{ctx} — leaks: #{preview}#{more}")
+        end)
+
+        IO.puts("")
+    end
+
+    IO.puts(
+      "Leaks summary: #{length(leaks)} modules have at least one impure or " <>
+        "spec-less public function."
+    )
+
+    0
+  end
+
   @spec print_metrics_matrix([String.t()]) :: non_neg_integer()
   def print_metrics_matrix(paths \\ ["lib"]) do
     source_files = collect_files(paths)

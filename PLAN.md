@@ -154,6 +154,41 @@ plugins, plug pipelines built from a list, etc.).
 CE-30 noise becomes blocking, or (b) the same pattern shows up in
 field-test cohort findings.
 
+### M-Aux4 — Building Block Audit (module + context verdicts + `--shorten`)
+**Triggered after M26 + a user question:** "do we know which modules /
+contexts ARE building blocks?" M25/M26 score per function but never
+produce a module- or context-level verdict; the per-module mean in
+`--metrics` masks single-function leaks. Five gaps:
+
+1. **Totality is a placeholder** — `Blackbox.score_function/4` hardcodes
+   `totality: 1.0`. Need a real check: function has catch-all clause OR
+   single-clause with no pattern matching → 1.0; multi-clause without
+   catch-all → 0.5.
+
+2. **Module-level verdict missing** — current `possibility/1` does
+   arithmetic mean. A module with 9 building-block functions + 1
+   boundary function gets ~0.9 (looks great); the one impure function
+   breaks the contract. Need `min`-based `module_verdict/1` →
+   `:building_block | {:leaks_at, [{name, arity, score}, ...]}`.
+
+3. **Context-level verdict missing** — aggregate `module_verdict`
+   across all modules in a `:context` Phoenix layer's namespace.
+   `:building_block` only when every module in the context is one.
+
+4. **`mix archdo --building-blocks` CLI** — prints two tables:
+   - Building-block MODULES (min-of-functions ≥ 0.9 across public fns)
+   - Building-block CONTEXTS (min-of-modules across the namespace)
+
+5. **`mix archdo --shorten Mod.fn/N`** (the AST-blackbox + StreamData
+   property-test workflow discussed earlier in the conversation) — for
+   genuinely verifying correctness on building-block candidates. Larger
+   effort (~1 day) than items 1–4.
+
+**Effort:** items 1–4 ~2-3 hours total; item 5 ~1 day.
+
+**Status (after M-Aux4 ship):** items 1–4 land in M-Aux4; item 5
+(`--shorten`) stays as M-Aux4-extended follow-up.
+
 ### M-Aux3 — CE-55 + CE-56: blackbox property-test + effect-leak rules
 **Triggered by M26.** CE-54 ships in M26 covering the actionable
 {:low_possibility, :high_value} cell. Two related rules from proposal

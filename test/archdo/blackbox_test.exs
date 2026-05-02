@@ -8,7 +8,9 @@ defmodule Archdo.BlackboxTest do
     ast
   end
 
-  defp possibility(code) do
+  # Convenience helper retained for future tests; underscore-prefix to
+  # quiet the "unused" warning until a test exercises it.
+  defp _possibility(code) do
     code
     |> parse_def()
     |> Blackbox.possibility()
@@ -102,6 +104,157 @@ defmodule Archdo.BlackboxTest do
 
       [{_, _, _score, components}] = Blackbox.score_module(ast)
       assert components.output_completeness == 0.0
+    end
+  end
+
+  describe "totality (M-Aux4 real check)" do
+    test "single-clause function with no pattern in head scores totality 1.0" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec f(integer()) :: integer()
+          def f(x), do: x * 2
+        end
+        """)
+
+      [{_, _, _, components}] = Blackbox.score_module(ast)
+      assert components.totality == 1.0
+    end
+
+    test "multi-clause function WITH catch-all scores totality 1.0" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec f(any()) :: integer()
+          def f(:a), do: 1
+          def f(:b), do: 2
+          def f(_), do: 0
+        end
+        """)
+
+      results = Blackbox.score_module(ast)
+      assert Enum.all?(results, fn {_, _, _, c} -> c.totality == 1.0 end)
+    end
+
+    test "multi-clause function WITHOUT catch-all scores totality 0.5" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec f(:a | :b) :: integer()
+          def f(:a), do: 1
+          def f(:b), do: 2
+        end
+        """)
+
+      results = Blackbox.score_module(ast)
+      assert Enum.any?(results, fn {_, _, _, c} -> c.totality == 0.5 end)
+    end
+  end
+
+  describe "module_verdict/1 (M-Aux4 — min not mean)" do
+    test "all-pure module returns :building_block" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec a(integer()) :: integer()
+          def a(x), do: x
+          @spec b(integer()) :: integer()
+          def b(x), do: x * 2
+        end
+        """)
+
+      assert Blackbox.module_verdict(ast) == :building_block
+    end
+
+    test "module with one impure function returns {:leaks_at, ...}" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec a(integer()) :: integer()
+          def a(x), do: x
+          @spec b(integer()) :: :ok
+          def b(_x) do
+            Logger.info("leak")
+            :ok
+          end
+        end
+        """)
+
+      assert {:leaks_at, leaks} = Blackbox.module_verdict(ast)
+      assert Enum.any?(leaks, fn {name, _arity, _score} -> name == :b end)
+    end
+
+    test "module with no public functions is vacuously a building block" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @moduledoc false
+          defp internal(x), do: x
+        end
+        """)
+
+      assert Blackbox.module_verdict(ast) == :building_block
+    end
+  end
+
+  describe "context_verdict/2 (M-Aux4 — namespace aggregation)" do
+    test "context with all-pure modules returns :building_block" do
+      file_asts = [
+        {"lib/myapp/accounts.ex",
+         elem(
+           Code.string_to_quoted("""
+           defmodule MyApp.Accounts do
+             @spec name(map()) :: String.t()
+             def name(u), do: u.name
+           end
+           """),
+           1
+         )},
+        {"lib/myapp/accounts/user.ex",
+         elem(
+           Code.string_to_quoted("""
+           defmodule MyApp.Accounts.User do
+             @spec greet(map()) :: String.t()
+             def greet(u), do: "hi " <> u.name
+           end
+           """),
+           1
+         )}
+      ]
+
+      assert Blackbox.context_verdict(file_asts, "MyApp.Accounts") == :building_block
+    end
+
+    test "context with one impure module returns {:leaks_at, modules}" do
+      file_asts = [
+        {"lib/myapp/accounts.ex",
+         elem(
+           Code.string_to_quoted("""
+           defmodule MyApp.Accounts do
+             @spec name(map()) :: String.t()
+             def name(u), do: u.name
+           end
+           """),
+           1
+         )},
+        {"lib/myapp/accounts/audit.ex",
+         elem(
+           Code.string_to_quoted("""
+           defmodule MyApp.Accounts.Audit do
+             @spec record(map()) :: :ok
+             def record(_event) do
+               Logger.info("audit")
+               :ok
+             end
+           end
+           """),
+           1
+         )}
+      ]
+
+      assert {:leaks_at, modules} = Blackbox.context_verdict(file_asts, "MyApp.Accounts")
+      assert "MyApp.Accounts.Audit" in modules
+      refute "MyApp.Accounts" in modules
     end
   end
 
