@@ -106,9 +106,173 @@ defmodule Archdo.Graph do
 
   # --- Building the graph ---
 
+  # M-Aux1: collect module attributes whose value is a list of module
+  # aliases (per host module), then emit `:registry` edges from the
+  # host module to each listed module wherever the attribute is read.
+  #
+  # An attribute read is `{:@, _, [{name, _, args}]}` where `args` is
+  # nil (or atom context). The attribute write has `args = [value]`.
+  # Reads anywhere in the module body produce edges — covering both
+  # direct iteration (`Enum.each(@rules, ...)`, `for x <- @rules`) and
+  # indirect dispatch through accessor functions (`def rules, do:
+  # @rules`) or helper plumbing (`filter_rules(@rules, opts)`).
+  #
+  # The pattern shows up in dispatch tables (`@rules [Foo, Bar]`,
+  # `@plugins [...]`), making the listed modules transitively
+  # reachable for CE-30 closure when they otherwise look orphaned.
+  defp extract_registry_edges(ast, file) do
+    {_, {_current, edges, _registries}} =
+      Macro.prewalk(ast, {nil, [], %{}}, fn
+        # Track current module + its alias-list registries.
+        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, {_mod, edges, _regs}
+        when is_atom(hd(aliases)) ->
+          mod = safe_concat(aliases)
+          {node, {mod, edges, alias_list_registries(node)}}
+
+        # Attribute READ: `{:@, _, [{name, _, nil_or_atom_context}]}`.
+        # A WRITE has `{name, _, [value]}` (args is a list); skip those.
+        {:@, meta, [{name, _, args}]} = node, {mod, edges, regs}
+        when is_atom(name) and (args == nil or is_atom(args)) and mod != nil ->
+          case Map.get(regs, name) do
+            nil ->
+              {node, {mod, edges, regs}}
+
+            targets ->
+              new_edges =
+                Enum.map(targets, fn target ->
+                  %{source: mod, target: target, type: :registry, file: file, line: AST.line(meta)}
+                end)
+
+              {node, {mod, new_edges ++ edges, regs}}
+          end
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    Enum.reverse(edges)
+  end
+
+  # Pre-scan a module body for `@attr [Mod, Mod, ...]` writes; return
+  # %{attr_name => [target_module_string, ...]} where the value is a
+  # non-empty list of module aliases.
+  #
+  # Single-segment aliases (`Mockability` after `alias Foo.Bar.Mockability`)
+  # are expanded via the module's alias table so that registry edges
+  # name the full module path, not the short form.
+  defp alias_list_registries({:defmodule, _, [_alias, kw]}) when is_list(kw) do
+    body = do_body(kw)
+    alias_table = collect_alias_table(body)
+
+    {_, regs} =
+      Macro.prewalk(body, %{}, fn
+        # Write: @attr_name <list>. Args is a 1-element list containing
+        # the value. Under literal_encoder the list itself is wrapped.
+        {:@, _, [{name, _, [value]}]} = node, acc when is_atom(name) ->
+          case alias_list_targets(value, alias_table) do
+            [] -> {node, acc}
+            targets -> {node, Map.put(acc, name, targets)}
+          end
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    regs
+  end
+
+  defp alias_list_registries(_), do: %{}
+
+  # Walk the body for `alias Foo.Bar.Baz` (and `alias Foo.{Bar, Baz}`)
+  # statements; return %{short_name_atom => "Foo.Bar.Baz"} for
+  # short-name resolution.
+  defp collect_alias_table(body) do
+    {_, table} =
+      Macro.prewalk(body || [], %{}, fn
+        # alias Foo.Bar.Baz  →  short = :Baz, full = "Foo.Bar.Baz"
+        {:alias, _, [{:__aliases__, _, parts}]} = node, acc when is_list(parts) ->
+          {node, add_alias(acc, parts)}
+
+        # alias Foo.Bar.Baz, as: Quux
+        {:alias, _, [{:__aliases__, _, parts}, [{:as, {:__aliases__, _, [as_name]}}]]} = node,
+        acc when is_list(parts) and is_atom(as_name) ->
+          full = safe_concat(parts)
+
+          case full do
+            nil -> {node, acc}
+            f -> {node, Map.put(acc, as_name, f)}
+          end
+
+        # alias Foo.{Bar, Baz} — expand each
+        {:alias, _, [{{:., _, [{:__aliases__, _, prefix_parts}, :{}]}, _, suffixes}]} = node,
+        acc when is_list(prefix_parts) and is_list(suffixes) ->
+          new_acc =
+            Enum.reduce(suffixes, acc, fn
+              {:__aliases__, _, suffix_parts}, inner_acc when is_list(suffix_parts) ->
+                add_alias(inner_acc, prefix_parts ++ suffix_parts)
+
+              _, inner_acc ->
+                inner_acc
+            end)
+
+          {node, new_acc}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    table
+  end
+
+  defp add_alias(table, [_ | _] = parts) do
+    case safe_concat(parts) do
+      nil -> table
+      full -> Map.put(table, List.last(parts), full)
+    end
+  end
+
+  defp add_alias(table, _), do: table
+
+  defp do_body(kw) do
+    Enum.find_value(kw, fn
+      {:do, body} -> body
+      {{:__block__, _, [:do]}, body} -> body
+      _ -> nil
+    end)
+  end
+
+  # Extract module-alias targets from a literal list value. Returns []
+  # if the value isn't a list of aliases. Single-segment names are
+  # resolved via the module's alias table.
+  defp alias_list_targets({:__block__, _, [list]}, alias_table) when is_list(list),
+    do: alias_list_targets(list, alias_table)
+
+  defp alias_list_targets(list, alias_table) when is_list(list) do
+    Enum.reduce_while(list, [], fn elem, acc ->
+      case alias_target(elem, alias_table) do
+        nil -> {:halt, []}
+        target -> {:cont, [target | acc]}
+      end
+    end)
+    |> Enum.reverse()
+  end
+
+  defp alias_list_targets(_, _), do: []
+
+  defp alias_target({:__aliases__, _, [single]}, alias_table) when is_atom(single) do
+    # Single-segment alias: try the alias table first, fall back to bare name
+    Map.get(alias_table, single, Atom.to_string(single))
+  end
+
+  defp alias_target({:__aliases__, _, parts}, _alias_table) when is_list(parts) do
+    safe_concat(parts)
+  end
+
+  defp alias_target(_, _), do: nil
+
   defp analyze_file(graph, file, ast) do
     modules = extract_module_names(ast)
-    edges = extract_edges(ast, file)
+    edges = extract_edges(ast, file) ++ extract_registry_edges(ast, file)
 
     %{
       graph
