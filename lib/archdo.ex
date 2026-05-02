@@ -438,8 +438,62 @@ defmodule Archdo do
     |> IO.write()
 
     print_quadrant_distributions(file_asts)
+    print_blackbox_summary(file_asts)
 
     0
+  end
+
+  # §§ elixir-planning: §6 — M25 Blackbox metric exposure. Per-module
+  # blackbox possibility score + class distribution. Pure measurement;
+  # no rule fires from these numbers (M26 will add CE-54/55/56 quadrant).
+  defp print_blackbox_summary(file_asts) do
+    per_module =
+      file_asts
+      |> Enum.map(fn {file, ast} ->
+        scores = Archdo.Blackbox.score_module(ast)
+
+        case scores do
+          [] -> nil
+          list ->
+            possibility = list |> Enum.map(fn {_, _, s, _} -> s end) |> Enum.sum() |> Kernel./(length(list))
+            module = AST.extract_module_name(ast)
+            {module, file, possibility, Archdo.Blackbox.classify(possibility)}
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    case per_module do
+      [] ->
+        :ok
+
+      _ ->
+        IO.puts("\nArchdo — Blackbox Possibility (Group O axis 1)\n")
+        IO.puts("Per-module mean of (input_closure × determinism × output_completeness ×")
+        IO.puts("totality × side_effect_free × errors_as_values).\n")
+
+        IO.puts(
+          :io_lib.format("~-55ts ~10ts ~-15ts~n", ["Module", "Possibility", "Class"])
+        )
+
+        IO.puts(String.duplicate("-", 84))
+
+        per_module
+        |> Enum.sort_by(fn {_, _, p, _} -> p end)
+        |> Enum.take(20)
+        |> Enum.each(fn {module, _file, p, class} ->
+          IO.puts(
+            :io_lib.format("~-55ts ~10.3f ~-15ts~n", [
+              truncate(module, 55),
+              p,
+              Atom.to_string(class)
+            ])
+          )
+        end)
+
+        # Class distribution
+        dist = per_module |> Enum.frequencies_by(fn {_, _, _, c} -> c end)
+        IO.puts("\nClass distribution: #{inspect(dist)}\n")
+    end
   end
 
   # §§ elixir-planning: §6 — Quadrant rules surface their cell distribution
