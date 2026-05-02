@@ -60,9 +60,13 @@ defmodule Archdo.Rules.CE.ReturnShapeDrift do
     Enum.all?(publics, fn {n, _, _, _, _} -> bang?(n) end)
   end
 
-  defp bang?(name) do
+  # Function name may be a macro form like `unquote(name)` for
+  # dynamically-defined functions. Skip non-atom names entirely.
+  defp bang?(name) when is_atom(name) do
     name |> Atom.to_string() |> String.ends_with?("!")
   end
+
+  defp bang?(_), do: false
 
   defp find_orphan_bangs(file, ast, publics) do
     # Use string-keyed set to avoid String.to_atom on the stripped base

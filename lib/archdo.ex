@@ -216,7 +216,8 @@ defmodule Archdo do
     Archdo.Rules.CE.ContractDensitySpecs,
     Archdo.Rules.CE.ReturnShapeDrift,
     Archdo.Rules.CE.ErrorCategoryDrift,
-    Archdo.Rules.CE.MissingTraceability
+    Archdo.Rules.CE.MissingTraceability,
+    Archdo.Rules.CE.MissingRetentionPolicy
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).
@@ -266,11 +267,20 @@ defmodule Archdo do
 
   # Project rules may take 1 or 2 args. Newer rules accept opts; older
   # rules don't. Dispatch by arity so existing rules keep working.
+  # Wrapped in rescue so one broken rule doesn't block the rest.
   defp invoke_project_rule(rule, file_asts, opts) do
     case function_exported?(rule, :analyze_project, 2) do
       true -> rule.analyze_project(file_asts, opts)
       false -> rule.analyze_project(file_asts)
     end
+  rescue
+    e ->
+      IO.puts(
+        :standard_error,
+        "[archdo] project rule #{rule.id()} crashed: #{Exception.format(:error, e, __STACKTRACE__)}"
+      )
+
+      []
   end
 
   defp calibrate_project_diagnostic(diag, file_asts) do
