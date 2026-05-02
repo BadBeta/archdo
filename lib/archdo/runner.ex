@@ -185,7 +185,8 @@ defmodule Archdo.Runner do
     Archdo.Rules.CE.VolatileCallNoTimeout,
     Archdo.Rules.CE.VolatileNoRetry,
     Archdo.Rules.CE.HighCognitiveComplexity,
-    Archdo.Rules.CE.ComplexityShape
+    Archdo.Rules.CE.ComplexityShape,
+    Archdo.Rules.CE.BlackboxQuadrant
   ]
 
   @graph_rules [

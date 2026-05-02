@@ -154,6 +154,28 @@ plugins, plug pipelines built from a list, etc.).
 CE-30 noise becomes blocking, or (b) the same pattern shows up in
 field-test cohort findings.
 
+### M-Aux3 — CE-55 + CE-56: blackbox property-test + effect-leak rules
+**Triggered by M26.** CE-54 ships in M26 covering the actionable
+{:low_possibility, :high_value} cell. Two related rules from proposal
+§O are deferred:
+
+- **CE-55** — Building-block candidate untested as such. Fires on
+  `{:high_possibility, :high_value}` cells (functions that already
+  ARE building blocks structurally) where no StreamData property
+  test exists. Requires test-file scanning for `property` blocks
+  that reference the function — needs cross-file analysis.
+
+- **CE-56** — Effect leak in a near-blackbox function. Special case
+  of `{:low, :high}` where the only structural failure is
+  `side_effect_free` AND the side effect is observability-only
+  (Logger / telemetry / PubSub). The fix is mechanical (split the
+  function into pure inner + thin effect wrapper), so the finding
+  carries higher specificity.
+
+**Effort:** small for CE-56 (filter CE-54 findings by failed-component
+shape); medium for CE-55 (requires property-test discovery, similar
+to existing `7.x` testing rules).
+
 ### M-Aux2 — CE-50: broaden detection via data-flow on discarded value
 **Triggered by M18.** CE-50's v1 detection requires `{:ok, _} = X.call(...)`
 followed by a bare `:ok` return. Field-tested across hexpm / Plausible /

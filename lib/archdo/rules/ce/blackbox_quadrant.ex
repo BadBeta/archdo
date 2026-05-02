@@ -1,0 +1,214 @@
+defmodule Archdo.Rules.CE.BlackboxQuadrant do
+  @moduledoc false
+  @behaviour Archdo.Rule
+
+  # §§ elixir-planning: §6 — CE-54 quadrant rule built on the M25
+  # Blackbox engine + M26 value axis.
+  #
+  # Two axes:
+  #   possibility — can this function BE a building block?
+  #                 (M25 Blackbox.score_module)
+  #   value       — would converting it pay off?
+  #                 (M26 Blackbox.value)
+  #
+  # Policy:
+  #
+  #                 value:high      value:low
+  #   poss:high    building block   pure but pointless
+  #                (CE-55 future)   (no finding)
+  #   poss:low     CE-54 fire       designed orchestrator
+  #                                 (no finding)
+  #
+  # Only the {:low, :high} cell fires here — the function WANTS to be
+  # a building block (substantial body, not an orchestrator role) but
+  # ISN'T (impure, side-effects, no spec). The diagnosis includes the
+  # specific component(s) that failed so the fix is concrete.
+  #
+  # Pack: :ce_composability (opt-in via `--packs core,ce_composability`).
+
+  alias Archdo.{AST, Blackbox, Diagnostic, Fix, Phoenix}
+
+  @impl Archdo.Rule
+  def id, do: "CE-54"
+
+  @impl Archdo.Rule
+  def description,
+    do: "Function wants to be a building block (high value) but isn't (low possibility)"
+
+  @impl Archdo.Rule
+  def pack, do: :ce_composability
+
+  @impl Archdo.Rule
+  def analyze(file, ast, opts) do
+    case AST.test_file?(file) do
+      true -> []
+      false -> find_actionable(file, ast, opts)
+    end
+  end
+
+  defp find_actionable(file, ast, opts) do
+    layer = phoenix_layer(file, ast, opts)
+    scores = Blackbox.score_module(ast)
+
+    ast
+    |> AST.extract_functions(:public)
+    |> Enum.zip(scores)
+    |> Enum.flat_map(fn {{name, arity, meta, _args, body}, {_n, _a, _possibility, components}} ->
+      value = Blackbox.value(body, name, layer)
+      value_class = Blackbox.value_class(value)
+      structural = structural_possibility(components)
+      failures = structural_failures(components)
+
+      case {possibility_class(structural), value_class, failures} do
+        {:low, :high, [_ | _]} ->
+          [build_diagnostic(file, name, arity, meta, structural, value, components)]
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  # Filter out output_completeness from the actionable possibility —
+  # if @spec is the only failure, that's CE-12 (M28) territory, not
+  # CE-54. CE-54 surfaces only structural building-block failures
+  # (state reads, non-determinism, side effects, raise).
+  @structural_components ~w(input_closure determinism totality side_effect_free errors_as_values)a
+
+  defp structural_possibility(components) do
+    components
+    |> Map.take(@structural_components)
+    |> Map.values()
+    |> Enum.reduce(1.0, &(&1 * &2))
+  end
+
+  defp structural_failures(components) do
+    @structural_components
+    |> Enum.flat_map(fn key ->
+      case Map.get(components, key, 1.0) < 1.0 do
+        true -> [Atom.to_string(key)]
+        false -> []
+      end
+    end)
+  end
+
+  defp phoenix_layer(file, ast, opts) when is_list(opts) do
+    case Keyword.get(opts, :phoenix) do
+      nil -> Phoenix.classify_file(file, ast).layer
+      c -> c.layer
+    end
+  end
+
+  defp phoenix_layer(file, ast, _), do: Phoenix.classify_file(file, ast).layer
+
+  defp possibility_class(score) when score >= 0.7, do: :high
+  defp possibility_class(score) when score >= 0.4, do: :medium
+  defp possibility_class(_), do: :low
+
+  defp build_diagnostic(file, name, arity, meta, possibility, value, components) do
+    failed = failed_components(components)
+
+    Diagnostic.warning("CE-54",
+      title: "Function wants to be a building block but isn't",
+      message:
+        "#{name}/#{arity} has high value (#{Float.round(value, 2)}) but low " <>
+          "blackbox possibility (#{Float.round(possibility, 2)}). Failed " <>
+          "components: #{Enum.join(failed, ", ")}",
+      why:
+        "The function lives in code that should be composable (substantial body, " <>
+          "non-orchestrator role) but can't currently be reasoned about as a " <>
+          "building block — it has hidden inputs / non-determinism / side effects / " <>
+          "missing spec / raise on legitimate inputs. The diagnosis names which " <>
+          "component(s) failed so the fix is concrete.",
+      alternatives: alternatives_for(failed),
+      references: ["ARCHITECTURE_RULES_CHANGE_ECONOMY.md#CE-54"],
+      context: %{
+        function: "#{name}/#{arity}",
+        possibility: possibility,
+        value: value,
+        failed_components: failed
+      },
+      file: file,
+      line: AST.line(meta)
+    )
+  end
+
+  defp failed_components(components) do
+    Enum.flat_map(components, fn {key, score} ->
+      case score < 1.0 do
+        true -> [Atom.to_string(key)]
+        false -> []
+      end
+    end)
+  end
+
+  defp alternatives_for(failed) do
+    Enum.flat_map(failed, &fix_for_component/1) |> Enum.take(3)
+  end
+
+  defp fix_for_component("input_closure") do
+    [
+      Fix.new(
+        summary: "Move config / process-state reads to the caller; pass values as parameters",
+        detail:
+          "Replace `Application.get_env` / `Process.get` / `:persistent_term.get` " <>
+            "with explicit parameters threaded from the orchestrating layer.",
+        applies_when: "The hidden input is configuration or per-process state."
+      )
+    ]
+  end
+
+  defp fix_for_component("determinism") do
+    [
+      Fix.new(
+        summary: "Inject the clock or random source as a parameter",
+        detail:
+          "Replace `DateTime.utc_now` / `:rand.uniform` with an injected value " <>
+            "passed from the caller. Tests pass a fixed value; production passes " <>
+            "the real source.",
+        applies_when: "The non-determinism is a single primitive (clock/random/uuid)."
+      )
+    ]
+  end
+
+  defp fix_for_component("output_completeness") do
+    [
+      Fix.new(
+        summary: "Add @spec narrowing the return type",
+        detail:
+          "Declare a closed type union for the return value (avoid `any()` / " <>
+            "`term()`). Lets Dialyzer + property tests verify the contract.",
+        applies_when: "The function's return shape is statically expressible."
+      )
+    ]
+  end
+
+  defp fix_for_component("side_effect_free") do
+    [
+      Fix.new(
+        summary: "Move the side effect to the orchestrating layer",
+        detail:
+          "Rename the inner function (e.g. `compute_x/n`) and have a thin " <>
+            "wrapper (`x/n`) emit the Logger / telemetry / PubSub effect. The " <>
+            "inner function becomes a building block; the wrapper composes " <>
+            "effects.",
+        applies_when: "The side effect is observability (Logger/telemetry/broadcast)."
+      )
+    ]
+  end
+
+  defp fix_for_component("errors_as_values") do
+    [
+      Fix.new(
+        summary: "Return {:ok, _} / {:error, _} instead of raising",
+        detail:
+          "Reserve raise for programming errors (truly impossible inputs). For " <>
+            "legitimate failure paths, return tagged tuples — composable with " <>
+            "`with` chains and explicit handling.",
+        applies_when: "The raise responds to legitimate caller-supplied inputs."
+      )
+    ]
+  end
+
+  defp fix_for_component(_), do: []
+end

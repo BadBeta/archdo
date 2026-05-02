@@ -227,4 +227,71 @@ defmodule Archdo.Blackbox do
 
   defp arithmetic_mean([]), do: 0.0
   defp arithmetic_mean(list), do: Enum.sum(list) / length(list)
+
+  # --- Group O axis 2: value ---
+  # Value answers "would converting this to a building block pay off?"
+  # Heuristics:
+  #   * substance — bigger function bodies are higher-value to capture
+  #   * role — orchestrator function names (handle_event, mount,
+  #     init, perform, run, call, child_spec) → low value, those
+  #     functions are SUPPOSED to compose effects
+  #   * public API position — public functions in :context layers
+  #     get a value boost (callers benefit from the building-block
+  #     guarantee)
+
+  @orchestrator_names ~w(
+    handle_event handle_call handle_cast handle_info handle_continue
+    init terminate code_change format_status start_link child_spec
+    mount render call run perform
+  )a
+
+  @substance_threshold 30
+  @medium_substance 10
+
+  @doc """
+  Score a function on the value axis (0.0–1.0). Inputs:
+    - `body` — the function body AST
+    - `name` — the function name (atom)
+    - `phoenix_layer` — the file's Phoenix layer (atom or nil)
+  """
+  @spec value(Macro.t() | nil, atom(), atom() | nil) :: float()
+  def value(body, name, phoenix_layer \\ nil)
+
+  def value(nil, _name, _layer), do: 0.0
+
+  def value(body, name, phoenix_layer) do
+    cond do
+      orchestrator_name?(name) -> 0.0
+      true -> substance_score(body) + layer_boost(phoenix_layer)
+    end
+    |> min(1.0)
+  end
+
+  defp orchestrator_name?(name), do: name in @orchestrator_names
+
+  defp substance_score(body) do
+    size = AST.ast_size(body)
+
+    cond do
+      size >= @substance_threshold -> 0.8
+      size >= @medium_substance -> 0.4
+      true -> 0.0
+    end
+  end
+
+  defp layer_boost(:context), do: 0.2
+  defp layer_boost(:schema), do: 0.1
+  defp layer_boost(_), do: 0.0
+
+  @doc """
+  Classify the value score into bands matching the possibility classifier.
+
+      ≥ 0.7  → :high
+      ≥ 0.3  → :medium
+      < 0.3  → :low
+  """
+  @spec value_class(float()) :: :high | :medium | :low
+  def value_class(v) when v >= 0.7, do: :high
+  def value_class(v) when v >= 0.3, do: :medium
+  def value_class(_), do: :low
 end
