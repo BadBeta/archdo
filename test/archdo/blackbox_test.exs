@@ -258,6 +258,143 @@ defmodule Archdo.BlackboxTest do
     end
   end
 
+  describe "boundary_suggestion/1 (M-Aux5)" do
+    test "all-pure module returns :building_block (no suggestion needed)" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec a(integer()) :: integer()
+          def a(x), do: x
+          @spec b(integer()) :: integer()
+          def b(x), do: x * 2
+        end
+        """)
+
+      assert Blackbox.boundary_suggestion(ast) == :building_block
+    end
+
+    test "mixed module where pure fns DON'T call leaky → {:extract, ...}" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec a(integer()) :: integer()
+          def a(x), do: x * 2
+          @spec b(integer()) :: integer()
+          def b(x), do: x + 1
+          @spec c(:ok) :: :ok
+          def c(_x) do
+            Logger.info("leak")
+            :ok
+          end
+        end
+        """)
+
+      assert {:extract, leaky, pure} = Blackbox.boundary_suggestion(ast)
+      assert {:c, 1} in leaky
+      assert {:a, 1} in pure
+      assert {:b, 1} in pure
+    end
+
+    test "mixed module where a pure fn CALLS a leaky fn → :refactor_in_place" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec a(integer()) :: integer()
+          def a(x), do: b(x) + 1
+          @spec b(integer()) :: integer()
+          def b(_x) do
+            Logger.info("leak from b")
+            42
+          end
+        end
+        """)
+
+      # a/1 scores high structurally, but it calls b/1 which leaks.
+      # Cannot cleanly extract; recommend refactor in place.
+      assert {:refactor_in_place, breakdown} = Blackbox.boundary_suggestion(ast)
+      assert is_map(breakdown)
+    end
+
+    test "all-leaky module → :refactor_in_place" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec a(:ok) :: :ok
+          def a(_) do
+            Logger.info("a leak")
+            :ok
+          end
+          @spec b(:ok) :: :ok
+          def b(_) do
+            Logger.error("b leak")
+            :ok
+          end
+        end
+        """)
+
+      assert {:refactor_in_place, breakdown} = Blackbox.boundary_suggestion(ast)
+      # side_effect_free is the dominating failed component
+      assert breakdown[:side_effect_free] >= 2
+    end
+
+    test "module with no public functions returns :building_block" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @moduledoc false
+        end
+        """)
+
+      assert Blackbox.boundary_suggestion(ast) == :building_block
+    end
+  end
+
+  describe "refactor_distance/1 (M-Aux5)" do
+    test "building-block module has distance 0" do
+      ast =
+        parse_def("""
+        defmodule M do
+          @spec a(integer()) :: integer()
+          def a(x), do: x
+        end
+        """)
+
+      assert Blackbox.refactor_distance(ast) == 0
+    end
+
+    test "single-component leak counts as 1" do
+      ast =
+        parse_def("""
+        defmodule M do
+          def a(x), do: x
+        end
+        """)
+
+      # missing @spec → output_completeness fails → distance 1
+      assert Blackbox.refactor_distance(ast) == 1
+    end
+
+    test "multiple components failed across multiple functions sum" do
+      ast =
+        parse_def("""
+        defmodule M do
+          def a(_x) do
+            Logger.info("leak")
+            :ok
+          end
+          def b(_x) do
+            DateTime.utc_now()
+          end
+        end
+        """)
+
+      # a: missing @spec + side-effect = 2 failures
+      # b: missing @spec + non-determinism = 2 failures
+      # total: 4
+      assert Blackbox.refactor_distance(ast) == 4
+    end
+  end
+
   describe "classify/1" do
     test "≥ 0.9 → :building_block" do
       assert Blackbox.classify(1.0) == :building_block

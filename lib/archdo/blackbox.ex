@@ -207,6 +207,139 @@ defmodule Archdo.Blackbox do
     name == context or String.starts_with?(name, context <> ".")
   end
 
+  # --- M-Aux5 boundary suggestion + refactor distance ---
+
+  @type boundary_suggestion ::
+          :building_block
+          | {:extract, leaky :: [{atom(), arity()}], pure :: [{atom(), arity()}]}
+          | {:refactor_in_place, %{atom() => non_neg_integer()}}
+
+  @doc """
+  Suggest the boundary of a possible building block.
+
+  * `:building_block` — module is already a building block; nothing to do.
+  * `{:extract, leaky_fns, pure_fns}` — pure functions don't depend on
+    leaky ones. Extracting `leaky_fns` into an orchestrator leaves
+    `pure_fns` as a building block.
+  * `{:refactor_in_place, breakdown}` — pure subset is empty, OR pure
+    functions call leaky ones (extraction would break callers). The
+    breakdown maps each failed component to the count of public
+    functions that fail it, so the user knows which kind of leak
+    dominates.
+
+  Modules with no public functions are vacuously building blocks.
+  """
+  @spec boundary_suggestion(Macro.t()) :: boundary_suggestion()
+  def boundary_suggestion(ast) do
+    case score_module(ast) do
+      [] ->
+        :building_block
+
+      scores ->
+        {pure, leaky} =
+          Enum.split_with(scores, fn {_n, _a, score, _c} ->
+            score >= @building_block_threshold
+          end)
+
+        case {pure, leaky} do
+          {_, []} ->
+            :building_block
+
+          {[], _} ->
+            {:refactor_in_place, leaks_breakdown(leaky)}
+
+          {_, _} ->
+            classify_extraction(ast, pure, leaky)
+        end
+    end
+  end
+
+  defp classify_extraction(ast, pure, leaky) do
+    leaky_set = MapSet.new(leaky, fn {n, a, _, _} -> {n, a} end)
+    fns = AST.extract_functions(ast, :public)
+
+    pure_calls_leaky? =
+      Enum.any?(pure, fn {name, arity, _, _} ->
+        body = body_of(fns, name, arity)
+        body && body_calls_any?(body, leaky_set)
+      end)
+
+    case pure_calls_leaky? do
+      true ->
+        {:refactor_in_place, leaks_breakdown(leaky)}
+
+      false ->
+        {:extract, name_arity_list(leaky), name_arity_list(pure)}
+    end
+  end
+
+  defp body_of(fns, name, arity) do
+    Enum.find_value(fns, fn
+      {^name, ^arity, _meta, _args, body} -> body
+      _ -> nil
+    end)
+  end
+
+  # Walk the function body looking for a bare local call (no module
+  # prefix) whose {name, arity} is in the leaky set.
+  defp body_calls_any?(body, leaky_set) do
+    {_, hit?} =
+      Macro.prewalk(body, false, fn
+        node, true ->
+          {node, true}
+
+        {name, _meta, args} = node, false
+        when is_atom(name) and is_list(args) ->
+          arity = length(args)
+
+          case MapSet.member?(leaky_set, {name, arity}) do
+            true -> {node, true}
+            false -> {node, false}
+          end
+
+        node, false ->
+          {node, false}
+      end)
+
+    hit?
+  end
+
+  defp name_arity_list(scores) do
+    scores
+    |> Enum.map(fn {n, a, _, _} -> {n, a} end)
+    |> Enum.sort()
+  end
+
+  defp leaks_breakdown(leaky) do
+    Enum.reduce(leaky, %{}, fn {_n, _a, _s, components}, acc ->
+      Enum.reduce(components, acc, fn {key, value}, acc2 ->
+        case value < 1.0 do
+          true -> Map.update(acc2, key, 1, &(&1 + 1))
+          false -> acc2
+        end
+      end)
+    end)
+  end
+
+  @doc """
+  Distance from a building block, expressed as the total count of
+  failed components across all public functions.
+
+  * 0 — already a building block
+  * 1 — one function fails one component
+  * N — total failed components
+
+  Useful for ranking modules by ROI of refactor.
+  """
+  @spec refactor_distance(Macro.t()) :: non_neg_integer()
+  def refactor_distance(ast) do
+    ast
+    |> score_module()
+    |> Enum.reduce(0, fn {_n, _a, _s, components}, acc ->
+      acc + Enum.count(components, fn {_k, v} -> v < 1.0 end)
+    end)
+  end
+
   # --- per-function scoring ---
 
   defp score_function(body, name, arity, specs, args, catch_all_set) do

@@ -435,12 +435,12 @@ defmodule Archdo do
       |> Enum.map(fn {file, ast} ->
         module = AST.extract_module_name(ast)
         verdict = Archdo.Blackbox.module_verdict(ast)
-        {module, file, verdict}
+        {module, file, ast, verdict}
       end)
-      |> Enum.reject(fn {module, _, _} -> module == "Unknown" end)
+      |> Enum.reject(fn {module, _, _, _} -> module == "Unknown" end)
 
     {blocks, leaks} =
-      Enum.split_with(module_results, fn {_, _, v} -> v == :building_block end)
+      Enum.split_with(module_results, fn {_, _, _, v} -> v == :building_block end)
 
     IO.puts("\nArchdo — Building Block Audit (M-Aux4)\n")
     IO.puts("Modules where EVERY public function scores ≥ 0.9 on the Blackbox\n" <>
@@ -455,7 +455,7 @@ defmodule Archdo do
 
       list ->
         list
-        |> Enum.map(fn {m, _, _} -> m end)
+        |> Enum.map(fn {m, _, _, _} -> m end)
         |> Enum.sort()
         |> Enum.each(&IO.puts("  ✓ #{&1}"))
 
@@ -505,12 +505,64 @@ defmodule Archdo do
         IO.puts("")
     end
 
+    print_near_block_section(leaks)
+
     IO.puts(
-      "Leaks summary: #{length(leaks)} modules have at least one impure or " <>
+      "\nLeaks summary: #{length(leaks)} modules have at least one impure or " <>
         "spec-less public function."
     )
 
     0
+  end
+
+  # M-Aux5: rank non-block modules by refactor distance (count of failed
+  # components across all public fns) and print the top-20 with their
+  # boundary suggestion.
+  defp print_near_block_section([]), do: :ok
+
+  defp print_near_block_section(leaks) do
+    ranked =
+      leaks
+      |> Enum.map(fn {module, _file, ast, _verdict} ->
+        distance = Archdo.Blackbox.refactor_distance(ast)
+        suggestion = Archdo.Blackbox.boundary_suggestion(ast)
+        {module, distance, suggestion}
+      end)
+      |> Enum.sort_by(fn {_, d, _} -> d end)
+
+    IO.puts(
+      "\n─── Near-block modules (top 20 by refactor distance, M-Aux5) ───\n" <>
+        "  Distance = total failed components across all public fns.\n"
+    )
+
+    ranked
+    |> Enum.take(20)
+    |> Enum.each(fn {module, distance, suggestion} ->
+      IO.puts("  d=#{distance} #{module}")
+      IO.puts("    " <> format_suggestion(suggestion))
+    end)
+
+    IO.puts("")
+  end
+
+  defp format_suggestion(:building_block), do: "→ already a building block"
+
+  defp format_suggestion({:extract, leaky, pure}) do
+    leaky_repr = leaky |> Enum.take(3) |> Enum.map_join(", ", fn {n, a} -> "#{n}/#{a}" end)
+    pure_repr = pure |> Enum.take(3) |> Enum.map_join(", ", fn {n, a} -> "#{n}/#{a}" end)
+    extra = if length(leaky) > 3, do: " (+#{length(leaky) - 3})", else: ""
+
+    "→ EXTRACT #{length(leaky)} leaky fn(s) [#{leaky_repr}#{extra}]; " <>
+      "remaining #{length(pure)} fn(s) [#{pure_repr}] become a building block"
+  end
+
+  defp format_suggestion({:refactor_in_place, breakdown}) do
+    sorted =
+      breakdown
+      |> Enum.sort_by(fn {_k, v} -> -v end)
+      |> Enum.map_join(", ", fn {k, v} -> "#{k}=#{v}" end)
+
+    "→ REFACTOR IN PLACE — pure subset depends on leaks; failures: #{sorted}"
   end
 
   @spec print_metrics_matrix([String.t()]) :: non_neg_integer()
