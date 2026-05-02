@@ -101,7 +101,7 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
               {node, nil}
 
             table ->
-              body = do_body(kw)
+              body = AST.do_body(kw)
               {node, {table, body}}
           end
 
@@ -115,14 +115,6 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
   defp unwrap_string({:__block__, _, [s]}) when is_binary(s), do: s
   defp unwrap_string(s) when is_binary(s), do: s
   defp unwrap_string(_), do: nil
-
-  defp do_body(kw) do
-    Enum.find_value(kw, fn
-      {:do, body} -> body
-      {{:__block__, _, [:do]}, body} -> body
-      _ -> nil
-    end)
-  end
 
   defp body_statements({:__block__, _, statements}), do: statements
   defp body_statements(nil), do: []

@@ -78,7 +78,7 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
     {_, calls} =
       Macro.prewalk(ast, [], fn
         {{:., meta, [target, fun]}, _, [arg | _rest]} = node, acc ->
-          case classify(unwrap_atom(target), fun, unwrap_arg(arg)) do
+          case classify(AST.unwrap_atom(target), fun, unwrap_arg(arg)) do
             nil -> {node, acc}
             {kind, surface} -> {node, [{kind, surface, line(meta)} | acc]}
           end
@@ -90,13 +90,10 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
     Enum.reverse(calls)
   end
 
-  defp unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
-  defp unwrap_atom(other), do: other
-
   # Lists of literals come through as `{:__block__, _, [list]}` under the
   # encoder; the inner list's elements are themselves wrapped atoms.
   defp unwrap_arg({:__block__, _, [s]}) when is_binary(s), do: s
-  defp unwrap_arg({:__block__, _, [list]}) when is_list(list), do: Enum.map(list, &unwrap_atom/1)
+  defp unwrap_arg({:__block__, _, [list]}) when is_list(list), do: Enum.map(list, &AST.unwrap_atom/1)
   defp unwrap_arg(other), do: other
 
   defp classify(:telemetry, fun, name) when fun in [:execute, :span] and is_list(name),

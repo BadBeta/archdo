@@ -161,7 +161,7 @@ defmodule Archdo.Graph do
   # are expanded via the module's alias table so that registry edges
   # name the full module path, not the short form.
   defp alias_list_registries({:defmodule, _, [_alias, kw]}) when is_list(kw) do
-    body = do_body(kw)
+    body = AST.do_body(kw)
     alias_table = collect_alias_table(body)
 
     {_, regs} =
@@ -232,14 +232,6 @@ defmodule Archdo.Graph do
   end
 
   defp add_alias(table, _), do: table
-
-  defp do_body(kw) do
-    Enum.find_value(kw, fn
-      {:do, body} -> body
-      {{:__block__, _, [:do]}, body} -> body
-      _ -> nil
-    end)
-  end
 
   # Extract module-alias targets from a literal list value. Returns []
   # if the value isn't a list of aliases. Single-segment names are

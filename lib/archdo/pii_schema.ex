@@ -62,7 +62,7 @@ defmodule Archdo.PiiSchema do
         {:schema, _, [table_arg, kw]} = node, nil when is_list(kw) ->
           case unwrap_string(table_arg) do
             nil -> {node, nil}
-            table -> {node, {table, do_body(kw)}}
+            table -> {node, {table, AST.do_body(kw)}}
           end
 
         node, acc ->
@@ -76,28 +76,16 @@ defmodule Archdo.PiiSchema do
   defp unwrap_string(s) when is_binary(s), do: s
   defp unwrap_string(_), do: nil
 
-  defp do_body(kw) do
-    Enum.find_value(kw, fn
-      {:do, body} -> body
-      {{:__block__, _, [:do]}, body} -> body
-      _ -> nil
-    end)
-  end
-
   defp body_statements({:__block__, _, statements}), do: statements
   defp body_statements(nil), do: []
   defp body_statements(single), do: [single]
 
   defp maybe_pii_field({:field, _, [name_arg | _]}) do
-    case unwrap_atom(name_arg) do
+    case AST.unwrap_atom(name_arg) do
       a when is_atom(a) -> if pii_field?(a), do: [a], else: []
       _ -> []
     end
   end
 
   defp maybe_pii_field(_), do: []
-
-  defp unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
-  defp unwrap_atom(a) when is_atom(a), do: a
-  defp unwrap_atom(_), do: nil
 end

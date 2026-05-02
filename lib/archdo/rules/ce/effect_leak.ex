@@ -115,7 +115,7 @@ defmodule Archdo.Rules.CE.EffectLeak do
   end
 
   defp observability_call?({{:., _, [target, fun]}, _, _}) do
-    target = unwrap_atom(target)
+    target = AST.unwrap_atom(target)
     is_atom(target) and {target, fun} in @observability_bare_calls
   end
 
@@ -126,14 +126,11 @@ defmodule Archdo.Rules.CE.EffectLeak do
        do: true
 
   defp other_side_effect?({{:., _, [target, fun]}, _, _}) do
-    target = unwrap_atom(target)
+    target = AST.unwrap_atom(target)
     is_atom(target) and {target, fun} in [{:ets, :insert}, {:ets, :delete}]
   end
 
   defp other_side_effect?(_), do: false
-
-  defp unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
-  defp unwrap_atom(other), do: other
 
   defp observability_kinds(body) do
     {_, kinds} =
@@ -145,7 +142,7 @@ defmodule Archdo.Rules.CE.EffectLeak do
           {node, MapSet.put(acc, "Phoenix.PubSub")}
 
         {{:., _, [target, _]}, _, _} = node, acc ->
-          case unwrap_atom(target) do
+          case AST.unwrap_atom(target) do
             :telemetry -> {node, MapSet.put(acc, ":telemetry")}
             _ -> {node, acc}
           end

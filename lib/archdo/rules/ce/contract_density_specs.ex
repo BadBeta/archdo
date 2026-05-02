@@ -47,7 +47,7 @@ defmodule Archdo.Rules.CE.ContractDensitySpecs do
 
   defp compute_and_flag(file, ast) do
     publics = AST.extract_functions(ast, :public)
-    spec_set = collect_spec_keys(ast)
+    spec_set = AST.spec_keys(ast)
 
     case length(publics) do
       0 ->
@@ -62,20 +62,6 @@ defmodule Archdo.Rules.CE.ContractDensitySpecs do
           false -> []
         end
     end
-  end
-
-  defp collect_spec_keys(ast) do
-    {_, set} =
-      Macro.prewalk(ast, MapSet.new(), fn
-        {:@, _, [{:spec, _, [{:"::", _, [{name, _, args}, _ret]}]}]} = node, acc
-        when is_atom(name) and is_list(args) ->
-          {node, MapSet.put(acc, {name, length(args)})}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    set
   end
 
   defp build_diagnostic(file, ast, with_specs, total, coverage) do

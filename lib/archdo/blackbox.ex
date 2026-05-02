@@ -87,7 +87,7 @@ defmodule Archdo.Blackbox do
   """
   @spec score_module(Macro.t()) :: [function_score()]
   def score_module(ast) do
-    specs = collect_specs(ast)
+    specs = AST.spec_keys(ast)
     fns = AST.extract_functions(ast, :public)
     catch_all_set = collect_catch_alls(fns)
 
@@ -435,22 +435,6 @@ defmodule Archdo.Blackbox do
   end
 
   defp call_in_set?(_, _, _), do: false
-
-  # --- spec collection ---
-
-  defp collect_specs(ast) do
-    {_, set} =
-      Macro.prewalk(ast, MapSet.new(), fn
-        {:@, _, [{:spec, _, [{:"::", _, [{name, _, args}, _ret]}]}]} = node, acc
-        when is_atom(name) and is_list(args) ->
-          {node, MapSet.put(acc, {name, length(args)})}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    set
-  end
 
   # --- aggregation ---
 

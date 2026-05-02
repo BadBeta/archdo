@@ -66,7 +66,7 @@ defmodule Archdo.Rules.CE.MissingTraceability do
   # in the module body. Such an attribute covers every public function;
   # attributes between or right before defs are function-level.
   defp module_level_trace?(ast) do
-    body = module_body(ast)
+    body = AST.module_body(ast)
 
     Enum.reduce_while(body, false, fn
       {:def, _, _}, _ -> {:halt, false}
@@ -75,29 +75,11 @@ defmodule Archdo.Rules.CE.MissingTraceability do
     end)
   end
 
-  defp module_body({:defmodule, _, [_alias, kw]}) when is_list(kw) do
-    case do_body(kw) do
-      {:__block__, _, statements} -> statements
-      single when single != nil -> [single]
-      nil -> []
-    end
-  end
-
-  defp module_body(_), do: []
-
-  defp do_body(kw) do
-    Enum.find_value(kw, fn
-      {:do, body} -> body
-      {{:__block__, _, [:do]}, body} -> body
-      _ -> nil
-    end)
-  end
-
   # Walk module body in order; @requirement / @spec_ref / @trace
   # immediately before a def covers that def. Otherwise, the def is
   # untraced.
   defp find_untraced_publics(file, ast) do
-    body = module_body(ast)
+    body = AST.module_body(ast)
     module = AST.extract_module_name(ast)
 
     {diags, _pending} =

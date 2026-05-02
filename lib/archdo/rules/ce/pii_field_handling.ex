@@ -105,16 +105,12 @@ defmodule Archdo.Rules.CE.PiiFieldHandling do
 
   defp list_to_atoms(list) when is_list(list) do
     list
-    |> Enum.map(&unwrap_atom/1)
+    |> Enum.map(&AST.unwrap_atom/1)
     |> Enum.filter(&is_atom/1)
     |> MapSet.new()
   end
 
   defp list_to_atoms(_), do: MapSet.new()
-
-  defp unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
-  defp unwrap_atom(a) when is_atom(a), do: a
-  defp unwrap_atom(_), do: nil
 
   defp build_diagnostic(file, %{module: module, table: table}, fields) do
     fields_str = fields |> Enum.sort() |> Enum.map_join(", ", &inspect/1)

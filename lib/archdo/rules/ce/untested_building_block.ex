@@ -75,7 +75,7 @@ defmodule Archdo.Rules.CE.UntestedBuildingBlock do
     {_, calls} =
       Macro.prewalk(ast, [], fn
         {:property, _, [_name, kw]} = node, acc when is_list(kw) ->
-          body = property_body(kw)
+          body = AST.do_body(kw)
           new_calls = collect_remote_calls(body)
           {node, new_calls ++ acc}
 
@@ -84,14 +84,6 @@ defmodule Archdo.Rules.CE.UntestedBuildingBlock do
       end)
 
     calls
-  end
-
-  defp property_body(kw) do
-    Enum.find_value(kw, fn
-      {:do, body} -> body
-      {{:__block__, _, [:do]}, body} -> body
-      _ -> nil
-    end)
   end
 
   # All `Mod.fun(args)` calls inside a body, returned as

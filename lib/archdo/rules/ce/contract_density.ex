@@ -75,7 +75,7 @@ defmodule Archdo.Rules.CE.ContractDensity do
         nil
 
       total ->
-        spec_set = collect_spec_keys(ast)
+        spec_set = AST.spec_keys(ast)
         doc_set = collect_doc_keys(ast)
 
         with_specs = Enum.count(publics, fn {n, a, _, _, _} -> {n, a} in spec_set end)
@@ -89,25 +89,11 @@ defmodule Archdo.Rules.CE.ContractDensity do
     end
   end
 
-  defp collect_spec_keys(ast) do
-    {_, set} =
-      Macro.prewalk(ast, MapSet.new(), fn
-        {:@, _, [{:spec, _, [{:"::", _, [{name, _, args}, _ret]}]}]} = node, acc
-        when is_atom(name) and is_list(args) ->
-          {node, MapSet.put(acc, {name, length(args)})}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    set
-  end
-
   # Walks the module body looking for `@doc ...` markers immediately
   # before `def name(args)` declarations, attributing the doc to that
   # function head.
   defp collect_doc_keys(ast) do
-    body = module_body(ast)
+    body = AST.module_body(ast)
 
     {_set, _last_doc} =
       result =
@@ -132,24 +118,6 @@ defmodule Archdo.Rules.CE.ContractDensity do
 
     {set, _} = result
     set
-  end
-
-  defp module_body({:defmodule, _, [_alias, kw]}) when is_list(kw) do
-    case do_body(kw) do
-      {:__block__, _, statements} -> statements
-      single when single != nil -> [single]
-      nil -> []
-    end
-  end
-
-  defp module_body(_), do: []
-
-  defp do_body(kw) do
-    Enum.find_value(kw, fn
-      {:do, body} -> body
-      {{:__block__, _, [:do]}, body} -> body
-      _ -> nil
-    end)
   end
 
   defp doc_attr?({:@, _, [{:doc, _, [_]}]}), do: true
