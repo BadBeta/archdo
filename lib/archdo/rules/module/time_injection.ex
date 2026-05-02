@@ -40,6 +40,12 @@ defmodule Archdo.Rules.Module.TimeInjection do
   end
 
   defp find_uninjected_time(file, ast) do
+    # §§ elixir-implementing: §5.2 — collect default-arg call lines
+    # FIRST so we can exclude them from the diagnostic set. A
+    # `def f(now \\ DateTime.utc_now())` IS the rule's recommended
+    # injection mechanism — flagging it defeats the suggested fix.
+    default_arg_lines = collect_default_arg_time_lines(ast)
+
     AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
         Enum.any?(@time_calls, fn {mod, fname} -> mod_parts == mod and func == fname end)
@@ -47,6 +53,7 @@ defmodule Archdo.Rules.Module.TimeInjection do
       _ ->
         false
     end)
+    |> Enum.reject(fn {_, meta, _} -> AST.line(meta) in default_arg_lines end)
     |> Enum.uniq_by(fn {{:., _, [{:__aliases__, _, mod}, func]}, _, _} -> {mod, func} end)
     |> Enum.map(fn {{:., _, [{:__aliases__, _, mod}, func]}, meta, _} ->
       call = "#{Enum.join(mod, ".")}.#{func}"
@@ -91,6 +98,38 @@ defmodule Archdo.Rules.Module.TimeInjection do
       )
     end)
   end
+
+  # Walk every def/defp head and collect line numbers of time calls
+  # that appear inside `arg \\ <default_expr>` patterns. Those lines
+  # are the function-default-arg sites and represent the injection
+  # mechanism itself, not a hardcoded body call.
+  defp collect_default_arg_time_lines(ast) do
+    {_, lines} =
+      Macro.prewalk(ast, [], fn
+        {def_kind, _meta, [{_name, _, args} | _]} = node, acc
+        when def_kind in [:def, :defp] and is_list(args) ->
+          new_lines = args |> Enum.flat_map(&time_lines_in_default/1)
+          {node, new_lines ++ acc}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    MapSet.new(lines)
+  end
+
+  defp time_lines_in_default({:\\, _, [_pattern, default_expr]}) do
+    AST.find_all(default_expr, fn
+      {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
+        Enum.any?(@time_calls, fn {mod, fname} -> mod_parts == mod and func == fname end)
+
+      _ ->
+        false
+    end)
+    |> Enum.map(fn {_, meta, _} -> AST.line(meta) end)
+  end
+
+  defp time_lines_in_default(_), do: []
 
   defp infrastructure_file?(file) do
     String.contains?(file, "/infrastructure/") or

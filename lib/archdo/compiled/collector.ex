@@ -14,6 +14,10 @@ defmodule Archdo.Compiled.Collector do
   # §§ elixir-implementing: §9.6 #6 — exempt from CE-29 (opaque-state
   # rule). The collector is a transient compilation buffer with no
   # external observers and no PII; format_status/1 would add no value.
+  # Module.register_attribute/3 with persist: true lets the marker
+  # exist in BEAM metadata for static analysis without triggering
+  # the "set but never used" compiler warning.
+  Module.register_attribute(__MODULE__, :archdo_opaque_state, persist: true)
   @archdo_opaque_state "transient compilation buffer; no external observers"
 
   def start_link(opts \\ []) do

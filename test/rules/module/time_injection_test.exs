@@ -55,5 +55,38 @@ defmodule Archdo.Rules.Module.TimeInjectionTest do
 
       assert_clean(TimeInjection, code, file: "lib/mix/tasks/my_app.backfill.ex")
     end
+
+    test "allows DateTime.utc_now in a function-head default arg" do
+      # FP-8: `def f(now \\ DateTime.utc_now())` IS the injection
+      # mechanism the rule recommends. Production callers use the
+      # default; tests pass an explicit timestamp. Flagging the
+      # default arg defeats the rule's own suggested fix.
+      code = ~S"""
+      defmodule MyApp.Scheduler do
+        def schedule(event, now \\ DateTime.utc_now()) do
+          %{event: event, scheduled_at: now}
+        end
+      end
+      """
+
+      assert_clean(TimeInjection, code, file: "lib/my_app/scheduler.ex")
+    end
+
+    test "still flags DateTime.utc_now in body when also used as default arg" do
+      # If the function uses both a default-arg injection AND a direct
+      # body call, the body call is still a hardcoded clock and the
+      # rule should fire.
+      code = ~S"""
+      defmodule MyApp.Scheduler do
+        def schedule(event, now \\ DateTime.utc_now()) do
+          actual_now = DateTime.utc_now()
+          %{event: event, default: now, actual: actual_now}
+        end
+      end
+      """
+
+      diags = assert_flagged(TimeInjection, code, file: "lib/my_app/scheduler.ex")
+      assert hd(diags).rule_id == "1.9"
+    end
   end
 end

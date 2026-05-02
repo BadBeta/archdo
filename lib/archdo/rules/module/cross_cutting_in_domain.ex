@@ -2,9 +2,23 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  # §§ elixir-planning: §6 — operational/web/adapter layer carve-out
+  # via Archdo.Phoenix.classify_file. Mix tasks, web, controllers,
+  # adapters legitimately wrap cross-cutting concerns; flagging
+  # Logger noise there is a false positive.
+
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @max_logger_calls 3
+
+  # Phoenix layers where cross-cutting Logger noise is APPROPRIATE,
+  # not a domain pollution. Operational = Mix tasks/release scripts.
+  # Web/controller/live_view/router/component = the boundary that
+  # emits request-lifecycle logs. Test = the test framework itself.
+  @cross_cutting_layers ~w(
+    operational test application_root web controller live_view router
+    component infrastructure migration
+  )a
 
   @impl true
   def id, do: "1.6"
@@ -14,12 +28,18 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
     do: "Cross-cutting concerns (Logger, Telemetry) belong at boundaries, not in domain"
 
   @impl true
-  def analyze(file, ast, _opts) do
-    if AST.test_file?(file) or web_file?(file) or adapter_file?(file) or
-         infrastructure_file?(file) do
-      []
-    else
-      check_excessive_logging(file, ast)
+  def analyze(file, ast, opts) do
+    classification =
+      case Keyword.get(opts, :phoenix) do
+        %{layer: _} = c -> c
+        _ -> Phoenix.classify_file(file, ast)
+      end
+
+    cond do
+      classification.layer in @cross_cutting_layers -> []
+      AST.test_file?(file) -> []
+      adapter_file?(file) -> []
+      true -> check_excessive_logging(file, ast)
     end
   end
 
@@ -80,21 +100,13 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
     )
   end
 
-  defp web_file?(file), do: String.contains?(file, "_web/") or String.contains?(file, "web/")
-
+  # adapter detection retained — Phoenix.classify_file/2 doesn't have
+  # a generic ":adapter" layer, so explicit substring/suffix check.
   defp adapter_file?(file) do
     String.contains?(file, "/adapter") or
       String.contains?(file, "/adapters/") or
       String.contains?(file, "/clients/") or
       String.ends_with?(file, "_client.ex") or
       String.ends_with?(file, "_adapter.ex")
-  end
-
-  defp infrastructure_file?(file) do
-    String.contains?(file, "/infrastructure/") or
-      String.ends_with?(file, "/repo.ex") or
-      String.ends_with?(file, "/mailer.ex") or
-      String.ends_with?(file, "/telemetry.ex") or
-      String.ends_with?(file, "/application.ex")
   end
 end
