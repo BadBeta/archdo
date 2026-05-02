@@ -159,10 +159,21 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
   end
 
   defp extract_fn_name_from_desc(desc) do
-    # Match "function_name/2" or "function_name" patterns
-    case Regex.run(~r/^(\w+)(?:\/\d+)?$/, desc) do
-      [_, name] -> String.to_atom(name)
+    # Match "function_name/2" or "function_name" patterns. Use
+    # to_existing_atom — if the test description doesn't correspond to
+    # a real function name in the atom table, it can't be testing one.
+    # (Also avoids accumulating atoms for malformed test descriptions.)
+    with [_, name] <- Regex.run(~r/^(\w+)(?:\/\d+)?$/, desc),
+         {:ok, atom} <- safe_existing_atom(name) do
+      atom
+    else
       _ -> nil
     end
+  end
+
+  defp safe_existing_atom(name) do
+    {:ok, String.to_existing_atom(name)}
+  rescue
+    ArgumentError -> :error
   end
 end

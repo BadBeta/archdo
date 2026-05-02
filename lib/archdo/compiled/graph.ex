@@ -282,24 +282,21 @@ defmodule Archdo.Compiled.Graph do
     beam_dir
     |> Path.join("Elixir.*.beam")
     |> Path.wildcard()
-    |> Map.new(fn beam_path ->
-      charlist = to_charlist(beam_path)
-
-      case :beam_lib.chunks(charlist, [:abstract_code]) do
+    |> Enum.flat_map(fn beam_path ->
+      case :beam_lib.chunks(to_charlist(beam_path), [:abstract_code]) do
         {:ok, {mod, [{:abstract_code, {:raw_abstract_v1, forms}}]}} ->
           exports = collect_exports_from_forms(forms)
-          fns = extract_fns(forms, exports)
-          {mod, fns}
+          [{mod, extract_fns(forms, exports)}]
 
+        # Malformed BEAM, stripped abstract code, etc. — skip rather
+        # than create a fresh atom from the file basename (atom-table
+        # exhaustion). The module won't appear in the function-clause
+        # map; rules consuming this map already handle missing entries.
         _ ->
-          mod =
-            beam_path
-            |> Path.basename(".beam")
-            |> String.to_atom()
-
-          {mod, []}
+          []
       end
     end)
+    |> Map.new()
   end
 
   defp walk_dependents(graph, frontier, visited, by_depth, depth) do
@@ -867,19 +864,32 @@ defmodule Archdo.Compiled.Graph do
 
   # --- Build Helpers (Private) ---
 
+  # `:beam_lib.info/1` reads the module atom from the BEAM file's
+  # metadata — the atom is already encoded in the file (not freshly
+  # created from a string), so this avoids the `String.to_atom`
+  # atom-table-exhaustion vector that the file-basename approach has.
   defp load_modules(beam_files) do
     beam_files
-    |> Enum.map(fn path ->
-      path
-      |> Path.basename(".beam")
-      |> String.to_atom()
-    end)
+    |> Enum.flat_map(&module_atom_from_beam/1)
     |> Enum.filter(fn mod ->
       case Code.ensure_loaded(mod) do
         {:module, _} -> true
         {:error, _} -> false
       end
     end)
+  end
+
+  defp module_atom_from_beam(beam_path) do
+    case :beam_lib.info(String.to_charlist(beam_path)) do
+      info when is_list(info) ->
+        case Keyword.fetch(info, :module) do
+          {:ok, mod} when is_atom(mod) -> [mod]
+          _ -> []
+        end
+
+      _ ->
+        []
+    end
   end
 
   defp collect_module_data(modules) do

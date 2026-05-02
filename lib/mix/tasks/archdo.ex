@@ -320,8 +320,10 @@ defmodule Mix.Tasks.Archdo do
     do: Diagram.dependency_delta_only(graph, ["lib"])
 
   defp generate_diagram(graph, "dataflow:" <> module_name) do
-    mod = String.to_atom("Elixir.#{module_name}")
-    Diagram.dataflow_module(graph, mod)
+    case existing_module_atom(module_name) do
+      {:ok, mod} -> Diagram.dataflow_module(graph, mod)
+      :error -> "Unknown module: #{module_name}"
+    end
   end
 
   defp generate_diagram(graph, "dataflow-context:" <> context_name) do
@@ -330,8 +332,10 @@ defmodule Mix.Tasks.Archdo do
 
   # SVG variants — proper port-based LabVIEW/Grasshopper-style diagrams
   defp generate_diagram(graph, "svg:" <> module_name) do
-    mod = String.to_atom("Elixir.#{module_name}")
-    DiagramSVG.module_dataflow(graph, mod)
+    case existing_module_atom(module_name) do
+      {:ok, mod} -> DiagramSVG.module_dataflow(graph, mod)
+      :error -> "Unknown module: #{module_name}"
+    end
   end
 
   defp generate_diagram(graph, "svg-context:" <> context_name) do
@@ -352,8 +356,10 @@ defmodule Mix.Tasks.Archdo do
   end
 
   defp generate_diagram(graph, "blast:" <> module_name) do
-    mod = String.to_atom("Elixir.#{module_name}")
-    Diagram.blast_radius(graph, mod)
+    case existing_module_atom(module_name) do
+      {:ok, mod} -> Diagram.blast_radius(graph, mod)
+      :error -> "Unknown module: #{module_name}"
+    end
   end
 
   defp generate_diagram(graph, "context:" <> context_name) do
@@ -362,6 +368,16 @@ defmodule Mix.Tasks.Archdo do
 
   defp generate_diagram(_graph, other) do
     "graph LR\n  error[\"Unknown diagram type: #{other}<br/>Use: overview, modules, api, blast:Module, context:Name\"]"
+  end
+
+  # CLI module-name → atom, safe against atom-table exhaustion.
+  # Modules in the compiled graph are already in the atom table; for
+  # callers asking about anything else, returning :error is the right
+  # answer (you can't diagram a module that doesn't exist).
+  defp existing_module_atom(name) when is_binary(name) do
+    {:ok, String.to_existing_atom("Elixir." <> name)}
+  rescue
+    ArgumentError -> :error
   end
 
   # --- --explain ---
