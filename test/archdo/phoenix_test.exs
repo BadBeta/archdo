@@ -264,4 +264,24 @@ defmodule Archdo.PhoenixTest do
       assert Phoenix.operational?(%{layer: :application_root})
     end
   end
+
+  describe "context_for_file/1" do
+    test "extracts the context segment from a standard lib/ path" do
+      assert Phoenix.context_for_file("lib/myapp/accounts/user.ex") == "Accounts"
+    end
+
+    test "camelizes snake-cased context names" do
+      assert Phoenix.context_for_file("lib/myapp/order_management/order.ex") == "OrderManagement"
+    end
+
+    test "returns nil for paths that don't match the lib/X/Y/ shape" do
+      assert Phoenix.context_for_file("config/runtime.exs") == nil
+      assert Phoenix.context_for_file("mix.exs") == nil
+      assert Phoenix.context_for_file("test/foo_test.exs") == nil
+    end
+
+    test "returns nil for shallow lib paths (lib/myapp.ex with no nested context)" do
+      assert Phoenix.context_for_file("lib/myapp.ex") == nil
+    end
+  end
 end

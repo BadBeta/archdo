@@ -52,7 +52,7 @@ defmodule Archdo.Rules.Boundary.SharedDbTable do
   end
 
   defp extract_schema_tables(file, ast) do
-    context = extract_context(file)
+    context = Phoenix.context_for_file(file)
 
     case context do
       nil ->
@@ -76,13 +76,6 @@ defmodule Archdo.Rules.Boundary.SharedDbTable do
   defp unwrap_table({:__block__, _, [name]}) when is_binary(name), do: name
   defp unwrap_table(name) when is_binary(name), do: name
   defp unwrap_table(_), do: nil
-
-  defp extract_context(file) do
-    case Regex.run(~r{lib/[^/]+/([^/]+)/}, file) do
-      [_, context] -> Macro.camelize(context)
-      _ -> nil
-    end
-  end
 
   defp build_diagnostic(file, line, table, contexts) do
     Diagnostic.warning("1.31",

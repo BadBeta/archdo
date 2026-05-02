@@ -29,7 +29,7 @@ defmodule Archdo.Rules.Boundary.CrossContextConfig do
   end
 
   defp find_cross_context_config(file, ast) do
-    own_context = extract_context(file)
+    own_context = Phoenix.context_for_file(file)
 
     case own_context do
       nil -> []
@@ -72,13 +72,6 @@ defmodule Archdo.Rules.Boundary.CrossContextConfig do
   end
 
   defp foreign_context?(_, _), do: false
-
-  defp extract_context(file) do
-    case Regex.run(~r{lib/[^/]+/([^/]+)/}, file) do
-      [_, context] -> Macro.camelize(context)
-      _ -> nil
-    end
-  end
 
   defp config_file?(file) do
     String.contains?(file, "/config/") or

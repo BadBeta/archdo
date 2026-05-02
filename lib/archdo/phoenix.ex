@@ -62,6 +62,22 @@ defmodule Archdo.Phoenix do
     layer in [:operational, :test, :application_root]
   end
 
+  @doc """
+  Extract the context segment from a `lib/<app>/<context>/...` file path.
+  Returns the camelized context name (`"Accounts"`, `"OrderManagement"`)
+  or `nil` if the path doesn't match the standard nested layout.
+
+  Used by boundary rules that need to attribute a file to its owning
+  context for cross-context call detection.
+  """
+  @spec context_for_file(String.t()) :: String.t() | nil
+  def context_for_file(file) do
+    case Regex.run(~r{lib/[^/]+/([^/]+)/}, file) do
+      [_, context] -> Macro.camelize(context)
+      _ -> nil
+    end
+  end
+
   # --- layer detection ---
 
   defp detect_layer(path, uses) do

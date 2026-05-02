@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Boundary.CrossContextSchema do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 
   @impl true
   def id, do: "1.29"
@@ -20,7 +20,7 @@ defmodule Archdo.Rules.Boundary.CrossContextSchema do
   end
 
   defp find_cross_context_schema_use(file, ast) do
-    own_context = extract_context(file)
+    own_context = Phoenix.context_for_file(file)
 
     case own_context do
       nil -> []
@@ -86,13 +86,6 @@ defmodule Archdo.Rules.Boundary.CrossContextSchema do
 
   # Extract the context name from a file path
   # lib/my_app/accounts/user.ex → "Accounts"
-  defp extract_context(file) do
-    case Regex.run(~r{lib/[^/]+/([^/]+)/}, file) do
-      [_, context] -> Macro.camelize(context)
-      _ -> nil
-    end
-  end
-
   defp mix_file?(file), do: String.ends_with?(file, "mix.exs")
 
   defp build_diagnostic(file, line, own_context) do

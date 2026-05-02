@@ -80,7 +80,7 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
         {{:., meta, [target, fun]}, _, [arg | _rest]} = node, acc ->
           case classify(AST.unwrap_atom(target), fun, unwrap_arg(arg)) do
             nil -> {node, acc}
-            {kind, surface} -> {node, [{kind, surface, line(meta)} | acc]}
+            {kind, surface} -> {node, [{kind, surface, AST.line(meta)} | acc]}
           end
 
         node, acc ->
@@ -104,9 +104,6 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
        do: {:logger, s}
 
   defp classify(_, _, _), do: nil
-
-  defp line(meta) when is_list(meta), do: Keyword.get(meta, :line, 0)
-  defp line(_), do: 0
 
   # Canonicalize a name to detect synonym clusters. Returns nil if the
   # surface form isn't a recognizable event-name shape.

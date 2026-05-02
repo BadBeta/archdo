@@ -71,7 +71,7 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
   end
 
   defp extract_ets_accesses(file, ast) do
-    context = extract_context(file)
+    context = Phoenix.context_for_file(file)
 
     case context do
       nil ->
@@ -108,13 +108,6 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
   defp unwrap_atom({:__block__, _, [atom]}) when is_atom(atom), do: atom
   defp unwrap_atom(atom) when is_atom(atom), do: atom
   defp unwrap_atom(_), do: :unknown
-
-  defp extract_context(file) do
-    case Regex.run(~r{lib/[^/]+/([^/]+)/}, file) do
-      [_, context] -> Macro.camelize(context)
-      _ -> nil
-    end
-  end
 
   defp build_diagnostic(file, line, table, contexts) do
     Diagnostic.info("1.33",

@@ -29,7 +29,7 @@ defmodule Archdo.Rules.Boundary.DirectProcessCall do
   end
 
   defp find_direct_process_calls(file, ast) do
-    own_context = extract_context(file)
+    own_context = Phoenix.context_for_file(file)
 
     case own_context do
       nil -> []
@@ -74,13 +74,6 @@ defmodule Archdo.Rules.Boundary.DirectProcessCall do
   end
 
   defp foreign_context_process?(_, _), do: false
-
-  defp extract_context(file) do
-    case Regex.run(~r{lib/[^/]+/([^/]+)/}, file) do
-      [_, context] -> Macro.camelize(context)
-      _ -> nil
-    end
-  end
 
   defp build_diagnostic(file, line, own_context) do
     Diagnostic.info("1.30",

@@ -70,7 +70,7 @@ defmodule Archdo.Rules.CE.ErrorCategoryDrift do
         # literal_encoder shape: {{:__block__, _, [:error]}, {:__block__, _, [atom]}}
         {{:__block__, _, [:error]}, {:__block__, meta, [atom]}} = node, acc
         when is_atom(atom) and atom != nil ->
-          {node, [{atom, line(meta)} | acc]}
+          {node, [{atom, AST.line(meta)} | acc]}
 
         # bare shape: {:error, :atom}
         {:error, atom} = node, acc when is_atom(atom) and atom != nil ->
@@ -82,9 +82,6 @@ defmodule Archdo.Rules.CE.ErrorCategoryDrift do
 
     Enum.reverse(found)
   end
-
-  defp line(meta) when is_list(meta), do: Keyword.get(meta, :line, 0)
-  defp line(_), do: 0
 
   # Stop words filtered out before clustering — they appear across
   # many error names without contributing to category meaning.
