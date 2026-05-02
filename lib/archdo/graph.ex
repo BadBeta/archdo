@@ -361,6 +361,30 @@ defmodule Archdo.Graph do
               {node, {mod, [edge | edges]}}
           end
 
+        # §§ elixir-implementing: §2.1 — apply/3 with literal module
+        # alias: apply(MyApp.Target, :run, [args]). Variable targets
+        # (apply(var, :run, args)) silently skipped — no static
+        # resolution possible. M-Plan8 broadens CE-30 graph coverage
+        # for dynamic dispatch shapes.
+        {:apply, meta, [{:__aliases__, _, aliases}, _fn_atom, _args]} = node,
+        {mod, edges}
+        when mod != nil ->
+          case safe_concat(aliases) do
+            nil ->
+              {node, {mod, edges}}
+
+            target ->
+              edge = %{
+                source: mod,
+                target: target,
+                type: :dynamic_dispatch,
+                file: file,
+                line: AST.line(meta)
+              }
+
+              {node, {mod, [edge | edges]}}
+          end
+
         node, acc ->
           {node, acc}
       end)

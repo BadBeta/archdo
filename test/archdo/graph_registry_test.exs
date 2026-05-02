@@ -129,4 +129,59 @@ defmodule Archdo.GraphRegistryTest do
              end)
     end
   end
+
+  describe "M-Plan8 — apply/3 dynamic dispatch edges" do
+    test "emits :dynamic_dispatch edge for apply(LiteralModule, :fn, args)" do
+      file_asts = [
+        parse("lib/myapp/dispatcher.ex", ~S"""
+        defmodule MyApp.Dispatcher do
+          def call(arg) do
+            apply(MyApp.Target, :run, [arg])
+          end
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+      targets = graph |> Graph.dependencies("MyApp.Dispatcher") |> Enum.map(& &1.target)
+
+      assert "MyApp.Target" in targets,
+             "expected MyApp.Target in #{inspect(targets)}"
+    end
+
+    test "edge type is :dynamic_dispatch (distinguishes from :call)" do
+      file_asts = [
+        parse("lib/myapp/d.ex", ~S"""
+        defmodule MyApp.D do
+          def run, do: apply(MyApp.X, :go, [])
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      assert Enum.any?(graph.edges, fn e ->
+               e.source == "MyApp.D" and e.target == "MyApp.X" and
+                 e.type == :dynamic_dispatch
+             end),
+             "expected dynamic_dispatch edge MyApp.D → MyApp.X"
+    end
+
+    test "no edge for apply(var, :fn, args) — variable target" do
+      # Cannot statically resolve a variable target; rule should
+      # silently not emit (NOT crash and NOT emit a stray edge).
+      file_asts = [
+        parse("lib/myapp/var.ex", ~S"""
+        defmodule MyApp.Var do
+          def call(mod, arg), do: apply(mod, :run, [arg])
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+      targets = graph |> Graph.dependencies("MyApp.Var") |> Enum.map(& &1.target)
+
+      assert targets == [], "expected no targets, got #{inspect(targets)}"
+    end
+  end
 end
