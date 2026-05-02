@@ -10,8 +10,27 @@
 2. [Installation](#2-installation)
 3. [The rules at a glance](#3-the-rules-at-a-glance)
    - [3.1 Precision improvements (May 2026)](#31-precision-improvements-may-2026)
+     - [3.1.1 Rule 1.6 — Cross-cutting in domain](#311-rule-16--cross-cutting-in-domain-phoenix-aware-layer-detection)
+     - [3.1.2 Rule 1.9 — Time injection](#312-rule-19--time-injection-default-arg-exemption)
+     - [3.1.3 Rule 3.1 — Duplicated code](#313-rule-31--duplicated-code-umbrella-sibling-downgrade)
+     - [3.1.4 Rule CE-11 — Contract density](#314-rule-ce-11--contract-density-test_density-sub-score)
+     - [3.1.5 Rule CE-50 — :ok loses info](#315-rule-ce-50--ok-loses-info-transitively-threaded-detection)
+     - [3.1.6 Rule CE-57 — Unguarded building block](#316-rule-ce-57--unguarded-building-block-module-verdict-propagation)
+     - [3.1.7 Graph extraction enhancements](#317-graph-extraction-enhancements-broaden-ce-30--ce-31)
    - [3.2 Per-module suppression markers](#32-per-module-suppression-markers)
+     - [3.2.1 Marker mechanics](#321-marker-mechanics)
+     - [3.2.2–20 — One subsection per marker](#322-archdo_anchor--ce-30--ce-31)
    - [3.3 Change Economy rules + packs](#33-change-economy-rules--packs)
+     - [3.3.1 Selected CE rules — worked examples](#331-selected-ce-rules--worked-examples)
+   - [3.4 Architectural primitives](#34-architectural-primitives--the-shared-modules-behind-the-rules)
+     - [3.4.1 `Archdo.Phoenix`](#341-archdophoenix--file-layer-classifier)
+     - [3.4.2 `Archdo.Volatility`](#342-archdovolatility--dependency-stability-classifier)
+     - [3.4.3 `Archdo.Blackbox`](#343-archdoblackbox--composability-scorer)
+     - [3.4.4 `Archdo.AnchorSet`](#344-archdoanchorset--reachability-anchor-discovery)
+     - [3.4.5 `Archdo.InputGuard`](#345-archdoinputguard--clause-constraint-analyzer)
+     - [3.4.6 `Archdo.IrreversibleDecision`](#346-archdoirreversibledecision--schemasupervisorpublic-api-classifier)
+     - [3.4.7 `Archdo.PiiSchema`](#347-archdopiischema--pii-field-detection)
+     - [3.4.8 `Archdo.Graph` and `Archdo.Compiled.Graph`](#348-archdograph-and-archdocompiledgraph--dependency-graphs)
 4. [The diagnostic shape](#4-the-diagnostic-shape)
 5. [Output formats](#5-output-formats)
 6. [CLI reference](#6-cli-reference)
@@ -119,66 +138,1309 @@ See §3.3 below for the Change Economy + pack system.
 
 ### 3.1 Precision improvements (May 2026)
 
-Six rules saw precision-improving changes that reduce false-positive load. None of these are new rules — they're sharper detection on existing rules. If you saw noise from any of these in earlier versions, re-run; the new behaviour is the default.
+Six rules saw precision-improving changes that reduce false-positive load. None of these are new rules — they're sharper detection on existing rules. If you saw noise from any of these in earlier versions, re-run; the new behaviour is the default. Each subsection below covers what the rule used to flag, what it flags now, the reasoning behind the change, and worked examples.
 
-| Rule | What changed | Why |
-|------|--------------|-----|
-| **1.6** Cross-cutting in domain | Now uses `Archdo.Phoenix.classify_file/2` for layer detection. Operational (Mix tasks, release scripts), web, controllers, LiveView, components, routers, migrations, infrastructure, and test layers are exempt. | Hand-rolled `web_file?`/`adapter_file?` predicates missed Mix tasks and release scripts — the very places Logger noise is *appropriate*, not domain pollution. The Phoenix classifier already encodes this knowledge with broader coverage. |
-| **1.9** Time injection | Function-head default args (`def f(now \\\\ DateTime.utc_now())`) are no longer flagged. | The default-arg pattern IS the rule's own recommended fix. Flagging it defeated the suggested injection mechanism. Body calls (`def f do x = DateTime.utc_now(); ... end`) still fire. |
-| **3.1** Duplicated code | Cross-app umbrella sibling clones (e.g., `apps/api/lib/api/foo.ex` ↔ `apps/edge/lib/edge/foo.ex`) emit `:info` instead of `:warning`. | Cross-app duplication is often deliberate — parallel implementations across deployables that need to evolve in lockstep. Same-app and non-umbrella clones still emit `:warning`. |
-| **CE-11** Contract density | Adds a third `test_density` sub-score (paired source/test counting via the Mix `lib/X.ex` ↔ `test/X_test.exs` convention). Cohort minimum lowered from 3 to 2 modules. | Test density is per-module signal that doesn't need a large cohort. A schema with no paired test file is now visible alongside spec/doc gaps. |
-| **CE-50** :ok loses info | Detects transitively-threaded chains: `r = X.fetch(); process(r); :ok`. Previously only fired when the bound result was unused. | When the function returns `:ok` literal, the chain *cannot* escape to the return position regardless of how many leaf calls reference the var. Bound-and-used is just as lossy as bound-and-unused. |
-| **CE-57** Unguarded building block | The input-safety verdict now propagates to `Blackbox.module_verdict/1`. A module passes `--building-blocks` only when EVERY public function constrains its input domain (guard, all-specific patterns, or `{:error, _}` fallback). | A function that's pure and deterministic but takes `def f(x), do: x * 2` *looks* like a building block until a caller passes `f("foo")` and crashes deep with `ArithmeticError`. Module-level audit must reflect this. |
+#### 3.1.1 Rule 1.6 — Cross-cutting in domain (Phoenix-aware layer detection)
 
-Two graph-extraction enhancements broaden detection across multiple rules:
+**What it measures:** the count of `Logger.{debug,info,notice,warning,warn}` calls in a single module. Above threshold (default 3, configurable via `.archdo.exs` `thresholds:`), the module is considered to be doing cross-cutting work in domain code rather than at a boundary.
 
-| Enhancement | Affects | Why |
-|-------------|---------|-----|
-| `Archdo.Graph` emits `:dynamic_dispatch` edges for `apply(LiteralModule, :fn, args)` | CE-30 (unanchored module), CE-31 (unanchored island) | Modules referenced only via `apply/3` were invisible to the reachability walker, appearing as orphans even when transitively reached. Variable targets (`apply(var, :fn, args)`) are correctly skipped — no static resolution possible. |
-| `Archdo.AnchorSet` recognizes nested `use Supervisor` and `use DynamicSupervisor` modules and their `init/1` children | CE-30, CE-31 | Children of sub-supervisors (anything not under `Application.start/2`) were previously invisible. They're real anchors because the nesting supervisor is itself anchored. |
+**What changed:** previously the rule used hand-rolled `web_file?`, `adapter_file?`, and `infrastructure_file?` predicates that matched on path substrings (`_web/`, `web/`, `/adapter`, `/infrastructure/`, `_client.ex`, etc.). These missed entire layer categories — most notably operational code (Mix tasks, release scripts, data migrations, seed scripts) where Logger noise is *appropriate* and not a domain-layer smell. The rule now consumes `Archdo.Phoenix.classify_file/2`, the shared layer classifier, and exempts these layers:
+
+```
+:operational | :test | :application_root | :web | :controller |
+:live_view | :router | :component | :infrastructure | :migration
+```
+
+**Why:** the Phoenix classifier already encodes file-layer knowledge with much broader coverage (Mix.Task detection via `use Mix.Task`, release scripts via `release.ex` filename, data migrations via `data_migration/` path, application root via `use Application`). Reusing it eliminated 3 substring helpers and brought in correct exemptions for Mix tasks the original predicates missed. The rule still fires on real domain modules with excessive Logger calls.
+
+**Triggers (BAD — domain module with 4+ Logger calls):**
+
+```elixir
+defmodule MyApp.Accounts do
+  def create(attrs) do
+    Logger.info("Validating attrs")
+    Logger.debug("Attrs: #{inspect(attrs)}")
+    Logger.info("Creating account")
+    Logger.info("Account created")
+    {:ok, attrs}
+  end
+end
+# → CE-1.6: Domain module MyApp.Accounts contains 4 Logger calls
+```
+
+**Doesn't trigger (GOOD — same code in operational layer):**
+
+```elixir
+defmodule Mix.Tasks.MyApp.Migrate do
+  use Mix.Task
+
+  @impl Mix.Task
+  def run(_args) do
+    Logger.info("Starting migration")
+    Logger.info("Pre-checks passed")
+    Logger.info("Running migration step 1")
+    Logger.info("Done")
+    :ok
+  end
+end
+# → No diagnostic. Mix tasks ARE the cross-cutting boundary;
+#   logging there is exactly where it belongs.
+```
+
+**Configuration:** raise the threshold in `.archdo.exs` if your domain modules legitimately need 4-5 Logger calls (rare):
+
+```elixir
+thresholds: [{"1.6", max_logger_calls: 5}]
+```
+
+**When it's still a false positive:** rare. If a module truly belongs in the domain but emits 4+ Logger calls for one inherent reason (e.g., an audit-log writer that must log each step), use the threshold knob rather than the rule. There's no per-module suppression marker for 1.6 — the domain/operational classification is the architectural decision; if you disagree with it, override the layer classifier via `.archdo.exs`.
+
+---
+
+#### 3.1.2 Rule 1.9 — Time injection (default-arg exemption)
+
+**What it measures:** direct calls to wall-clock primitives (`DateTime.utc_now/0`, `Date.utc_today/0`, `NaiveDateTime.utc_now/0`, `Time.utc_now/0`, `System.system_time/0`, `System.monotonic_time/0`, `System.os_time/0`, `Calendar.universal_time/0`) in domain code that doesn't accept an injected clock.
+
+**What changed:** the rule's own recommended fix is `def schedule(event, now \\ DateTime.utc_now()) do ... end` — accept the current time as a function argument with the wall-clock as the default. Production callers use the default; tests pass an explicit timestamp. The rule used to flag the default-arg expression itself, which defeated the suggested fix. Now the rule walks every `def`/`defp` head, finds `{:\\, _, [pattern, default_expr]}` nodes, recurses into the default to collect time-call line numbers, and excludes those lines from the diagnostic set.
+
+**Why:** flagging the recommended pattern produces a no-win situation — the developer either ignores the rule or reverts the fix. The exemption preserves the rule's intent (catch hardcoded clock dependencies in function bodies) while permitting the injection mechanism the rule itself recommends.
+
+**Triggers (BAD — body call):**
+
+```elixir
+defmodule MyApp.Scheduler do
+  def schedule(event) do
+    now = DateTime.utc_now()              # ← body call, fires CE-1.9
+    %{event: event, scheduled_at: now}
+  end
+end
+```
+
+**Doesn't trigger (GOOD — default-arg injection):**
+
+```elixir
+defmodule MyApp.Scheduler do
+  def schedule(event, now \\ DateTime.utc_now()) do
+    %{event: event, scheduled_at: now}
+  end
+end
+# → No diagnostic. The default-arg IS the injection mechanism
+#   the rule recommends.
+```
+
+**Still triggers (BAD — both default arg AND body call):**
+
+```elixir
+defmodule MyApp.Scheduler do
+  def schedule(event, now \\ DateTime.utc_now()) do
+    actual_now = DateTime.utc_now()       # ← body call, still fires
+    %{event: event, default: now, actual: actual_now}
+  end
+end
+# → CE-1.9 fires on line 3, NOT on the default arg.
+```
+
+**Edge case — multiple default args, single time call:** the rule deduplicates per `{module, function}`, so a module with `DateTime.utc_now/0` in N defaults emits at most one diagnostic per function (and zero if all calls are in defaults).
+
+---
+
+#### 3.1.3 Rule 3.1 — Duplicated code (umbrella sibling downgrade)
+
+**What it measures:** Type-2 clones — structurally identical functions across modules. The rule normalizes function bodies (strips metadata, replaces variable references with positional placeholders), hashes them, and groups by hash. Functions sharing a hash are reported as duplicates. Minimum AST node count: 15 (filters out trivial getters/setters).
+
+**What changed:** in umbrella projects, the same function often appears in multiple sibling apps by deliberate design — parallel implementations across deployables (api / edge), shared schema field definitions, mirrored helpers across web / worker apps. These cross-app clones are usually intentional and need to evolve in lockstep, which is the opposite of "extract to shared module." The rule now downgrades cross-app clones from `:warning` to `:info` while keeping intra-app clones at `:warning`.
+
+**Detection of "umbrella sibling app"** is path-based: a file at `apps/<app_name>/lib/...` or any path containing the segment `apps/<app_name>/`. Two clones are "cross-app" iff their `<app_name>` segments differ. Non-umbrella projects (no `apps/` prefix) get the original `:warning` severity for all clones.
+
+**Why:** umbrella siblings are a legitimate architectural pattern — Phoenix Channels and JSON APIs often need the same encoder code, but in physically separate apps. Forcing extraction creates a third app (the shared library) with its own deployment dependencies, which is typically a worse trade than accepting the duplication. The `:info` severity preserves the signal (you should know about the clones) without elevating them above intra-app duplication, which is almost always real debt.
+
+**Triggers as `:warning` (BAD — same-app clone):**
+
+```
+lib/my_app/orders.ex            # MyApp.Orders.calculate_total/1
+lib/my_app/invoices.ex          # MyApp.Invoices.compute_amount/1
+                                # ↑ structurally identical, same app
+                                # → :warning, "extract to shared helper"
+```
+
+**Triggers as `:info` (cross-app, intentional):**
+
+```
+apps/api/lib/api/orders.ex      # Api.Orders.calculate_total/1
+apps/edge/lib/edge/orders.ex    # Edge.Orders.calculate_total/1
+                                # ↑ structurally identical, sibling apps
+                                # → :info, "consider whether to share"
+```
+
+**When the downgrade is wrong:** when the cross-app clones are NOT deliberate (someone copy-pasted across apps without realizing). The `:info` is then under-reporting. Currently no escape hatch — file an issue if the over-broad downgrade produces false negatives in your project.
+
+---
+
+#### 3.1.4 Rule CE-11 — Contract density (test_density sub-score)
+
+**What it measures:** a module representing an irreversible decision (Ecto schema, supervisor, public-API path) whose contract density is dramatically below the codebase median on at least one of three sub-scores: spec coverage, doc coverage, OR test density. Fires when any sub-score is below 50% of its respective cohort median.
+
+**What changed:** v1 scored only spec coverage and doc coverage. Test density was deferred at the M28 ship because the project-level analysis didn't pair source files with test files. M-Plan10 adds test density via the Mix convention (`lib/foo/bar.ex` paired with `test/foo/bar_test.exs`). The cohort minimum was also lowered from 3 modules to 2, since test density is per-module signal that doesn't need a large cohort.
+
+**Test density formula:** `min(1.0, test_count / public_function_count)`. Test count is the number of `test "name" do ... end` blocks in the paired test file. Capped at 1.0 so a module with 5 publics and 10 tests doesn't outweigh modules with reasonable test counts. The rule does NOT count `describe` blocks separately — the per-test count is what matters.
+
+**Why:** an Ecto schema with 100% spec coverage but no paired test file ships an irreversible-decision module without a regression guard. The combined three-dimensional view catches this case the original two-dimensional view missed.
+
+**Triggers (BAD — schema with no test file):**
+
+```
+lib/myapp/billing/invoice.ex    # Invoice schema, has @spec + @doc
+test/myapp/billing/             # ← no invoice_test.exs
+
+# Cohort: 3 other schemas have invoice_test.exs / customer_test.exs / etc.
+# Median test_density = 1.0
+# Invoice's test_density = 0.0
+# Floor (50% of median) = 0.5
+# 0.0 < 0.5 → fires CE-11 with "test density 0% (median 100%)"
+```
+
+**Doesn't trigger (GOOD — paired test file exists):**
+
+```
+lib/myapp/billing/invoice.ex
+test/myapp/billing/invoice_test.exs   # ≥ 1 test "..." block
+```
+
+**Marker exemption:** `@archdo_skip_contract_check "internal-only embedded shape"` if the module looks irreversible (uses `Ecto.Schema`, `use Supervisor`, or sits on a configured public-API path) but is genuinely internal. See §3.2.
+
+**Cohort minimum:** the rule now needs only 2 candidate modules (schemas/supervisors/public-API paths) before it fires. Single-candidate projects still get no signal — a one-element median is degenerate.
+
+---
+
+#### 3.1.5 Rule CE-50 — :ok loses info (transitively-threaded detection)
+
+**What it measures:** a function that returns the bare atom `:ok` after performing work that produced a richer result (`{:ok, value}`, an inserted struct, an HTTP response, a Mailer.deliver result). Callers can't distinguish "succeeded with this result" from "succeeded with no result"; subsequent operations needing the result must re-fetch.
+
+**What v1 caught (still fires):**
+
+1. Pattern-match-then-discard:
+   ```elixir
+   def create(attrs) do
+     {:ok, _user} = Repo.insert(%User{} |> User.changeset(attrs))
+     :ok
+   end
+   ```
+2. Bare bang call followed by `:ok`:
+   ```elixir
+   def save(attrs) do
+     Repo.insert!(%User{} |> User.changeset(attrs))
+     :ok
+   end
+   ```
+3. Bound-and-unused (M-Aux2):
+   ```elixir
+   def go(id) do
+     result = Repo.get(Order, id)        # bound, never used
+     :ok
+   end
+   ```
+
+**What M-Plan9 added (new this session):**
+
+4. Transitively-threaded chain:
+   ```elixir
+   def go(id) do
+     result = Repo.get(Order, id)
+     process(result)                     # uses result — chain ends here
+     :ok                                 # ← richer value still discarded
+   end
+   ```
+
+**Why the v1 logic missed case 4:** the v1 `bound_richer_unused?/1` predicate explicitly checked "does `result` appear in any subsequent statement?" If yes, it bailed — assuming the value was used productively. But "used in `process(result)`" is meaningless when `process(result)`'s return value is discarded by the function returning `:ok` literal. The chain literally cannot escape to the return position regardless of how many leaf calls reference the var.
+
+**The new logic** (`binds_richer?/1`): when the function returns `:ok` literal AND the prefix contains ANY `var = richer_call(...)` assignment, fire — regardless of whether `var` is referenced downstream. The body-returns-`:ok`-literal precondition is the safety check: if the chain DOES escape (`{:ok, processed}` return, for example), the outer `body_returns_lossy_ok?/1` filter exits before the binding check runs.
+
+**Doesn't trigger (GOOD — chain escapes via the return):**
+
+```elixir
+def go(id) do
+  result = Repo.get(Order, id)
+  processed = process(result)
+  {:ok, processed}                      # ← return contains derived value
+end
+```
+
+**Doesn't trigger (GOOD — intentional discard):**
+
+```elixir
+def go(id) do
+  _result = Repo.get(Order, id)         # ← _ prefix = intentional discard
+  :ok
+end
+```
+
+**Marker exemption:** `@archdo_fire_and_forget true` on the module when the operation is genuinely fire-and-forget and the richer value is uninteresting to callers (cache invalidation, notification dispatch).
+
+**Why this matters at scale:** the change found ~15 additional findings in the field cohort that v1 missed. Most were the "transform-then-discard" pattern in mailers and webhook handlers where someone added a transformation step but forgot to update the function's contract.
+
+---
+
+#### 3.1.6 Rule CE-57 — Unguarded building block (module-verdict propagation)
+
+**What it measures:** a function whose Blackbox score is ≥ 0.9 on the existing six structural components (input_closure, determinism, output_completeness, totality, side_effect_free, errors_as_values) but whose head does NOT constrain its input domain. A function `def discount(price, rate), do: max(0, price - round(price * rate))` scores 1.0 on every existing component but crashes on `discount("foo", :bar)` deep in the body with `ArithmeticError` — illegal input becomes an opaque crash instead of an expected error.
+
+**What changed:** the per-function CE-57 finding existed since M-Aux6 (April 2026). M-Plan6 propagates the input-safety verdict to `Blackbox.module_verdict/1` — the engine behind `mix archdo --building-blocks`. Previously a module with one unguarded fn could still appear as `:building_block` in the audit output, contradicting the per-function CE-57 finding. Now the module verdict combines:
+
+1. **Structural check:** every public fn ≥ 0.9 on the 6-component score
+2. **Input-safety check:** every public fn (arity > 0) constrains its input via `Archdo.InputGuard`
+
+The leak shape gained a new reason value `:unguarded_input` alongside the existing `float()` (structural score). Leak entries are `{atom, arity, leak_reason}` where `leak_reason :: float | :unguarded_input`. Backwards-compatible at the pattern level — existing callers matching `{n, a, _}` continue to work.
+
+**Definition of "constrained input":** a clause is constrained when AT LEAST ONE of:
+- the head has a `when` guard
+- all argument patterns are specific (no bare-variable args)
+- the body's last expression is an `{:error, _}` literal (clause is the explicit error fallback)
+
+A function is well-guarded when EVERY clause is constrained. The rule fires when ANY clause is unconstrained.
+
+**Triggers (BAD — bare-variable arg, no guard):**
+
+```elixir
+defmodule MyApp.Pricing do
+  @spec discount(integer(), float()) :: integer()
+  def discount(price, rate), do: max(0, price - round(price * rate))
+end
+# → CE-57: discount/2 accepts unguarded input.
+#   discount("foo", :bar) crashes deep with ArithmeticError instead
+#   of returning {:error, :invalid_input}.
+# → Module no longer appears in --building-blocks ✓ list.
+```
+
+**Doesn't trigger (GOOD — guard constrains domain):**
+
+```elixir
+defmodule MyApp.Pricing do
+  @spec discount(integer(), float()) :: integer()
+  def discount(price, rate)
+      when is_integer(price) and is_number(rate) and rate >= 0 do
+    max(0, price - round(price * rate))
+  end
+end
+# → No diagnostic. Module appears in --building-blocks ✓.
+```
+
+**Doesn't trigger (GOOD — explicit error fallback):**
+
+```elixir
+defmodule MyApp.Pricing do
+  def discount(price, rate)
+      when is_integer(price) and is_number(rate), do: max(0, price - round(price * rate))
+
+  def discount(_, _), do: {:error, :invalid_input}    # ← fallback clause
+end
+```
+
+**Doesn't trigger (GOOD — all-specific patterns):**
+
+```elixir
+defmodule MyApp.Status do
+  def label(:active), do: "Active"
+  def label(:pending), do: "Pending"
+  def label(:cancelled), do: "Cancelled"
+end
+# → No bare variables; every clause is specific.
+```
+
+**Marker exemption:** `@archdo_no_input_check "all callers pre-validate via context"` when the function is internal-only and the caller's contract enforces the domain. See §3.2.
+
+**Why this matters at the module level:** the `--building-blocks` audit is a hiring signal. A team scanning their audit output for "modules safe to property-test" needs the verdict to be honest — if the audit lists a module with one unguarded function, the recommendation is wrong. The propagation closes that gap.
+
+---
+
+#### 3.1.7 Graph extraction enhancements (broaden CE-30 / CE-31)
+
+Two changes to `Archdo.Graph` and `Archdo.AnchorSet` broaden the reachability analysis behind CE-30 (unanchored module) and CE-31 (unanchored island).
+
+**M-Plan8a — `:dynamic_dispatch` edges for `apply/3`:** when the source contains `apply(MyApp.Target, :run, [arg])` with a literal module alias as the first argument, the graph emits a new edge type `:dynamic_dispatch` from the calling module to the target. The reachability walker uses ALL edge types, so modules referenced only via apply/3 are no longer orphans.
+
+```elixir
+defmodule MyApp.Dispatcher do
+  def call(arg), do: apply(MyApp.Target, :run, [arg])
+end
+# → Graph emits edge: MyApp.Dispatcher --[:dynamic_dispatch]--> MyApp.Target
+# → MyApp.Target now reachable from anchors that reach MyApp.Dispatcher.
+```
+
+Variable targets (`apply(mod, :run, [arg])` where `mod` is a parameter or local binding) are silently skipped — there's no static resolution for the target module. This is correct: the graph should not invent edges it can't prove.
+
+**M-Plan8b — nested `use Supervisor` / `use DynamicSupervisor` modules:** previously the supervisor-children walker only fired on modules with `use Application` (the app root). Sub-supervisors anywhere else in the tree were invisible — their child lists weren't anchored, so children appeared as orphans even though they were transitively anchored via the app's main supervisor.
+
+The walker now recognizes any module with `use Supervisor`, `use DynamicSupervisor`, or `use Application` as a supervisor module. The supervisor module itself is added as an anchor (its existence is justified by the framework supervision contract); its `init/1` child list contributes anchors per the existing children-extraction logic.
+
+```elixir
+# Previously: only application.ex had its children anchored.
+defmodule MyApp.WorkersSupervisor do
+  use Supervisor
+
+  def init(_) do
+    children = [MyApp.RateLimiter, MyApp.Cache]
+    Supervisor.init(children, strategy: :one_for_one)
+  end
+end
+# → Now: MyApp.WorkersSupervisor + MyApp.RateLimiter + MyApp.Cache
+#   are all anchored. Previously only the supervisor itself
+#   (if anchored from elsewhere) was visible; children were lost.
+```
+
+**Net effect:** CE-30 self-analysis dropped from 39 to a smaller number (exact count depends on the subset of the project where `apply/3` and nested supervisors appear). On the field cohort, the change predominantly affects projects with plug-style dispatch (Phoenix routers, custom router macros) and nested supervision trees (e.g., libraries that ship their own sub-supervisor).
 
 ### 3.2 Per-module suppression markers
 
-Rules expose intentional-pattern markers as module attributes. When a rule fires on something a developer has already considered and accepted, mark the module to suppress further alerts. Markers are **opt-in declarations**, not silencing — they explicitly document the architectural choice.
+Rules expose intentional-pattern markers as module attributes. When a rule fires on something a developer has already considered and accepted, mark the module to suppress further alerts. Markers are **opt-in declarations**, not silencing — they explicitly document the architectural choice. A reviewer reading the marker should understand both that the rule *would have* fired and *why* the pattern is intentional.
 
-A marker is a module attribute; for runtime safety (avoiding the "set but never used" warning), wrap with `Module.register_attribute/3`:
+#### 3.2.1 Marker mechanics
+
+A marker is a module attribute. To prevent the Elixir 1.18+ "module attribute set but never used" warning, register the attribute first via `Module.register_attribute/3` with `persist: true`. The `persist: true` flag puts the marker in BEAM metadata where Archdo's static analysis can find it without any runtime use:
 
 ```elixir
 defmodule MyApp.SecretsVault do
   use GenServer
-  # Without register_attribute, Elixir 1.18 warns "set but never used"
+
+  # Required: register the attribute as persistent, OR Elixir
+  # warns "module attribute @archdo_opaque_state was set but
+  # never used" at compile time.
   Module.register_attribute(__MODULE__, :archdo_opaque_state, persist: true)
   @archdo_opaque_state "contains operator secrets — operators run with elevated access"
-  # ...
+
+  # ... GenServer callbacks ...
 end
 ```
 
-Full marker table:
+The `register_attribute/3` line goes ABOVE the `@archdo_X` assignment. Order matters: the attribute must be registered before it's set. A common idiom is to place all `Module.register_attribute/3` calls together at the top of the module body, just below `use GenServer` (or whatever framework `use` is appropriate).
 
-| Marker | Suppresses | Use when |
-|--------|------------|----------|
-| `@archdo_anchor` | CE-30 (unanchored module) | Module is reachable via dynamic dispatch the walker can't see (`:erpc`, registry pattern, runtime configuration). Reason string required. |
-| `@archdo_aspect_aggregator true` | CE-25 (cross-cutting density) | Function intentionally aggregates cross-cutting calls (telemetry initializer, metrics router). |
-| `@archdo_boundary_rescue` | CE-49 (catch-all rescue) | The `rescue _` is at a process boundary (port handler, NIF wrapper) where any exception must be caught for safety. Reason string required. |
-| `@archdo_fire_and_forget true` | CE-50 (:ok loses info) | Function deliberately discards a richer result; callers cannot use it. |
-| `@archdo_gdpr_exempt` | CE-53 (PII without deletion path) | Schema is GDPR-exempt (e.g., audit logs with retention obligation). |
-| `@archdo_no_input_check` | CE-57 (unguarded building block) | Every caller pre-validates input via the context boundary; internal-use function. |
-| `@archdo_no_property` | CE-55, CE-56 (effect leak / untested building block) | Function's job IS to produce an effect (logger, telemetry), or property testing is impractical. |
-| `@archdo_no_telemetry` | CE-27 (boundary telemetry) | Telemetry is centralized one layer up (Plug, channel handler). Reason string typically names the wrapping module. |
-| `@archdo_no_trace` | CE-32 (missing traceability annotation) | Function is non-traced by design (internal helper not tied to a requirement). |
-| `@archdo_opaque_state` | CE-29 (process state without inspection hook) | Process state is intentionally opaque — transient buffer, contains secrets, or no observers exist. Reason string required. |
-| `@archdo_pii_handled` | CE-51 (PII field without designated handling) | PII fields use a non-standard but auditable handling pattern. |
-| `@archdo_policy_wrapper` | CE-15 (wrapper over framework) | Wrapper enforces policy the framework doesn't (auth, rate limiting). Reason string names the policy. |
-| `@archdo_silent_error` | CE-28 (error path without log) | Errors are returned for caller-side logging; this layer is silent by design. |
-| `@archdo_skip_contract_check` | CE-11 (contract density) | Module looks irreversible (Ecto schema, supervisor) but is internal-only. |
-| `@archdo_specs_pending` | CE-12 (public API spec coverage) | Specs are being added incrementally; track via reason string ("WIP — adding specs in #1234"). |
-| `@archdo_volatility` | Volatility classifier | Override the auto-classifier with `:stable`, `:volatile`, or `:mixed`. |
+Markers are **declarations, not silencers** — they document a deliberate architectural choice, not a desire to mute the rule. When the situation changes (you add a public observer to an `@archdo_opaque_state` GenServer; you wire telemetry into an `@archdo_no_telemetry` controller), remove the marker. Stale markers that no longer reflect reality are themselves a smell — Archdo doesn't currently flag them, but a future rule might.
 
-Marker discipline:
+The full marker table:
 
-- Always include a reason string (`@archdo_X "why"`) when the marker accepts one. Reviewers reading the marker need to understand the architectural choice.
-- Markers persist in BEAM metadata via `Module.register_attribute(__MODULE__, :archdo_X, persist: true)` — that registration is also what suppresses the "set but never used" Elixir compiler warning.
-- A marker is a contract: it claims the rule *would have* fired but the pattern is intentional. If the situation changes (you add a public observer to an `@archdo_opaque_state` GenServer), remove the marker.
+| Marker | Suppresses | Reason string |
+|--------|------------|---------------|
+| `@archdo_anchor` | CE-30, CE-31 | required |
+| `@archdo_aspect_aggregator` | CE-25 | optional (`true` only) |
+| `@archdo_boundary_rescue` | CE-49 | required |
+| `@archdo_extension_point` | CE-15 | optional (`true` only) |
+| `@archdo_fire_and_forget` | CE-50 | optional (`true` only) |
+| `@archdo_gdpr_exempt` | CE-53 | optional |
+| `@archdo_no_input_check` | CE-57 | optional |
+| `@archdo_no_property` | CE-55, CE-56 | optional |
+| `@archdo_no_telemetry` | CE-27 | recommended |
+| `@archdo_no_trace` | CE-32 | optional |
+| `@archdo_opaque_state` | CE-29 | required |
+| `@archdo_pii_handled` | CE-51 | optional |
+| `@archdo_policy_wrapper` | CE-15 | required |
+| `@archdo_silent_error` | CE-28 | optional |
+| `@archdo_skip_contract_check` | CE-11 | recommended |
+| `@archdo_specs_pending` | CE-12 | recommended |
+| `@archdo_volatility` | Volatility classifier | required value (`:stable` / `:volatile` / `:mixed`) |
+| `@retention` | CE-52 | required string ("90 days", "indefinite", etc.) |
+| `@requirement` / `@spec_ref` / `@trace` | CE-32 | required |
+
+Each marker is detailed below with the code shape that triggers the rule, the marker's correct usage, and common mistakes.
+
+#### 3.2.2 `@archdo_anchor` — CE-30 / CE-31
+
+**Suppresses:** CE-30 (unanchored module), CE-31 (unanchored island).
+
+**What CE-30 detects:** a module that is not transitively reachable from any anchor (Phoenix route, Mix task, supervised process, public-API path, OR another `@archdo_anchor`-marked module) via the dependency graph.
+
+**Use the marker when:** the module IS reachable but the reachability path is invisible to the static walker. Common cases:
+- Called via `:erpc` from a sibling node (cross-node dispatch)
+- Called via `apply(var, :fn, args)` with a runtime-bound module (the walker can't resolve `var` statically; the apply/3 enhancement only handles literal targets)
+- Listed in a runtime configuration map that drives dispatch (`@plugins [...]` consumed via `Application.get_env`)
+- Referenced from external Erlang code or a NIF binding
+
+**Triggers (BAD — module appears unanchored):**
+
+```elixir
+defmodule MyApp.NifBindings do
+  # No `use Mix.Task`, `use Application`, `use Phoenix.Router`, etc.
+  # Not in any supervisor child list.
+  # Not on any public-API path.
+
+  def hello, do: :world
+end
+# → CE-30: MyApp.NifBindings is not transitively reachable from
+#   any anchor. Likely dead code or a missing anchor declaration.
+```
+
+**Doesn't trigger (GOOD — explicit anchor with reason):**
+
+```elixir
+defmodule MyApp.NifBindings do
+  Module.register_attribute(__MODULE__, :archdo_anchor, persist: true)
+  @archdo_anchor "called via :erpc from sibling node — see lib/my_app/cluster.ex"
+
+  def hello, do: :world
+end
+```
+
+**Common mistake:** marking a module `@archdo_anchor` because it "feels important" instead of because it's actually reachable via an invisible path. If you can't name the entry path in the reason string, the module probably IS dead code and the rule is correct.
+
+**Cross-reference:** the alternative to marking is to wire the module into a visible entry path — add it to the application's child list, expose it via a public-API module the rule already considers an anchor, or refactor the runtime dispatch to use literal module aliases (which the M-Plan8a apply/3 enhancement now picks up).
+
+---
+
+#### 3.2.3 `@archdo_aspect_aggregator true` — CE-25
+
+**Suppresses:** CE-25 (cross-cutting density).
+
+**What CE-25 detects:** a function with body ≥ 5 expressions where >40% of body expressions are calls into cross-cutting modules (Logger, `:telemetry`, `:telemetry_metrics`, `Repo.transaction`, `Ecto.Multi`, `Retry`, `Fuse`, `:fuse`).
+
+**Use the marker when:** the function is intentionally an aspect aggregator — its purpose IS to bundle cross-cutting concerns:
+- Telemetry initializer that attaches N handlers
+- Metrics router that fans out to multiple sinks
+- A `setup_observability/0` style function called once at app boot
+
+**Triggers (BAD — domain function with too much cross-cutting):**
+
+```elixir
+defmodule MyApp.Orders do
+  def place(attrs) do
+    Logger.info("place called")
+    :telemetry.execute([:orders, :place, :start], %{}, %{})
+    Repo.transaction(fn ->
+      Logger.debug("inside tx")
+      :telemetry.execute([:orders, :tx, :start], %{}, %{})
+      # ... actual order logic, drowned in observability
+    end)
+  end
+end
+# → CE-25: 5 cross-cutting calls out of 6 body expressions = 83%
+#   density. Function is doing aspect work in domain code.
+```
+
+**Doesn't trigger (GOOD — function IS an aspect aggregator):**
+
+```elixir
+defmodule MyAppWeb.Telemetry do
+  Module.register_attribute(__MODULE__, :archdo_aspect_aggregator, persist: true)
+  @archdo_aspect_aggregator true
+
+  def setup do
+    :telemetry.attach("phoenix-stop", [:phoenix, :endpoint, :stop], &log_request/4, nil)
+    :telemetry.attach("repo-query", [:my_app, :repo, :query], &log_query/4, nil)
+    :telemetry.attach("oban-job", [:oban, :job, :stop], &log_job/4, nil)
+    :telemetry.attach_many("metrics", @metric_events, &emit_metric/4, nil)
+    Logger.info("Telemetry handlers attached")
+    :ok
+  end
+end
+```
+
+**Common mistake:** marking ANY module that contains a function with multiple Logger calls. The marker is for functions whose entire purpose is observability orchestration — if the function ALSO does domain work, the right fix is to extract the observability into a separate function and let the rule fire on whichever side is doing aspect work it shouldn't be.
+
+---
+
+#### 3.2.4 `@archdo_boundary_rescue` — CE-49
+
+**Suppresses:** CE-49 (catch-all rescue).
+
+**What CE-49 detects:** a bare `_` or `_var` rescue clause inside a `def` body or `try/rescue` keyword list — `rescue _ ->` or `rescue x ->` where `x` is then unused. These swallow ALL exceptions silently, hiding bugs as defaults.
+
+**Use the marker when:** the broad rescue is at a process or system boundary where ANY uncaught exception would crash a critical resource:
+- Port handler that must not let GCI errors crash the port supervisor
+- NIF wrapper that translates Rust panics to error tuples (every panic shape must be caught)
+- TCP/UDP frame parser at the network edge where adversarial input must not bring down the listener
+
+**Triggers (BAD — broad rescue in domain code):**
+
+```elixir
+defmodule MyApp.Orders do
+  def fetch_with_fallback(id) do
+    Repo.get!(Order, id)
+  rescue
+    _ -> nil          # ← swallows MatchError, ArithmeticError,
+                      #   DBConnection.ConnectionError, EVERYTHING.
+                      #   Real bugs hide as `nil` returns.
+  end
+end
+# → CE-49: catch-all rescue inside def. Use a specific exception
+#   type or return {:error, reason} from a non-bang call.
+```
+
+**Doesn't trigger (GOOD — narrow rescue with specific types):**
+
+```elixir
+defmodule MyApp.Orders do
+  def fetch_with_fallback(id) do
+    case Repo.get(Order, id) do
+      nil -> nil
+      order -> order
+    end
+  end
+end
+```
+
+**Doesn't trigger (GOOD — boundary rescue with marker):**
+
+```elixir
+defmodule MyApp.PortHandler do
+  Module.register_attribute(__MODULE__, :archdo_boundary_rescue, persist: true)
+  @archdo_boundary_rescue "GCI port — any uncaught exception kills the port supervisor"
+
+  def handle_frame(frame) do
+    decode!(frame)
+  rescue
+    _ -> {:error, :malformed_frame}
+  end
+end
+```
+
+**Common mistake:** treating a deeply-nested business function as a "boundary." The boundary is where the system meets something unpredictable — external network input, a NIF that can panic, a port that can corrupt. If you can list every exception your `rescue` needs to catch, list them by name; the marker is for the case where you genuinely cannot.
+
+---
+
+#### 3.2.5 `@archdo_extension_point true` — CE-15
+
+**Suppresses:** CE-15 (wrapper over framework abstraction) for SDK/library extension-point patterns.
+
+**What CE-15 detects:** a single-implementor behaviour whose principal call target is a framework primitive with a documented test seam (Ecto.Repo, Phoenix.PubSub, Oban, Task, Task.Supervisor, GenServer, Agent). The wrapper adds an indirection hop without policy value — the framework's own seam is sufficient.
+
+**Use the marker when:** the behaviour exists to be implemented BY OTHER LIBRARIES or BY USERS — it's a published extension point of an SDK, not internal abstraction:
+- OpenTelemetry-style: ship a `MyLib.SpanProcessor` behaviour so consumers can plug in their own
+- A Phoenix-style: ship a `MyLib.Plug` behaviour for user middleware
+- A protocol-as-extension: ship `MyLib.Encoder` behaviour for data type extension
+
+**Triggers (BAD — wrapper around Repo with no policy):**
+
+```elixir
+defmodule MyApp.RepoBehaviour do
+  @callback get(module(), id :: term()) :: struct() | nil
+  @callback insert(struct()) :: {:ok, struct()} | {:error, Changeset.t()}
+end
+
+defmodule MyApp.Repo do
+  @behaviour MyApp.RepoBehaviour
+  def get(schema, id), do: MyApp.EctoRepo.get(schema, id)
+  def insert(struct), do: MyApp.EctoRepo.insert(struct)
+end
+# → CE-15: single-implementor behaviour wrapping Ecto.Repo.
+#   Ecto.Repo already has its own test seam (Ecto.Adapters.SQL.Sandbox).
+#   The wrapper adds a hop without policy value.
+```
+
+**Doesn't trigger (GOOD — extension point for SDK):**
+
+```elixir
+defmodule MyOtelLib.SpanProcessor do
+  Module.register_attribute(__MODULE__, :archdo_extension_point, persist: true)
+  @archdo_extension_point true
+
+  @callback on_start(span :: term()) :: :ok
+  @callback on_end(span :: term()) :: :ok
+end
+
+defmodule MyOtelLib.SpanProcessor.Default do
+  @behaviour MyOtelLib.SpanProcessor
+  # Default impl shipped for users who don't customize.
+end
+```
+
+**Common mistake:** confusing "I might want to swap this in tests" (which is what `@archdo_policy_wrapper` is for) with "this is a published extension point for third parties." The marker is specifically for SDK boundaries where the absence of a behaviour would force users to fork the library.
+
+---
+
+#### 3.2.6 `@archdo_fire_and_forget true` — CE-50
+
+**Suppresses:** CE-50 (:ok loses info).
+
+**What CE-50 detects:** a function that returns the bare atom `:ok` after performing work that produced a richer result (Repo.insert, Mailer.deliver, HTTP client call). See §3.1.5 for the full v2 detection logic.
+
+**Use the marker when:** the operation is genuinely fire-and-forget and callers cannot use the richer result:
+- Cache invalidation: callers want "tell me when the invalidation completed", not the deleted entries
+- Notification dispatch: callers want "did it queue?", not the message ID for tracking
+- Audit log append: the appended record is uninteresting to the caller
+
+**Triggers (BAD — domain function discarding richer result):**
+
+```elixir
+defmodule MyApp.Orders do
+  def complete(id) do
+    {:ok, _order} = Repo.update(...)
+    :ok
+  end
+end
+# → CE-50: `complete/1` returns :ok after a Repo.update.
+#   Callers cannot tell what was updated; subsequent operations
+#   needing the order must re-fetch.
+```
+
+**Doesn't trigger (GOOD — function returns the meaningful value):**
+
+```elixir
+defmodule MyApp.Orders do
+  def complete(id) do
+    Repo.update(...)        # returns {:ok, order} | {:error, cs}
+  end
+end
+```
+
+**Doesn't trigger (GOOD — fire-and-forget with marker):**
+
+```elixir
+defmodule MyApp.CacheInvalidator do
+  Module.register_attribute(__MODULE__, :archdo_fire_and_forget, persist: true)
+  @archdo_fire_and_forget true
+
+  def invalidate(key) do
+    :ets.delete(:my_cache, key)
+    Phoenix.PubSub.broadcast(MyApp.PubSub, "cache:invalidated", {:invalidated, key})
+    :ok                     # ← intentionally :ok; callers don't care
+                            #   about the deleted entries or broadcast result.
+  end
+end
+```
+
+**Common mistake:** marking a module fire-and-forget when only ONE function genuinely is. The marker applies to the whole module, so use it for modules whose entire purpose is fire-and-forget side effects (cache invalidator, notification dispatcher). For one-function exceptions in a mixed-purpose module, refactor the function to return the meaningful value or extract it to a dedicated module.
+
+---
+
+#### 3.2.7 `@archdo_gdpr_exempt` — CE-53
+
+**Suppresses:** CE-53 (PII schema without right-to-deletion path).
+
+**What CE-53 detects:** a schema with PII-shaped fields (email, phone, SSN, address, password*, *_token, etc.) lacking a `delete_for_*` / `forget_*` / `anonymize_*` / `erase_*` function that references the schema. Fires only with the `--gdpr-scope` CLI flag.
+
+**Use the marker when:** the schema is genuinely GDPR-exempt:
+- Audit log with regulatory retention obligation (must NOT be deletable per legal requirement)
+- Anonymized data where the "PII fields" are already pseudonymized (hashes, derived keys)
+- Internal-only schema that never holds real subject data
+
+**Triggers (BAD — user schema with no deletion path):**
+
+```elixir
+defmodule MyApp.Users.User do
+  use Ecto.Schema
+
+  schema "users" do
+    field :email, :string
+    field :name, :string
+    timestamps()
+  end
+end
+
+# Project search for delete_user / forget_user / anonymize_user
+# / erase_user finds nothing referencing MyApp.Users.User
+# → CE-53: no right-to-deletion path for PII schema.
+```
+
+**Doesn't trigger (GOOD — deletion path exists):**
+
+```elixir
+defmodule MyApp.Users do
+  def forget_user(user_id) do
+    user = Repo.get!(MyApp.Users.User, user_id)
+    Repo.delete!(user)
+    :ok
+  end
+end
+```
+
+**Doesn't trigger (GOOD — exempt with marker):**
+
+```elixir
+defmodule MyApp.AuditLogs.Entry do
+  use Ecto.Schema
+
+  Module.register_attribute(__MODULE__, :archdo_gdpr_exempt, persist: true)
+  @archdo_gdpr_exempt "regulatory retention — SOX 7 years, cannot delete"
+
+  schema "audit_log" do
+    field :user_email, :string
+    field :action, :string
+    timestamps()
+  end
+end
+```
+
+**Common mistake:** marking a schema GDPR-exempt because "we don't have a deletion path yet." The marker is for schemas that should NEVER have deletion paths. If you intend to add one later, use `@archdo_specs_pending` style discipline (track the work explicitly) rather than declaring exemption that won't hold.
+
+---
+
+#### 3.2.8 `@archdo_no_input_check` — CE-57
+
+**Suppresses:** CE-57 (unguarded building block).
+
+**What CE-57 detects:** see §3.1.6.
+
+**Use the marker when:** every caller pre-validates input via a context boundary (Ecto changeset, NimbleOptions schema), so the function itself never sees illegal input:
+- Internal helper called only from a public API that has already validated arguments
+- Function whose callers go through a strongly-typed pipeline (`with` chain validating each step)
+- Pure transformation in a context where the calling-site contract is enforced
+
+**Triggers (BAD — public function accepts any input):**
+
+```elixir
+defmodule MyApp.Pricing do
+  @spec discount(integer(), float()) :: integer()
+  def discount(price, rate), do: max(0, price - round(price * rate))
+end
+# → CE-57: discount/2 has bare-variable args, no guard, no error
+#   fallback. discount("foo", :bar) crashes deep with ArithmeticError.
+```
+
+**Doesn't trigger (GOOD — input check via guard):**
+
+```elixir
+defmodule MyApp.Pricing do
+  @spec discount(integer(), float()) :: integer()
+  def discount(price, rate)
+      when is_integer(price) and is_number(rate), do: max(0, price - round(price * rate))
+end
+```
+
+**Doesn't trigger (GOOD — internal helper with marker):**
+
+```elixir
+defmodule MyApp.Pricing do
+  Module.register_attribute(__MODULE__, :archdo_no_input_check, persist: true)
+  @archdo_no_input_check "all callers pre-validate via Cart.changeset/2"
+
+  # Public — but only called from MyApp.Cart after changeset validation
+  def discount(price, rate), do: max(0, price - round(price * rate))
+end
+```
+
+**Common mistake:** marking the module when the actual boundary contract isn't documented or enforced. The marker is a CLAIM that callers pre-validate; if a future refactor adds a new caller that doesn't pre-validate, the marker becomes a lie. Prefer guards on the function head — they're enforced by the runtime, not by convention.
+
+---
+
+#### 3.2.9 `@archdo_no_property` — CE-55, CE-56
+
+**Suppresses:** CE-55 (building-block function without property test), CE-56 (effect leak in near-blackbox function).
+
+**What CE-55 detects:** a function with Blackbox score ≥ 0.9 + arity > 0 + no `property "..." do ... end` block referencing the function in test files. The function is structurally a building block but only example-tested.
+
+**What CE-56 detects:** a function where every Blackbox component score ≥ 0.9 EXCEPT side_effect_free, AND ≤ 2 observability-only side effects (Logger / `Phoenix.PubSub.broadcast` / `:telemetry.execute|span`). The function is one extracted side-effect away from being a building block.
+
+**Use the marker when:** the function's purpose IS to produce an observability effect, OR property testing is impractical:
+- Logger/telemetry emitter where the "side effect" IS the function's contract
+- Function whose input domain is too rich for StreamData generators (complex AST nodes, file system trees)
+- Function with deliberate non-determinism (UUID generation, timestamp emission)
+
+**Triggers CE-56 (BAD — near-blackbox with single Logger leak):**
+
+```elixir
+defmodule MyApp.Pricing do
+  @spec discount(integer(), float()) :: integer()
+  def discount(price, rate)
+      when is_integer(price) and is_number(rate) and rate >= 0 do
+    Logger.debug("discount: price=#{price} rate=#{rate}")    # ← single side effect
+    max(0, price - round(price * rate))
+  end
+end
+# → CE-56: function passes 5/6 components; the lone Logger
+#   call is the only thing keeping it from being a building block.
+#   Suggest: split into pure inner + thin Logger wrapper.
+```
+
+**Doesn't trigger (GOOD — split into pure + wrapper):**
+
+```elixir
+defmodule MyApp.Pricing do
+  @spec discount(integer(), float()) :: integer()
+  def discount(price, rate)
+      when is_integer(price) and is_number(rate) and rate >= 0 do
+    max(0, price - round(price * rate))
+  end
+
+  def discount_with_log(price, rate) do
+    result = discount(price, rate)
+    Logger.debug("discount: price=#{price} rate=#{rate} result=#{result}")
+    result
+  end
+end
+```
+
+**Doesn't trigger (GOOD — observability is the purpose):**
+
+```elixir
+defmodule MyApp.Telemetry.RequestEmitter do
+  Module.register_attribute(__MODULE__, :archdo_no_property, persist: true)
+  @archdo_no_property "function's job IS to emit telemetry; no pure version exists"
+
+  def emit_request_event(method, path, latency) do
+    :telemetry.execute([:my_app, :request], %{latency: latency}, %{method: method, path: path})
+    :ok
+  end
+end
+```
+
+**Common mistake:** marking a module to silence CE-55 because "we'll add property tests later." Prefer adding the tests — most pure transformations have a 1-line StreamData property (`check all x <- integer(), do: assert process(x) >= 0`). The marker is for cases where property testing is genuinely impossible, not delayed.
+
+---
+
+#### 3.2.10 `@archdo_no_telemetry` — CE-27
+
+**Suppresses:** CE-27 (boundary telemetry).
+
+**What CE-27 detects:** Phoenix controller actions, `Mix.Task` `run/1,2`, and `Oban.Worker` `perform/1` callbacks not wrapped in `:telemetry.span` or `:telemetry.execute`. LiveView callbacks are exempt by spec (Phoenix.LiveView.Channel emits its own telemetry).
+
+**Use the marker when:** telemetry IS being emitted, but it's centralized one layer up from the boundary:
+- Phoenix controllers covered by a `MyAppWeb.Plugs.Telemetry` plug in the router pipeline
+- Oban workers covered by an Oban telemetry handler attached at app boot
+- Mix tasks covered by a Mix.Task wrapper or supervisor instrumentation
+
+**Triggers (BAD — controller without telemetry):**
+
+```elixir
+defmodule MyAppWeb.OrderController do
+  use MyAppWeb, :controller
+
+  def show(conn, %{"id" => id}) do
+    order = MyApp.Orders.get!(id)
+    render(conn, :show, order: order)
+  end
+end
+# → CE-27: show/2 not wrapped in :telemetry.span. Latency, error
+#   rates, throughput cannot be measured at this boundary.
+```
+
+**Doesn't trigger (GOOD — telemetry inline):**
+
+```elixir
+def show(conn, %{"id" => id}) do
+  :telemetry.span([:orders, :show], %{id: id}, fn ->
+    order = MyApp.Orders.get!(id)
+    {render(conn, :show, order: order), %{}}
+  end)
+end
+```
+
+**Doesn't trigger (GOOD — centralized via plug, marker declared):**
+
+```elixir
+defmodule MyAppWeb.OrderController do
+  use MyAppWeb, :controller
+  Module.register_attribute(__MODULE__, :archdo_no_telemetry, persist: true)
+  @archdo_no_telemetry "covered by MyAppWeb.Plugs.Telemetry in router pipeline :api"
+
+  def show(conn, %{"id" => id}) do
+    order = MyApp.Orders.get!(id)
+    render(conn, :show, order: order)
+  end
+end
+```
+
+**Common mistake:** marking every controller `@archdo_no_telemetry` because "we have a plug somewhere." The reason string MUST name the actual covering layer — when the plug is removed during a refactor, the markers become incorrect, and the team has no way to find them. Always name the specific module in the reason string.
+
+**Future enhancement:** M-Plan7 (deferred) will discover telemetry-emitting plugs in the router pipeline automatically and exempt the controllers they cover, making this marker mostly redundant. See PLAN_NEXT.md.
+
+---
+
+#### 3.2.11 `@archdo_no_trace` — CE-32
+
+**Suppresses:** CE-32 (missing traceability annotation).
+
+**What CE-32 detects:** public function on a configured `traceability_required_paths` (e.g., `lib/my_app/billing/`) without `@requirement`, `@spec_ref`, or `@trace` annotations linking it to an external requirement.
+
+**Use the marker when:** the function is a non-traced helper that doesn't correspond to any single requirement:
+- Internal utility function on a traceability-required path
+- Test fixture / setup helper colocated with billing code
+- Generated code that has no source-of-truth requirement
+
+**Triggers (BAD — billing function without trace):**
+
+```elixir
+defmodule MyApp.Billing.Charges do
+  def calculate_total(items), do: Enum.reduce(items, 0, &(&1.amount + &2))
+end
+# → CE-32 (with --traceability-required-paths "lib/my_app/billing"):
+#   calculate_total/1 lacks @requirement / @spec_ref / @trace.
+```
+
+**Doesn't trigger (GOOD — traced):**
+
+```elixir
+defmodule MyApp.Billing.Charges do
+  @requirement "REQ-FIN-042"
+  @spec calculate_total(list()) :: non_neg_integer()
+  def calculate_total(items), do: Enum.reduce(items, 0, &(&1.amount + &2))
+end
+```
+
+**Doesn't trigger (GOOD — utility marker):**
+
+```elixir
+defmodule MyApp.Billing.Charges do
+  Module.register_attribute(__MODULE__, :archdo_no_trace, persist: true)
+  @archdo_no_trace "internal utility — no source requirement"
+
+  def calculate_total(items), do: Enum.reduce(items, 0, &(&1.amount + &2))
+end
+```
+
+---
+
+#### 3.2.12 `@archdo_opaque_state` — CE-29
+
+**Suppresses:** CE-29 (process state without inspection hook).
+
+**What CE-29 detects:** a long-running stateful process (`use GenServer`, `use Agent`, `@behaviour :gen_statem`) without `format_status/1,2`. Operators cannot inspect process state during incident response (`:sys.get_state/1` returns the raw struct, which may be unreadable, contain secrets, or be unhelpfully verbose).
+
+**Use the marker when:** process state is intentionally opaque:
+- Transient buffer (compilation tracer, event collector) where state is uninteresting after the process stops
+- Process holding secrets (auth vault, encryption key cache) where leaking state to logs IS the security problem
+- Process where no external observers exist by design (internal worker started and stopped within a single request)
+
+**Triggers (BAD — GenServer without format_status):**
+
+```elixir
+defmodule MyApp.SecretsCache do
+  use GenServer
+
+  def start_link(_), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+
+  @impl true
+  def init(state), do: {:ok, state}
+
+  # No format_status/1
+end
+# → CE-29: state is opaque to operators. Add format_status/1
+#   returning a sanitized view, or mark @archdo_opaque_state.
+```
+
+**Doesn't trigger (GOOD — format_status defined):**
+
+```elixir
+defmodule MyApp.SecretsCache do
+  use GenServer
+  # ... start_link, init ...
+
+  @impl true
+  def format_status(_status) do
+    %{cached_keys: state |> Map.keys() |> length(), values: "[REDACTED]"}
+  end
+end
+```
+
+**Doesn't trigger (GOOD — opaque-by-design with marker):**
+
+```elixir
+defmodule Archdo.Compiled.Collector do
+  use GenServer
+  Module.register_attribute(__MODULE__, :archdo_opaque_state, persist: true)
+  @archdo_opaque_state "transient compilation buffer; no external observers"
+
+  # ... start_link, init, handle_call ...
+end
+```
+
+**Common mistake:** marking long-running production GenServers `@archdo_opaque_state` because "we don't want to write `format_status`." The marker is for processes where state IS opaque by architectural intent. Production-critical processes should have `format_status` even if the implementation is just `%{stats: state.stats, secrets: "[REDACTED]"}` — operators need ANYTHING to look at during an incident.
+
+---
+
+#### 3.2.13 `@archdo_pii_handled` — CE-51
+
+**Suppresses:** CE-51 (PII field without designated handling).
+
+**What CE-51 detects:** an Ecto schema with PII-shaped fields (email, phone, SSN, address, dob, date_of_birth, national_id, tax_id; password* prefix; passport* prefix; *_token suffix) without `@derive {Inspect, except: [pii_field, ...]}`. Without the derive, PII appears in inspect output, error logs, and IEx sessions.
+
+**Use the marker when:** PII fields use a non-standard but auditable handling pattern:
+- Custom `Inspect` implementation (not via `@derive`) that redacts differently per field
+- Schema where PII fields are encrypted at the Ecto type level (`Ecto.Type` that returns a placeholder from `dump/1`)
+- Test-only schemas where PII is fixture data
+
+**Triggers (BAD — schema with PII in inspect output):**
+
+```elixir
+defmodule MyApp.Users.User do
+  use Ecto.Schema
+
+  schema "users" do
+    field :email, :string
+    field :password_hash, :string
+    timestamps()
+  end
+end
+# → CE-51: email / password_hash appear in `inspect(user)` output.
+#   Add @derive {Inspect, except: [:email, :password_hash]}.
+```
+
+**Doesn't trigger (GOOD — derived inspect):**
+
+```elixir
+defmodule MyApp.Users.User do
+  use Ecto.Schema
+
+  @derive {Inspect, except: [:email, :password_hash]}
+  schema "users" do
+    field :email, :string
+    field :password_hash, :string
+    timestamps()
+  end
+end
+```
+
+**Doesn't trigger (GOOD — custom handling with marker):**
+
+```elixir
+defmodule MyApp.Users.User do
+  use Ecto.Schema
+  Module.register_attribute(__MODULE__, :archdo_pii_handled, persist: true)
+  @archdo_pii_handled "custom Inspect impl — see lib/my_app/users/user/inspect_impl.ex"
+
+  schema "users" do
+    field :email, MyApp.EncryptedField
+    field :password_hash, MyApp.EncryptedField
+    timestamps()
+  end
+
+  defimpl Inspect do
+    def inspect(_, _), do: "#User<[REDACTED]>"
+  end
+end
+```
+
+---
+
+#### 3.2.14 `@archdo_policy_wrapper` — CE-15
+
+**Suppresses:** CE-15 (wrapper over framework abstraction).
+
+**What CE-15 detects:** see §3.2.5.
+
+**Use the marker when:** the wrapper enforces policy the framework doesn't:
+- Auth wrapper that adds permission checks before delegating to Repo
+- Rate-limited HTTP client wrapper that throttles outgoing requests
+- Audit-logging Mailer wrapper that records every send
+
+**Triggers (BAD — Repo wrapper with no policy):**
+
+```elixir
+defmodule MyApp.Repo do
+  def get(schema, id), do: MyApp.EctoRepo.get(schema, id)
+  def insert(struct), do: MyApp.EctoRepo.insert(struct)
+end
+# → CE-15: thin wrapper over Ecto.Repo with no added policy.
+```
+
+**Doesn't trigger (GOOD — policy wrapper with marker):**
+
+```elixir
+defmodule MyApp.AuthorizedRepo do
+  Module.register_attribute(__MODULE__, :archdo_policy_wrapper, persist: true)
+  @archdo_policy_wrapper "enforces tenant isolation on every query"
+
+  def get(schema, id, tenant_id) do
+    schema
+    |> where([x], x.tenant_id == ^tenant_id)
+    |> MyApp.EctoRepo.get(id)
+  end
+end
+```
+
+---
+
+#### 3.2.15 `@archdo_silent_error` — CE-28
+
+**Suppresses:** CE-28 (error path without log).
+
+**What CE-28 detects:** a function returning `{:error, _}` literal OR containing a `rescue` clause without an in-scope `Logger.error/warning/info/debug/notice` call.
+
+**Use the marker when:** errors are deliberately returned unlogged for caller-side handling:
+- Pure validation function that returns `{:error, reason}` and lets the caller decide whether to log
+- Layer that intentionally bubbles errors silently (logging would be redundant — the boundary above already logs)
+
+**Triggers (BAD — error path with no log):**
+
+```elixir
+defmodule MyApp.Orders do
+  def fetch(id) do
+    case Repo.get(Order, id) do
+      nil -> {:error, :not_found}     # no log
+      order -> {:ok, order}
+    end
+  end
+end
+# → CE-28: error path returns {:error, :not_found} without Logger.
+```
+
+**Doesn't trigger (GOOD — error logged):**
+
+```elixir
+def fetch(id) do
+  case Repo.get(Order, id) do
+    nil ->
+      Logger.warning("Order not found: id=#{id}")
+      {:error, :not_found}
+    order ->
+      {:ok, order}
+  end
+end
+```
+
+**Doesn't trigger (GOOD — silent by design):**
+
+```elixir
+defmodule MyApp.Orders do
+  Module.register_attribute(__MODULE__, :archdo_silent_error, persist: true)
+  @archdo_silent_error "errors logged at boundary (controllers); domain stays silent"
+
+  def fetch(id) do
+    case Repo.get(Order, id) do
+      nil -> {:error, :not_found}
+      order -> {:ok, order}
+    end
+  end
+end
+```
+
+---
+
+#### 3.2.16 `@archdo_skip_contract_check` — CE-11
+
+**Suppresses:** CE-11 (contract density).
+
+**What CE-11 detects:** see §3.1.4.
+
+**Use the marker when:** the module looks irreversible (uses `Ecto.Schema`, `use Supervisor`, sits on a public-API path) but is genuinely internal:
+- `embedded_schema` for in-process state that's never persisted
+- Internal supervisor that's a private detail of a parent module
+- "Public" module in a deeply nested namespace that's never called from outside
+
+**Triggers (BAD — embedded schema flagged as irreversible):**
+
+```elixir
+defmodule MyApp.Filter.State do
+  use Ecto.Schema    # ← embedded, not persisted
+
+  embedded_schema do
+    field :search_term, :string
+    field :sort_dir, Ecto.Enum, values: [:asc, :desc]
+  end
+
+  def changeset(state, attrs), do: cast(state, attrs, [:search_term, :sort_dir])
+end
+# → CE-11: low spec/doc/test coverage on what looks like an
+#   irreversible decision module (uses Ecto.Schema).
+```
+
+**Doesn't trigger (GOOD — internal-shape with marker):**
+
+```elixir
+defmodule MyApp.Filter.State do
+  use Ecto.Schema
+  Module.register_attribute(__MODULE__, :archdo_skip_contract_check, persist: true)
+  @archdo_skip_contract_check "internal-only embedded shape for in-process filter state"
+
+  embedded_schema do
+    field :search_term, :string
+    field :sort_dir, Ecto.Enum, values: [:asc, :desc]
+  end
+end
+```
+
+---
+
+#### 3.2.17 `@archdo_specs_pending` — CE-12
+
+**Suppresses:** CE-12 (public API spec coverage).
+
+**What CE-12 detects:** a candidate module (Ecto schema, supervisor, public-API path) with spec coverage below 80% on its public functions.
+
+**Use the marker when:** specs are being added incrementally and you want to track the work:
+
+```elixir
+defmodule MyApp.Billing do
+  Module.register_attribute(__MODULE__, :archdo_specs_pending, persist: true)
+  @archdo_specs_pending "WIP — adding @specs in #1234"
+
+  def list_invoices(scope), do: ...    # no spec yet
+  def create_invoice(attrs), do: ...   # no spec yet
+end
+```
+
+The marker is a CONTRACT with the team that the work is in flight. Reviewers should not approve a marker without a tracking link in the reason string.
+
+---
+
+#### 3.2.18 `@archdo_volatility` — Volatility classifier
+
+**Sets:** the per-module volatility tag used by CE-1, CE-2, CE-3, CE-4, CE-34, CE-35.
+
+**What the classifier does:** categorizes each module as `:stable`, `:volatile`, or `:mixed` based on the modules it depends on. A module that calls Tesla, Req, or HTTPoison is `:volatile` (depends on volatile network primitives); a module that only calls `String`, `Enum`, `Map` is `:stable`. A module mixing both is `:mixed` and a candidate for splitting (CE-4).
+
+**Use the marker when:** the auto-classifier gets it wrong. Common cases:
+- Module calls a volatile dependency in dead code or a never-executed branch
+- Module's "volatile" calls are all behind a behaviour seam that the classifier doesn't see
+- Test helper that calls volatile primitives but isn't really part of the system
+
+```elixir
+defmodule MyApp.HealthCheck do
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable    # despite calling Tesla in one branch
+
+  def check, do: ...
+end
+```
+
+**Common mistake:** marking modules to silence CE-1 / CE-34 / CE-35 because adding a behaviour seam is "too much work." The auto-classification is usually correct — the marker should override it only when the classification is genuinely wrong, not when the classification is correct but the fix is inconvenient.
+
+---
+
+#### 3.2.19 `@retention` — CE-52
+
+**Suppresses:** CE-52 (missing retention policy).
+
+**What CE-52 detects:** an Ecto schema with timestamps + a user-like FK (configurable: user/account/member/owner/subject/creator/author/actor) lacking `@retention` annotation OR a referencing Oban worker that performs scheduled deletion.
+
+**Use the marker** to declare the schema's retention policy:
+
+```elixir
+defmodule MyApp.Sessions.Session do
+  use Ecto.Schema
+  @retention "30 days from last_used_at"
+
+  schema "sessions" do
+    field :token_hash, :string
+    field :user_id, :binary_id
+    field :last_used_at, :utc_datetime
+    timestamps()
+  end
+end
+```
+
+The reason string must be human-readable AND parseable by future tooling — recommend `"<duration> from <field>"` shape, or `"indefinite — see compliance/retention.md"` for never-expires data.
+
+---
+
+#### 3.2.20 `@requirement` / `@spec_ref` / `@trace` — CE-32 traceability annotations
+
+**Suppresses:** CE-32 (missing traceability annotation) for the annotated function.
+
+**Module-level vs per-function:**
+- At module level (before any `def`), the annotation covers ALL public functions
+- Immediately before a specific `def`, it covers only that function
+
+```elixir
+# Module-level — covers all functions
+defmodule MyApp.Billing.Charges do
+  @requirement "REQ-FIN-001"
+  @spec calculate(list()) :: integer()
+  def calculate(items), do: ...
+
+  @spec apply_discount(integer(), float()) :: integer()
+  def apply_discount(amount, rate), do: ...
+end
+
+# Per-function — only this def is covered
+defmodule MyApp.Billing.Charges do
+  @requirement "REQ-FIN-001"
+  @spec calculate(list()) :: integer()
+  def calculate(items), do: ...
+
+  # Not covered by REQ-FIN-001 — would fire CE-32
+  @spec apply_discount(integer(), float()) :: integer()
+  def apply_discount(amount, rate), do: ...
+end
+```
+
+Multiple annotations per def are fine: a function can satisfy multiple requirements simultaneously. The reason string is the requirement ID — usually a JIRA ticket, a spec section, or a contract clause reference.
 
 ### 3.3 Change Economy rules + packs
 
@@ -241,6 +1503,625 @@ Selected CE rules — what each measures and indicates:
 | **CE-57** Unguarded building block | Blackbox score ≥0.9 + arity > 0 + at least one clause has bare-variable args without guard, all-specific patterns, or `{:error, _}` fallback | Function looks like a building block but accepts any input — illegal inputs crash deep instead of returning a controlled domain error |
 
 For the full text and rationale of every CE rule, see [ARCHITECTURE_RULES_CHANGE_ECONOMY.md](ARCHITECTURE_RULES_CHANGE_ECONOMY.md).
+
+#### 3.3.1 Selected CE rules — worked examples
+
+The rules below are the highest-impact CE rules from field cohort runs. Each shows the AST shape that triggers the rule, the architectural failure mode, and a worked BAD/GOOD pair.
+
+##### CE-15 — Wrapper over framework abstraction
+
+**Detects:** a behaviour with exactly one implementation whose principal call target is a framework primitive that already has a documented test seam.
+
+**Why it matters:** wrapping `Ecto.Repo` in `MyApp.RepoBehaviour` so you can swap it in tests is a common pattern from other ecosystems — but Ecto already ships `Ecto.Adapters.SQL.Sandbox` for test isolation. The wrapper costs an indirection hop on every call, an extra mock to maintain in tests, and obscures the actual data-access pattern. CE-15 catches this.
+
+**Triggers (BAD):**
+
+```elixir
+defmodule MyApp.Repo.Behaviour do
+  @callback get(module(), term()) :: struct() | nil
+  @callback insert(struct()) :: {:ok, struct()} | {:error, Changeset.t()}
+end
+
+defmodule MyApp.Repo do
+  @behaviour MyApp.Repo.Behaviour
+
+  defdelegate get(schema, id), to: Ecto.Repo
+  defdelegate insert(struct), to: Ecto.Repo
+end
+```
+
+**Doesn't trigger (GOOD — use Ecto's own seam):**
+
+```elixir
+defmodule MyApp.Repo do
+  use Ecto.Repo, otp_app: :my_app, adapter: Ecto.Adapters.Postgres
+end
+# Test isolation via Ecto.Adapters.SQL.Sandbox.checkout/2 — no wrapper needed.
+```
+
+**Doesn't trigger (GOOD — wrapper enforces policy):**
+
+```elixir
+defmodule MyApp.AuthorizedRepo do
+  Module.register_attribute(__MODULE__, :archdo_policy_wrapper, persist: true)
+  @archdo_policy_wrapper "tenant isolation enforced on every query"
+
+  def get(schema, id, tenant_id) do
+    schema |> where([x], x.tenant_id == ^tenant_id) |> Ecto.Repo.get(id)
+  end
+end
+```
+
+##### CE-17 — Magic literals across modules
+
+**Detects:** atom or integer literals appearing in `==`/`!=` comparisons or status-shaped field assignments (`status:`, `state:`, `kind:`, `type:`, `role:`, …) across ≥2 modules.
+
+**Why it matters:** when `:active`, `:pending`, `:cancelled` appear scattered across 11 modules, renaming `:cancelled` to `:archived` requires a coordinated change across all 11 — and a forgotten module silently routes to a wrong code path. The status taxonomy needs ONE source of truth (`MyApp.Order.Status` module with `defstruct` or `Ecto.Enum`).
+
+**Triggers (BAD — `:owner` literal in 15 modules):**
+
+```elixir
+# lib/my_app/teams.ex
+def role(member), do: if member.role == :owner, do: :ok, else: :error
+
+# lib/my_app/billing.ex
+def can_charge?(user), do: user.role == :owner
+
+# lib/my_app/audit.ex
+def can_view_logs?(member), do: member.role == :owner
+
+# ... 12 more files with `:owner` literal
+# → CE-17: 15 occurrences of :owner across 15 modules.
+#   Centralize in MyApp.Roles.
+```
+
+**Doesn't trigger (GOOD — single source):**
+
+```elixir
+defmodule MyApp.Roles do
+  @owner :owner
+  @member :member
+  @guest :guest
+
+  def owner, do: @owner
+  def member, do: @member
+  def guest, do: @guest
+
+  def can_administer?(role), do: role == owner()
+end
+```
+
+##### CE-21 — Acquire / release without bracket helper
+
+**Detects:** public `open/close`, `acquire/release`, `subscribe/unsubscribe`, `lock/unlock`, `connect/disconnect`, or `checkout/checkin` function pairs without a `with_*/2` bracket helper. Exempts `start_link/stop` (OTP lifecycle).
+
+**Why it matters:** when callers manually pair `open` with `close`, every error path is a leak waiting to happen. The `with_*/2` bracket pattern ensures cleanup runs even on exception:
+
+```elixir
+def with_connection(opts, fun) do
+  conn = open(opts)
+  try do
+    fun.(conn)
+  after
+    close(conn)
+  end
+end
+```
+
+**Triggers (BAD):**
+
+```elixir
+defmodule MyApp.Lock do
+  def acquire(resource), do: ...
+  def release(resource), do: ...
+  # No with_lock/2 helper
+end
+
+# Caller code — easy to forget release on exception path
+def update_safely(resource) do
+  acquire(resource)
+  result = do_update(resource)
+  release(resource)
+  result
+end
+```
+
+**Doesn't trigger (GOOD):**
+
+```elixir
+defmodule MyApp.Lock do
+  def acquire(resource), do: ...
+  def release(resource), do: ...
+
+  def with_lock(resource, fun) do
+    acquire(resource)
+    try do
+      fun.()
+    after
+      release(resource)
+    end
+  end
+end
+```
+
+##### CE-29 — Opaque process state
+
+**Detects:** see §3.2.12.
+
+**The architectural cost:** during an incident, an operator wants to ask "what is process X holding?" via `:observer` or `:sys.get_state/1`. Without `format_status/1`, they get the raw struct — which may be:
+- 50KB of cached binary data (visually unparseable)
+- A struct with `:auth_token` or `:secret_key` fields (security leak in logs)
+- A reference-only struct (`#PID<0.123.0>`, `#Reference<...>`) with no human meaning
+
+`format_status/1` returns a sanitized, summarized view designed for operator inspection.
+
+**Triggers (BAD):**
+
+```elixir
+defmodule MyApp.AuthVault do
+  use GenServer
+
+  defstruct [:secret_key, :session_tokens, :rotation_at]
+
+  def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  @impl true
+  def init(opts), do: {:ok, %__MODULE__{secret_key: opts[:key]}}
+  # No format_status/1
+end
+# → CE-29: state opaque to operators. :sys.get_state(MyApp.AuthVault)
+#   leaks the secret key in any debugging session.
+```
+
+**Doesn't trigger (GOOD):**
+
+```elixir
+defmodule MyApp.AuthVault do
+  use GenServer
+
+  defstruct [:secret_key, :session_tokens, :rotation_at]
+  # ... start_link, init ...
+
+  @impl true
+  def format_status(:terminate, [_pdict, state]), do: format_status(:normal, [_pdict, state])
+
+  @impl true
+  def format_status(:normal, [_pdict, state]) do
+    %{
+      session_count: map_size(state.session_tokens),
+      rotation_at: state.rotation_at,
+      secret_key: "[REDACTED]"
+    }
+  end
+end
+```
+
+##### CE-30 — Unanchored module
+
+**Detects:** a module that is not transitively reachable from any anchor (Phoenix route, Mix task, supervised process, public API, `@archdo_anchor`).
+
+**The architectural cost:** unanchored modules accumulate over time as features are removed without removing their helpers, refactors leave behind orphan modules, or runtime dispatch changes invalidate static reachability. Each unanchored module is either:
+- Dead code (delete it)
+- Reachable via an invisible path (mark it `@archdo_anchor` with the path documented)
+- A bug (the path WAS visible until a recent refactor broke it)
+
+CE-30 turns this into a routine audit. The May 2026 enhancements (M-Plan8a/b) reduce false positives from `apply/3` dispatch and nested supervision; the remaining hits should be examined.
+
+**Triggers (BAD — module has no entry path):**
+
+```elixir
+defmodule MyApp.LegacyBatchProcessor do
+  def process(items), do: Enum.map(items, &process_one/1)
+  defp process_one(item), do: ...
+end
+# Project search: nothing references MyApp.LegacyBatchProcessor.
+# → CE-30: unanchored. Likely removed-but-not-deleted from when
+#   the team migrated to Oban workers.
+```
+
+##### CE-34 — Volatile call without timeout
+
+**Detects:** a call to Tesla / Req / Finch / HTTPoison without an explicit timeout option, OR `GenServer.call/2` without a third-arg timeout (defaults to 5000ms — usually wrong for cross-process calls).
+
+**The architectural cost:** unbounded waits create cascading failure scenarios. A slow downstream HTTP service eats the calling process's mailbox; a slow GenServer eats every caller's pool capacity; eventually the entire pipeline grinds to a halt — and the operator can't tell which downstream is the culprit because there's no timeout to surface as an error.
+
+**Triggers (BAD):**
+
+```elixir
+defmodule MyApp.ExternalAPI do
+  def fetch(url), do: Req.get!(url)        # no receive_timeout
+end
+
+defmodule MyApp.Worker do
+  def get_state, do: GenServer.call(__MODULE__, :get)   # default 5000ms
+end
+```
+
+**Doesn't trigger (GOOD):**
+
+```elixir
+defmodule MyApp.ExternalAPI do
+  def fetch(url), do: Req.get!(url, receive_timeout: 10_000)
+end
+
+defmodule MyApp.Worker do
+  def get_state, do: GenServer.call(__MODULE__, :get, 30_000)
+end
+```
+
+##### CE-47 — Bang without non-bang sibling
+
+**Detects:** a public `name!/n` function lacking a sibling `name/n` returning `{:ok, _} | {:error, _}`. The convention in Elixir is to ship pairs: `Repo.get/2` (returns `nil` or struct, never raises) and `Repo.get!/2` (returns struct or raises). When only the bang exists, callers wanting controlled error handling are forced into `try/rescue`.
+
+**Triggers (BAD):**
+
+```elixir
+defmodule MyApp.Settings do
+  def get!(key), do: Map.fetch!(:persistent_term, key)
+  # No corresponding get/1 returning {:ok, value} | :error
+end
+```
+
+**Doesn't trigger (GOOD — pair):**
+
+```elixir
+defmodule MyApp.Settings do
+  def get(key) do
+    case Map.fetch(:persistent_term, key) do
+      {:ok, value} -> {:ok, value}
+      :error -> {:error, :not_found}
+    end
+  end
+
+  def get!(key) do
+    case get(key) do
+      {:ok, value} -> value
+      {:error, reason} -> raise "settings get! failed: #{reason}"
+    end
+  end
+end
+```
+
+##### CE-49 — Catch-all rescue
+
+**Detects:** see §3.2.4.
+
+**The architectural cost:** every catch-all rescue is a bug suppressor. The intended exception (e.g., `Ecto.NoResultsError` from `Repo.get!/2`) gets caught alongside `MatchError` (typo), `ArithmeticError` (division by zero), `DBConnection.ConnectionError` (downstream is down), `KeyError` (missing field). The function returns the same `nil` for all of them, and the operator has no signal to investigate.
+
+##### CE-54 — Low-possibility / high-value Blackbox
+
+**Detects:** a function in the `:context` or `:schema` layer where:
+- Substance score is high (`AST size ≥ 30`)
+- At least one of `input_closure`, `determinism`, `totality`, `side_effect_free`, or `errors_as_values` failed (component score < 1.0)
+
+**The architectural cost:** these are the functions doing real domain work that aren't structured for verification. They're the hardest to test (substance ≥ 0.7 means significant logic), the most consequential when changed (high value), AND they have at least one structural impurity blocking property tests.
+
+**Why it's actionable:** the diagnostic names which component failed. If `side_effect_free` failed, the fix is to extract the side effect (CE-56 catches the easy version of this). If `input_closure` failed, the fix is to remove the `Application.get_env` from the function body and inject via parameter. If `errors_as_values` failed, the fix is to convert `raise` calls to `{:error, _}` returns.
+
+##### CE-55 — Building-block function without property test
+
+**Detects:** a function that already passes the Blackbox 6-component check (score ≥ 0.9, arity > 0) AND is not exercised by any `property "..." do ... end` block in test files.
+
+**The architectural cost:** a function that's structurally pure, deterministic, total, and side-effect-free is the perfect candidate for property testing — the input domain can be generated, the output invariant asserted, and edge cases discovered automatically. Skipping property testing on these functions is leaving free verification on the table.
+
+**Suggested fix per finding:**
+
+```elixir
+# In test/my_app/pricing_test.exs
+use ExUnitProperties
+
+property "discount/2 is monotonic in rate" do
+  check all price <- positive_integer(),
+            rate1 <- float(min: 0.0, max: 1.0),
+            rate2 <- float(min: rate1, max: 1.0) do
+    assert MyApp.Pricing.discount(price, rate2) <= MyApp.Pricing.discount(price, rate1)
+  end
+end
+```
+
+##### CE-56 — Effect leak in near-blackbox
+
+**Detects:** see §3.2.9 (where the marker is documented).
+
+**Why it matters:** the function is one refactor away from a building block. The diagnostic specifically names the single side-effect call. The fix is mechanical (split into pure inner + thin wrapper) — much smaller than refactoring a multi-effect function.
+
+##### CE-57 — Unguarded building block
+
+**Detects:** see §3.1.6.
+
+---
+
+### 3.4 Architectural primitives — the shared modules behind the rules
+
+Several rules share underlying analyzers. Understanding these primitives helps both when reading the rule code and when writing custom rules. Each primitive has a single-responsibility module, used by multiple rules and by `Archdo` itself.
+
+#### 3.4.1 `Archdo.Phoenix` — file-layer classifier
+
+**Module:** `lib/archdo/phoenix.ex`. **Tests:** `test/archdo/phoenix_test.exs`.
+
+**Purpose:** classify each file into one of these layers based on path + AST inspection:
+
+```
+:application_root | :web | :live_view | :component | :controller |
+:router | :context | :schema | :migration | :operational |
+:test | :other
+```
+
+**Detection logic:**
+
+| Layer | Signal |
+|-------|--------|
+| `:application_root` | File ends in `application.ex` OR module uses `use Application` |
+| `:web` | File path under `_web/` or `web/` (excluding more specific layers) |
+| `:live_view` | Module uses `use Phoenix.LiveView` OR `use AppWeb, :live_view` |
+| `:component` | Module uses `use Phoenix.Component` OR `use AppWeb, :component` |
+| `:controller` | Module uses `use Phoenix.Controller` OR `use AppWeb, :controller` |
+| `:router` | Module uses `use Phoenix.Router` |
+| `:operational` | Module uses `use Mix.Task`, file under `lib/mix/tasks/`, or path matches `data_migration/`, `release.ex`, `priv/repo/seeds*` |
+| `:migration` | Module uses `use Ecto.Migration` |
+| `:schema` | Module uses `use Ecto.Schema` |
+| `:test` | Path under `test/` |
+| `:context` | None of the above, in `lib/<app>/<context>.ex` shape |
+| `:other` | Fallback |
+
+**Used by:** rule 1.6 (Cross-cutting in domain), 1.9 (Time injection), 4.4 (External deps without behaviour), 4.18 (Unbounded external call), 4.19 (Missing telemetry), 5.30 (Process sleep), 5.24 (Dynamic atom name), 1.30 (Direct process call), 1.32 (Cross-context config), 4.5 (Import breadth), 1.31 (Shared DB table), 1.33 (Shared ETS table), 3.3 (Lib config via args), 4.20 (Unprotected external call), 7.25 (Untested module), 6.10 (Raise in non-bang), 1.26 (Reverse dependency), and others.
+
+**Helper functions:**
+
+```elixir
+Archdo.Phoenix.classify_file(file_path, ast) :: %{layer: layer(), uses: [...], embed_templates: ...}
+Archdo.Phoenix.operational?(classification) :: boolean()
+```
+
+**Override mechanism:** `.archdo.exs` doesn't currently expose layer overrides — the classifier is convention-driven and projects with non-standard layouts may need to map paths via `layers:` regex. For per-file overrides, the relevant rule must be marked or skipped via `# archdo:allow RULE_ID` comment suppression on the line.
+
+**Why it's a primitive:** layer classification was scattered across 8 rules with hand-rolled `web_file?`, `controller_file?`, etc. helpers, each with subtle differences. Centralizing in `Phoenix.classify_file/2` means a project's layer classification is consistent across rules, and a layer-detection bug fix lands in one place.
+
+#### 3.4.2 `Archdo.Volatility` — dependency-stability classifier
+
+**Module:** `lib/archdo/volatility.ex`. **Tests:** `test/archdo/volatility_test.exs`.
+
+**Purpose:** tag each module as `:stable`, `:volatile`, or `:mixed` based on the modules it depends on. The rules in pack `core` that consume volatility (CE-1, CE-2, CE-3, CE-4, CE-34, CE-35) use this classification to focus on cost-of-change-driving boundaries.
+
+**The shipped per-dependency profile (~25 entries):**
+
+| Module pattern | Tag |
+|---------------|-----|
+| `Tesla`, `Req`, `Finch`, `HTTPoison` | `:volatile` (network primitives) |
+| `Ecto.Repo`, `Ecto.Multi`, `Ecto.Query` | `:stable` (Ecto API contract) |
+| `Logger`, `:telemetry` | `:stable` (observability primitives) |
+| `Phoenix.PubSub` | `:stable` (PubSub interface) |
+| `DateTime`, `Date`, `Time`, `NaiveDateTime` | `:mixed` (volatile in some uses, stable in others — see dual-purpose resolution below) |
+| `:inet`, `:gen_tcp`, `:gen_udp` | `:volatile` (network) |
+| `:calendar` | `:stable` |
+| `String`, `Enum`, `Map`, `Keyword`, `List`, `Stream` | `:stable` (BIF-equivalent) |
+
+**Dual-purpose resolution:** `DateTime.utc_now/0` is volatile (changes every call); `DateTime.add/3` is stable (pure transformation). The volatility classifier resolves these per-call-site by checking the function name against a per-module profile — `:utc_now` is volatile, `:add` is stable.
+
+**Density thresholds:** a module's volatility tag is computed from the ratio of volatile vs stable calls in its body:
+- `volatile_ratio ≥ 0.40` → `:volatile`
+- `volatile_ratio in 0.05..0.40` → `:mixed`
+- `volatile_ratio < 0.05` → `:stable`
+
+**Path overrides via `.archdo.exs`:**
+
+```elixir
+[
+  volatile_paths: ["lib/my_app/external/", "lib/my_app/integrations/"],
+  stable_paths: ["lib/my_app/core/"],
+  dependency_volatility: [
+    {MyApp.LegacyHTTP, :volatile},
+    {MyApp.PureCore, :stable}
+  ]
+]
+```
+
+**Per-module override via marker:** `@archdo_volatility :stable | :volatile | :mixed`. See §3.2.18.
+
+**Used by:** CE-1, CE-2, CE-3, CE-4, CE-34, CE-35.
+
+#### 3.4.3 `Archdo.Blackbox` — composability scorer
+
+**Module:** `lib/archdo/blackbox.ex`. **Tests:** `test/archdo/blackbox_test.exs`.
+
+**Purpose:** score every public function on six independent components, multiplied together. A perfect score (1.0) means the function has every property property-based testing requires.
+
+**The six components (each scored 0.0–1.0):**
+
+| Component | What it measures | Component fails if... |
+|-----------|------------------|----------------------|
+| `input_closure` | Does the function read state outside its parameter list? | calls `Application.get_env`, `Process.get`, `:persistent_term.get`, `:ets.lookup`, `:ets.tab2list` |
+| `determinism` | Is the output a function of inputs only? | calls `DateTime.utc_now`, `:rand.uniform`, `:erlang.system_time`, `:os.timestamp`, etc. |
+| `output_completeness` | Is the return type documented? | no `@spec` for the function |
+| `totality` | Does the function handle every possible input? | no catch-all clause AND no all-specific patterns covering the type |
+| `side_effect_free` | Does the function avoid side effects? | calls `Logger.*`, `Phoenix.PubSub.broadcast`, `Repo.{insert,update,delete}`, `:telemetry.execute` |
+| `errors_as_values` | Does the function return errors as values, not exceptions? | body contains `raise` |
+
+**Class verdict:** `score_module/1` returns a list of `{name, arity, score, components}` per public function. `classify/1` maps the multiplied score to a class:
+
+| Score | Class | Meaning |
+|-------|-------|---------|
+| ≥ 0.9 | `:building_block` | Property-testable, drop-in replaceable |
+| ≥ 0.5 | `:near_block` | One or two structural fixes from `:building_block` |
+| ≥ 0.2 | `:mixed` | Substantial structural impurities |
+| < 0.2 | `:boundary` | Pure boundary (controller, GenServer callback, etc.) |
+
+**Module verdict (M-Plan6 enhancement):** `module_verdict/1` combines:
+1. Structural check: every public fn ≥ 0.9 on the 6-component score
+2. Input-safety check: every public fn (arity > 0) constrains its input via `Archdo.InputGuard`
+
+Returns `:building_block` or `{:leaks_at, [{name, arity, leak_reason}]}` where `leak_reason :: float() | :unguarded_input`.
+
+**Boundary suggestion (M-Aux5):** `boundary_suggestion/1` decides whether a near-block module would benefit from extracting its pure functions into a sibling module. Returns:
+
+```elixir
+:building_block                                      # No extraction needed
+| {:extract, leaky_fns, pure_fns}                    # Pure fns can be extracted
+| {:refactor_in_place, %{component => fail_count}}   # Fix in place
+```
+
+**CLI:** `mix archdo --building-blocks` prints two sections:
+1. Building-block MODULES (all public fns pass both checks)
+2. Building-block CONTEXTS (all modules in the context's namespace are building blocks)
+
+Plus a third section (M-Aux5): top-20 near-block modules ranked by refactor distance, each with its boundary suggestion.
+
+**Used by:** CE-54, CE-55, CE-56, CE-57, plus the `--building-blocks` CLI command.
+
+#### 3.4.4 `Archdo.AnchorSet` — reachability anchor discovery
+
+**Module:** `lib/archdo/anchor_set.ex`. **Tests:** `test/archdo/anchor_set_test.exs`.
+
+**Purpose:** compute the set of "anchored" modules — modules with externally-justified existence. CE-30 (unanchored module) and CE-31 (unanchored island) report modules NOT transitively reachable from this set.
+
+**Anchor sources:**
+
+| Source | What counts |
+|--------|-------------|
+| `use Mix.Task` | Mix task entry point |
+| `use Application` | Application lifecycle callback |
+| `use Phoenix.Router` | Phoenix router (HTTP route table) |
+| `use Phoenix.LiveView` | Phoenix LiveView (route-mounted) |
+| `use Oban.Worker` | Oban worker (queue-driven) |
+| `use Phoenix.Channel` | Phoenix channel (websocket route) |
+| `use Supervisor` | Nested supervisor (M-Plan8b) |
+| `use DynamicSupervisor` | Dynamic supervisor (M-Plan8b) |
+| `@archdo_anchor "reason"` | Explicit user-declared anchor |
+| Children of any supervisor module | Listed in any `init/1` child list (M-Plan8b enhancement) |
+| `Phoenix.classify_file` returning `:application_root`, `:controller`, `:live_view`, `:component`, `:router`, `:operational`, `:migration` | Layer-classified anchor |
+
+**Closure walk:** `closure(anchors, graph)` walks the dependency graph forward from each anchor, collecting every module transitively reachable. The walker uses ALL edge types (`:alias`, `:import`, `:use`, `:call`, `:registry`, `:dynamic_dispatch`).
+
+**M-Plan8a contribution:** the `:dynamic_dispatch` edge from `apply(LiteralModule, :fn, args)` is now part of the closure, capturing modules referenced only via runtime dispatch with literal targets.
+
+**M-Plan8b contribution:** previously the children-of-supervisor anchor only fired for `use Application` modules. Now any nested `use Supervisor` / `use DynamicSupervisor` module is itself an anchor, AND its children (extracted from `init/1` child lists) are anchors.
+
+**Field impact:** the May 2026 enhancements reduced Archdo's own self-analysis CE-30 false positives substantially. The remaining hits should be examined — they're either real dead code OR truly invisible dispatch shapes (registry maps consumed via `Application.get_env`, `:erpc` calls to other nodes) that need an `@archdo_anchor` marker.
+
+**Used by:** CE-30, CE-31.
+
+#### 3.4.5 `Archdo.InputGuard` — clause-constraint analyzer
+
+**Module:** `lib/archdo/input_guard.ex` (new in M-Plan6). **Tests:** indirectly via CE-57 + Blackbox test suites.
+
+**Purpose:** the single source of truth for "is this function clause's input domain constrained?" Used by CE-57 (UnguardedBuildingBlock) and `Blackbox.module_verdict/1`.
+
+**Definition of "constrained":** a clause is constrained when AT LEAST ONE of:
+- The head has a `when` guard
+- All argument patterns are specific (no bare-variable args)
+- The body's last expression is an `{:error, _}` literal (clause is the explicit error fallback)
+
+A function is well-guarded when EVERY clause is constrained. CE-57 and Blackbox both fire when ANY clause is unconstrained.
+
+**API:**
+
+```elixir
+Archdo.InputGuard.collect_clauses(ast) :: %{{atom(), arity()} => [clause]}
+# Each clause: %{args, guard?, body, meta}
+
+Archdo.InputGuard.any_unconstrained?(clauses) :: boolean()
+```
+
+**Why it exists as a separate module:** CE-57 implemented the clause walker first (M-Aux6). M-Plan6 needed the same logic for module-level verdict in Blackbox. Rather than duplicate ~30 lines of clause analysis, the predicates were extracted to `InputGuard`. Future rules wanting the same constraint check can use the same primitive.
+
+**Used by:** CE-57, `Archdo.Blackbox.module_verdict/1`.
+
+#### 3.4.6 `Archdo.IrreversibleDecision` — schema/supervisor/public-API classifier
+
+**Module:** `lib/archdo/irreversible_decision.ex`. **Tests:** indirectly via CE-11/CE-12 test suites.
+
+**Purpose:** identify modules that represent irreversible decisions — schemas (data contracts), supervisors (process tree), or public-API modules (consumer contracts). These modules carry higher contract obligations because changing them breaks consumers in ways non-irreversible modules don't.
+
+**Detection:**
+
+| Module type | Signal |
+|------------|--------|
+| Ecto schema | `use Ecto.Schema` |
+| Supervisor | `use Supervisor`, `use DynamicSupervisor`, OR defines `child_spec/1` |
+| Public API | File path matches a `.archdo.exs` `public_api_paths` regex |
+| Oban worker | `use Oban.Worker` (also classified as anchor) |
+
+**API:**
+
+```elixir
+Archdo.IrreversibleDecision.candidate?(file, ast, opts) :: boolean()
+Archdo.IrreversibleDecision.oban_worker?(ast) :: boolean()
+```
+
+**Used by:** CE-11 (contract density), CE-12 (public API spec coverage). CE-12 is the focused subset of CE-11 — fires when spec coverage is below 80% on a candidate module, regardless of cohort comparison.
+
+#### 3.4.7 `Archdo.PiiSchema` — PII field detection
+
+**Module:** `lib/archdo/pii_schema.ex`. **Tests:** indirectly via CE-51/CE-53 test suites.
+
+**Purpose:** identify Ecto schemas containing PII-shaped fields. Used by CE-51 (PII field without designated handling) and CE-53 (PII schema without right-to-deletion path).
+
+**Default field name patterns:**
+
+| Pattern | Match |
+|---------|-------|
+| Exact match | `email`, `phone`, `ssn`, `address`, `dob`, `date_of_birth`, `national_id`, `tax_id` |
+| Prefix match | `password*` (e.g., `password`, `password_hash`, `password_reset_token`), `passport*` |
+| Suffix match | `*_token` (e.g., `auth_token`, `reset_token`, `verification_token`) |
+
+**API:**
+
+```elixir
+Archdo.PiiSchema.has_pii_fields?(ast) :: boolean()
+Archdo.PiiSchema.pii_field_names(ast) :: [atom()]
+```
+
+**Used by:** CE-51, CE-53.
+
+**Customization:** the field name patterns are currently hard-coded. A future enhancement would expose `.archdo.exs` `pii_field_patterns:` for project-specific PII shapes (e.g., `customer_id` in some healthcare contexts).
+
+#### 3.4.8 `Archdo.Graph` and `Archdo.Compiled.Graph` — dependency graphs
+
+**Modules:** `lib/archdo/graph.ex` (static, AST-derived) and `lib/archdo/compiled/graph.ex` (BEAM-traced, compile-time captured).
+
+**The two graphs differ in source AND content:**
+
+| Aspect | `Archdo.Graph` (static) | `Archdo.Compiled.Graph` (compiled) |
+|--------|-------------------------|-----------------------------------|
+| Source | `lib/**/*.ex` AST parse | BEAM files + compilation tracer |
+| When built | Every `mix archdo` run | Only with `--compiled` flag |
+| Captures | `alias`, `import`, `use`, qualified remote calls, `apply/3` with literal target, registry attribute lists | Every resolved remote call (even via macro expansion), import resolution, protocol dispatch targets, `@optional_callbacks` |
+| Misses | Dynamic dispatch (`apply(var, :fn, args)`), macro-expanded calls, runtime configuration dispatch | Nothing — captures the resolved truth |
+| Performance | Fast (~1s for 100K LOC) | Slower (requires recompile + tracer collection) |
+
+**Edge types in `Archdo.Graph`:**
+
+```
+:alias              # `alias MyApp.Foo`
+:import             # `import MyApp.Foo`
+:use                # `use MyApp.Foo`
+:call               # `MyApp.Foo.bar(...)` qualified remote call
+:registry           # @attr [Foo, Bar] consumed via Enum.* / for / Stream.*
+:dynamic_dispatch   # apply(LiteralMod, :fn, args)  ← M-Plan8a
+```
+
+**API:**
+
+```elixir
+Archdo.Graph.build(file_asts) :: %Archdo.Graph{}
+Archdo.Graph.dependencies(graph, module) :: [edge()]   # what does `module` depend on?
+Archdo.Graph.dependents(graph, module) :: [edge()]     # what depends on `module`?
+```
+
+**`Archdo.Compiled.Graph`** has a richer API for BEAM-derived analysis:
+
+```elixir
+Archdo.Compiled.Graph.callers(graph, mfa)          # who calls this function?
+Archdo.Compiled.Graph.find_function(graph, mfa)    # locate function metadata
+Archdo.Compiled.Graph.unused_functions(graph)      # exported but uncalled
+Archdo.Compiled.Graph.find_recursive_calls(graph, mfa)  # self-loops
+# ... and ~15 more
+```
+
+**Used by:**
+- `Archdo.Graph` → CE-30, CE-31 (via `AnchorSet.closure/2`), and any rule needing module-level dependency information
+- `Archdo.Compiled.Graph` → all 21 compiled-analysis rules in `Archdo.Rules.Compiled.*`
+
+**Future split (M-Plan19):** `Archdo.Compiled.Graph` is currently 927 lines mixing build (struct + ingest) and read (query API) responsibilities. M-Plan19 (deferred) splits it into `Compiled.Graph` (build) + `Compiled.Query` (read), with `Archdo.Compiled` as the public facade. See PLAN_NEXT.md.
 
 ---
 
@@ -1137,6 +3018,162 @@ For project-level rules, parse files individually with `Code.string_to_quoted/2`
 ### Self-analysis tests
 
 Some tests parse Archdo's own source as a regression guard — e.g. `test "Archdo.Compiled.Collector is exempt via @archdo_opaque_state"` reads `lib/archdo/compiled/collector.ex` and asserts no CE-29 diagnostics. These tests guard against accidental marker removal during refactoring. They live in the same test module as the rule they're guarding (no separate self-analysis directory).
+
+```elixir
+test "Archdo.Compiled.Collector is exempt via @archdo_opaque_state" do
+  ast =
+    "lib/archdo/compiled/collector.ex"
+    |> File.read!()
+    |> Code.string_to_quoted!()
+
+  diags = OpaqueProcessState.analyze("lib/archdo/compiled/collector.ex", ast, [])
+  assert diags == []
+end
+```
+
+The pattern is intentionally low-tech: read the file, parse it, run the rule, assert the expected outcome. No mocks, no fixtures — the production code IS the test fixture. If a future refactor strips the `@archdo_opaque_state` marker, this test fails immediately with a clear diff.
+
+### Shape tolerance — the literal_encoder pattern
+
+The Archdo runner parses files via `Code.string_to_quoted/2` with `literal_encoder: &{:ok, {:__block__, &2, [&1]}}`. This wraps every literal (atoms, strings, numbers) in a `{:__block__, meta, [literal]}` shape so positions are preserved through transformations. Tests, however, often parse code via plain `Code.string_to_quoted/2` without the encoder — atoms and strings are bare in the AST.
+
+This means rule predicates must match BOTH shapes:
+
+```elixir
+# WRONG — only matches the literal_encoder shape
+defp returns_ok_atom?({:__block__, _, [:ok]}), do: true
+
+# RIGHT — matches both bare and wrapped atoms
+defp returns_ok_atom?({:__block__, _, [:ok]}), do: true
+defp returns_ok_atom?(:ok), do: true
+defp returns_ok_atom?(_), do: false
+```
+
+When you find a rule that "works in tests but not in production runs" (or vice versa), this is almost always the cause. Common shape pairs:
+
+| Concept | Bare shape | literal_encoder shape |
+|---------|-----------|----------------------|
+| Atom literal | `:ok` | `{:__block__, _, [:ok]}` |
+| String literal | `"abc"` | `{:__block__, _, ["abc"]}` |
+| Tuple literal `{:ok, val}` | `{:ok, var}` | `{{:__block__, _, [:ok]}, var}` |
+| Tuple literal pair | `{:ok, _}` (3-tuple is automatic) | `{{:__block__, _, [:ok]}, {:__block__, _, [:_]}}` |
+| Keyword `:do` key | `[do: body]` | `[{{:__block__, _, [:do]}, body}]` |
+
+The `Archdo.AST` module provides `unwrap_atom/1` and similar helpers for normalizing. Prefer these over hand-written shape matches when both forms need to be handled.
+
+### Test categories — what each kind of test does
+
+Archdo's test suite organizes by what it's testing:
+
+| Path | Purpose | Async |
+|------|---------|-------|
+| `test/archdo/<primitive>_test.exs` | Tests for shared primitives (AST, Blackbox, Volatility, Phoenix, Config) | yes |
+| `test/rules/<category>/<rule_name>_test.exs` | One test file per rule, named after the rule's module | yes |
+| `test/integration/real_project_test.exs` | Cross-project integration tests against pinned `/tmp/<repo>` checkouts | yes (excluded by default) |
+| `test/mcp/tools_test.exs` | MCP tool wrappers — JSON-shape contracts | yes |
+| `test/runner_test.exs` | The orchestration layer — rule registration, opts plumbing, severity calibration | yes |
+| `test/regression_test.exs` | Bug-fix regressions — each test documents the original bug + the failing-input shape | yes |
+
+The test count broke down (May 2026 baseline) approximately as:
+- 1100 rule tests
+- 200 primitive tests
+- 100 runner / orchestration tests
+- 30 regression tests
+- 12 integration tests (excluded by default)
+
+### TDD discipline — when tests-first is required
+
+Per the elixir-implementing skill §0 (TDD gate), every new public function in `lib/` is written under TDD: failing test on disk first, confirmed RED for the right reason, then minimal implementation to GREEN. The skill's gate fires at three abstraction levels:
+
+1. **Per-function** — before writing `def some_new_function`, name the test file + test name, confirm both exist, run the test, see the failure.
+2. **Per-milestone** — before committing a milestone, name every new public function added and the test covering its happy path AND error path.
+3. **Bug-fix retrospective** — every bug fix commit must include both the regression test (would have caught the original bug) AND tests for adjacent untested behaviour in the same module.
+
+The skill explicitly excludes a narrow set of cases (`HEEx`/`EEx` templates, CSS, one-off scripts outside `lib/`/`src/`). For everything else in `lib/`, tests-first is mandatory.
+
+In practice, the discipline is enforced by:
+- A `[TDD]` tag in user prompts that activates the elixir-implementing skill's PreToolUse hooks
+- The `mix archdo --paths lib` self-analysis at commit time, which catches missing `@spec` (rule 2.1) and missing tests (rule 7.x family)
+- Code review — the diff should show test files appearing in the same commit OR earlier than the implementation files
+
+### Writing a project-level rule test
+
+Project-level rules (`analyze_project/1` or `/2`) take a `[{file, ast}, ...]` list rather than a single `(file, ast)`. The test pattern is:
+
+```elixir
+defmodule Archdo.Rules.CE.MyProjectRuleTest do
+  use ExUnit.Case, async: true
+
+  alias Archdo.Rules.CE.MyProjectRule
+
+  defp parse(file, code) do
+    {:ok, ast} =
+      Code.string_to_quoted(code,
+        file: file,
+        columns: true,
+        token_metadata: true,
+        # Include literal_encoder if your rule depends on the wrapped shape
+        literal_encoder: &{:ok, {:__block__, &2, [&1]}}
+      )
+    {file, ast}
+  end
+
+  describe "MyProjectRule.analyze_project/1" do
+    test "fires when condition holds across multiple files" do
+      file_asts = [
+        parse("lib/myapp/a.ex", ~S"""
+        defmodule MyApp.A do
+          def thing, do: :the_pattern
+        end
+        """),
+        parse("lib/myapp/b.ex", ~S"""
+        defmodule MyApp.B do
+          def thing, do: :the_pattern
+        end
+        """)
+      ]
+
+      diags = MyProjectRule.analyze_project(file_asts)
+      assert [_diag | _] = diags
+      assert hd(diags).rule_id == "CE-X"
+    end
+  end
+end
+```
+
+For rules that consume opts (config, threshold overrides, gdpr_scope), pass them via the second arg:
+
+```elixir
+config = Archdo.Config.from_keyword([thresholds: [{"CE-X", min_size: 5}]], "/tmp/x")
+diags = MyProjectRule.analyze_project(file_asts, config: config)
+```
+
+### Snapshot of the Archdo test suite
+
+As of the May 2026 session-end baseline:
+
+```
+1443 tests, 0 failures, 129 excluded
+```
+
+The 129 excluded are: `:integration` (12 tests requiring `/tmp/*` repos) + `:self_analysis` (a tag for tests that load Archdo against itself; mostly off by default for speed). All 1443 default tests run in ~3.6s with `async: true` throughout — the suite scales well because most tests are pure-function rule tests with no shared state.
+
+When adding a new rule:
+- Default to `async: true` (every existing rule test does)
+- Use `Archdo.RuleCase` for file-level rules
+- Use plain `ExUnit.Case` + `parse/2` helper for project-level rules
+- Add at least 3 tests: positive case (fires), negative case (doesn't fire), edge case (the false-positive class the rule is most prone to)
+- Add a regression test in `test/regression_test.exs` once the rule has shipped and someone has reported a real-world bug
+
+### When test fixtures need updating
+
+Fixtures inside test files often serve as the rule's specification — `assert_flagged(MyRule, ~S"""...""")` documents what the rule fires on. When a rule's behaviour changes:
+
+1. **Semantic change (e.g., M-Plan9 CE-50 v2):** the rule's behaviour changed deliberately. Existing fixtures that asserted `assert_clean` may now need `assert_flagged` (or vice versa). Update the test to reflect the new contract; the fixture itself stays the same.
+2. **Bug fix:** the fixture exposed a bug. Add the fixture to `test/regression_test.exs` permanently; the rule's main test file may stay focused on the happy path.
+3. **Strengthened verdict (e.g., M-Plan6 Blackbox.module_verdict):** existing fixtures that "passed by being structurally pure" now need additional constraints (input guards). Update the FIXTURES to include the new constraints, not the rule's behaviour. The test's INTENT (assert "all-pure module is a building block") is preserved; the fixture catches up to the strengthened semantics.
+
+The git history of `test/archdo/blackbox_test.exs` is a good reference — see commits `7d96dc3` and `9fa8ba1` for examples of fixture migration when verdicts strengthened.
 
 ---
 
