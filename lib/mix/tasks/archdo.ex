@@ -66,6 +66,16 @@ defmodule Mix.Tasks.Archdo do
 
   use Mix.Task
 
+  alias Archdo.{AST, Compare, Compiled, Formatter, Rule, Runner, Stats}
+
+  alias Archdo.Compiled.{
+    Diagram,
+    DiagramInteractive,
+    DiagramOTP,
+    DiagramSVG,
+    DiagramSystem
+  }
+
   @impl Mix.Task
   def run(args) do
     {opts, _, _} =
@@ -116,8 +126,8 @@ defmodule Mix.Tasks.Archdo do
         :ok
 
       Keyword.get(opts, :stats, false) ->
-        stats = Archdo.Stats.collect(paths)
-        Mix.shell().info(Archdo.Stats.format(stats))
+        stats = Stats.collect(paths)
+        Mix.shell().info(Stats.format(stats))
         :ok
 
       Keyword.get(opts, :list_packs, false) ->
@@ -169,9 +179,9 @@ defmodule Mix.Tasks.Archdo do
     run_opts = build_run_opts(opts)
 
     paths
-    |> Archdo.Compare.run(compare_paths, run_opts)
-    |> Archdo.Compare.merge()
-    |> Archdo.Compare.format()
+    |> Compare.run(compare_paths, run_opts)
+    |> Compare.merge()
+    |> Compare.format()
     |> Mix.shell().info()
   end
 
@@ -211,20 +221,20 @@ defmodule Mix.Tasks.Archdo do
 
   # §§ elixir-planning: §6 — Pack abstraction (M13). CLI parses
   # `--packs core,ce_composability` into a list of atoms. Validates against
-  # `Archdo.Rule.known_packs/0` so a typo (e.g. `--packs ce_composabilty`)
+  # `Rule.known_packs/0` so a typo (e.g. `--packs ce_composabilty`)
   # crashes at parse time with a useful message rather than silently
   # excluding every rule.
   defp run_list_packs do
     rules =
-      Archdo.Runner.phase1_rules() ++
-        Archdo.Runner.graph_rules() ++
+      Runner.phase1_rules() ++
+        Runner.graph_rules() ++
         Archdo.project_rules()
 
-    by_pack = Enum.group_by(rules, &Archdo.Rule.pack_of/1)
+    by_pack = Enum.group_by(rules, &Rule.pack_of/1)
 
     Mix.shell().info("Archdo packs:\n")
 
-    for pack <- Archdo.Rule.known_packs() do
+    for pack <- Rule.known_packs() do
       members = Map.get(by_pack, pack, [])
       Mix.shell().info("  #{pack} (#{length(members)} rules)")
 
@@ -241,7 +251,7 @@ defmodule Mix.Tasks.Archdo do
   defp parse_packs(nil), do: [:core]
 
   defp parse_packs(str) when is_binary(str) do
-    known = Archdo.Rule.known_packs()
+    known = Rule.known_packs()
 
     str
     |> String.split(",", trim: true)
@@ -262,7 +272,7 @@ defmodule Mix.Tasks.Archdo do
   rescue
     ArgumentError ->
       Mix.raise(
-        "Unknown pack name in --packs #{inspect(str)}. Known packs: #{inspect(Archdo.Rule.known_packs())}"
+        "Unknown pack name in --packs #{inspect(str)}. Known packs: #{inspect(Rule.known_packs())}"
       )
   end
 
@@ -278,11 +288,11 @@ defmodule Mix.Tasks.Archdo do
           File.cwd!()
       end
 
-    case Archdo.Compiled.analyze(project_root) do
+    case Compiled.analyze(project_root) do
       {:ok, graph} ->
         case diagram_type do
           "interactive" ->
-            html = Archdo.Compiled.DiagramInteractive.generate(graph)
+            html = DiagramInteractive.generate(graph)
             File.write!("archdo_interactive.html", html)
             IO.puts("Interactive diagram written to archdo_interactive.html")
             System.cmd("xdg-open", ["archdo_interactive.html"], stderr_to_stdout: true)
@@ -298,56 +308,56 @@ defmodule Mix.Tasks.Archdo do
   end
 
   defp generate_diagram(graph, "overview"),
-    do: Archdo.Compiled.Diagram.architecture_overview(graph)
+    do: Diagram.architecture_overview(graph)
 
-  defp generate_diagram(graph, "modules"), do: Archdo.Compiled.Diagram.module_dependencies(graph)
-  defp generate_diagram(graph, "api"), do: Archdo.Compiled.Diagram.api_surface(graph)
+  defp generate_diagram(graph, "modules"), do: Diagram.module_dependencies(graph)
+  defp generate_diagram(graph, "api"), do: Diagram.api_surface(graph)
 
   defp generate_diagram(graph, "delta"),
-    do: Archdo.Compiled.Diagram.dependency_delta(graph, ["lib"])
+    do: Diagram.dependency_delta(graph, ["lib"])
 
   defp generate_diagram(graph, "delta-only"),
-    do: Archdo.Compiled.Diagram.dependency_delta_only(graph, ["lib"])
+    do: Diagram.dependency_delta_only(graph, ["lib"])
 
   defp generate_diagram(graph, "dataflow:" <> module_name) do
     mod = String.to_atom("Elixir.#{module_name}")
-    Archdo.Compiled.Diagram.dataflow_module(graph, mod)
+    Diagram.dataflow_module(graph, mod)
   end
 
   defp generate_diagram(graph, "dataflow-context:" <> context_name) do
-    Archdo.Compiled.Diagram.dataflow_context(graph, context_name)
+    Diagram.dataflow_context(graph, context_name)
   end
 
   # SVG variants — proper port-based LabVIEW/Grasshopper-style diagrams
   defp generate_diagram(graph, "svg:" <> module_name) do
     mod = String.to_atom("Elixir.#{module_name}")
-    Archdo.Compiled.DiagramSVG.module_dataflow(graph, mod)
+    DiagramSVG.module_dataflow(graph, mod)
   end
 
   defp generate_diagram(graph, "svg-context:" <> context_name) do
-    Archdo.Compiled.DiagramSVG.context_dataflow(graph, context_name)
+    DiagramSVG.context_dataflow(graph, context_name)
   end
 
   # OTP diagrams
   defp generate_diagram(graph, "otp") do
-    Archdo.Compiled.DiagramOTP.supervision_diagram(graph)
+    DiagramOTP.supervision_diagram(graph)
   end
 
   defp generate_diagram(graph, "otp-messages") do
-    Archdo.Compiled.DiagramOTP.messaging_diagram(graph)
+    DiagramOTP.messaging_diagram(graph)
   end
 
   defp generate_diagram(graph, "system") do
-    Archdo.Compiled.DiagramSystem.system_diagram(graph)
+    DiagramSystem.system_diagram(graph)
   end
 
   defp generate_diagram(graph, "blast:" <> module_name) do
     mod = String.to_atom("Elixir.#{module_name}")
-    Archdo.Compiled.Diagram.blast_radius(graph, mod)
+    Diagram.blast_radius(graph, mod)
   end
 
   defp generate_diagram(graph, "context:" <> context_name) do
-    Archdo.Compiled.Diagram.context_detail(graph, context_name)
+    Diagram.context_detail(graph, context_name)
   end
 
   defp generate_diagram(_graph, other) do
@@ -357,7 +367,7 @@ defmodule Mix.Tasks.Archdo do
   # --- --explain ---
 
   defp run_explain(rule_id) do
-    rules = Archdo.Runner.phase1_rules() ++ Archdo.Runner.graph_rules()
+    rules = Runner.phase1_rules() ++ Runner.graph_rules()
 
     case Enum.find(rules, fn r -> r.id() == rule_id end) do
       nil ->
@@ -498,9 +508,9 @@ defmodule Mix.Tasks.Archdo do
       {:ok, files} ->
         IO.puts("\nArchdo — analyzing #{length(files)} files changed since #{ref}\n")
         run_opts = build_run_opts(opts)
-        diagnostics = Archdo.Runner.analyze(files, run_opts)
+        diagnostics = Runner.analyze(files, run_opts)
 
-        exit_status = Archdo.Formatter.format(diagnostics, run_opts)
+        exit_status = Formatter.format(diagnostics, run_opts)
         maybe_exit(exit_status)
 
       {:error, reason} ->
@@ -537,7 +547,7 @@ defmodule Mix.Tasks.Archdo do
 
     run_opts = build_run_opts(opts)
     files = Archdo.collect_files(paths)
-    diagnostics = Archdo.Runner.analyze(files, run_opts)
+    diagnostics = Runner.analyze(files, run_opts)
 
     fixable = Enum.filter(diagnostics, &auto_fixable?/1)
 
@@ -552,7 +562,7 @@ defmodule Mix.Tasks.Archdo do
           true ->
             Enum.each(fixable, fn d ->
               IO.puts(
-                "  [#{d.rule_id}] #{Archdo.AST.relative_path(d.file)}:#{d.line} — #{d.title}"
+                "  [#{d.rule_id}] #{AST.relative_path(d.file)}:#{d.line} — #{d.title}"
               )
             end)
 

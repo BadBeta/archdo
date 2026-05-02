@@ -3,6 +3,7 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
   @behaviour Archdo.Rule
 
   alias Archdo.{Diagnostic, Fix}
+  alias Archdo.Rules.StateMachine.Helpers
 
   @impl true
   def id, do: "9.2"
@@ -24,7 +25,7 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
   defp find_terminal_violations(file, transitions) do
     all_states =
       transitions
-      |> Archdo.Rules.StateMachine.Helpers.collect_all_states()
+      |> Helpers.collect_all_states()
       |> MapSet.to_list()
 
     # Find states that reach a "terminal-looking" state and themselves have no other exits
@@ -88,7 +89,7 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
 
         {:%{}, _, pairs} = node, acc when is_list(pairs) ->
           if transition_map?(pairs) do
-            map = Archdo.Rules.StateMachine.Helpers.pairs_to_transition_map(pairs)
+            map = Helpers.pairs_to_transition_map(pairs)
             {node, Map.merge(acc, map)}
           else
             {node, acc}

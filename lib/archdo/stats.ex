@@ -2,6 +2,8 @@ defmodule Archdo.Stats do
   @moduledoc false
 
   alias Archdo.AST
+  alias Archdo.Compiled
+  alias Archdo.Compiled.Graph
 
   @doc """
   Collect comprehensive project statistics from source files.
@@ -71,9 +73,9 @@ defmodule Archdo.Stats do
           end
       end)
 
-    case Archdo.Compiled.analyze(project_root) do
+    case Compiled.analyze(project_root) do
       {:ok, graph} ->
-        Archdo.Compiled.Graph.discover_contexts(graph)
+        Graph.discover_contexts(graph)
         |> Enum.map(fn ctx ->
           %{
             name: ctx.context,
