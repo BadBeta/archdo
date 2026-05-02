@@ -187,7 +187,9 @@ defmodule Archdo.Runner do
     Archdo.Rules.CE.HighCognitiveComplexity,
     Archdo.Rules.CE.ComplexityShape,
     Archdo.Rules.CE.BlackboxQuadrant,
-    Archdo.Rules.CE.CrossCuttingDensity
+    Archdo.Rules.CE.CrossCuttingDensity,
+    Archdo.Rules.CE.ErrorPathWithoutLog,
+    Archdo.Rules.CE.OpaqueProcessState
   ]
 
   @graph_rules [
