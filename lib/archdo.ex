@@ -218,7 +218,9 @@ defmodule Archdo do
     Archdo.Rules.CE.ErrorCategoryDrift,
     Archdo.Rules.CE.MissingTraceability,
     Archdo.Rules.CE.MissingRetentionPolicy,
-    Archdo.Rules.CE.UntestedBuildingBlock
+    Archdo.Rules.CE.UntestedBuildingBlock,
+    Archdo.Rules.CE.PiiFieldHandling,
+    Archdo.Rules.CE.MissingDeletionPath
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).
@@ -269,7 +271,13 @@ defmodule Archdo do
   # Project rules may take 1 or 2 args. Newer rules accept opts; older
   # rules don't. Dispatch by arity so existing rules keep working.
   # Wrapped in rescue so one broken rule doesn't block the rest.
+  #
+  # `Code.ensure_loaded` is critical: function_exported?/3 returns false
+  # for any function on an unloaded module — without ensure_loaded we'd
+  # always fall through to the /1 branch, silently dropping opts.
   defp invoke_project_rule(rule, file_asts, opts) do
+    Code.ensure_loaded(rule)
+
     case function_exported?(rule, :analyze_project, 2) do
       true -> rule.analyze_project(file_asts, opts)
       false -> rule.analyze_project(file_asts)

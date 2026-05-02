@@ -94,7 +94,9 @@ defmodule Mix.Tasks.Archdo do
           freeze: :boolean,
           freeze_stats: :boolean,
           show_all: :boolean,
-          watch: :boolean
+          watch: :boolean,
+          gdpr_scope: :boolean,
+          traceability_required_paths: :string
         ]
       )
 
@@ -181,7 +183,10 @@ defmodule Mix.Tasks.Archdo do
       boundaries: boundaries,
       tests: tests,
       functions: functions,
-      compiled: compiled
+      compiled: compiled,
+      gdpr_scope: Keyword.get(opts, :gdpr_scope, false),
+      traceability_required_paths:
+        parse_nullable_list(Keyword.get(opts, :traceability_required_paths)) || []
     ]
     |> maybe_add(:only, only)
   end

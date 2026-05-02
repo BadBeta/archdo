@@ -42,6 +42,9 @@ defmodule Archdo.Rules.CE.ReturnShapeDrift do
     publics =
       ast
       |> AST.extract_functions(:public)
+      # Drop dynamically-named functions (`def unquote(name)`) — name
+      # isn't an atom, can't classify as bang/non-bang.
+      |> Enum.filter(fn {n, _, _, _, _} -> is_atom(n) end)
       |> Enum.uniq_by(fn {n, a, _, _, _} -> {n, a} end)
 
     cond do
