@@ -16,7 +16,7 @@ defmodule Archdo.Rules.CE.ReturnShapeDrift do
   # Modules with fewer than 3 public functions are exempt — too small
   # a sample to claim a "context style."
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix, Naming}
 
   @min_context_size 3
 
@@ -60,16 +60,8 @@ defmodule Archdo.Rules.CE.ReturnShapeDrift do
   end
 
   defp all_bang?(publics) do
-    Enum.all?(publics, fn {n, _, _, _, _} -> bang?(n) end)
+    Enum.all?(publics, fn {n, _, _, _, _} -> Naming.bang?(n) end)
   end
-
-  # Function name may be a macro form like `unquote(name)` for
-  # dynamically-defined functions. Skip non-atom names entirely.
-  defp bang?(name) when is_atom(name) do
-    name |> Atom.to_string() |> String.ends_with?("!")
-  end
-
-  defp bang?(_), do: false
 
   defp find_orphan_bangs(file, ast, publics) do
     # Use string-keyed set to avoid String.to_atom on the stripped base
@@ -80,7 +72,7 @@ defmodule Archdo.Rules.CE.ReturnShapeDrift do
     module = AST.extract_module_name(ast)
 
     publics
-    |> Enum.filter(fn {n, _a, _, _, _} -> bang?(n) end)
+    |> Enum.filter(fn {n, _a, _, _, _} -> Naming.bang?(n) end)
     |> Enum.flat_map(fn {n, a, meta, _, _} ->
       base_str = strip_bang(n)
 

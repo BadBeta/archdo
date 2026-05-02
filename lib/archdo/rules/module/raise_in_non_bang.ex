@@ -6,7 +6,7 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
   # Mix tasks, release scripts, and seed files legitimately raise on bad
   # arguments at the system entry point.
 
-  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
+  alias Archdo.{AST, Diagnostic, Fix, Naming, Phoenix}
 
   @impl true
   def id, do: "6.10"
@@ -51,7 +51,7 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
 
     fns
     |> Enum.reject(fn {name, arity, _meta, _args, _body} ->
-      not is_atom(name) or bang_function?(name) or name in @raise_ok_contexts or
+      not is_atom(name) or Naming.bang?(name) or name in @raise_ok_contexts or
         name in @framework_callbacks or
         # Skip behaviour callbacks: a function annotated with `@impl true` or
         # `@impl SomeBehaviour` has a fixed name defined by the behaviour and
@@ -76,12 +76,6 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
     |> Enum.map(fn {name, arity, meta, _args, _body} ->
       build_diagnostic(file, name, arity, meta)
     end)
-  end
-
-  defp bang_function?(name) do
-    name
-    |> Atom.to_string()
-    |> String.ends_with?("!")
   end
 
   defp dunder_name?(name) do

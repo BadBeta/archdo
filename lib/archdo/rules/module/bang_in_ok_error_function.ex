@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Module.BangInOkErrorFunction do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix, Naming}
 
   @impl true
   def id, do: "6.15"
@@ -32,7 +32,7 @@ defmodule Archdo.Rules.Module.BangInOkErrorFunction do
     |> Enum.filter(fn {name, _arity, _meta, _args, body} ->
       body != nil and
         name not in @bang_ok_contexts and
-        not bang_function?(name) and
+        not Naming.bang?(name) and
         returns_ok_error?(body) and
         contains_risky_bang?(body)
     end)
@@ -57,10 +57,10 @@ defmodule Archdo.Rules.Module.BangInOkErrorFunction do
   defp contains_risky_bang?(body) do
     AST.contains?(body, fn
       {{:., _, [_, func]}, _, _} when is_atom(func) ->
-        bang_function?(func) and not safe_bang?(func)
+        Naming.bang?(func) and not safe_bang?(func)
 
       {func, _, args} when is_atom(func) and is_list(args) ->
-        bang_function?(func) and not safe_bang?(func)
+        Naming.bang?(func) and not safe_bang?(func)
 
       _ ->
         false
@@ -70,7 +70,7 @@ defmodule Archdo.Rules.Module.BangInOkErrorFunction do
   defp collect_bang_calls(body) do
     AST.find_all(body, fn
       {{:., _, [{:__aliases__, _, _mod}, func]}, _, _} when is_atom(func) ->
-        bang_function?(func) and not safe_bang?(func)
+        Naming.bang?(func) and not safe_bang?(func)
 
       _ ->
         false
@@ -81,14 +81,6 @@ defmodule Archdo.Rules.Module.BangInOkErrorFunction do
     |> Enum.uniq()
     |> Enum.take(3)
   end
-
-  defp bang_function?(name) when is_atom(name) do
-    name
-    |> Atom.to_string()
-    |> String.ends_with?("!")
-  end
-
-  defp bang_function?(_), do: false
 
   # Bangs that are safe (don't represent failable operations)
   defp safe_bang?(func) do
