@@ -190,39 +190,59 @@ existing structural leaks.
 
 ### M-Plan7 — CE-27 + CE-28 cross-function call-graph walk (M1 + M2)
 
-**Problem (CE-27):** Boundary telemetry rule fires on every controller
-action without `:telemetry.span` in its body, missing the case where
-telemetry is emitted centrally in a Plug or before-action hook that
-covers many actions.
+**Status (2026-05-02):** Deferred to follow-up session. Architectural
+barrier identified: CE-27 and CE-28 are file-level rules
+(`analyze/3`) registered in `@phase1_rules`. Implementing the
+"covering plug" check requires PROJECT-level state — the set of plug
+modules that emit telemetry / log — that the file-level dispatch
+model doesn't expose.
 
-**Problem (CE-28):** Error-path log rule fires when a function returns
-`{:error, _}` without an in-scope `Logger.error/warning`, missing the
-case where the caller logs the error at the boundary.
+**Two structural paths forward (pick one in follow-up):**
 
-**Shared fix:** Both rules need a 2-level walk: "does the function OR
-any function that calls it (within 1 hop) emit telemetry/log?"
+1. **Convert both rules to project-level.** Move CE-27 / CE-28 from
+   `Runner.@phase1_rules` to `Archdo.@project_file_ast_rules`. Each
+   rule's `analyze_project/2` builds the plug-coverage index in a
+   single pre-pass, then iterates `file_asts` running the existing
+   per-file logic with the coverage as a parameter. Cost: changes
+   the rule's dispatch model; per-file parallelism in the runner
+   no longer applies to these two rules.
 
-Implementation:
-- New helper `Archdo.AST.PluginCoverage` (project-level helper, shared
-  by CE-27 and CE-28). Builds a per-project map of `{module, fn, arity}
-  → {emits_telemetry?, emits_log?}` from one pass over the project ASTs.
-- For each module, also collect `Plug` modules referenced via
-  `pipeline :api do plug X end` in router files; mark each plug's body
-  for telemetry/log.
-- CE-27 changes: when checking a controller action, look up not just
-  its own body but the union of (own body) + (any plug in the
-  router pipeline that wraps this controller's scope). Same for
-  CE-28: log is "covered" if the function OR a wrapping plug logs.
+2. **Add `:plug_coverage` to opts via a runner pre-pass.**
+   `Runner.analyze/2` would call a new `Archdo.PluginCoverage.scan/1`
+   over `file_asts` once, then pass the result via opts to every
+   per-file rule. Existing rules ignore the new key; CE-27 / CE-28
+   read it. Cost: adds project-level state to the per-file dispatch
+   path (small change to runner.ex; no impact on parallelism).
 
-**Test files:**
+Path 2 is preferred because it preserves the file-level dispatch and
+keeps the rule shape uniform with other CE rules. The plug-coverage
+index shape is small:
+
+```elixir
+%{
+  telemetry_plugs: [module_name, ...],   # plug modules with :telemetry.* calls
+  log_plugs: [module_name, ...]           # plug modules with Logger.error/.warning calls
+}
+```
+
+A "plug module" is a module defining `def call(conn, _opts)` (the
+Plug behaviour shape). The `pipeline :api do plug X end` mapping
+from router → plugs is OPTIONAL for v1: presence of any
+telemetry/log plug in the project is signal enough that the project
+has a plug-based observability strategy. Per-pipeline scoping is a
+v2 refinement.
+
+**Tests required when implementing:**
 - `test/rules/ce/boundary_telemetry_test.exs` — add 2 tests:
-  controller with telemetry plug in pipeline is NOT flagged; controller
-  without any covering telemetry IS flagged.
+  controller is NOT flagged when project has any telemetry plug;
+  controller IS flagged when project has no telemetry plug.
 - `test/rules/ce/error_path_without_log_test.exs` — add 2 tests:
-  function returning `{:error, _}` whose caller logs is NOT flagged;
-  function whose caller doesn't log IS flagged.
+  function returning `{:error, _}` is NOT flagged when project has
+  any log-plug; IS flagged otherwise.
 
-**Effort:** 2.5 hr.
+**Effort estimate:** 3 hr (was 2.5; updated after structural review).
+**Disposition:** deferred — requires runner pre-pass plumbing. Not
+in scope for the May 2026 session.
 
 ---
 
