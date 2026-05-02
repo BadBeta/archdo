@@ -54,4 +54,83 @@ defmodule Archdo.Rules.CE.OkLosesInfoTest do
 
     assert_clean(OkLosesInfo, code)
   end
+
+  describe "M-Aux2 — broadened detection" do
+    test "fires on bang-call discarded result followed by :ok" do
+      # Repo.insert! returns the inserted struct; throwing it away to
+      # return bare :ok loses information.
+      code = ~S"""
+      defmodule MyApp.Accounts do
+        def save(attrs) do
+          Repo.insert!(%User{} |> User.changeset(attrs))
+          :ok
+        end
+      end
+      """
+
+      diags = assert_flagged(OkLosesInfo, code)
+      assert hd(diags).rule_id == "CE-50"
+    end
+
+    test "fires when richer result is bound but never used downstream" do
+      # `result = X.fetch()` where `result` doesn't appear anywhere else
+      # before the function returns :ok.
+      code = ~S"""
+      defmodule MyApp.Service do
+        def go(id) do
+          result = Repo.get(Order, id)
+          :ok
+        end
+      end
+      """
+
+      diags = assert_flagged(OkLosesInfo, code)
+      assert hd(diags).rule_id == "CE-50"
+    end
+
+    test "does NOT fire when bound result IS used in a subsequent call" do
+      # `result = X.fetch(); process(result); :ok` — the value flowed
+      # somewhere before being thrown away. v1 considers this used.
+      code = ~S"""
+      defmodule MyApp.Service do
+        def go(id) do
+          result = Repo.get(Order, id)
+          process(result)
+          :ok
+        end
+      end
+      """
+
+      assert_clean(OkLosesInfo, code)
+    end
+
+    test "fires on Mailer.deliver discarded then :ok" do
+      code = ~S"""
+      defmodule MyApp.Notify do
+        def send_welcome(user) do
+          Mailer.deliver(WelcomeEmail.build(user))
+          :ok
+        end
+      end
+      """
+
+      diags = assert_flagged(OkLosesInfo, code)
+      assert hd(diags).rule_id == "CE-50"
+    end
+
+    test "does NOT fire on bang-call that genuinely returns :ok" do
+      # Some bangs are :ok-returning (Logger.info!, etc.). v1 only
+      # treats Repo / Mailer / HTTP-client bangs as richer-result.
+      code = ~S"""
+      defmodule MyApp.Util do
+        def go(msg) do
+          Logger.info(msg)
+          :ok
+        end
+      end
+      """
+
+      assert_clean(OkLosesInfo, code)
+    end
+  end
 end

@@ -11,6 +11,20 @@ defmodule Archdo.Rules.CE.OkLosesInfo do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  # Modules whose calls return richer values than `:ok` — used by the
+  # M-Aux2 broadened detection AND the original `{:ok, _} = ...` form.
+  # Defined at the top so all consumer functions can reference it.
+  @richer_modules [
+    [:Repo],
+    [:Ecto, :Repo],
+    [:HTTPoison],
+    [:Req],
+    [:Tesla],
+    [:Finch],
+    [:Mailer],
+    [:Swoosh, :Mailer]
+  ]
+
   @impl true
   def id, do: "CE-50"
 
@@ -74,25 +88,82 @@ defmodule Archdo.Rules.CE.OkLosesInfo do
         false
 
       {prefix, _last} ->
-        Enum.any?(prefix, &richer_result_call?/1)
+        Enum.any?(prefix, &richer_result_call?/1) or
+          bound_richer_unused?(prefix)
     end
   end
 
-  # A "richer result" call is a remote call to one of the well-known
-  # tuple-returning APIs OR a pattern-match assertion of {:ok, _} on
-  # a function call (`{:ok, _user} = Repo.insert(...)` — the value is
-  # being captured AND then thrown away when the function returns :ok).
-  @richer_modules [
-    [:Repo],
-    [:Ecto, :Repo],
-    [:HTTPoison],
-    [:Req],
-    [:Tesla],
-    [:Finch],
-    [:Mailer],
-    [:Swoosh, :Mailer]
-  ]
+  # M-Aux2: `var = richer_call(...)` where `var` doesn't appear in any
+  # statement after the assignment — the value was captured and silently
+  # thrown away when the function returns `:ok`. Variables prefixed with
+  # `_` are intentional discards (`_result = ...`) and don't count.
+  defp bound_richer_unused?(prefix) do
+    indexed = Enum.with_index(prefix)
 
+    Enum.any?(indexed, fn {stmt, idx} ->
+      case bound_var_with_richer_rhs(stmt) do
+        nil ->
+          false
+
+        var_name ->
+          rest = Enum.drop(prefix, idx + 1)
+          not used_in?(var_name, rest)
+      end
+    end)
+  end
+
+  # Match `var = call_to_richer_module(...)` and return the var atom.
+  # Returns nil when the assignment isn't a richer-result binding or
+  # when the LHS is `_` / `_var` (intentional discard).
+  defp bound_var_with_richer_rhs({:=, _, [lhs, rhs]}) do
+    with var when is_atom(var) <- bare_var_name(lhs),
+         true <- bare_richer_call?(rhs) do
+      var
+    else
+      _ -> nil
+    end
+  end
+
+  defp bound_var_with_richer_rhs(_), do: nil
+
+  defp bare_var_name({var, _, ctx}) when is_atom(var) and is_atom(ctx) do
+    case Atom.to_string(var) do
+      "_" <> _ -> nil
+      _ -> var
+    end
+  end
+
+  defp bare_var_name(_), do: nil
+
+  defp bare_richer_call?({{:., _, [{:__aliases__, _, parts}, _fun]}, _, _})
+       when is_list(parts) do
+    parts in @richer_modules
+  end
+
+  defp bare_richer_call?(_), do: false
+
+  # Walk the statements looking for ANY occurrence of the variable.
+  defp used_in?(var_name, statements) do
+    {_, found?} =
+      Macro.prewalk(statements, false, fn
+        node, true ->
+          {node, true}
+
+        {^var_name, _, ctx} = node, false when is_atom(ctx) ->
+          {node, true}
+
+        node, false ->
+          {node, false}
+      end)
+
+    found?
+  end
+
+  # A "richer result" call is a remote call to one of the well-known
+  # tuple-returning APIs (see @richer_modules at module top) OR a
+  # pattern-match assertion of {:ok, _} on a function call
+  # (`{:ok, _user} = Repo.insert(...)` — value captured AND then thrown
+  # away when the function returns :ok).
   defp richer_result_call?({:=, _, [{:{}, _, [{:__block__, _, [:ok]}, _]}, _rhs]}), do: true
   defp richer_result_call?({:=, _, [{:__block__, _, [{tuple_pattern, _}]}, _rhs]}) do
     case tuple_pattern do
