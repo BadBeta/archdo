@@ -69,7 +69,10 @@ defmodule Archdo.Mcp.Tools.ListRules do
         {String.to_integer(strip_letters(only)), ""}
     end
   rescue
-    _ -> {999, mod.id()}
+    # Sort key fallback: a rule whose ID can't be parsed as N.N goes
+    # to the end. ArgumentError is the only realistic failure
+    # (`String.to_integer` on non-numeric input).
+    ArgumentError -> {999, mod.id()}
   end
 
   defp strip_letters(str), do: String.replace(str, ~r/[^0-9]/, "")

@@ -119,6 +119,11 @@ defmodule Archdo.Rules.NIF.NifSchedulerSafety do
   defp ast_to_rough_string(ast) do
     Macro.to_string(ast)
   rescue
-    _ -> ""
+    # Macro.to_string can raise on malformed AST (Protocol.UndefinedError
+    # for unrecognized nodes, ArgumentError for invalid quoted forms).
+    # Empty string makes the calling string-contains check return false.
+    err in [Protocol.UndefinedError, ArgumentError] ->
+      _ = err
+      ""
   end
 end
