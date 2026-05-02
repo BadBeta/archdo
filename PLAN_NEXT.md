@@ -474,6 +474,125 @@ borderline. If FP rate > 30%, recalibrate the warn/error thresholds
 
 ---
 
+### M-Plan19 — Compiled.Graph split: builder vs query (Stats leaks fix)
+
+**Problem (May 2026 stats audit):** The `Compiled` context shows 27
+boundary leaks. Inspection confirmed all are `Archdo.Rules.Compiled.*`
+rule modules `alias Archdo.Compiled.Graph` and calling
+`Graph.callers/2`, `Graph.dependencies/2`, `Graph.find_function/2`,
+etc. The metric is correct: `Compiled.Graph` is not the registered
+boundary of the Compiled context (`Archdo.Compiled` is), and the
+927-line `Graph` module mixes the build-the-graph side (struct
+construction, edge extraction, BEAM scanning) with the
+query-the-graph side (read API consumed by 19+ rule modules).
+
+The conservative fix is the one-line `.archdo.exs` config
+(`boundary_modules: ["Archdo.Compiled.Graph"]`) — that drops the
+metric to zero. M-Plan19 is the architectural fix instead: the
+`Compiled.Graph` file is too big and mixes two responsibilities;
+splitting it makes the boundary honest, not just classified.
+
+**Fix shape:**
+
+1. **New module `Archdo.Compiled.Query`** owns the read API:
+   - `callers(graph, mfa)` — who calls this function?
+   - `dependencies(graph, module)` — what does this module depend on?
+   - `find_function(graph, mfa)` — locate function metadata
+   - `module_modules(graph)` — list every module
+   - `unused_functions(graph)` — exported but uncalled
+   - `transitive_callers(graph, mfa, depth)` — n-hop callers
+   - `find_recursive_calls(graph, mfa)` — self-loops
+   - All other read-only accessors currently in `Compiled.Graph`
+     (any function with name starting `find_`, `list_`, `get_`,
+     or that takes a `%Graph{}` and returns derived data without
+     mutating).
+
+2. **`Archdo.Compiled.Graph` retains only**:
+   - `defstruct` for `%Graph{}` and `%Function{}` types
+   - `analyze/1` — the BEAM-scanning builder
+   - `module_atom_from_beam/1` and other private build helpers
+   - Tarjan's SCC implementation (used by builder)
+   - `extract_function_clauses/1` and other ingest helpers
+   - Public API surface shrinks to: `analyze/1`, struct types only.
+
+3. **`Archdo.Compiled` re-exports `Query`'s functions** via
+   `defdelegate` so external callers can use either the facade
+   (`Archdo.Compiled.callers(graph, mfa)`) OR import `Query`
+   directly. The 19 `Archdo.Rules.Compiled.*` rule modules are
+   updated to `alias Archdo.Compiled.Query` instead of
+   `alias Archdo.Compiled.Graph`.
+
+4. **`%Graph{}` struct stays in `Compiled.Graph`** — it's the
+   data shape both builder and query operate on, lives with the
+   builder. Rules that need to type-annotate continue to write
+   `%Graph{}` from `Archdo.Compiled.Graph`.
+
+**Why a real split, not just a facade:**
+- `Compiled.Graph` is 927 lines today — Archdo's largest file.
+  Already a candidate for split per the May 2026 stats output.
+- A pure `defdelegate` facade in `Archdo.Compiled` would silence
+  the leak metric but leave the file size and mixed responsibility
+  untouched. Then the next rule needing a new query function still
+  has to navigate a 1000-line file.
+- After split, `Compiled.Graph` is purely a builder
+  (~400 lines: struct, analyze/1, ingest helpers, Tarjan SCC).
+  `Compiled.Query` is purely a reader (~500 lines: every accessor
+  rules consume). Two single-purpose files.
+
+**Test files:**
+
+- **`test/archdo/compiled/query_test.exs` (new)** — 8 tests:
+  callers/2 returns expected list for a known graph fixture;
+  dependencies/2 returns expected; find_function/2 returns nil
+  for missing; transitive_callers/3 respects depth; unused_functions/1
+  excludes private; module_modules/1 returns all known modules;
+  find_recursive_calls/2 finds self-loops; query against an empty
+  graph returns []/nil consistently.
+- **`test/rules/compiled/graph_test.exs` (existing)** — keep all
+  current tests; this file still tests `Compiled.Graph.analyze/1`
+  (the builder side). Move any test that exercises a query function
+  to `query_test.exs`.
+- **No new tests needed for the rule modules** — they already test
+  end-to-end behaviour and don't care which module they alias.
+
+**Migration steps (in order, each commitable separately):**
+
+1. Create `lib/archdo/compiled/query.ex` with all read-only
+   functions copied from `Compiled.Graph`. Add `alias
+   Archdo.Compiled.Graph` for the struct type. All tests still
+   green (Graph still has the functions; Query is a parallel copy).
+2. Add `Archdo.Compiled` `defdelegate` re-exports for every
+   Query function. Now `Archdo.Compiled.callers/2` works as
+   the public facade.
+3. Update each `Archdo.Rules.Compiled.*` rule (19 files) to
+   `alias Archdo.Compiled.Query` and call `Query.X` instead of
+   `Graph.X`. Run tests after each batch of ~5 to catch
+   regressions early.
+4. Delete the read-only functions from `Compiled.Graph` (now
+   only in `Compiled.Query`). The build path (`analyze/1`,
+   ingest, struct) stays. Run full suite — should still be green
+   because every external caller now goes through Query.
+5. Field check: re-run `mix archdo --stats`. The Compiled
+   "Leaks" column should show 0 (or close to it — any remaining
+   non-Query callers indicate a missed migration).
+
+**Why not Option 1 (one-line `.archdo.exs`):** that's the right
+fix if you only care about the metric. M-Plan19 is the right fix
+if you also care about the 927-line file the metric is pointing
+at. Pick one based on whether the file size is a maintenance
+problem yet — the metric will not be wrong either way.
+
+**Effort:** ~half a day (4 hr): 1 hr to create Query + tests,
+30 min for `Archdo.Compiled` defdelegate facade, 1.5 hr for
+the 19 rule-module migrations, 30 min for delete + full suite,
+30 min for `mix archdo --stats` confirmation and any cleanup.
+
+**Disposition:** deferred — not a correctness fix, not blocking
+any user. Ship when graph.ex's size becomes a navigation
+problem, or as part of a larger Compiled-subsystem cleanup.
+
+---
+
 ## Plan-completeness gate verification
 
 §0.1 checklist for the M-Plan1..M-Plan11 scope (Phase A + B):
