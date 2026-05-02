@@ -183,7 +183,9 @@ defmodule Archdo.Runner do
     Archdo.Rules.CE.HardcodedVolatileDeps,
     Archdo.Rules.CE.MixedModuleSplit,
     Archdo.Rules.CE.VolatileCallNoTimeout,
-    Archdo.Rules.CE.VolatileNoRetry
+    Archdo.Rules.CE.VolatileNoRetry,
+    Archdo.Rules.CE.HighCognitiveComplexity,
+    Archdo.Rules.CE.ComplexityShape
   ]
 
   @graph_rules [
