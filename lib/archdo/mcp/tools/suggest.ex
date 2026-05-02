@@ -49,57 +49,52 @@ defmodule Archdo.Mcp.Tools.Suggest do
 
   def call(_), do: {:error, "Missing required argument: file"}
 
+  @path_signals [:test, :liveview, :controller, :mix, :nif]
+
   defp classify_file(file) do
-    cond do
-      String.contains?(file, "/test/") ->
-        :test
-
-      String.contains?(file, "_live.ex") or String.contains?(file, "/live/") ->
-        :liveview
-
-      String.contains?(file, "_controller.ex") or String.contains?(file, "/controllers/") ->
-        :controller
-
-      String.contains?(file, "mix.exs") ->
-        :mix
-
-      String.ends_with?(file, "/native.ex") or String.contains?(file, "/native/") ->
-        :nif
-
-      true ->
-        detect_from_content(file)
+    case Enum.find(@path_signals, &path_signal?(&1, file)) do
+      nil -> detect_from_content(file)
+      tag -> tag
     end
   end
+
+  defp path_signal?(:test, file), do: String.contains?(file, "/test/")
+
+  defp path_signal?(:liveview, file),
+    do: String.contains?(file, "_live.ex") or String.contains?(file, "/live/")
+
+  defp path_signal?(:controller, file),
+    do: String.contains?(file, "_controller.ex") or String.contains?(file, "/controllers/")
+
+  defp path_signal?(:mix, file), do: String.contains?(file, "mix.exs")
+
+  defp path_signal?(:nif, file),
+    do: String.ends_with?(file, "/native.ex") or String.contains?(file, "/native/")
+
+  @content_signals [:genserver, :state_machine, :event_sourcing, :schema, :supervisor]
 
   defp detect_from_content(file) do
     case File.read(file) do
       {:ok, content} ->
-        cond do
-          String.contains?(content, "use GenServer") ->
-            :genserver
-
-          String.contains?(content, "use GenStateMachine") or
-              String.contains?(content, ":gen_statem") ->
-            :state_machine
-
-          String.contains?(content, "use Commanded") ->
-            :event_sourcing
-
-          String.contains?(content, "use Ecto.Schema") ->
-            :schema
-
-          String.contains?(content, "use Supervisor") or
-              String.contains?(content, "use DynamicSupervisor") ->
-            :supervisor
-
-          true ->
-            :module
-        end
+        Enum.find(@content_signals, :module, &content_signal?(&1, content))
 
       {:error, _} ->
         :module
     end
   end
+
+  defp content_signal?(:genserver, content), do: String.contains?(content, "use GenServer")
+
+  defp content_signal?(:state_machine, content),
+    do: String.contains?(content, "use GenStateMachine") or String.contains?(content, ":gen_statem")
+
+  defp content_signal?(:event_sourcing, content), do: String.contains?(content, "use Commanded")
+  defp content_signal?(:schema, content), do: String.contains?(content, "use Ecto.Schema")
+
+  defp content_signal?(:supervisor, content),
+    do:
+      String.contains?(content, "use Supervisor") or
+        String.contains?(content, "use DynamicSupervisor")
 
   defp suggestions_for(:genserver) do
     [
