@@ -96,7 +96,8 @@ defmodule Mix.Tasks.Archdo do
           show_all: :boolean,
           watch: :boolean,
           gdpr_scope: :boolean,
-          traceability_required_paths: :string
+          traceability_required_paths: :string,
+          compare_with: :string
         ]
       )
 
@@ -134,6 +135,10 @@ defmodule Mix.Tasks.Archdo do
         Archdo.print_building_blocks(paths)
         :ok
 
+      Keyword.has_key?(opts, :compare_with) ->
+        run_compare(opts, paths)
+        :ok
+
       Keyword.get(opts, :freeze, false) ->
         run_opts = build_run_opts(opts)
         Archdo.freeze_baseline(paths, run_opts)
@@ -156,6 +161,17 @@ defmodule Mix.Tasks.Archdo do
       true ->
         run_normal(opts, paths)
     end
+  end
+
+  defp run_compare(opts, paths) do
+    compare_paths = parse_list(Keyword.get(opts, :compare_with, ""))
+    run_opts = build_run_opts(opts)
+
+    paths
+    |> Archdo.Compare.run(compare_paths, run_opts)
+    |> Archdo.Compare.merge()
+    |> Archdo.Compare.format()
+    |> Mix.shell().info()
   end
 
   defp run_normal(opts, paths) do
