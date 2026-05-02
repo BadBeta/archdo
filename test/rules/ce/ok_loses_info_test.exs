@@ -88,15 +88,35 @@ defmodule Archdo.Rules.CE.OkLosesInfoTest do
       assert hd(diags).rule_id == "CE-50"
     end
 
-    test "does NOT fire when bound result IS used in a subsequent call" do
+    test "M-Plan9 v2: fires when bound result IS used in a subsequent leaf call" do
       # `result = X.fetch(); process(result); :ok` — the value flowed
-      # somewhere before being thrown away. v1 considers this used.
+      # through one call but the function returns :ok literal. The
+      # chain doesn't escape to the return position; the richer
+      # value is still discarded. v2 (M-Plan9) detects this.
       code = ~S"""
       defmodule MyApp.Service do
         def go(id) do
           result = Repo.get(Order, id)
           process(result)
           :ok
+        end
+      end
+      """
+
+      diags = assert_flagged(OkLosesInfo, code)
+      assert hd(diags).rule_id == "CE-50"
+    end
+
+    test "M-Plan9: does NOT fire when chain terminates in {:ok, derived}" do
+      # `result = X.fetch(); processed = process(result); {:ok, processed}`
+      # — the derived value escapes via the return, so the richer
+      # result IS preserved (transformed but preserved). No firing.
+      code = ~S"""
+      defmodule MyApp.Service do
+        def go(id) do
+          result = Repo.get(Order, id)
+          processed = process(result)
+          {:ok, processed}
         end
       end
       """

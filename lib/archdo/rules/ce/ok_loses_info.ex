@@ -81,28 +81,23 @@ defmodule Archdo.Rules.CE.OkLosesInfo do
         false
 
       {prefix, _last} ->
+        # §§ elixir-implementing: §2.1 — three independent shape checks
+        # OR'd together. Any one is sufficient evidence the function
+        # has a richer-result call whose value is discarded by the
+        # `:ok` literal return.
         Enum.any?(prefix, &richer_result_call?/1) or
-          bound_richer_unused?(prefix)
+          binds_richer?(prefix)
     end
   end
 
-  # M-Aux2: `var = richer_call(...)` where `var` doesn't appear in any
-  # statement after the assignment — the value was captured and silently
-  # thrown away when the function returns `:ok`. Variables prefixed with
+  # M-Aux2 + M-Plan9: ANY `var = richer_call(...)` binding in the prefix.
+  # When the function returns `:ok` literal, the binding's value can
+  # never reach the return position — even if `var` flows through
+  # subsequent calls (`process(var)` etc.), the chain terminates at
+  # `:ok` and the richer value is discarded. Variables prefixed with
   # `_` are intentional discards (`_result = ...`) and don't count.
-  defp bound_richer_unused?(prefix) do
-    indexed = Enum.with_index(prefix)
-
-    Enum.any?(indexed, fn {stmt, idx} ->
-      case bound_var_with_richer_rhs(stmt) do
-        nil ->
-          false
-
-        var_name ->
-          rest = Enum.drop(prefix, idx + 1)
-          not used_in?(var_name, rest)
-      end
-    end)
+  defp binds_richer?(prefix) do
+    Enum.any?(prefix, fn stmt -> bound_var_with_richer_rhs(stmt) != nil end)
   end
 
   # Match `var = call_to_richer_module(...)` and return the var atom.
@@ -134,23 +129,6 @@ defmodule Archdo.Rules.CE.OkLosesInfo do
   end
 
   defp bare_richer_call?(_), do: false
-
-  # Walk the statements looking for ANY occurrence of the variable.
-  defp used_in?(var_name, statements) do
-    {_, found?} =
-      Macro.prewalk(statements, false, fn
-        node, true ->
-          {node, true}
-
-        {^var_name, _, ctx} = node, false when is_atom(ctx) ->
-          {node, true}
-
-        node, false ->
-          {node, false}
-      end)
-
-    found?
-  end
 
   # A "richer result" call is a remote call to one of the well-known
   # tuple-returning APIs (see @richer_modules at module top) OR a
