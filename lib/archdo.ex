@@ -210,7 +210,8 @@ defmodule Archdo do
     Archdo.Rules.CE.UnanchoredModule,
     Archdo.Rules.CE.UnanchoredIsland,
     Archdo.Rules.CE.MagicLiterals,
-    Archdo.Rules.CE.VolatilitySubstitutability
+    Archdo.Rules.CE.VolatilitySubstitutability,
+    Archdo.Rules.CE.ScatteredTaxonomy
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).

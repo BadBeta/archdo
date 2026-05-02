@@ -186,7 +186,8 @@ defmodule Archdo.Runner do
     Archdo.Rules.CE.VolatileNoRetry,
     Archdo.Rules.CE.HighCognitiveComplexity,
     Archdo.Rules.CE.ComplexityShape,
-    Archdo.Rules.CE.BlackboxQuadrant
+    Archdo.Rules.CE.BlackboxQuadrant,
+    Archdo.Rules.CE.CrossCuttingDensity
   ]
 
   @graph_rules [
