@@ -2,7 +2,7 @@ defmodule Archdo.Compiled.DiagramInteractive do
   @moduledoc false
 
   alias Archdo.AST
-  alias Archdo.Compiled.Graph
+  alias Archdo.Compiled.{Graph, Query}
 
   @doc """
   Generate an interactive HTML file with two-level architecture visualization.
@@ -12,14 +12,14 @@ defmodule Archdo.Compiled.DiagramInteractive do
   Boundary-crossing connections are highlighted in red.
   """
   def generate(%Graph{} = graph) do
-    contexts = Graph.discover_contexts(graph)
+    contexts = Query.discover_contexts(graph)
     graph_json = build_graph_json(graph, contexts)
 
     html_template(graph_json)
   end
 
   defp build_graph_json(graph, contexts) do
-    membership = Graph.build_context_membership(contexts)
+    membership = Query.build_context_membership(contexts)
     nodes = build_nodes(graph, membership)
     edges = build_edges(graph, nodes, membership)
     context_groups = build_context_groups(contexts)
@@ -53,7 +53,7 @@ defmodule Archdo.Compiled.DiagramInteractive do
       short = safe_short_name(mod)
       ctx = Map.get(membership, mod, "Uncategorized")
 
-      deps = Graph.module_dependencies(graph, mod)
+      deps = Query.module_dependencies(graph, mod)
 
       inputs =
         deps
@@ -87,7 +87,7 @@ defmodule Archdo.Compiled.DiagramInteractive do
         end)
         |> Enum.take(15)
         |> Enum.map(fn {name, arity} ->
-          callers = Graph.callers_of(graph, {mod, name, arity})
+          callers = Query.callers_of(graph, {mod, name, arity})
           external = Enum.reject(callers, fn c -> elem(c.caller, 0) == mod end)
           %{name: "#{name}/#{arity}", callers: length(external), type: "export"}
         end)

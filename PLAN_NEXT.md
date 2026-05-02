@@ -500,18 +500,30 @@ rule function heads, plus builder helpers (`extract_function_clauses`,
 `collect_exports_from_forms`) called from rules that genuinely need
 the build path. Phase 2 below addresses both.
 
-**Phase 2 (deferred):** physically move the 15 query function bodies
-out of `Compiled.Graph` and into `Compiled.Query` (currently Query is
-a defdelegate facade — the impl still lives in Graph). After Phase 2:
-`Compiled.Graph` contains only `defstruct`, `analyze/1` (build I/O),
-Tarjan SCC, and ingest helpers (~400 lines). `Compiled.Query` owns
-~500 lines of read accessors. To reach near-zero leaks, also:
-(a) consider exposing the struct as `%Compiled.Graph{}` opaquely (or
-move it onto a Compiled-owned type), so rule heads can pattern-match
-on the boundary instead of an internal; (b) re-export the two
-build-side helpers (`extract_function_clauses`, `collect_exports_from_forms`)
-from `Compiled` so the 5 rules calling them go through the boundary.
-Phase 2 is a pure refactor — no test changes, no behaviour change.
+**Phase 2 (2026-05-03 SHIPPED):** The 15 query function bodies physically
+moved from `Compiled.Graph` to `Compiled.Query`, including all
+private helpers (Tarjan SCC, walk_dependents, compute_risk_score,
+context discovery + analyze_context + classify_context_calls +
+find_leaking_modules + find_misplaced_modules, dead-fn helpers).
+`Compiled.Query` is no longer a defdelegate facade — it owns the
+implementations. `Compiled` facade also gained `extract_function_clauses`
+and `collect_exports_from_forms` defdelegates so 4 rules using
+build-side helpers go through the boundary too. 5 internal Compiled
+modules (diagram, diagram_svg, diagram_interactive, diagram_system,
+otp_topology) re-aliased to call `Query.X` instead of `Graph.X`.
+
+**Resulting sizes:**
+- `Compiled.Graph`: 1166 → 420 lines (single-purpose builder)
+- `Compiled.Query`: 723 lines (single-purpose reader)
+- `Compiled` facade: 83 → 104 lines (17 defdelegate exports)
+
+Suite: 1463/1463. Leak metric stayed at 21 (Phase 1 already routed
+all CALL SITES through `Compiled.X`; the remaining 21 are `%Graph{}`
+struct matches in 11 rule function heads — inherent to the data
+contract). Eliminating those requires type-erasing the Graph struct
+or replacing every `%Graph{...}` head match with `map()` — both
+trade type safety for a metric. Out of scope for M-Plan19; the
+file-size split (the Graph-is-too-big motivation) IS achieved.
 
 **Original spec retained below.**
 

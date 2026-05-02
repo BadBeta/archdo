@@ -12,7 +12,7 @@ defmodule Archdo.Compiled.DiagramSystem do
   # The whole thing flows left-to-right like a LabVIEW block diagram.
 
   alias Archdo.AST
-  alias Archdo.Compiled.Graph
+  alias Archdo.Compiled.{Graph, Query}
 
   # Layout — horizontal layers stacked top to bottom
   # Each layer is a full-width horizontal band.
@@ -526,7 +526,7 @@ defmodule Archdo.Compiled.DiagramSystem do
       down_connections =
         upper_mods
         |> Enum.flat_map(fn upper_mod ->
-          Graph.module_dependencies(graph, upper_mod)
+          Query.module_dependencies(graph, upper_mod)
           |> Enum.filter(&MapSet.member?(lower_set, &1))
           |> Enum.map(fn lower_mod -> {upper_mod, lower_mod} end)
         end)
@@ -536,7 +536,7 @@ defmodule Archdo.Compiled.DiagramSystem do
       up_connections =
         lower_mods
         |> Enum.flat_map(fn lower_mod ->
-          Graph.module_dependencies(graph, lower_mod)
+          Query.module_dependencies(graph, lower_mod)
           |> Enum.filter(&MapSet.member?(upper_set, &1))
           |> Enum.map(fn upper_mod -> {lower_mod, upper_mod} end)
         end)
@@ -794,8 +794,8 @@ defmodule Archdo.Compiled.DiagramSystem do
   defp prioritize_by_connections(modules, graph, max) do
     modules
     |> Enum.map(fn mod ->
-      deps = length(Graph.module_dependencies(graph, mod))
-      dependents = length(Graph.module_dependents(graph, mod))
+      deps = length(Query.module_dependencies(graph, mod))
+      dependents = length(Query.module_dependents(graph, mod))
       {mod, deps + dependents}
     end)
     |> Enum.sort_by(fn {_mod, score} -> score end, :desc)

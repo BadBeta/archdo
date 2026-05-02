@@ -37,6 +37,15 @@ defmodule Archdo.Compiled do
   defdelegate context_known_by(graph, context_name), to: Query
   defdelegate discover_contexts(graph), to: Query
 
+  # §§ M-Plan19 (Phase 2) — build-side helpers exposed through the
+  # boundary so rules that need clause-shape data (NonExhaustiveApi,
+  # InconsistentApiReturn) or raw export sets (DegenerateFunction,
+  # LookupTableCandidate) call through `Compiled` instead of into
+  # `Compiled.Graph`. Path-taking signatures — these don't take a
+  # graph; they read beam files.
+  defdelegate extract_function_clauses(beam_dir), to: Graph
+  defdelegate collect_exports_from_forms(forms), to: Graph
+
   @doc """
   Analyze a project directory by reading compiled beam files and building
   a complete interaction graph.

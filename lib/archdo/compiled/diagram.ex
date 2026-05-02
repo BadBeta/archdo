@@ -6,6 +6,7 @@ defmodule Archdo.Compiled.Diagram do
 
   alias Archdo.{AST, Graph}
   alias Archdo.Compiled.Graph, as: CompiledGraph
+  alias Archdo.Compiled.Query
 
   @doc """
   Generate an architecture overview diagram showing contexts as subgraphs,
@@ -13,10 +14,10 @@ defmodule Archdo.Compiled.Diagram do
   """
   @spec architecture_overview(CompiledGraph.t()) :: String.t()
   def architecture_overview(%CompiledGraph{} = graph) do
-    contexts = CompiledGraph.discover_contexts(graph)
+    contexts = Query.discover_contexts(graph)
 
     # Build context membership lookup
-    context_of = CompiledGraph.build_context_membership(contexts)
+    context_of = Query.build_context_membership(contexts)
 
     # Collect cross-context edges (aggregated at module level)
     cross_edges = collect_cross_context_edges(graph, context_of)
@@ -65,7 +66,7 @@ defmodule Archdo.Compiled.Diagram do
   """
   @spec context_detail(CompiledGraph.t(), String.t()) :: String.t()
   def context_detail(%CompiledGraph{} = graph, context_name) do
-    contexts = CompiledGraph.discover_contexts(graph)
+    contexts = Query.discover_contexts(graph)
 
     case Enum.find(contexts, fn c -> c.context == context_name end) do
       nil ->
@@ -132,7 +133,7 @@ defmodule Archdo.Compiled.Diagram do
   """
   @spec api_surface(CompiledGraph.t()) :: String.t()
   def api_surface(%CompiledGraph{} = graph) do
-    contexts = CompiledGraph.discover_contexts(graph)
+    contexts = Query.discover_contexts(graph)
 
     lines = ["graph LR", ""]
 
@@ -152,7 +153,7 @@ defmodule Archdo.Compiled.Diagram do
   """
   @spec blast_radius(CompiledGraph.t(), module()) :: String.t()
   def blast_radius(%CompiledGraph{} = graph, module) do
-    report = CompiledGraph.blast_radius(graph, module)
+    report = Query.blast_radius(graph, module)
     mod_name = AST.module_name(module)
 
     lines = [
@@ -316,7 +317,7 @@ defmodule Archdo.Compiled.Diagram do
     internal_edges =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        CompiledGraph.module_dependencies(graph, mod)
+        Query.module_dependencies(graph, mod)
         |> Enum.filter(&MapSet.member?(member_set, &1))
         |> Enum.map(fn dep -> {mod, dep} end)
       end)
@@ -330,7 +331,7 @@ defmodule Archdo.Compiled.Diagram do
       ctx.leaking_modules
       |> Enum.take(5)
       |> Enum.flat_map(fn %{module: mod} ->
-        callers = CompiledGraph.module_dependents(graph, mod)
+        callers = Query.module_dependents(graph, mod)
 
         callers
         |> Enum.reject(&MapSet.member?(member_set, &1))
@@ -386,7 +387,7 @@ defmodule Archdo.Compiled.Diagram do
         exports
         |> Enum.filter(fn {func, arity} ->
           mfa = {mod, func, arity}
-          callers = CompiledGraph.callers_of(graph, mfa)
+          callers = Query.callers_of(graph, mfa)
 
           Enum.any?(callers, fn call ->
             caller_mod = elem(call.caller, 0)
@@ -722,10 +723,10 @@ defmodule Archdo.Compiled.Diagram do
     exports = Enum.filter(functions, & &1.exported)
 
     # What this module knows about (outgoing)
-    outgoing = CompiledGraph.knows_about(graph, module)
+    outgoing = Query.knows_about(graph, module)
 
     # Who knows about this module (incoming)
-    incoming = CompiledGraph.known_by(graph, module)
+    incoming = Query.known_by(graph, module)
 
     lines = [
       "graph LR",
@@ -808,7 +809,7 @@ defmodule Archdo.Compiled.Diagram do
   """
   @spec dataflow_context(CompiledGraph.t(), String.t()) :: String.t()
   def dataflow_context(%CompiledGraph{} = graph, context_name) do
-    contexts = CompiledGraph.discover_contexts(graph)
+    contexts = Query.discover_contexts(graph)
 
     case Enum.find(contexts, fn c -> c.context == context_name end) do
       nil ->
@@ -831,7 +832,7 @@ defmodule Archdo.Compiled.Diagram do
     external_callers =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        CompiledGraph.known_by(graph, mod)
+        Query.known_by(graph, mod)
         |> Enum.reject(fn e -> MapSet.member?(member_set, e.module) end)
         |> Enum.map(fn e -> {e.module, mod, e.functions_called, e.call_count} end)
       end)
@@ -842,7 +843,7 @@ defmodule Archdo.Compiled.Diagram do
     external_deps =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        CompiledGraph.knows_about(graph, mod)
+        Query.knows_about(graph, mod)
         |> Enum.reject(fn e -> MapSet.member?(member_set, e.module) end)
         |> Enum.map(fn e -> {mod, e.module, e.functions_called, e.call_count} end)
       end)
@@ -908,7 +909,7 @@ defmodule Archdo.Compiled.Diagram do
     internal_wiring =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        CompiledGraph.knows_about(graph, mod)
+        Query.knows_about(graph, mod)
         |> Enum.filter(fn e -> MapSet.member?(member_set, e.module) end)
         |> Enum.map(fn e ->
           from_id = sanitize_id(AST.module_name(mod))

@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
   alias Archdo.Rules.Compiled.Helpers
 
@@ -21,7 +22,7 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
   @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
   def analyze_compiled(%Graph{beam_dir: beam_dir}) when is_binary(beam_dir) do
     beam_dir
-    |> Graph.extract_function_clauses()
+    |> Compiled.extract_function_clauses()
     |> Enum.flat_map(fn {module, functions} ->
       functions
       |> Enum.filter(fn fn_info ->

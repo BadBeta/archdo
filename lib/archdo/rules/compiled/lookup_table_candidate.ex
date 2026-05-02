@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
 
   @impl true
@@ -28,7 +29,7 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
 
       case :beam_lib.chunks(charlist, [:abstract_code]) do
         {:ok, {mod, [{:abstract_code, {:raw_abstract_v1, forms}}]}} ->
-          exports = Graph.collect_exports_from_forms(forms)
+          exports = Compiled.collect_exports_from_forms(forms)
           find_lookup_candidates(mod, forms, exports)
 
         _ ->

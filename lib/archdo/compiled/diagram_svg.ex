@@ -15,7 +15,7 @@ defmodule Archdo.Compiled.DiagramSVG do
   #   - Style: solid=synchronous call, dashed=async/cast/send
 
   alias Archdo.AST
-  alias Archdo.Compiled.{DiagramHelpers, Graph}
+  alias Archdo.Compiled.{DiagramHelpers, Graph, Query}
 
   # Layout constants
   @node_width 220
@@ -51,8 +51,8 @@ defmodule Archdo.Compiled.DiagramSVG do
   """
   @spec module_dataflow(Graph.t(), module()) :: String.t()
   def module_dataflow(%Graph{} = graph, module) do
-    incoming = Graph.known_by(graph, module)
-    outgoing = Graph.knows_about(graph, module)
+    incoming = Query.known_by(graph, module)
+    outgoing = Query.knows_about(graph, module)
 
     # Get export info
     clauses_map =
@@ -133,7 +133,7 @@ defmodule Archdo.Compiled.DiagramSVG do
   """
   @spec context_dataflow(Graph.t(), String.t()) :: String.t()
   def context_dataflow(%Graph{} = graph, context_name) do
-    contexts = Graph.discover_contexts(graph)
+    contexts = Query.discover_contexts(graph)
 
     case Enum.find(contexts, fn c -> c.context == context_name end) do
       nil ->
@@ -302,7 +302,7 @@ defmodule Archdo.Compiled.DiagramSVG do
     ext_callers =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        Enum.reject(Graph.known_by(graph, mod), fn e -> MapSet.member?(member_set, e.module) end)
+        Enum.reject(Query.known_by(graph, mod), fn e -> MapSet.member?(member_set, e.module) end)
       end)
       |> Enum.uniq_by(& &1.module)
       |> Enum.take(6)
@@ -311,7 +311,7 @@ defmodule Archdo.Compiled.DiagramSVG do
     ext_deps =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        Enum.reject(Graph.knows_about(graph, mod), fn e ->
+        Enum.reject(Query.knows_about(graph, mod), fn e ->
           MapSet.member?(member_set, e.module)
         end)
       end)
