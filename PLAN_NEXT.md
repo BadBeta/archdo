@@ -1,0 +1,474 @@
+# Archdo — Next Milestone Plan (PLAN-NEXT)
+
+Addresses every non-Credo finding from the May 2026 outstanding-work review.
+Each milestone is shippable independently. The plan passes the
+elixir-planning §0.1 plan-completeness gate (concrete names, types,
+signatures, test files for every item).
+
+## Scope
+
+Ordered by ROI per cost. Phase A = quick wins (this session). Phase B =
+medium analyzers (this session if time). Phase C = larger features
+(deferred to follow-up sessions, full spec here).
+
+---
+
+## Phase A — Quick wins
+
+### M-Plan1 — Fix Elixir 1.18 typing warning in tools_test.exs:103
+
+**Problem:** `assert result.suggestions != []` — Elixir 1.18's type
+checker proves `result.suggestions` is always non-empty (every clause
+of `Suggest.suggestions_for/1` returns a literal non-empty list), so
+the comparison is always-true across disjoint types.
+
+**Fix:** Replace with pattern-match assertion per elixir-implementing
+§7.10. `assert [_ | _] = result.suggestions` proves non-empty
+structurally without the disjoint-types comparison.
+
+**Test file:** `test/mcp/tools_test.exs` (the warning IS in a test —
+the change IS the fix; no separate regression test needed).
+
+**Verification:** `mix test 2>&1 | grep -c "typing violation"` returns 0.
+
+**Effort:** 5 minutes.
+
+---
+
+### M-Plan2 — Document integration-test environment requirement
+
+**Problem:** `test/integration/real_project_test.exs` runs against
+`/tmp/oban`, `/tmp/req`, etc. Without those checkouts, 12 tests fail
+when `mix test --include integration` is run.
+
+**Status:** Tests are CORRECTLY excluded by default
+(`test_helper.exs:1`). The failures only fire when someone explicitly
+includes integration. **No code change needed.**
+
+**Action:** Add a `@moduledoc` block to
+`test/integration/real_project_test.exs` listing required `/tmp/*`
+paths and a one-line shell command to clone them, so future engineers
+who run `--include integration` know how to set up the environment.
+
+**Test file:** N/A — this is documentation only, no behavior change.
+
+**Effort:** 5 minutes.
+
+---
+
+### M-Plan3 — Mark Archdo.Compiled.Collector with @archdo_opaque_state
+
+**Problem:** CE-29 fires on `Archdo.Compiled.Collector` (a legit
+GenServer with no `format_status/1`). It's a known false positive
+because the collector's state is a transient compilation buffer with
+no PII — `format_status` would add no value.
+
+**Fix:** Add `@archdo_opaque_state "transient compilation buffer; no
+external observers"` to `Archdo.Compiled.Collector`. The exemption is
+already implemented in
+`lib/archdo/rules/ce/opaque_process_state.ex` (per its existing
+`@archdo_opaque_state` exemption marker code).
+
+**Test file:** `test/rules/ce/opaque_process_state_test.exs` — already
+has the exemption-marker test. Add one self-analysis check:
+`test "Archdo.Compiled.Collector is exempt via @archdo_opaque_state"`.
+
+**Effort:** 10 minutes.
+
+---
+
+### M-Plan4 — FP-7 + FP-8: Phoenix-classification for rules 1.6 + 1.9
+
+**Problem (FP-7):** Rule 1.6 (`CrossCuttingInDomain`) uses
+hand-rolled `web_file?` / `adapter_file?` / `infrastructure_file?`
+predicates. The shared `Archdo.Phoenix.classify_file/2` already
+encodes this knowledge with broader coverage (`:operational`,
+`:application_root`, `:test`).
+
+**Problem (FP-8):** Rule 1.9 (`TimeInjection`) over-fires on
+`DateTime.utc_now/0` calls in code that isn't truly hard-coded
+(e.g., a default arg `now \\ DateTime.utc_now()` is the very
+*injection mechanism* the rule is supposed to recommend).
+
+**Fix (FP-7):** Refactor 1.6 to consume `opts[:phoenix]` like 1.9
+already does, and use `Phoenix.classify_file/2` for the layer check.
+Drop `web_file?`/`adapter_file?`/`infrastructure_file?` private
+helpers when the Phoenix classification subsumes them.
+
+**Fix (FP-8):** Add a default-arg detection step: if every call site
+of a hard-coded clock function is in a function-head default value
+(`def f(arg \\ DateTime.utc_now())`), skip the diagnostic — the
+function IS injecting the clock through its default. Walk function
+heads to collect default-arg expressions before the call-site scan.
+
+**Test files (TDD-first):**
+- `test/rules/module/cross_cutting_in_domain_test.exs` — add 2 new
+  tests: (1) operational layer (Mix task) is exempt via Phoenix
+  classification, (2) test layer is exempt.
+- `test/rules/module/time_injection_test.exs` — add 1 new test:
+  function with `def f(now \\ DateTime.utc_now())` is NOT flagged.
+
+**Effort:** 30 minutes.
+
+---
+
+### M-Plan5 — Configurable thresholds in `.archdo.exs` (D11)
+
+**Problem:** Rules 1.6 (`@max_logger_calls 3`), 1.9 (no threshold,
+just severity), 1.11 (`@min_files 3`) have hard-coded thresholds.
+Field reports asked for `.archdo.exs` knobs to tune them per project.
+
+**Fix:** Add `thresholds:` keyword to `.archdo.exs` config schema.
+Shape:
+
+```elixir
+# .archdo.exs
+[
+  thresholds: [
+    {"1.6", max_logger_calls: 5},      # default: 3
+    {"1.11", min_files: 5}             # default: 3
+  ]
+]
+```
+
+Plumbing:
+- `Archdo.Config` gains `thresholds :: %{String.t() => keyword()}`
+  field. `from_keyword/2` parses it. `from_conventions/1` returns `%{}`.
+- New `Archdo.Config.threshold/3` accessor:
+  `threshold(config, "1.6", :max_logger_calls)` returns the configured
+  value or the rule-defined default.
+- Rule 1.6 reads `opts[:config]` (already plumbed via Runner) and
+  calls `Archdo.Config.threshold(config, "1.6", :max_logger_calls,
+  @max_logger_calls)` instead of using `@max_logger_calls` directly.
+- Rule 1.11 same pattern.
+
+Rule 1.9 has no numeric threshold (it's per-call-site detection); the
+M-Plan4 default-arg fix already covers the over-firing concern, so
+1.9 needs no threshold knob.
+
+**Test files (TDD-first):**
+- `test/archdo/config_test.exs` — add 3 tests: parses `thresholds:`
+  keyword, accessor returns configured value, accessor returns default
+  when key absent.
+- `test/rules/module/cross_cutting_in_domain_test.exs` — add 1 test:
+  rule respects configured `max_logger_calls`.
+- `test/rules/boundary/anemic_context_test.exs` — add 1 test: rule
+  respects configured `min_files`.
+
+**Effort:** 45 minutes.
+
+---
+
+## Phase B — Medium analyzers (1-3 hr each)
+
+### M-Plan6 — CE-57 propagate input-guard verdict to module level (M6)
+
+**Problem:** CE-57 (M-Aux6) flags individual functions whose input
+is unguarded. The `--building-blocks` CLI uses
+`Blackbox.module_verdict/1` which only checks the structural 6-component
+score; it doesn't reflect CE-57 findings. A module can show as
+`:building_block` even when one of its functions accepts unguarded input.
+
+**Fix:** New `Blackbox.module_input_safety/2` that takes a module's AST
+and returns `:safe | {:unsafe, [{name, arity, reason}]}`. Reuse
+CE-57's `unguarded_clause?/1` predicate (extract to shared helper in
+`Archdo.Rules.CE.UnguardedBuildingBlock`). Update `module_verdict/1`
+to combine the existing 6-component check AND the input-safety check
+— a module is `:building_block` only if both pass. The
+`--building-blocks` CLI prints "input-safety" leaks alongside the
+existing structural leaks.
+
+**Test files:**
+- `test/archdo/blackbox_test.exs` — add 3 tests: pure module with
+  guarded inputs is `:building_block`; pure module with one unguarded
+  fn is `{:leaks_at, [{name, arity, _}]}` with reason `:unguarded_input`;
+  CLI output includes input-safety leaks.
+
+**Effort:** 1.5 hr.
+
+---
+
+### M-Plan7 — CE-27 + CE-28 cross-function call-graph walk (M1 + M2)
+
+**Problem (CE-27):** Boundary telemetry rule fires on every controller
+action without `:telemetry.span` in its body, missing the case where
+telemetry is emitted centrally in a Plug or before-action hook that
+covers many actions.
+
+**Problem (CE-28):** Error-path log rule fires when a function returns
+`{:error, _}` without an in-scope `Logger.error/warning`, missing the
+case where the caller logs the error at the boundary.
+
+**Shared fix:** Both rules need a 2-level walk: "does the function OR
+any function that calls it (within 1 hop) emit telemetry/log?"
+
+Implementation:
+- New helper `Archdo.AST.PluginCoverage` (project-level helper, shared
+  by CE-27 and CE-28). Builds a per-project map of `{module, fn, arity}
+  → {emits_telemetry?, emits_log?}` from one pass over the project ASTs.
+- For each module, also collect `Plug` modules referenced via
+  `pipeline :api do plug X end` in router files; mark each plug's body
+  for telemetry/log.
+- CE-27 changes: when checking a controller action, look up not just
+  its own body but the union of (own body) + (any plug in the
+  router pipeline that wraps this controller's scope). Same for
+  CE-28: log is "covered" if the function OR a wrapping plug logs.
+
+**Test files:**
+- `test/rules/ce/boundary_telemetry_test.exs` — add 2 tests:
+  controller with telemetry plug in pipeline is NOT flagged; controller
+  without any covering telemetry IS flagged.
+- `test/rules/ce/error_path_without_log_test.exs` — add 2 tests:
+  function returning `{:error, _}` whose caller logs is NOT flagged;
+  function whose caller doesn't log IS flagged.
+
+**Effort:** 2.5 hr.
+
+---
+
+### M-Plan8 — CE-30 broaden graph for apply/3 + nested supervisors (F1 + M5)
+
+**Problem:** CE-30 self-analysis still has 29 false positives because
+graph extraction misses:
+- `apply(mod, fn, args)` dynamic dispatch — `mod` may be bound to a
+  module atom from a list, but the walker doesn't know that
+- Supervisor children listed in `init/1` of a non-`Application` module
+  (e.g., a sub-supervisor's child list)
+
+**Fix:**
+- Extend `Archdo.Graph.extract_edges/2` to handle `apply/3`:
+  when the first arg is a literal module alias (`apply(MyMod, :run,
+  [arg])`), emit a `:dynamic_dispatch` edge.
+- Extend `Archdo.AnchorSet.compute/1` to walk every `Supervisor.init/2`
+  call (not just inside `Application.start/2`) and treat its child
+  list as anchors. Same for `DynamicSupervisor.init/1` returning a
+  child spec.
+
+**Test files:**
+- `test/archdo/graph_test.exs` — add 2 tests: `apply(MyMod, :f, [])`
+  emits an edge; `apply(var, :f, [])` does NOT emit an edge.
+- `test/archdo/anchor_set_test.exs` — add 2 tests: child in nested
+  supervisor's `init/1` is anchored; child in dynamic supervisor's
+  `init/1` is anchored.
+
+**Field check:** Re-run `mix archdo --paths lib --packs ce_compliance,core`
+on Archdo itself; expect CE-30 self-finding count down from 29 to <15.
+
+**Effort:** 2 hr.
+
+---
+
+### M-Plan9 — CE-50 transitively-threaded chain detection (M3)
+
+**Problem:** CE-50 catches `{:ok, _} = X.call(...); :ok` and
+`var = X.call(...); :ok`. It misses
+`r = X.call(...); process(r); :ok` — the value flows through one
+function then is discarded.
+
+**Fix:** Light data-flow walk. For each function body, build a binding
+graph: `{var → [usage_sites]}`. A binding is "thrown away" if every
+usage site is a leaf call (no transitively-derived value reaches the
+return position). Add `Archdo.Rules.CE.OkLosesInfo.threaded_unused?/1`
+that detects the new shape; combine with existing predicates via OR.
+
+**Test files:**
+- `test/rules/ce/ok_loses_info_test.exs` — 4 tests: transitive thread
+  + discard fires; transitive thread + return does NOT fire; multiple
+  intermediate steps + discard fires; existing patterns still fire.
+
+**Effort:** 2 hr.
+
+---
+
+### M-Plan10 — CE-11 add test-density sub-score (M4)
+
+**Problem:** CE-11 contract density currently scores spec_coverage +
+doc_coverage. The PLAN noted test-density was deferred because it
+needs paired source/test matching. Single-module projects also get no
+signal because cohort size threshold is ≥3.
+
+**Fix:**
+- Pair: for `lib/foo/bar.ex` look for `test/foo/bar_test.exs` (the
+  Mix convention). Count public functions in source vs `test "..." do
+  ... end` blocks in test file.
+- Test density score = `min(1.0, test_count / public_fn_count)`.
+- Combined CE-11 score = average of `spec_coverage`, `doc_coverage`,
+  `test_density`. Fires when the combined score < 50% of cohort
+  median (cohort threshold lowered to ≥2 since test-density gives
+  signal even in small projects).
+
+**Test files:**
+- `test/rules/ce/contract_density_test.exs` — add 3 tests: module with
+  paired test file scores higher than module without; test density
+  lowers below median fires; small-cohort (2 modules) fires correctly.
+
+**Effort:** 1.5 hr.
+
+---
+
+### M-Plan11 — D12: Clone diff-awareness for umbrella siblings (Rule 3.1)
+
+**Problem:** Rule 3.1 reports clones across umbrella sibling apps as
+high-severity even when both copies are intentional (e.g., shared
+schema fields between `apps/api` and `apps/edge`). Field feedback
+asked for `:info`-level downgrade when sibling apps own the clones.
+
+**Fix:** In `DuplicatedCode.analyze_project/1`, group findings by
+top-level prefix (`Archdo.Foo` vs `Archdo.Bar` is intra-app;
+`ApiApp.Foo` vs `EdgeApp.Foo` is cross-app). Cross-app clones get
+`Diagnostic.info/2` instead of warning.
+
+**Detection:** umbrella iff `mix.exs` contains `apps_path:` OR project
+root has `apps/` directory with sub-`mix.exs` files.
+
+**Test files:**
+- `test/rules/module/duplicated_code_test.exs` — add 2 tests: umbrella
+  sibling clone emits `:info`; intra-app clone still emits `:warning`.
+
+**Effort:** 1 hr.
+
+---
+
+## Phase C — Larger features (deferred; spec here)
+
+### M-Plan12 — `mix archdo --shorten Mod.fn/N` (D1)
+
+**Specification (defers implementation):**
+- New CLI flag `--shorten Mod.fn/N` produces a shortened
+  AST + StreamData property test for the named function.
+- `Archdo.Shorten` module, public API:
+  - `analyze(file, ast, mfa) :: {:ok, %Shorten.Result{}} | {:error, term()}`
+  - `Result` struct: `{:ast, :ast_size, :pure?, :guards, :suggested_property}`
+- `suggested_property/1` returns a StreamData skeleton based on the
+  function's `@spec`-inferred input types (or guards if no spec).
+- CLI prints the shortened AST + property template; user copies into
+  test file.
+- Integration: needs `Archdo.Blackbox.score_function/4` results to
+  validate the function IS suitable for property testing
+  (substantive enough — substance ≥ 0.4).
+
+**Test plan:** 6 tests in `test/archdo/shorten_test.exs` covering:
+guarded fn with int spec generates `integer()`, fn with no spec falls
+back to `term()`, fn with map arg generates `map_of(...)`, error on
+unknown fn, error on macro fn, fn under threshold rejected.
+
+**Effort:** ~1 day.
+
+**Disposition:** deferred to follow-up session — too large for this
+batch and orthogonal to the false-positive cleanup that's the main
+ROI of Phase A+B.
+
+---
+
+### M-Plan13 — Metadata-aware volatility V2 (D2)
+
+**Specification:**
+- New `Archdo.Volatility.MixLockSource` module that parses `mix.lock`
+  to extract per-dep version, source (`:hex` / `:git` / `:path`).
+- New `Archdo.Volatility.HexpmSource` (optional) that fetches
+  package metadata from `https://hex.pm/api/packages/<name>` to
+  determine: download_count, last_release_date,
+  external-dep-count.
+- Both sources behind a behaviour `Archdo.Volatility.MetadataSource`
+  with `@callback fetch(name :: atom()) :: {:ok, map()} | {:error, _}`.
+- `Volatility.classify_module/3` consumes the metadata to refine the
+  shipped per-dep profile: high-download + recent-release →
+  `:stable`; low-download or stale → `:volatile`.
+- HexpmSource is OPT-IN via `--hexpm-cache <dir>` flag (avoids
+  network round-trips by default; cache is offline after first fetch).
+
+**Effort:** ~1 day. **Disposition:** deferred.
+
+---
+
+### M-Plan14 — `--compare-with` curated cohort + HTML map (D3 + D4)
+
+**Specification:**
+- Curated reference cohort: `Archdo.Compare.curated_cohort/0` returns
+  `[%{name: "phoenix", path: ..., commit: ...}, ...]` for a stable set
+  of well-known projects.
+- New `mix archdo --compare-with-curated` — clones (or uses cached)
+  each cohort entry, runs analysis, prints comparison table.
+- Caching: `~/.archdo/cohort/<name>` clones; refreshed on commit-SHA
+  mismatch.
+- HTML volatility map: `Archdo.Diagram.VolatilityMap` renders an SVG
+  heatmap of `(module → volatility tag)` overlaid on the dependency
+  graph.
+
+**Effort:** ~2 days combined. **Disposition:** deferred.
+
+---
+
+### M-Plan15 — SM-B/C/E/G/H/I (D5)
+
+**Specification:** Six state-machine rules requiring an explicit
+`@transitions [{from, event, to}, ...]` module attribute. Each rule
+fires only when the project opts in via the attribute.
+
+**Names + behaviours:**
+- SM-B: Unreachable state (no incoming transition)
+- SM-C: Terminal state with outgoing transition
+- SM-E: Variable-bound `next_state` value
+- SM-G: Event referenced in transition table not handled
+- SM-H: State referenced in transition table not declared
+- SM-I: Cycle in deterministic-only transitions
+
+**Effort:** ~3 hr per rule, ~1.5 days total. **Disposition:** deferred.
+
+---
+
+### M-Plan16 — Interactive diagram v3 (D6)
+
+**Specification:** UX enhancements per CONTINUE.md "Planned (v3)"
+section. Sugiyama layout, orthogonal routing, port endpoints, search,
+PNG export.
+
+**Effort:** ~2-3 days. **Disposition:** deferred.
+
+---
+
+### M-Plan17 — Rule 6.34 HEEx via Phoenix.LiveView.HTMLEngine.compile (F3)
+
+**Specification:**
+- Add optional `phoenix_live_view` dep gated by a `:heex_compile`
+  flag.
+- Replace regex HEEx scanning in `DeadPrivateFunction` with
+  `Phoenix.LiveView.HTMLEngine.compile/2` to get exact function-call
+  resolution including dynamic `<.tag>` patterns.
+- Behind config flag (off by default — adds dep weight).
+
+**Effort:** ~4 hr. **Disposition:** deferred.
+
+---
+
+### M-Plan18 — CE-23 Campbell calibration cohort study (F4)
+
+**Specification:** Empirical study, not code. Run CE-23 across the
+field cohort (hexpm, Plausible, Livebook, otel, oban, broadway, req,
+ecto, supavisor, finch). Hand-rate each finding as TP / FP /
+borderline. If FP rate > 30%, recalibrate the warn/error thresholds
+(currently 15 / 25). Document the calibration in
+`ARCHITECTURE_RULES_CHANGE_ECONOMY.md#CE-23`.
+
+**Effort:** ~3 hr (mostly judgment). **Disposition:** deferred.
+
+---
+
+## Plan-completeness gate verification
+
+§0.1 checklist for the M-Plan1..M-Plan11 scope (Phase A + B):
+
+- ✓ Layout: every new module named with file path. No new contexts.
+- ✓ Processes: no new processes. Pure analyzers in the existing Runner.
+- ✓ State: no new state. Same opt-in keyword plumbing.
+- ✓ Communication: rules consume `opts[:phoenix]`, `opts[:config]`.
+- ✓ External boundaries: none.
+- ✓ Configuration: `.archdo.exs` gains `thresholds:` keyword; the
+  signature `Archdo.Config.threshold(config, rule_id, key, default)`
+  is the single accessor.
+- ✓ Resilience: no I/O.
+- ✓ Test strategy: every milestone names its test files and counts.
+
+Forbidden phrases (per §0.5): none in M-Plan1..M-Plan11. The Phase C
+items use "deferred" only inside the explicit "Disposition: deferred"
+line per planning convention.

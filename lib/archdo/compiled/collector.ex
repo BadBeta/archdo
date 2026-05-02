@@ -11,6 +11,11 @@ defmodule Archdo.Compiled.Collector do
 
   use GenServer
 
+  # §§ elixir-implementing: §9.6 #6 — exempt from CE-29 (opaque-state
+  # rule). The collector is a transient compilation buffer with no
+  # external observers and no PII; format_status/1 would add no value.
+  @archdo_opaque_state "transient compilation buffer; no external observers"
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end

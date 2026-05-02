@@ -99,8 +99,7 @@ defmodule Archdo.Mcp.ToolsTest do
       {:ok, result} = Suggest.call(%{"file" => "lib/archdo/mcp/server.ex"})
 
       assert result.file_type in [:genserver, :module]
-      assert is_list(result.suggestions)
-      assert result.suggestions != []
+      assert [_ | _] = result.suggestions
     end
 
     test "returns suggestions for a test file" do

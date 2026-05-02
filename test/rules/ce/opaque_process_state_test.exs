@@ -89,5 +89,18 @@ defmodule Archdo.Rules.CE.OpaqueProcessStateTest do
       [diag] = assert_flagged(OpaqueProcessState, code)
       assert diag.rule_id == "CE-29"
     end
+
+    test "Archdo.Compiled.Collector is exempt via @archdo_opaque_state" do
+      # Self-analysis guard: Collector is a transient compilation buffer.
+      # Holds tracer events in memory while compilation runs; nothing
+      # external observes its state. Exempt via @archdo_opaque_state.
+      ast =
+        "lib/archdo/compiled/collector.ex"
+        |> File.read!()
+        |> Code.string_to_quoted!()
+
+      diags = OpaqueProcessState.analyze("lib/archdo/compiled/collector.ex", ast, [])
+      assert diags == []
+    end
   end
 end
