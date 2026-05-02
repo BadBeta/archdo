@@ -191,7 +191,8 @@ defmodule Archdo.Runner do
     Archdo.Rules.CE.ErrorPathWithoutLog,
     Archdo.Rules.CE.OpaqueProcessState,
     Archdo.Rules.CE.BoundaryTelemetry,
-    Archdo.Rules.CE.EffectLeak
+    Archdo.Rules.CE.EffectLeak,
+    Archdo.Rules.CE.UnguardedBuildingBlock
   ]
 
   @graph_rules [
