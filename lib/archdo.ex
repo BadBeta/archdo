@@ -220,7 +220,8 @@ defmodule Archdo do
     Archdo.Rules.CE.MissingRetentionPolicy,
     Archdo.Rules.CE.UntestedBuildingBlock,
     Archdo.Rules.CE.PiiFieldHandling,
-    Archdo.Rules.CE.MissingDeletionPath
+    Archdo.Rules.CE.MissingDeletionPath,
+    Archdo.Rules.CE.DeadRequirement
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).

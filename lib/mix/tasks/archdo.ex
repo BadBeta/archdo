@@ -97,6 +97,7 @@ defmodule Mix.Tasks.Archdo do
           watch: :boolean,
           gdpr_scope: :boolean,
           traceability_required_paths: :string,
+          requirements_source: :string,
           compare_with: :string
         ]
       )
@@ -202,7 +203,8 @@ defmodule Mix.Tasks.Archdo do
       compiled: compiled,
       gdpr_scope: Keyword.get(opts, :gdpr_scope, false),
       traceability_required_paths:
-        parse_nullable_list(Keyword.get(opts, :traceability_required_paths)) || []
+        parse_nullable_list(Keyword.get(opts, :traceability_required_paths)) || [],
+      requirements_source: Keyword.get(opts, :requirements_source)
     ]
     |> maybe_add(:only, only)
   end
