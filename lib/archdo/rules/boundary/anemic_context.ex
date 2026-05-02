@@ -2,10 +2,11 @@ defmodule Archdo.Rules.Boundary.AnemicContext do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{Config, Diagnostic, Fix}
 
   # Contexts with fewer files than this are "anemic" unless they have a very
-  # focused purpose (single schema, single behaviour).
+  # focused purpose (single schema, single behaviour). Default —
+  # overridable via `.archdo.exs` thresholds key "1.11" :min_files.
   @min_files 3
 
   @impl true
@@ -18,15 +19,18 @@ defmodule Archdo.Rules.Boundary.AnemicContext do
   def analyze(_file, _ast, _opts), do: []
 
   @doc """
-  Project-level: count files per context directory. Contexts with < 3 files
-  that are heavily depended on from outside suggest the boundary is gratuitous —
-  the content could live in another context.
+  Project-level: count files per context directory. Contexts with fewer
+  than `min_files` files that are heavily depended on from outside
+  suggest the boundary is gratuitous — the content could live in
+  another context. Threshold is configurable via `.archdo.exs`.
   """
-  def analyze_project(source_files) do
+  def analyze_project(source_files, opts \\ []) do
+    threshold = min_files(opts)
+
     source_files
     |> Enum.group_by(&context_dir/1)
     |> Enum.reject(fn {dir, _} -> is_nil(dir) end)
-    |> Enum.filter(fn {_dir, files} -> length(files) < @min_files end)
+    |> Enum.filter(fn {_dir, files} -> length(files) < threshold end)
     |> Enum.map(fn {dir, files} ->
       Diagnostic.info("1.11",
         title: "Anemic context",
@@ -61,11 +65,19 @@ defmodule Archdo.Rules.Boundary.AnemicContext do
           )
         ],
         references: ["ARCHITECTURE_RULES.md#1.11"],
-        context: %{path: dir, file_count: length(files), threshold: @min_files},
+        context: %{path: dir, file_count: length(files), threshold: threshold},
         file: dir,
         line: 0
       )
     end)
+  end
+
+  # §§ elixir-implementing: §10.5 — central config-accessor pattern.
+  defp min_files(opts) do
+    case Keyword.get(opts, :config) do
+      %Config{} = config -> Config.threshold(config, "1.11", :min_files, @min_files)
+      _ -> @min_files
+    end
   end
 
   defp context_dir(file) do

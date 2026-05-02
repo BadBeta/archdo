@@ -97,6 +97,13 @@ defmodule Archdo do
   def run(paths \\ ["lib"], opts \\ []) do
     files = collect_files(paths)
 
+    # §§ elixir-implementing: §10.5 — load .archdo.exs once at the
+    # entry point and thread through opts. Downstream rules that
+    # honour configurable thresholds (1.6 max_logger_calls, 1.11
+    # min_files, etc.) read opts[:config] via Archdo.Config.threshold/4.
+    # Lazy-load preserves the test seam: callers passing :config win.
+    opts = Keyword.put_new_lazy(opts, :config, fn -> Config.load() end)
+
     per_file_diagnostics =
       case Keyword.get(opts, :boundaries, false) do
         true -> Runner.analyze_with_graph(files, opts)
@@ -244,7 +251,10 @@ defmodule Archdo do
       Enum.flat_map(@project_file_ast_rules, &invoke_project_rule(&1, file_asts, opts))
 
     file_path_diagnostics =
-      Enum.flat_map(@project_file_path_rules, & &1.analyze_project(source_files))
+      Enum.flat_map(
+        @project_file_path_rules,
+        &invoke_project_path_rule(&1, source_files, opts)
+      )
 
     metrics_diagnostics = run_metrics_rules(file_asts)
 
@@ -282,6 +292,26 @@ defmodule Archdo do
     case function_exported?(rule, :analyze_project, 2) do
       true -> rule.analyze_project(file_asts, opts)
       false -> rule.analyze_project(file_asts)
+    end
+  rescue
+    e ->
+      IO.puts(
+        :standard_error,
+        "[archdo] project rule #{rule.id()} crashed: #{Exception.format(:error, e, __STACKTRACE__)}"
+      )
+
+      []
+  end
+
+  # §§ elixir-implementing: §10.5 — same arity-aware dispatch for
+  # path-only project rules so threshold-aware ones (1.11 min_files)
+  # can read opts[:config] without breaking older /1 rules.
+  defp invoke_project_path_rule(rule, source_files, opts) do
+    Code.ensure_loaded(rule)
+
+    case function_exported?(rule, :analyze_project, 2) do
+      true -> rule.analyze_project(source_files, opts)
+      false -> rule.analyze_project(source_files)
     end
   rescue
     e ->

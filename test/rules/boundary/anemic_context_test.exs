@@ -22,5 +22,29 @@ defmodule Archdo.Rules.Boundary.AnemicContextTest do
       diags = AnemicContext.analyze_project(files)
       assert diags == []
     end
+
+    test "respects configured min_files threshold from .archdo.exs" do
+      # 4 files — over default of 3, so clean WITHOUT a config
+      files = [
+        "/project/lib/my_app/accounts/user.ex",
+        "/project/lib/my_app/accounts/credential.ex",
+        "/project/lib/my_app/accounts/auth.ex",
+        "/project/lib/my_app/accounts/session.ex"
+      ]
+
+      assert AnemicContext.analyze_project(files) == []
+
+      # With min_files bumped to 5, 4 files now fires
+      config =
+        Archdo.Config.from_keyword(
+          [thresholds: [{"1.11", min_files: 5}]],
+          "/tmp/test_root"
+        )
+
+      diags_configured = AnemicContext.analyze_project(files, config: config)
+
+      assert [diag] = diags_configured
+      assert diag.rule_id == "1.11"
+    end
   end
 end

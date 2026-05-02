@@ -7,8 +7,9 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
   # adapters legitimately wrap cross-cutting concerns; flagging
   # Logger noise there is a false positive.
 
-  alias Archdo.{AST, Diagnostic, Fix, Phoenix}
+  alias Archdo.{AST, Config, Diagnostic, Fix, Phoenix}
 
+  # Default — overridable via `.archdo.exs` thresholds.
   @max_logger_calls 3
 
   # Phoenix layers where cross-cutting Logger noise is APPROPRIATE,
@@ -39,14 +40,15 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
       classification.layer in @cross_cutting_layers -> []
       AST.test_file?(file) -> []
       adapter_file?(file) -> []
-      true -> check_excessive_logging(file, ast)
+      true -> check_excessive_logging(file, ast, opts)
     end
   end
 
-  defp check_excessive_logging(file, ast) do
+  defp check_excessive_logging(file, ast, opts) do
     logger_calls = count_logger_calls(ast)
+    threshold = max_logger_calls(opts)
 
-    if logger_calls > @max_logger_calls do
+    if logger_calls > threshold do
       module_name = AST.extract_module_name(ast)
 
       [
@@ -98,6 +100,20 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomain do
           false
       end)
     )
+  end
+
+  # §§ elixir-implementing: §10.5 — central config-accessor pattern.
+  # Rule reads its threshold via Archdo.Config.threshold/4, so
+  # `.archdo.exs` overrides flow through one accessor instead of
+  # scattered Application.get_env calls.
+  defp max_logger_calls(opts) do
+    case Keyword.get(opts, :config) do
+      %Config{} = config ->
+        Config.threshold(config, "1.6", :max_logger_calls, @max_logger_calls)
+
+      _ ->
+        @max_logger_calls
+    end
   end
 
   # adapter detection retained — Phoenix.classify_file/2 doesn't have

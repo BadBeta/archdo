@@ -91,5 +91,41 @@ defmodule Archdo.Rules.Module.CrossCuttingInDomainTest do
 
       assert_clean(CrossCuttingInDomain, code, file: "test/my_app/accounts_test.exs")
     end
+
+    test "respects configured max_logger_calls threshold from .archdo.exs" do
+      # 4 Logger calls — over default of 3, so flagged WITHOUT a config
+      code = ~S"""
+      defmodule MyApp.Accounts do
+        def create(attrs) do
+          Logger.info("a")
+          Logger.info("b")
+          Logger.info("c")
+          Logger.info("d")
+          {:ok, attrs}
+        end
+      end
+      """
+
+      diags_default =
+        analyze(CrossCuttingInDomain, code, file: "lib/my_app/accounts.ex")
+
+      assert [_ | _] = diags_default
+      assert hd(diags_default).rule_id == "1.6"
+
+      # With max_logger_calls bumped to 5, the same code is clean
+      config =
+        Archdo.Config.from_keyword(
+          [thresholds: [{"1.6", max_logger_calls: 5}]],
+          "/tmp/test_root"
+        )
+
+      diags_configured =
+        analyze(CrossCuttingInDomain, code,
+          file: "lib/my_app/accounts.ex",
+          config: config
+        )
+
+      assert diags_configured == []
+    end
   end
 end

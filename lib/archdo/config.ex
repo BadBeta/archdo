@@ -9,6 +9,7 @@ defmodule Archdo.Config do
           adapters: Regex.t() | nil,
           framework_modules: [Regex.t()],
           overrides: keyword(),
+          thresholds: %{String.t() => keyword()},
           app_module: String.t() | nil,
           web_module: String.t() | nil
         }
@@ -19,6 +20,7 @@ defmodule Archdo.Config do
             adapters: nil,
             framework_modules: [],
             overrides: [],
+            thresholds: %{},
             app_module: nil,
             web_module: nil
 
@@ -52,6 +54,7 @@ defmodule Archdo.Config do
       adapters: Keyword.get(kw, :adapters),
       framework_modules: default_framework_modules(),
       overrides: Keyword.get(kw, :overrides, []),
+      thresholds: build_thresholds(Keyword.get(kw, :thresholds)),
       app_module: app,
       web_module: web
     }
@@ -71,6 +74,7 @@ defmodule Archdo.Config do
       adapters: ~r/\.(Adapters?|Impl|Client)\./,
       framework_modules: default_framework_modules(),
       overrides: [],
+      thresholds: %{},
       app_module: app,
       web_module: web
     }
@@ -132,6 +136,38 @@ defmodule Archdo.Config do
 
   def adapter_module?(config, module_name) when is_atom(module_name) do
     adapter_module?(config, Archdo.AST.module_name(module_name))
+  end
+
+  @doc """
+  Look up a per-rule threshold value, falling back to the rule-supplied
+  default when no override is configured. Centralizes `.archdo.exs`
+  threshold configuration so individual rules don't read raw config.
+
+  ## Examples
+
+      iex> config = Archdo.Config.from_keyword(
+      ...>   [thresholds: [{"1.6", max_logger_calls: 5}]],
+      ...>   "/tmp/x"
+      ...> )
+      iex> Archdo.Config.threshold(config, "1.6", :max_logger_calls, 3)
+      5
+      iex> Archdo.Config.threshold(config, "1.11", :min_files, 3)
+      3
+  """
+  @spec threshold(t(), String.t(), atom(), term()) :: term()
+  def threshold(%__MODULE__{thresholds: thresholds}, rule_id, key, default) do
+    case Map.fetch(thresholds, rule_id) do
+      {:ok, kw} -> Keyword.get(kw, key, default)
+      :error -> default
+    end
+  end
+
+  defp build_thresholds(nil), do: %{}
+
+  defp build_thresholds(list) when is_list(list) do
+    Map.new(list, fn
+      {rule_id, kw} when is_binary(rule_id) and is_list(kw) -> {rule_id, kw}
+    end)
   end
 
   @doc """
