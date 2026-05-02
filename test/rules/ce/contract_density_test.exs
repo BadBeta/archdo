@@ -140,4 +140,88 @@ defmodule Archdo.Rules.CE.ContractDensityTest do
       assert msg =~ "spec" or msg =~ "doc"
     end
   end
+
+  describe "M-Plan10 — test_density sub-score" do
+    test "fires on schema with no paired test file when others have one" do
+      # Three schemas; only the first two have paired test files.
+      # MyApp.Untested has spec+doc but ZERO test_density — fires
+      # on the test_density dimension.
+      good_schema = fn name ->
+        ~s|defmodule MyApp.#{name} do
+          @moduledoc "Documented schema."
+          use Ecto.Schema
+          @spec id(map()) :: integer()
+          @doc "id"
+          def id(s), do: s.id
+          @spec name(map()) :: String.t()
+          @doc "name"
+          def name(s), do: s.name
+        end|
+      end
+
+      paired_test = fn name ->
+        ~s|defmodule MyApp.#{name}Test do
+          use ExUnit.Case
+          test "id/1 returns the id field" do
+            :ok
+          end
+          test "name/1 returns the name field" do
+            :ok
+          end
+        end|
+      end
+
+      file_asts = [
+        parse("lib/myapp/a.ex", good_schema.("A")),
+        parse("test/myapp/a_test.exs", paired_test.("A")),
+        parse("lib/myapp/b.ex", good_schema.("B")),
+        parse("test/myapp/b_test.exs", paired_test.("B")),
+        parse("lib/myapp/c.ex", good_schema.("C")),
+        parse("test/myapp/c_test.exs", paired_test.("C")),
+        parse("lib/myapp/untested.ex", good_schema.("Untested"))
+        # NOTE: no paired test/myapp/untested_test.exs
+      ]
+
+      diags = ContractDensity.analyze_project(file_asts)
+      untested = Enum.find(diags, fn d -> d.message =~ "MyApp.Untested" end)
+      assert untested != nil
+      assert untested.message =~ "test"
+    end
+
+    test "fires with cohort of 2 (lowered min)" do
+      # Pre-M-Plan10: required cohort ≥ 3. New: ≥ 2.
+      good_schema = fn name ->
+        ~s|defmodule MyApp.#{name} do
+          @moduledoc "Doc."
+          use Ecto.Schema
+          @spec id(map()) :: integer()
+          @doc "id"
+          def id(s), do: s.id
+        end|
+      end
+
+      paired_test = fn name ->
+        ~s|defmodule MyApp.#{name}Test do
+          use ExUnit.Case
+          test "id" do
+            :ok
+          end
+        end|
+      end
+
+      file_asts = [
+        parse("lib/myapp/a.ex", good_schema.("A")),
+        parse("test/myapp/a_test.exs", paired_test.("A")),
+        parse("lib/myapp/bare.ex", ~S"""
+        defmodule MyApp.Bare do
+          use Ecto.Schema
+          def id(s), do: s.id
+        end
+        """)
+      ]
+
+      diags = ContractDensity.analyze_project(file_asts)
+      assert Enum.any?(diags, fn d -> d.message =~ "MyApp.Bare" end)
+    end
+  end
 end

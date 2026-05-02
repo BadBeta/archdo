@@ -18,7 +18,10 @@ defmodule Archdo.Rules.CE.ContractDensity do
   alias Archdo.{AST, Diagnostic, Fix, IrreversibleDecision}
 
   @median_floor 0.5
-  @min_cohort_size 3
+  # M-Plan10: lowered from 3 → 2. Test-density gives meaningful
+  # signal even for tiny cohorts because it's per-module, not
+  # cross-module.
+  @min_cohort_size 2
 
   @impl true
   def id, do: "CE-11"
@@ -33,12 +36,17 @@ defmodule Archdo.Rules.CE.ContractDensity do
   @doc "Project-level. Returns one Diagnostic per under-density candidate."
   @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
   def analyze_project(file_asts, opts \\ []) do
+    # §§ elixir-implementing: §10.5 — index test files once at the
+    # entry, not per-candidate. Maps `lib/foo/bar.ex` →
+    # `test/foo/bar_test.exs`.
+    test_index = build_test_index(file_asts)
+
     candidates =
       file_asts
       |> Enum.reject(fn {file, _} -> AST.test_file?(file) end)
       |> Enum.filter(fn {file, ast} -> IrreversibleDecision.candidate?(file, ast, opts) end)
       |> Enum.reject(fn {_, ast} -> AST.has_marker?(ast, :archdo_skip_contract_check) end)
-      |> Enum.map(fn {file, ast} -> {file, ast, sub_scores(ast)} end)
+      |> Enum.map(fn {file, ast} -> {file, ast, sub_scores(ast, file, test_index)} end)
       |> Enum.reject(fn {_, _, scores} -> scores == nil end)
 
     case length(candidates) < @min_cohort_size do
@@ -48,19 +56,74 @@ defmodule Archdo.Rules.CE.ContractDensity do
       false ->
         spec_median = median(Enum.map(candidates, fn {_, _, s} -> s.spec_coverage end))
         doc_median = median(Enum.map(candidates, fn {_, _, s} -> s.doc_coverage end))
+        test_median = median(Enum.map(candidates, fn {_, _, s} -> s.test_density end))
+        medians = %{spec: spec_median, doc: doc_median, test: test_median}
 
         Enum.flat_map(candidates, fn {file, ast, scores} ->
-          fails = which_failed(scores, spec_median, doc_median)
+          fails = which_failed(scores, medians)
 
           case fails do
             [] -> []
-            list -> [build_diagnostic(file, ast, scores, list, spec_median, doc_median)]
+            list -> [build_diagnostic(file, ast, scores, list, medians)]
           end
         end)
     end
   end
 
-  defp sub_scores(ast) do
+  # §§ elixir-implementing: §2.6 — Map.new once for O(1) lookup.
+  # Only test files (path ends with _test.exs) are indexed.
+  defp build_test_index(file_asts) do
+    file_asts
+    |> Enum.filter(fn {file, _} -> AST.test_file?(file) end)
+    |> Map.new()
+  end
+
+  # Pair `lib/foo/bar.ex` with `test/foo/bar_test.exs`. Returns the
+  # test AST or nil. The convention is fixed: same relative path
+  # under test/, file name with _test.exs suffix.
+  defp paired_test_ast(source_file, test_index) do
+    expected_test_path =
+      source_file
+      |> String.replace(~r{(^|/)lib/}, "\\1test/")
+      |> String.replace(~r{\.ex$}, "_test.exs")
+
+    Map.get(test_index, expected_test_path)
+  end
+
+  defp count_test_blocks(nil), do: 0
+
+  defp count_test_blocks(test_ast) do
+    # §§ elixir-implementing: §5.2 — multi-clause shape match.
+    # `test "name" do ... end` parses as `{:test, _, args}` with a
+    # variable arg count (2 with `do:` keyword, 3 with context arg
+    # before `do:`). The `do:` keyword may be a bare `[do: body]`
+    # OR a literal_encoder-wrapped `[{{:__block__, _, [:do]}, body}]`,
+    # depending on how the source was parsed. Match both.
+    {_, count} =
+      Macro.prewalk(test_ast, 0, fn
+        {:test, _, args} = node, acc when is_list(args) ->
+          case test_block?(args) do
+            true -> {node, acc + 1}
+            false -> {node, acc}
+          end
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    count
+  end
+
+  defp test_block?(args) do
+    Enum.any?(args, fn
+      [{:do, _}] -> true
+      [{:do, _} | _] -> true
+      [{{:__block__, _, [:do]}, _} | _] -> true
+      _ -> false
+    end)
+  end
+
+  defp sub_scores(ast, source_file, test_index) do
     publics = AST.extract_functions(ast, :public)
 
     case length(publics) do
@@ -74,9 +137,12 @@ defmodule Archdo.Rules.CE.ContractDensity do
         with_specs = Enum.count(publics, fn {n, a, _, _, _} -> {n, a} in spec_set end)
         with_docs = Enum.count(publics, fn {n, a, _, _, _} -> {n, a} in doc_set end)
 
+        test_count = source_file |> paired_test_ast(test_index) |> count_test_blocks()
+
         %{
           spec_coverage: with_specs / total,
           doc_coverage: with_docs / total,
+          test_density: min(1.0, test_count / total),
           public_count: total
         }
     end
@@ -139,13 +205,15 @@ defmodule Archdo.Rules.CE.ContractDensity do
     end
   end
 
-  defp which_failed(scores, spec_median, doc_median) do
+  defp which_failed(scores, %{spec: spec_median, doc: doc_median, test: test_median}) do
     spec_floor = spec_median * @median_floor
     doc_floor = doc_median * @median_floor
+    test_floor = test_median * @median_floor
 
     []
     |> maybe_add(:spec_coverage, scores.spec_coverage, spec_floor, spec_median)
     |> maybe_add(:doc_coverage, scores.doc_coverage, doc_floor, doc_median)
+    |> maybe_add(:test_density, scores.test_density, test_floor, test_median)
   end
 
   defp maybe_add(list, key, value, floor, median) do
@@ -157,7 +225,7 @@ defmodule Archdo.Rules.CE.ContractDensity do
     end
   end
 
-  defp build_diagnostic(file, ast, scores, fails, spec_median, doc_median) do
+  defp build_diagnostic(file, ast, scores, fails, medians) do
     module = AST.extract_module_name(ast)
 
     fails_summary =
@@ -176,8 +244,9 @@ defmodule Archdo.Rules.CE.ContractDensity do
         "Irreversible decisions are exactly where carelessness costs the most. " <>
           "A schema rolled out without specs becomes an unverifiable shape every " <>
           "consumer must guess at; a public API with no docs becomes everyone's " <>
-          "reverse-engineering project. Comparing to the codebase median calibrates " <>
-          "the threshold to the project's own standards.",
+          "reverse-engineering project; an untested schema is one bad migration " <>
+          "from a hidden invariant break. Comparing to the codebase median " <>
+          "calibrates the threshold to the project's own standards.",
       alternatives: [
         Fix.new(
           summary: "Raise spec coverage to match cohort median",
@@ -195,6 +264,15 @@ defmodule Archdo.Rules.CE.ContractDensity do
           applies_when: "doc_coverage is the failed sub-score."
         ),
         Fix.new(
+          summary: "Add a paired test file with one or more `test` blocks",
+          detail:
+            "Convention: a module at `lib/foo/bar.ex` is paired with a test file " <>
+              "at `test/foo/bar_test.exs`. Even one `test \"...\"` block per public " <>
+              "function lifts the test_density score above the cohort floor and " <>
+              "guards the irreversible decision against silent regressions.",
+          applies_when: "test_density is the failed sub-score."
+        ),
+        Fix.new(
           summary: "Mark @archdo_skip_contract_check with reason",
           detail:
             "If the module is internal-only despite looking irreversible (e.g., " <>
@@ -208,8 +286,10 @@ defmodule Archdo.Rules.CE.ContractDensity do
         module: module,
         spec_coverage: scores.spec_coverage,
         doc_coverage: scores.doc_coverage,
-        spec_median: spec_median,
-        doc_median: doc_median,
+        test_density: scores.test_density,
+        spec_median: medians.spec,
+        doc_median: medians.doc,
+        test_median: medians.test,
         failed: Enum.map(fails, fn {k, _, _} -> k end)
       },
       file: file,
