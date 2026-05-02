@@ -213,7 +213,9 @@ defmodule Archdo do
     Archdo.Rules.CE.VolatilitySubstitutability,
     Archdo.Rules.CE.ScatteredTaxonomy,
     Archdo.Rules.CE.ContractDensity,
-    Archdo.Rules.CE.ContractDensitySpecs
+    Archdo.Rules.CE.ContractDensitySpecs,
+    Archdo.Rules.CE.ReturnShapeDrift,
+    Archdo.Rules.CE.ErrorCategoryDrift
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).
