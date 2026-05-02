@@ -8,15 +8,20 @@
 
 1. [What Archdo is and why](#1-what-archdo-is-and-why)
 2. [Installation](#2-installation)
-3. [The 203 rules at a glance](#3-the-193-rules-at-a-glance)
+3. [The rules at a glance](#3-the-rules-at-a-glance)
+   - [3.1 Precision improvements (May 2026)](#31-precision-improvements-may-2026)
+   - [3.2 Per-module suppression markers](#32-per-module-suppression-markers)
+   - [3.3 Change Economy rules + packs](#33-change-economy-rules--packs)
 4. [The diagnostic shape](#4-the-diagnostic-shape)
 5. [Output formats](#5-output-formats)
 6. [CLI reference](#6-cli-reference)
 7. [Configuration (`.archdo.exs`)](#7-configuration-archdoexs)
+   - [Configurable thresholds](#configurable-thresholds)
 8. [Freeze / baseline workflow](#8-freeze--baseline-workflow)
 9. [MCP server (for LLM clients)](#9-mcp-server-for-llm-clients)
 10. [Architecture (how Archdo works internally)](#10-architecture-how-archdo-works-internally)
 11. [Guidance for LLM clients](#11-guidance-for-llm-clients)
+11.5. [Testing Archdo itself](#115-testing-archdo-itself)
 12. [Troubleshooting](#12-troubleshooting)
 13. [Where to read next](#13-where-to-read-next)
 
@@ -74,9 +79,14 @@ Archdo needs `Jason` (JSON encoding) and `JSV` (JSON Schema validation for MCP t
 
 ---
 
-## 3. The 203 rules at a glance
+## 3. The rules at a glance
 
-Archdo currently ships **203 rules in 11 categories** (including 21 compiled-analysis rules, 8 performance rules, and 5 LLM slop detectors). Full text for every rule is in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md).
+Archdo ships rules in two complementary layers:
+
+- **Core rules (203 rules in 11 categories)** — the original architecture-quality checks documented in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md). Always-on by default.
+- **Change Economy rules (32 rules across 4 opt-in packs)** — a second-generation rule family focused on the *cost of changing* the system rather than its current shape. Documented in [ARCHITECTURE_RULES_CHANGE_ECONOMY.md](ARCHITECTURE_RULES_CHANGE_ECONOMY.md). The `core` pack ships on by default; the `ce_compliance`, `ce_privacy`, and `ce_composability` packs are opt-in via `--packs`.
+
+See §3.3 below for the Change Economy + pack system.
 
 | #   | Category                         | Rules    | Severity mix          | What it catches                                                                  |
 |-----|----------------------------------|----------|-----------------------|----------------------------------------------------------------------------------|
@@ -106,6 +116,131 @@ Archdo currently ships **203 rules in 11 categories** (including 21 compiled-ana
 // archdo_list_rules → returns id, category, description, module
 // archdo_explain_rule → returns the canonical description for one rule id
 ```
+
+### 3.1 Precision improvements (May 2026)
+
+Six rules saw precision-improving changes that reduce false-positive load. None of these are new rules — they're sharper detection on existing rules. If you saw noise from any of these in earlier versions, re-run; the new behaviour is the default.
+
+| Rule | What changed | Why |
+|------|--------------|-----|
+| **1.6** Cross-cutting in domain | Now uses `Archdo.Phoenix.classify_file/2` for layer detection. Operational (Mix tasks, release scripts), web, controllers, LiveView, components, routers, migrations, infrastructure, and test layers are exempt. | Hand-rolled `web_file?`/`adapter_file?` predicates missed Mix tasks and release scripts — the very places Logger noise is *appropriate*, not domain pollution. The Phoenix classifier already encodes this knowledge with broader coverage. |
+| **1.9** Time injection | Function-head default args (`def f(now \\\\ DateTime.utc_now())`) are no longer flagged. | The default-arg pattern IS the rule's own recommended fix. Flagging it defeated the suggested injection mechanism. Body calls (`def f do x = DateTime.utc_now(); ... end`) still fire. |
+| **3.1** Duplicated code | Cross-app umbrella sibling clones (e.g., `apps/api/lib/api/foo.ex` ↔ `apps/edge/lib/edge/foo.ex`) emit `:info` instead of `:warning`. | Cross-app duplication is often deliberate — parallel implementations across deployables that need to evolve in lockstep. Same-app and non-umbrella clones still emit `:warning`. |
+| **CE-11** Contract density | Adds a third `test_density` sub-score (paired source/test counting via the Mix `lib/X.ex` ↔ `test/X_test.exs` convention). Cohort minimum lowered from 3 to 2 modules. | Test density is per-module signal that doesn't need a large cohort. A schema with no paired test file is now visible alongside spec/doc gaps. |
+| **CE-50** :ok loses info | Detects transitively-threaded chains: `r = X.fetch(); process(r); :ok`. Previously only fired when the bound result was unused. | When the function returns `:ok` literal, the chain *cannot* escape to the return position regardless of how many leaf calls reference the var. Bound-and-used is just as lossy as bound-and-unused. |
+| **CE-57** Unguarded building block | The input-safety verdict now propagates to `Blackbox.module_verdict/1`. A module passes `--building-blocks` only when EVERY public function constrains its input domain (guard, all-specific patterns, or `{:error, _}` fallback). | A function that's pure and deterministic but takes `def f(x), do: x * 2` *looks* like a building block until a caller passes `f("foo")` and crashes deep with `ArithmeticError`. Module-level audit must reflect this. |
+
+Two graph-extraction enhancements broaden detection across multiple rules:
+
+| Enhancement | Affects | Why |
+|-------------|---------|-----|
+| `Archdo.Graph` emits `:dynamic_dispatch` edges for `apply(LiteralModule, :fn, args)` | CE-30 (unanchored module), CE-31 (unanchored island) | Modules referenced only via `apply/3` were invisible to the reachability walker, appearing as orphans even when transitively reached. Variable targets (`apply(var, :fn, args)`) are correctly skipped — no static resolution possible. |
+| `Archdo.AnchorSet` recognizes nested `use Supervisor` and `use DynamicSupervisor` modules and their `init/1` children | CE-30, CE-31 | Children of sub-supervisors (anything not under `Application.start/2`) were previously invisible. They're real anchors because the nesting supervisor is itself anchored. |
+
+### 3.2 Per-module suppression markers
+
+Rules expose intentional-pattern markers as module attributes. When a rule fires on something a developer has already considered and accepted, mark the module to suppress further alerts. Markers are **opt-in declarations**, not silencing — they explicitly document the architectural choice.
+
+A marker is a module attribute; for runtime safety (avoiding the "set but never used" warning), wrap with `Module.register_attribute/3`:
+
+```elixir
+defmodule MyApp.SecretsVault do
+  use GenServer
+  # Without register_attribute, Elixir 1.18 warns "set but never used"
+  Module.register_attribute(__MODULE__, :archdo_opaque_state, persist: true)
+  @archdo_opaque_state "contains operator secrets — operators run with elevated access"
+  # ...
+end
+```
+
+Full marker table:
+
+| Marker | Suppresses | Use when |
+|--------|------------|----------|
+| `@archdo_anchor` | CE-30 (unanchored module) | Module is reachable via dynamic dispatch the walker can't see (`:erpc`, registry pattern, runtime configuration). Reason string required. |
+| `@archdo_aspect_aggregator true` | CE-25 (cross-cutting density) | Function intentionally aggregates cross-cutting calls (telemetry initializer, metrics router). |
+| `@archdo_boundary_rescue` | CE-49 (catch-all rescue) | The `rescue _` is at a process boundary (port handler, NIF wrapper) where any exception must be caught for safety. Reason string required. |
+| `@archdo_fire_and_forget true` | CE-50 (:ok loses info) | Function deliberately discards a richer result; callers cannot use it. |
+| `@archdo_gdpr_exempt` | CE-53 (PII without deletion path) | Schema is GDPR-exempt (e.g., audit logs with retention obligation). |
+| `@archdo_no_input_check` | CE-57 (unguarded building block) | Every caller pre-validates input via the context boundary; internal-use function. |
+| `@archdo_no_property` | CE-55, CE-56 (effect leak / untested building block) | Function's job IS to produce an effect (logger, telemetry), or property testing is impractical. |
+| `@archdo_no_telemetry` | CE-27 (boundary telemetry) | Telemetry is centralized one layer up (Plug, channel handler). Reason string typically names the wrapping module. |
+| `@archdo_no_trace` | CE-32 (missing traceability annotation) | Function is non-traced by design (internal helper not tied to a requirement). |
+| `@archdo_opaque_state` | CE-29 (process state without inspection hook) | Process state is intentionally opaque — transient buffer, contains secrets, or no observers exist. Reason string required. |
+| `@archdo_pii_handled` | CE-51 (PII field without designated handling) | PII fields use a non-standard but auditable handling pattern. |
+| `@archdo_policy_wrapper` | CE-15 (wrapper over framework) | Wrapper enforces policy the framework doesn't (auth, rate limiting). Reason string names the policy. |
+| `@archdo_silent_error` | CE-28 (error path without log) | Errors are returned for caller-side logging; this layer is silent by design. |
+| `@archdo_skip_contract_check` | CE-11 (contract density) | Module looks irreversible (Ecto schema, supervisor) but is internal-only. |
+| `@archdo_specs_pending` | CE-12 (public API spec coverage) | Specs are being added incrementally; track via reason string ("WIP — adding specs in #1234"). |
+| `@archdo_volatility` | Volatility classifier | Override the auto-classifier with `:stable`, `:volatile`, or `:mixed`. |
+
+Marker discipline:
+
+- Always include a reason string (`@archdo_X "why"`) when the marker accepts one. Reviewers reading the marker need to understand the architectural choice.
+- Markers persist in BEAM metadata via `Module.register_attribute(__MODULE__, :archdo_X, persist: true)` — that registration is also what suppresses the "set but never used" Elixir compiler warning.
+- A marker is a contract: it claims the rule *would have* fired but the pattern is intentional. If the situation changes (you add a public observer to an `@archdo_opaque_state` GenServer), remove the marker.
+
+### 3.3 Change Economy rules + packs
+
+The Change Economy (CE) rule family asks a different question than the core rules: not "is this code shaped right?" but "what does it cost when this code needs to change?" CE rules are organized into 4 packs:
+
+| Pack | Rules | Default | What it measures |
+|------|-------|---------|------------------|
+| `core` | All 203 original rules + CE-1, CE-2, CE-3, CE-4, CE-11, CE-12, CE-15, CE-17, CE-21, CE-23, CE-24, CE-25, CE-26, CE-27, CE-28, CE-29, CE-30, CE-31, CE-34, CE-35, CE-47, CE-48, CE-49, CE-50 | **on** | Architecture quality + cost-of-change essentials |
+| `ce_compliance` | CE-32 (missing traceability), CE-33 (dead requirement) | opt-in | Traceability between code and external requirements |
+| `ce_privacy` | CE-51 (PII field without designated handling), CE-52 (missing retention policy), CE-53 (PII schema without right-to-deletion path) | opt-in | GDPR / data-protection signals |
+| `ce_composability` | CE-54 (low-possibility-high-value blackbox), CE-55 (building-block function without property test), CE-56 (effect leak in near-blackbox), CE-57 (building-block candidate accepts unguarded input) | opt-in | "Could this function become a tested building block?" |
+
+Run a pack via `--packs`:
+
+```bash
+# Default — all core rules
+mix archdo --paths lib
+
+# Add the privacy pack
+mix archdo --paths lib --packs core,ce_privacy
+
+# Just the composability pack (no core noise)
+mix archdo --paths lib --packs ce_composability
+
+# List which packs exist and which rules they contain
+mix archdo --list-packs
+```
+
+Selected CE rules — what each measures and indicates:
+
+| Rule | What it measures | What firing indicates |
+|------|------------------|----------------------|
+| **CE-1** Hardcoded volatile dependency | Direct call to a `:volatile`-tagged module (Tesla, Req, HTTPoison, Finch) without a behaviour seam | Test doubles can't be substituted; the volatile dependency drives the cost-of-change for every consumer |
+| **CE-2/CE-3** Volatility-substitutability quadrant | Per-module 3×3 cell of `{abstraction_class} × {volatility_tag}` | CE-2: `:volatile` module without abstraction (missing seam at the boundary). CE-3: `:stable` module heavily abstracted (over-engineered stable core) |
+| **CE-11** Contract density | Spec coverage + doc coverage + test density on irreversible-decision modules (schemas, supervisors, public API) vs cohort median | One sub-score below 50% of cohort median means the module is under-contracted relative to the project's own standards |
+| **CE-15** Wrapper over framework | Single-implementor behaviour wrapping a framework primitive that already has a documented test seam (Ecto.Repo, Phoenix.PubSub, Oban) | The wrapper adds a hop without policy value; the framework's existing seam is sufficient |
+| **CE-17** Magic literals | Atoms / integers in `==` comparisons or status-shaped field assignments (`status:`, `state:`, `kind:`) appearing in ≥2 modules | Status taxonomy isn't centralized; renaming requires coordinated change across N modules |
+| **CE-23** High cognitive complexity | Per-function cognitive complexity (Campbell 2018) ≥15 (warn) or ≥25 (error) | Function has nested control flow + logical-op chains that compound reading cost beyond what cyclomatic complexity captures |
+| **CE-24** Complexity shape | `{cyclomatic_band, cognitive_band}` cell classification | `:twisty` (cogn ≥10 + cogn > 2×cyclo) = nested-and-twisty. `:flat-dispatch` (cyclo ≥8 + cyclo > 2×cogn) = many clauses but each shallow — 6.2 over-counting |
+| **CE-25** Cross-cutting density | >40% of body expressions are calls into Logger/telemetry/Repo.transaction/Ecto.Multi/Retry/Fuse | Function is functioning as an aspect aggregator without saying so |
+| **CE-26** Scattered taxonomy | Telemetry event lists `[:user, :created]` and Logger string keys clustered by canonical token-stem | Same-concept events go by N different surface forms across modules |
+| **CE-27** Boundary telemetry | Phoenix controller actions, Mix.Task `run/1`, Oban `perform/1` not wrapped in `:telemetry.span` / `:telemetry.execute` | Latency, error rates, throughput cannot be measured at the boundary |
+| **CE-28** Error path without log | Function returns `{:error, _}` literal OR contains `rescue` clause without an in-scope `Logger.error/warning` | Errors disappear silently — no trace in production logs |
+| **CE-29** Opaque process state | `use GenServer` / `use Agent` / `@behaviour :gen_statem` without `format_status/1,2` | Operators cannot inspect process state during incident response |
+| **CE-30** Unanchored module | Module not transitively reachable from any anchor (Phoenix route, Mix task, supervised process, public API, `@archdo_anchor`) | Module exists but no entry path leads to it — likely dead code or a missing anchor declaration |
+| **CE-32** Missing traceability annotation | Public function on `traceability_required_paths` lacks `@requirement` / `@spec_ref` / `@trace` | Compliance audit cannot link the code to its source requirement |
+| **CE-33** Dead requirement | Requirement (from `--requirements-source <path>`) has no `@requirement` annotation referencing it anywhere in the code | Requirement was specified but never implemented — or implementation was removed |
+| **CE-34** Volatile call without timeout | Tesla / Req / Finch / HTTPoison call (or any `GenServer.call/2`) without explicit timeout | Call blocks indefinitely if downstream is slow; cascading failure risk |
+| **CE-35** Volatile module without retry/breaker | Function uses a volatile target without a retry helper (`Retry.with_retries`, custom) or breaker (`:fuse.ask`) in scope | Single network hiccup propagates as an exception |
+| **CE-47** Bang without non-bang sibling | Public `name!/n` lacking a sibling `name/n` returning `{:ok, _} \| {:error, _}` | Forces callers into try/rescue when they want a controlled error path |
+| **CE-48** Error category drift | Error atoms in `{:error, _}` literals cluster around the same canonical stem (e.g., `:not_found`, `:user_not_found`, `:no_user_found` all mean "found") | Consumers must pattern-match on every variant; renaming one requires coordinated change |
+| **CE-49** Catch-all rescue | Bare `_` or `_var` rescue clause inside a `def` or `try` keyword list | All exceptions swallowed silently; bugs hide as defaults |
+| **CE-50** :ok loses info | Function returns `:ok` literal after a richer-result call (Repo, Mailer, HTTP client) — bare, bound-and-unused, or transitively threaded | Callers can't distinguish "succeeded with this result" from "succeeded with no result"; subsequent operations re-fetch |
+| **CE-51** PII field without designated handling | Schema with PII-shaped fields (email, phone, SSN, password*, *_token) without `@derive {Inspect, except: [...]}` | PII appears in inspect output, error logs, and IEx sessions |
+| **CE-52** Missing retention policy | Schema with timestamps + user-like FK lacking `@retention` annotation OR a referencing Oban worker | Data accumulates indefinitely; GDPR right-to-erasure obligation untracked |
+| **CE-53** PII schema without right-to-deletion path | PII schema with no `delete_for_*` / `forget_*` / `anonymize_*` / `erase_*` function referencing it | Cannot fulfill data-subject deletion requests |
+| **CE-54** Low-possibility / high-value blackbox | Function in `:context` or `:schema` layer with structural component failure AND high substance score | Function is doing real domain work but isn't structured as a building block — hardest to test, most consequential when changed |
+| **CE-55** Building-block function without property test | Blackbox score ≥0.9 + arity > 0 + no `property "..." do ... end` block referencing the function in test files | Function is structurally a building block but only example-tested; property test would exercise the input domain |
+| **CE-56** Effect leak in near-blackbox | Every Blackbox component ≥0.9 EXCEPT side_effect_free, AND ≤2 observability-only side effects (Logger / Phoenix.PubSub.broadcast / `:telemetry.execute`) | Function is one extracted side-effect away from being a building block |
+| **CE-57** Unguarded building block | Blackbox score ≥0.9 + arity > 0 + at least one clause has bare-variable args without guard, all-specific patterns, or `{:error, _}` fallback | Function looks like a building block but accepts any input — illegal inputs crash deep instead of returning a controlled domain error |
+
+For the full text and rationale of every CE rule, see [ARCHITECTURE_RULES_CHANGE_ECONOMY.md](ARCHITECTURE_RULES_CHANGE_ECONOMY.md).
 
 ---
 
@@ -448,9 +583,29 @@ Most projects work with **zero configuration** — Archdo detects Phoenix conven
   overrides: [
     {:"5.6", :ignore},                                  # accept default max_restarts
     {:"6.1", severity: :error, max_public_functions: 15}
+  ],
+
+  # Per-rule numeric threshold overrides — replaces hard-coded
+  # rule defaults without forking the rule. Each entry is
+  # {rule_id, [option: value, ...]}. The rule reads its threshold
+  # via Archdo.Config.threshold/4 at analysis time.
+  thresholds: [
+    {"1.6", max_logger_calls: 5},     # default 3 — bump for logging-heavy domains
+    {"1.11", min_files: 5}            # default 3 — bump if your contexts run small
   ]
 ]
 ```
+
+### Configurable thresholds
+
+The `thresholds:` keyword lets you tune per-rule numeric knobs without overriding severity. Currently wired:
+
+| Rule | Key | Default | Effect |
+|------|-----|---------|--------|
+| **1.6** Cross-cutting in domain | `:max_logger_calls` | 3 | Maximum Logger calls per domain module before firing |
+| **1.11** Anemic context | `:min_files` | 3 | A context directory with fewer files than this is "anemic" |
+
+The shape extends naturally to other rules — they need to call `Archdo.Config.threshold(config, rule_id, key, default)` from their `analyze/3` (or `analyze_project/2`) callback. The runner threads the loaded `%Config{}` via `opts[:config]`. See `lib/archdo/rules/module/cross_cutting_in_domain.ex` and `lib/archdo/rules/boundary/anemic_context.ex` for the pattern.
 
 ### How layer detection actually works
 
@@ -904,6 +1059,84 @@ The CLI's default `text` format already sorts this way; the JSON/LLM outputs lea
 - **Don't suggest fixes that aren't in `alternatives`** unless the user explicitly asks for a different approach. The alternatives are the canonical answers.
 - **Don't ignore the freeze baseline.** If the user has `.archdo_baseline.exs`, respect it: pre-existing findings are intentional acceptances, not things to fix.
 - **Don't disable `--boundaries` or `--functions`** unless the project is very large and the user is waiting. Both are now enabled by default because they catch the most important architectural issues.
+
+---
+
+## 11.5. Testing Archdo itself
+
+If you're contributing to Archdo or building rules, the test infrastructure has a few conventions worth knowing.
+
+### Test discipline
+
+Archdo follows TDD per the elixir-implementing skill — every new public function in `lib/` has a failing test on disk before the implementation is written. Tests verify *observable behaviour*, not implementation details. Pattern-match assertions are preferred (`assert {:ok, %User{}} = call(...)`) over `==` for shape/structure tests because they produce structural diffs on failure.
+
+The test layout mirrors `lib/`:
+
+```
+test/
+├── archdo/                  # Tests for primitives (AST, Blackbox, Config, ...)
+├── rules/                   # One test file per rule, organized by category
+│   ├── boundary/
+│   ├── ce/
+│   ├── module/
+│   └── ...
+├── integration/             # Cross-project integration tests (opt-in)
+└── support/
+    ├── rule_case.ex         # `use Archdo.RuleCase` — assert_flagged / assert_clean
+    └── ...
+```
+
+### Running tests
+
+```bash
+mix test                              # Default suite (1443 tests as of May 2026)
+mix test --include integration        # Adds tests in test/integration/ (need /tmp/* repos)
+mix test --stale                      # Only files affected by recent changes
+mix test test/rules/ce/ce_57_test.exs # One file
+```
+
+### Integration-test environment
+
+`test/integration/real_project_test.exs` runs Archdo against pinned-commit checkouts of real Elixir projects under `/tmp` (oban, broadway, finch, req, etc.). These are excluded by default. When `--include integration` is passed and a `/tmp/<repo>` directory is missing or at the wrong commit, the test prints a visible `→ SKIP integration test: /tmp/X missing or wrong commit` and vacuously passes — the suite stays green for contributors who don't have the test corpus checked out. The pattern is a small `defmacrop skip_unless_available/2` defined in the test module; ExUnit has no built-in runtime-skip mechanism, so this is the standard idiom for opt-in environment-dependent tests.
+
+### Writing a rule + test
+
+Each rule has a sibling test file. Use `Archdo.RuleCase` for the `assert_flagged` / `assert_clean` helpers:
+
+```elixir
+defmodule Archdo.Rules.Module.MyRuleTest do
+  use Archdo.RuleCase
+  alias Archdo.Rules.Module.MyRule
+
+  test "fires when X" do
+    code = ~S"""
+    defmodule MyApp.Bad do
+      def thing, do: :the_bad_pattern
+    end
+    """
+
+    diags = assert_flagged(MyRule, code, file: "lib/my_app/bad.ex")
+    assert hd(diags).rule_id == "X.Y"
+    assert hd(diags).message =~ "expected substring"
+  end
+
+  test "does NOT fire on the good shape" do
+    code = ~S"""
+    defmodule MyApp.Good do
+      def thing, do: :the_good_pattern
+    end
+    """
+
+    assert_clean(MyRule, code, file: "lib/my_app/good.ex")
+  end
+end
+```
+
+For project-level rules, parse files individually with `Code.string_to_quoted/2` and pass the `[{file, ast}, ...]` list to `analyze_project/1` or `/2` directly.
+
+### Self-analysis tests
+
+Some tests parse Archdo's own source as a regression guard — e.g. `test "Archdo.Compiled.Collector is exempt via @archdo_opaque_state"` reads `lib/archdo/compiled/collector.ex` and asserts no CE-29 diagnostics. These tests guard against accidental marker removal during refactoring. They live in the same test module as the rule they're guarding (no separate self-analysis directory).
 
 ---
 
