@@ -119,6 +119,67 @@ defmodule Archdo.AST do
   def line(_), do: 0
 
   @doc """
+  Find the `:do` value in a `def` / `defmodule` keyword list. Handles
+  both bare (`:do`) and literal_encoder-wrapped (`{:__block__, _, [:do]}`)
+  key shapes used by `parse_file/1`.
+
+  Returns the body AST or `nil`.
+  """
+  @spec do_body(keyword() | term()) :: Macro.t() | nil
+  def do_body(kw) when is_list(kw) do
+    Enum.find_value(kw, fn
+      {:do, body} -> body
+      {{:__block__, _, [:do]}, body} -> body
+      _ -> nil
+    end)
+  end
+
+  def do_body(_), do: nil
+
+  @doc """
+  Extract a module's body as a list of statements. Returns `[]` for
+  non-module nodes or modules with empty bodies. Single-statement
+  bodies are returned as a one-element list.
+  """
+  @spec module_body(Macro.t()) :: [Macro.t()]
+  def module_body({:defmodule, _, [_alias, kw]}) when is_list(kw) do
+    case do_body(kw) do
+      {:__block__, _, statements} -> statements
+      nil -> []
+      single -> [single]
+    end
+  end
+
+  def module_body(_), do: []
+
+  @doc """
+  Unwrap a literal_encoder-wrapped atom (`{:__block__, _, [:atom]}`)
+  to its bare atom form. Pass through anything else unchanged.
+  """
+  @spec unwrap_atom(Macro.t()) :: Macro.t()
+  def unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
+  def unwrap_atom(other), do: other
+
+  @doc """
+  Collect all `@spec name(args) :: ret` declarations in an AST as a
+  `MapSet` of `{name, arity}` pairs.
+  """
+  @spec spec_keys(Macro.t()) :: MapSet.t({atom(), arity()})
+  def spec_keys(ast) do
+    {_, set} =
+      Macro.prewalk(ast, MapSet.new(), fn
+        {:@, _, [{:spec, _, [{:"::", _, [{name, _, args}, _ret]}]}]} = node, acc
+        when is_atom(name) and is_list(args) ->
+          {node, MapSet.put(acc, {name, length(args)})}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    set
+  end
+
+  @doc """
   Walk the AST and collect all nodes matching a predicate.
   Returns a list of `{node, meta}` tuples.
   """
@@ -551,14 +612,6 @@ defmodule Archdo.AST do
   end
 
   defp recurse_module_children(_, acc), do: acc
-
-  defp do_body(kw) do
-    Enum.find_value(kw, fn
-      {:do, body} -> body
-      {{:__block__, _, [:do]}, body} -> body
-      _ -> nil
-    end)
-  end
 
   defp body_statements({:__block__, _, statements}), do: statements
   defp body_statements(single), do: [single]

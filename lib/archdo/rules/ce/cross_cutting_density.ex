@@ -73,10 +73,9 @@ defmodule Archdo.Rules.CE.CrossCuttingDensity do
 
   # Body comes from extract_functions/2 as the def's keyword list. Under
   # literal_encoder (used by the runner) the `:do` key itself is wrapped
-  # as `{:__block__, _, [:do]}`; under bare Code.string_to_quoted it
-  # stays as `:do`. Handle both.
+  # as `{:__block__, _, [:do]}`; AST.do_body/1 handles both shapes.
   defp body_statements(body) when is_list(body) do
-    case do_body(body) do
+    case AST.do_body(body) do
       nil -> []
       {:__block__, _, statements} when is_list(statements) -> statements
       single -> [single]
@@ -85,14 +84,6 @@ defmodule Archdo.Rules.CE.CrossCuttingDensity do
 
   defp body_statements({:__block__, _, statements}) when is_list(statements), do: statements
   defp body_statements(single), do: [single]
-
-  defp do_body(kw) do
-    Enum.find_value(kw, fn
-      {:do, body} -> body
-      {{:__block__, _, [:do]}, body} -> body
-      _ -> nil
-    end)
-  end
 
   defp classify_statements(statements) do
     Enum.reduce(statements, {0, MapSet.new()}, fn stmt, {n, cats} ->
