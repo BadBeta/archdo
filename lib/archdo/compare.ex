@@ -110,27 +110,31 @@ defmodule Archdo.Compare do
   @spec format(table()) :: String.t()
   def format(%{codebases: codebases, rows: rows}) do
     sorted_rows =
-      rows
-      |> Enum.sort_by(fn {{rule_id, severity}, _} -> {rule_id, severity_order(severity)} end)
+      Enum.sort_by(rows, fn {{rule_id, severity}, _} ->
+        {rule_id, severity_order(severity)}
+      end)
 
     rule_w = max_width(["rule" | Enum.map(sorted_rows, fn {{r, _}, _} -> r end)])
     sev_w = max_width(["sev" | Enum.map(sorted_rows, fn {{_, s}, _} -> Atom.to_string(s) end)])
     code_widths = Enum.map(codebases, &max(String.length(&1), 5))
 
-    header =
-      [pad("rule", rule_w), pad("sev", sev_w) | Enum.zip(codebases, code_widths) |> Enum.map(fn {c, w} -> pad(c, w) end)]
-      |> Enum.join("  ")
+    code_cells = Enum.map(Enum.zip(codebases, code_widths), fn {c, w} -> pad(c, w) end)
+
+    header = Enum.join([pad("rule", rule_w), pad("sev", sev_w) | code_cells], "  ")
 
     sep = String.duplicate("-", String.length(header))
 
     body_lines =
       Enum.map(sorted_rows, fn {{rule_id, severity}, counts} ->
         cells =
-          Enum.zip(codebases, code_widths)
-          |> Enum.map(fn {c, w} -> pad(Integer.to_string(Map.get(counts, c, 0)), w) end)
+          Enum.map(Enum.zip(codebases, code_widths), fn {c, w} ->
+            pad(Integer.to_string(Map.get(counts, c, 0)), w)
+          end)
 
-        [pad(rule_id, rule_w), pad(Atom.to_string(severity), sev_w) | cells]
-        |> Enum.join("  ")
+        Enum.join(
+          [pad(rule_id, rule_w), pad(Atom.to_string(severity), sev_w) | cells],
+          "  "
+        )
       end)
 
     Enum.join(["", "Comparison report", sep, header, sep | body_lines] ++ [""], "\n")

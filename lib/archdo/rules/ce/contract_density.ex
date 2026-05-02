@@ -90,8 +90,7 @@ defmodule Archdo.Rules.CE.ContractDensity do
 
     {_set, _last_doc} =
       result =
-        body
-        |> Enum.reduce({MapSet.new(), false}, fn node, {acc, pending_doc?} ->
+        Enum.reduce(body, {MapSet.new(), false}, fn node, {acc, pending_doc?} ->
           cond do
             doc_attr?(node) ->
               {acc, true}

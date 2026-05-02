@@ -37,7 +37,7 @@ defmodule Archdo.Rules.CE.MissingTraceability do
 
     case paths do
       [] -> []
-      _ -> file_asts |> Enum.flat_map(&module_diagnostics(&1, paths))
+      _ -> Enum.flat_map(file_asts, &module_diagnostics(&1, paths))
     end
   end
 

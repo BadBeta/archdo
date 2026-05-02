@@ -42,8 +42,7 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
 
     cleaner_references = collect_cleaner_references(production)
 
-    production
-    |> Enum.flat_map(fn {file, ast} ->
+    Enum.flat_map(production, fn {file, ast} ->
       case schema_info(ast, file, file_asts) do
         nil ->
           []
