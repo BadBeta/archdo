@@ -189,7 +189,8 @@ defmodule Archdo.Runner do
     Archdo.Rules.CE.BlackboxQuadrant,
     Archdo.Rules.CE.CrossCuttingDensity,
     Archdo.Rules.CE.ErrorPathWithoutLog,
-    Archdo.Rules.CE.OpaqueProcessState
+    Archdo.Rules.CE.OpaqueProcessState,
+    Archdo.Rules.CE.BoundaryTelemetry
   ]
 
   @graph_rules [
