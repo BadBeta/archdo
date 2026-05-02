@@ -6,6 +6,12 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
   use ExUnit.Case, async: true
 
   alias Archdo.Mcp.Tools.Fix
+  alias Archdo.Runner
+
+  alias Archdo.Rules.Boundary.ReverseDependency
+  alias Archdo.Rules.Module.DeadPrivateFunction
+  alias Archdo.Rules.OTP.MaxRestarts
+  alias Archdo.Rules.Testing.EmptyDescribe
 
   defp fix_file(code) do
     path = Path.join(System.tmp_dir!(), "archdo_safety_#{System.unique_integer([:positive])}.ex")
@@ -181,7 +187,7 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
 
       # Rule 7.24 should NOT crash — it previously crashed on {:__block__, _, ["string"]}
       diags =
-        Archdo.Rules.Testing.EmptyDescribe.analyze(
+        EmptyDescribe.analyze(
           path,
           elem(
             Code.string_to_quoted(code,
@@ -222,12 +228,12 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
 
       # Without comment: rule fires
       File.write!(path, code_without_allow)
-      diags_without = Archdo.Runner.analyze([path], [])
+      diags_without = Runner.analyze([path], [])
       has_finding = Enum.any?(diags_without, &(&1.rule_id == "4.27"))
 
       # With comment: rule is suppressed
       File.write!(path, code_with_allow)
-      diags_with = Archdo.Runner.analyze([path], [])
+      diags_with = Runner.analyze([path], [])
       suppressed = not Enum.any?(diags_with, &(&1.rule_id == "4.27"))
 
       File.rm(path)
@@ -262,7 +268,7 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
         )
 
       diags =
-        Archdo.Rules.Module.DeadPrivateFunction.analyze("lib/foo_web/components.ex", ast, [])
+        DeadPrivateFunction.analyze("lib/foo_web/components.ex", ast, [])
 
       dead_fns = Enum.filter(diags, &(&1.rule_id == "6.34"))
 
@@ -293,7 +299,7 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
         )
 
       diags =
-        Archdo.Rules.Boundary.ReverseDependency.analyze(
+        ReverseDependency.analyze(
           "lib/my_app_web.ex",
           ast,
           []
@@ -327,7 +333,7 @@ defmodule Archdo.Mcp.Tools.FixSafetyTest do
           literal_encoder: &{:ok, {:__block__, &2, [&1]}}
         )
 
-      diags = Archdo.Rules.OTP.MaxRestarts.analyze("lib/my_app/supervisor.ex", ast, [])
+      diags = MaxRestarts.analyze("lib/my_app/supervisor.ex", ast, [])
       assert diags == []
     end
   end

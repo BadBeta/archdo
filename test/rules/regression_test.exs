@@ -3,6 +3,19 @@ defmodule Archdo.Rules.RegressionTest do
   Regression tests for bugs fixed during development.
   Each test documents the original bug and prevents it from returning.
   """
+
+  alias Archdo.Rules.Boundary.UnusedAlias
+
+  alias Archdo.Rules.Module.{
+    BangInOkErrorFunction,
+    BooleanBlindness,
+    DeadPrivateFunction,
+    InefficientListOperation,
+    LongParameterList,
+    MissingRescueAtBoundary,
+    MissingTelemetry,
+    RedundantGuardRecheck
+  }
   use ExUnit.Case, async: true
 
   defp parse(code) do
@@ -28,7 +41,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Module.DeadPrivateFunction.analyze("lib/foo.ex", ast, [])
+      diags = DeadPrivateFunction.analyze("lib/foo.ex", ast, [])
       assert diags == []
     end
 
@@ -41,7 +54,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Module.DeadPrivateFunction.analyze("lib/foo.ex", ast, [])
+      diags = DeadPrivateFunction.analyze("lib/foo.ex", ast, [])
       assert diags == []
     end
 
@@ -54,7 +67,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Module.DeadPrivateFunction.analyze("lib/foo.ex", ast, [])
+      diags = DeadPrivateFunction.analyze("lib/foo.ex", ast, [])
       assert [%{rule_id: "6.34", message: msg}] = diags
       assert msg =~ "unused_helper"
     end
@@ -74,7 +87,7 @@ defmodule Archdo.Rules.RegressionTest do
         """)
 
       # Should not crash — metaprogrammed names are skipped
-      diags = Archdo.Rules.Module.DeadPrivateFunction.analyze("lib/foo.ex", ast, [])
+      diags = DeadPrivateFunction.analyze("lib/foo.ex", ast, [])
       assert is_list(diags)
     end
   end
@@ -94,7 +107,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Module.MissingRescueAtBoundary.analyze("lib/foo.ex", ast, [])
+      diags = MissingRescueAtBoundary.analyze("lib/foo.ex", ast, [])
       assert diags == []
     end
 
@@ -108,7 +121,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Module.MissingRescueAtBoundary.analyze("lib/foo.ex", ast, [])
+      diags = MissingRescueAtBoundary.analyze("lib/foo.ex", ast, [])
       assert [%{rule_id: "6.16"}] = diags
     end
   end
@@ -134,7 +147,7 @@ defmodule Archdo.Rules.RegressionTest do
 
       # This module has telemetry — should NOT be flagged
       diags =
-        Archdo.Rules.Module.MissingTelemetry.analyze_project([
+        MissingTelemetry.analyze_project([
           {"lib/my_app/accounts.ex", ast}
         ])
 
@@ -155,7 +168,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Boundary.UnusedAlias.analyze("lib/foo.ex", ast, [])
+      diags = UnusedAlias.analyze("lib/foo.ex", ast, [])
       assert diags == []
     end
 
@@ -168,7 +181,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Boundary.UnusedAlias.analyze("lib/foo.ex", ast, [])
+      diags = UnusedAlias.analyze("lib/foo.ex", ast, [])
       assert [%{rule_id: "4.27"}] = diags
     end
   end
@@ -190,7 +203,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Module.InefficientListOperation.analyze("lib/foo.ex", ast, [])
+      diags = InefficientListOperation.analyze("lib/foo.ex", ast, [])
       concat_diags = Enum.filter(diags, &(&1.title =~ "++ in loop"))
       assert concat_diags == []
     end
@@ -207,7 +220,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Module.InefficientListOperation.analyze("lib/foo.ex", ast, [])
+      diags = InefficientListOperation.analyze("lib/foo.ex", ast, [])
       concat_diags = Enum.filter(diags, fn d -> d.title =~ "++" end)
       assert concat_diags != []
     end
@@ -227,7 +240,7 @@ defmodule Archdo.Rules.RegressionTest do
         """)
 
       # Should not crash — compound guards were causing argument swap
-      diags = Archdo.Rules.Module.RedundantGuardRecheck.analyze("lib/foo.ex", ast, [])
+      diags = RedundantGuardRecheck.analyze("lib/foo.ex", ast, [])
       assert is_list(diags)
     end
   end
@@ -245,7 +258,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Module.BangInOkErrorFunction.analyze("lib/foo.ex", ast, [])
+      diags = BangInOkErrorFunction.analyze("lib/foo.ex", ast, [])
       assert is_list(diags)
     end
 
@@ -259,7 +272,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Module.LongParameterList.analyze("lib/foo.ex", ast, [])
+      diags = LongParameterList.analyze("lib/foo.ex", ast, [])
       assert is_list(diags)
     end
 
@@ -273,7 +286,7 @@ defmodule Archdo.Rules.RegressionTest do
         end
         """)
 
-      diags = Archdo.Rules.Module.BooleanBlindness.analyze("lib/foo.ex", ast, [])
+      diags = BooleanBlindness.analyze("lib/foo.ex", ast, [])
       assert is_list(diags)
     end
   end

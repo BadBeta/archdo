@@ -2,6 +2,7 @@ defmodule Archdo.Mcp.Tools.FixTest do
   use ExUnit.Case, async: true
 
   alias Archdo.Mcp.Tools.Fix
+  alias Archdo.Rules.Boundary.UnusedAlias
 
   # Helper: write temp file, call fix, read result
   defp fix_file(code, opts \\ %{}) do
@@ -223,7 +224,7 @@ defmodule Archdo.Mcp.Tools.FixTest do
 
       File.write!(path, code)
 
-      {:ok, fix_result} = Archdo.Mcp.Tools.Fix.call(%{"file" => path})
+      {:ok, fix_result} = Fix.call(%{"file" => path})
       pipe_fix = Enum.find(fix_result.fixes, &(&1.rule_id == "6.33"))
 
       case pipe_fix do
@@ -266,7 +267,7 @@ defmodule Archdo.Mcp.Tools.FixTest do
           literal_encoder: &{:ok, {:__block__, &2, [&1]}}
         )
 
-      diagnostics = Archdo.Rules.Boundary.UnusedAlias.analyze(path, ast, [])
+      diagnostics = UnusedAlias.analyze(path, ast, [])
 
       # If unused alias is detected, the line should be removable
       case diagnostics do

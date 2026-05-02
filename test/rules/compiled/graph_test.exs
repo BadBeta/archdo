@@ -3,7 +3,7 @@ defmodule Archdo.Compiled.GraphTest do
 
   @moduletag :self_analysis
 
-  alias Archdo.Compiled.Graph
+  alias Archdo.Compiled.{Diagram, Graph}
 
   describe "build/1" do
     setup do
@@ -271,7 +271,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "computes delta between AST and compiled", %{graph: graph} do
-      delta = Archdo.Compiled.Diagram.compute_delta(graph, ["lib"])
+      delta = Diagram.compute_delta(graph, ["lib"])
       assert MapSet.size(delta.both) > 0
       assert MapSet.size(delta.compiled_only) > 0
       assert MapSet.size(delta.ast_only) >= 0
@@ -279,7 +279,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "delta edges are module pairs", %{graph: graph} do
-      delta = Archdo.Compiled.Diagram.compute_delta(graph, ["lib"])
+      delta = Diagram.compute_delta(graph, ["lib"])
 
       delta.both
       |> MapSet.to_list()
@@ -292,7 +292,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "hidden count is reasonable", %{graph: graph} do
-      delta = Archdo.Compiled.Diagram.compute_delta(graph, ["lib"])
+      delta = Diagram.compute_delta(graph, ["lib"])
       # There should be more compiled edges than AST edges
       # (macros inject calls invisible to AST)
       assert delta.compiled_total > delta.ast_total
@@ -307,7 +307,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "generates valid Mermaid output", %{graph: graph} do
-      mermaid = Archdo.Compiled.Diagram.dependency_delta_only(graph, ["lib"])
+      mermaid = Diagram.dependency_delta_only(graph, ["lib"])
       assert String.starts_with?(mermaid, "graph LR")
       assert mermaid =~ "HIDDEN"
       assert mermaid =~ "PHANTOM"
