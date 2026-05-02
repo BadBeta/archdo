@@ -22,3 +22,7 @@ archdo-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 CONTINUE.md
+
+# Generated diagram artifacts (output of `mix archdo --diagram ...`).
+archdo_interactive.html
+archdo_*.svg
