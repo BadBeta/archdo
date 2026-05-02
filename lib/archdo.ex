@@ -217,7 +217,8 @@ defmodule Archdo do
     Archdo.Rules.CE.ReturnShapeDrift,
     Archdo.Rules.CE.ErrorCategoryDrift,
     Archdo.Rules.CE.MissingTraceability,
-    Archdo.Rules.CE.MissingRetentionPolicy
+    Archdo.Rules.CE.MissingRetentionPolicy,
+    Archdo.Rules.CE.UntestedBuildingBlock
   ]
 
   # Project-level rules that take source file paths (directory-based analysis).
