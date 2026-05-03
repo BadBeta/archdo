@@ -152,14 +152,37 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   # collide even when bodies coincide (false positive on `f/2 ↔ g/3` where
   # the body literal happens to match).
   defp extract_functions_with_hashes(file, ast) do
-    AST.extract_functions(ast, :all)
-    |> Enum.reject(fn {name, _arity, _meta, _args, _body} -> name in @ignored_callbacks end)
+    extract_with_guards(ast)
+    |> Enum.reject(fn {name, _, _, _, _, _} -> name in @ignored_callbacks end)
     |> Enum.group_by(
-      fn {name, arity, _, _, _} -> {name, arity} end,
-      fn {_, _, meta, args, body} -> {meta, args, body} end
+      fn {name, arity, _, _, _, _} -> {name, arity} end,
+      fn {_, _, meta, args, guards, body} -> {meta, args, guards, body} end
     )
     |> Enum.map(&hash_function_group(&1, file))
     |> Enum.filter(fn {_hash, info} -> info.size >= @min_node_count end)
+  end
+
+  # Walks `ast` and returns one tuple per `def`/`defp` clause as
+  # `{name, arity, meta, args, guards, body}`. Differs from
+  # `AST.extract_functions/2` only in that GUARDS are returned alongside
+  # args — clone detection treats `f(x) when is_atom(x)` and
+  # `f(x) when is_binary(x)` as distinct even if their bodies coincide.
+  defp extract_with_guards(ast) do
+    {_, fns} =
+      Macro.prewalk(ast, [], fn
+        {kind, meta, [{:when, _, [{name, _, args} | guards]}, body]} = node, acc
+        when kind in [:def, :defp] and is_atom(name) and is_list(args) ->
+          {node, [{name, length(args), meta, args, guards, body} | acc]}
+
+        {kind, meta, [{name, _, args}, body]} = node, acc
+        when kind in [:def, :defp] and is_atom(name) and (is_list(args) or args == nil) ->
+          {node, [{name, length(args || []), meta, args || [], [], body} | acc]}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    Enum.reverse(fns)
   end
 
   # The hash includes both ARG PATTERNS and BODIES of every clause. Two
@@ -169,22 +192,22 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   # `{arity, [{normalized_args, normalized_body}, ...]}` distinguishes
   # them, while still grouping multi-clause heads of the same function.
   defp hash_function_group({{name, arity}, clauses}, file) do
-    clauses_sorted = Enum.sort_by(clauses, fn {meta, _, _} -> AST.line(meta) end)
+    clauses_sorted = Enum.sort_by(clauses, fn {meta, _, _, _} -> AST.line(meta) end)
 
     clause_shapes =
-      Enum.map(clauses_sorted, fn {_meta, args, body} ->
-        {normalize(args), normalize(body)}
+      Enum.map(clauses_sorted, fn {_meta, args, guards, body} ->
+        {normalize(args), normalize(guards), normalize(body)}
       end)
 
     size =
       Enum.sum(
-        Enum.map(clause_shapes, fn {args_n, body_n} ->
-          AST.ast_size(args_n) + AST.ast_size(body_n)
+        Enum.map(clause_shapes, fn {args_n, guards_n, body_n} ->
+          AST.ast_size(args_n) + AST.ast_size(guards_n) + AST.ast_size(body_n)
         end)
       )
 
     hash = :erlang.phash2({arity, clause_shapes})
-    {first_meta, _, _} = hd(clauses_sorted)
+    {first_meta, _, _, _} = hd(clauses_sorted)
 
     {hash,
      %{

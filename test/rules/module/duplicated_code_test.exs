@@ -369,6 +369,36 @@ defmodule Archdo.Rules.Module.DuplicatedCodeTest do
              "different arities should not be considered structural clones"
     end
 
+    test "functions with same body but different guards are NOT duplicates" do
+      file1 =
+        parse(
+          ~S"""
+          defmodule MyApp.A do
+            def unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
+            def unwrap_atom(a) when is_atom(a), do: a
+            def unwrap_atom(_), do: nil
+          end
+          """,
+          "lib/a.ex"
+        )
+
+      file2 =
+        parse(
+          ~S"""
+          defmodule MyApp.B do
+            def unwrap_string({:__block__, _, [s]}) when is_binary(s), do: s
+            def unwrap_string(s) when is_binary(s), do: s
+            def unwrap_string(_), do: nil
+          end
+          """,
+          "lib/b.ex"
+        )
+
+      diags = DuplicatedCode.analyze_project([file1, file2])
+      refute Enum.any?(diags, &(&1.message =~ "unwrap_atom" or &1.message =~ "unwrap_string")),
+             "guards (is_atom vs is_binary) discriminate semantically — must not collide"
+    end
+
     test "predicates with same body shape but different head patterns are NOT duplicates" do
       file1 =
         parse(
