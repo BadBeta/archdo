@@ -21,7 +21,7 @@ defmodule Archdo.Rules.EventSourcing.ProcessManagerReadsProjection do
   defp find_repo_reads(file, ast) do
     AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, mod_parts}, func]}, _, _} ->
-        List.last(mod_parts) == :Repo and
+        List.last(mod_parts) == AST.repo_atom() and
           func in [:get, :get!, :get_by, :get_by!, :one, :one!, :all]
 
       _ ->

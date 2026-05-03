@@ -123,7 +123,7 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
 
     ast_graph
     |> Graph.dependencies(source_name)
-    |> Enum.filter(fn edge -> Map.get(edge, :type) == :registry end)
+    |> Enum.filter(&Graph.edge_of_type?(&1, :registry))
     |> Enum.map(fn edge -> AST.safe_existing_atom(edge.target) end)
     |> Enum.reject(&is_nil/1)
   end

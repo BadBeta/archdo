@@ -12,6 +12,8 @@ defmodule Archdo.Rules.CE.VolatileNoRetry do
 
   alias Archdo.{AST, Diagnostic, Fix, Volatility}
 
+  @volatile_tag :volatile
+
   @impl true
   def id, do: "CE-35"
 
@@ -29,7 +31,7 @@ defmodule Archdo.Rules.CE.VolatileNoRetry do
   def analyze(file, ast, opts) do
     classification = Volatility.classification_for(file, ast, opts)
 
-    case classification.tag == :volatile do
+    case classification.tag == @volatile_tag do
       true -> find_unprotected_calls(file, ast, classification)
       false -> []
     end

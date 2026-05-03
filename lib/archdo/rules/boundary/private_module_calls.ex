@@ -37,7 +37,7 @@ defmodule Archdo.Rules.Boundary.PrivateModuleCalls do
     |> Enum.filter(fn edge ->
       MapSet.member?(private_modules, edge.target) and
         not same_namespace?(edge.source, edge.target) and
-        edge.type == :call
+        Graph.edge_of_type?(edge, :call)
     end)
     |> Enum.uniq_by(fn edge -> {edge.source, edge.target} end)
     |> Enum.map(&build_diagnostic/1)

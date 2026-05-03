@@ -4,6 +4,9 @@ defmodule Archdo.Rules.Boundary.LogicInLiveview do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  @handle_event_callback :handle_event
+  @handle_event_arity 3
+
   @max_handle_event_nodes 10
 
   @impl true
@@ -41,7 +44,7 @@ defmodule Archdo.Rules.Boundary.LogicInLiveview do
     ast
     |> AST.extract_functions(:public)
     |> Enum.filter(fn {name, arity, _, _, body} ->
-      name == :handle_event and arity == 3 and
+      name == @handle_event_callback and arity == @handle_event_arity and
         body != nil and count_non_assign_nodes(body) > @max_handle_event_nodes
     end)
     |> Enum.map(fn {name, arity, meta, _, body} ->

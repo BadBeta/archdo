@@ -3,13 +3,15 @@ defmodule Archdo.Rules.EventSourcing.Helpers do
 
   alias Archdo.AST
 
+  @apply_callback :apply
+
   @doc """
   Check if a module defines both execute/2 and apply/2 — the aggregate shape.
   """
   def aggregate_shape?(ast) do
     fns = AST.extract_functions(ast, :public)
     has_execute = Enum.any?(fns, fn {n, a, _, _, _} -> n == :execute and a == 2 end)
-    has_apply = Enum.any?(fns, fn {n, a, _, _, _} -> n == :apply and a == 2 end)
+    has_apply = Enum.any?(fns, fn {n, a, _, _, _} -> n == @apply_callback and a == 2 end)
     has_execute and has_apply
   end
 

@@ -24,7 +24,7 @@ defmodule Archdo.Rules.Testing.RepoInTests do
   defp find_repo_calls(file, ast) do
     AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
-        List.last(mod_parts) == :Repo and func in @repo_funcs
+        List.last(mod_parts) == AST.repo_atom() and func in @repo_funcs
 
       _ ->
         false

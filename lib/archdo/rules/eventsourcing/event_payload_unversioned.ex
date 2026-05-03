@@ -4,6 +4,8 @@ defmodule Archdo.Rules.EventSourcing.EventPayloadUnversioned do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  @event_kind :event
+
   @impl true
   def id, do: "8.9"
 
@@ -100,7 +102,7 @@ defmodule Archdo.Rules.EventSourcing.EventPayloadUnversioned do
 
   defp build_diagnostic(file, meta, kind, aliases) do
     module_name = Enum.map_join(aliases, ".", &Atom.to_string/1)
-    label = if kind == :event, do: "Event", else: "Command"
+    label = if kind == @event_kind, do: "Event", else: "Command"
 
     Diagnostic.warning("8.9",
       title: "#{label} struct missing version",

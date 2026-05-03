@@ -60,7 +60,7 @@ defmodule Archdo.Rules.Boundary.WidelyUsedInternalModule do
 
     graph.edges
     |> Enum.filter(fn edge ->
-      edge.type == :call and MapSet.member?(private_modules, edge.target)
+      Graph.edge_of_type?(edge, :call) and MapSet.member?(private_modules, edge.target)
     end)
     |> Enum.group_by(& &1.target)
     |> Enum.flat_map(fn {target, edges} ->

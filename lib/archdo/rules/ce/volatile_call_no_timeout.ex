@@ -20,6 +20,8 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
 
   alias Archdo.{AST, Diagnostic, Fix, Volatility}
 
+  @volatile_tag :volatile
+
   @impl true
   def id, do: "CE-34"
 
@@ -39,7 +41,7 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
     classification = Volatility.classification_for(file, ast, opts)
 
     httpish_findings =
-      case classification.tag == :volatile do
+      case classification.tag == @volatile_tag do
         true -> find_unbounded_http(file, ast)
         false -> []
       end
@@ -100,7 +102,10 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
   defp pair_matches?(_, _), do: false
 
   defp recurse_into(value, keys) when is_list(value), do: keyword_has_any?(value, keys)
-  defp recurse_into({:__block__, _, [list]}, keys) when is_list(list), do: keyword_has_any?(list, keys)
+
+  defp recurse_into({:__block__, _, [list]}, keys) when is_list(list),
+    do: keyword_has_any?(list, keys)
+
   defp recurse_into(_, _), do: false
 
   # --- GenServer.call ---

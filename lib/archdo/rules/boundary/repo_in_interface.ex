@@ -4,6 +4,8 @@ defmodule Archdo.Rules.Boundary.RepoInInterface do
 
   alias Archdo.{Config, Diagnostic, Fix, Graph}
 
+  @interface_layer :interface
+
   @impl true
   def id, do: "1.4"
 
@@ -14,7 +16,7 @@ defmodule Archdo.Rules.Boundary.RepoInInterface do
     graph.edges
     |> Enum.filter(fn edge ->
       source_layer = Config.classify_module(config, edge.source)
-      source_layer == :interface and repo_reference?(edge.target)
+      source_layer == @interface_layer and repo_reference?(edge.target)
     end)
     |> Enum.reject(&tolerated?/1)
     |> Enum.uniq_by(fn edge -> {edge.source, edge.target} end)
@@ -60,6 +62,6 @@ defmodule Archdo.Rules.Boundary.RepoInInterface do
 
   defp tolerated?(edge) do
     # import Ecto.Query is tolerated in some patterns
-    edge.type == :alias
+    Graph.edge_of_type?(edge, :alias)
   end
 end

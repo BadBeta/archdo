@@ -107,7 +107,7 @@ defmodule Archdo.Rules.CE.CrossCuttingDensity do
 
   # Repo.transaction(...) / X.Repo.transaction(...)
   defp classify_target({:__aliases__, _, parts}, :transaction) when is_list(parts) do
-    case List.last(parts) == :Repo do
+    case List.last(parts) == AST.repo_atom() do
       true -> "Repo.transaction"
       false -> nil
     end

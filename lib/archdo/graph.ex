@@ -4,6 +4,11 @@ defmodule Archdo.Graph do
   alias Archdo.AST
 
   @type dep_type :: :alias | :import | :use | :call
+
+  # Edge-type names — single source of truth for the four atoms.
+  @call_type :call
+  @alias_type :alias
+  @registry_type :registry
   @type edge :: %{
           source: String.t(),
           target: String.t(),
@@ -41,6 +46,14 @@ defmodule Archdo.Graph do
   def dependencies(%__MODULE__{edges_by_source: by_source}, module_name) do
     Map.get(by_source, module_name, [])
   end
+
+  @doc """
+  Predicate — is the edge's type `kind`?
+  Centralizes edge-type tagging so consumers don't carry the literal
+  atom (`:call`, `:alias`, `:registry`) at every filter site.
+  """
+  @spec edge_of_type?(edge(), dep_type()) :: boolean()
+  def edge_of_type?(edge, kind) when is_atom(kind), do: edge.type == kind
 
   @doc """
   Get all edges that point TO a given module (reverse lookup).
@@ -152,7 +165,7 @@ defmodule Archdo.Graph do
   defp attr_read_edges(targets, node, mod, edges, regs, file, meta) do
     new_edges =
       Enum.map(targets, fn target ->
-        %{source: mod, target: target, type: :registry, file: file, line: AST.line(meta)}
+        %{source: mod, target: target, type: @registry_type, file: file, line: AST.line(meta)}
       end)
 
     {node, {mod, new_edges ++ edges, regs}}
@@ -317,7 +330,7 @@ defmodule Archdo.Graph do
               edge = %{
                 source: mod,
                 target: target,
-                type: :alias,
+                type: @alias_type,
                 file: file,
                 line: AST.line(meta)
               }
@@ -362,7 +375,14 @@ defmodule Archdo.Graph do
               {node, {mod, edges}}
 
             target ->
-              edge = %{source: mod, target: target, type: :call, file: file, line: AST.line(meta)}
+              edge = %{
+                source: mod,
+                target: target,
+                type: @call_type,
+                file: file,
+                line: AST.line(meta)
+              }
+
               {node, {mod, [edge | edges]}}
           end
 

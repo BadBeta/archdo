@@ -85,7 +85,7 @@ defmodule Archdo.Rules.Boundary.ContextEncapsulation do
   defp tolerated?(edge, _config) do
     # Schema references for struct matching are common
     String.ends_with?(edge.target, "Schema") or
-      edge.type == :alias
+      Graph.edge_of_type?(edge, :alias)
   end
 
   defp normalize(mod) when is_atom(mod), do: AST.module_name(mod)

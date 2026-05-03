@@ -4,6 +4,10 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  @handle_event_callback :handle_event
+  @handle_params_callback :handle_params
+  @handler_arity 3
+
   @impl true
   def id, do: "1.14"
 
@@ -45,8 +49,8 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
 
     fns
     |> Enum.filter(fn {name, arity, _, _, _} ->
-      (name == :handle_event and arity == 3) or
-        (name == :handle_params and arity == 3)
+      (name == @handle_event_callback and arity == @handler_arity) or
+        (name == @handle_params_callback and arity == @handler_arity)
     end)
     |> Enum.reject(fn {_name, _, _, _, body} -> has_validation?(body) end)
     |> Enum.map(fn {name, arity, meta, _, _} ->

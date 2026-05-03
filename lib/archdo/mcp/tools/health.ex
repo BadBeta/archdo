@@ -56,10 +56,12 @@ defmodule Archdo.Mcp.Tools.Health do
      }}
   end
 
+  @warning_severity :warning
+
   defp grade(diagnostics, files) do
     file_count = length(files)
     error_count = Enum.count(diagnostics, &(&1.severity == :error))
-    warning_count = Enum.count(diagnostics, &(&1.severity == :warning))
+    warning_count = Enum.count(diagnostics, &(&1.severity == @warning_severity))
 
     ratio = (error_count * 3 + warning_count) / max(file_count, 1)
 

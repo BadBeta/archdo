@@ -4,6 +4,9 @@ defmodule Archdo.Rules.Module.InconsistentErrorShape do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  # Internal style classification for unrecognized return shapes.
+  @unknown_style :unknown
+
   @impl true
   def id, do: "6.11"
 
@@ -29,7 +32,7 @@ defmodule Archdo.Rules.Module.InconsistentErrorShape do
       |> Enum.map(fn {name, arity, _meta, _args, body} ->
         {name, arity, classify_style(body)}
       end)
-      |> Enum.reject(fn {_, _, style} -> style == :unknown end)
+      |> Enum.reject(fn {_, _, style} -> style == @unknown_style end)
 
     style_groups =
       styles

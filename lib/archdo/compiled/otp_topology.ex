@@ -7,6 +7,13 @@ defmodule Archdo.Compiled.OTPTopology do
 
   alias Archdo.Compiled.Graph
 
+  # Message kinds and process kinds — single source of truth atoms.
+  @msg_call :call
+  @msg_cast :cast
+  @msg_send :send
+  @kind_supervisor :supervisor
+  @kind_unknown :unknown
+
   @type process_info :: %{
           module: module(),
           type: :genserver | :supervisor | :agent | :task | :gen_statem | :process,
@@ -85,12 +92,12 @@ defmodule Archdo.Compiled.OTPTopology do
 
     supervisors =
       topology
-      |> Enum.filter(&(&1.type == :supervisor))
+      |> Enum.filter(&(&1.type == @kind_supervisor))
       |> Map.new(&{&1.module, &1})
 
     roots =
       Enum.filter(topology, fn p ->
-        p.type == :supervisor and not MapSet.member?(all_children, p.module)
+        p.type == @kind_supervisor and not MapSet.member?(all_children, p.module)
       end)
 
     process_map = Map.new(topology, &{&1.module, &1})
@@ -106,7 +113,13 @@ defmodule Archdo.Compiled.OTPTopology do
         }
 
   defp build_tree_node(process, process_map, supervisors, visited) do
-    build_tree_node_for(MapSet.member?(visited, process.module), process, process_map, supervisors, visited)
+    build_tree_node_for(
+      MapSet.member?(visited, process.module),
+      process,
+      process_map,
+      supervisors,
+      visited
+    )
   end
 
   # §§ elixir-implementing: §2.1 — boolean → multi-clause head on cycle visit.
@@ -115,7 +128,10 @@ defmodule Archdo.Compiled.OTPTopology do
 
   defp build_tree_node_for(false, process, process_map, supervisors, visited) do
     visited = MapSet.put(visited, process.module)
-    child_nodes = Enum.flat_map(process.children, &child_tree_node(&1, process_map, supervisors, visited))
+
+    child_nodes =
+      Enum.flat_map(process.children, &child_tree_node(&1, process_map, supervisors, visited))
+
     %{process: process, children: child_nodes}
   end
 
@@ -124,6 +140,7 @@ defmodule Archdo.Compiled.OTPTopology do
   end
 
   defp child_tree_node_for(nil, _process_map, _supervisors, _visited), do: []
+
   defp child_tree_node_for(child, process_map, supervisors, visited),
     do: [build_tree_node(child, process_map, supervisors, visited)]
 
@@ -150,7 +167,7 @@ defmodule Archdo.Compiled.OTPTopology do
     # Group into incoming/outgoing per process
     incoming =
       message_calls
-      |> Enum.filter(fn m -> m.to != :unknown end)
+      |> Enum.filter(fn m -> m.to != @kind_unknown end)
       |> Enum.group_by(& &1.to)
 
     outgoing =
@@ -178,7 +195,8 @@ defmodule Archdo.Compiled.OTPTopology do
     genserver_kind(MapSet.member?(process_set, caller_mod), fn_name)
   end
 
-  defp call_kind(caller_mod, callee_mod, :send, process_set) when callee_mod in [:erlang, Kernel] do
+  defp call_kind(caller_mod, callee_mod, :send, process_set)
+       when callee_mod in [:erlang, Kernel] do
     send_kind(MapSet.member?(process_set, caller_mod))
   end
 
@@ -203,19 +221,19 @@ defmodule Archdo.Compiled.OTPTopology do
   defp interprocess_kind(_caller_in, _callee_in), do: :other
 
   defp message_call(:genserver_call, caller_mod, _callee_mod, callee_fn),
-    do: [%{from: caller_mod, to: :unknown, type: :call, function: callee_fn}]
+    do: [%{from: caller_mod, to: @kind_unknown, type: @msg_call, function: callee_fn}]
 
   defp message_call(:genserver_cast, caller_mod, _callee_mod, callee_fn),
-    do: [%{from: caller_mod, to: :unknown, type: :cast, function: callee_fn}]
+    do: [%{from: caller_mod, to: @kind_unknown, type: @msg_cast, function: callee_fn}]
 
   defp message_call(:send, caller_mod, _callee_mod, _callee_fn),
-    do: [%{from: caller_mod, to: :unknown, type: :send, function: :send}]
+    do: [%{from: caller_mod, to: @kind_unknown, type: @msg_send, function: :send}]
 
   defp message_call(:process_to_process, caller_mod, callee_mod, callee_fn),
-    do: [%{from: caller_mod, to: callee_mod, type: :call, function: callee_fn}]
+    do: [%{from: caller_mod, to: callee_mod, type: @msg_call, function: callee_fn}]
 
   defp message_call(:external_to_process, caller_mod, callee_mod, callee_fn),
-    do: [%{from: caller_mod, to: callee_mod, type: :call, function: callee_fn}]
+    do: [%{from: caller_mod, to: callee_mod, type: @msg_call, function: callee_fn}]
 
   defp message_call(:other, _caller_mod, _callee_mod, _callee_fn), do: []
 
@@ -224,7 +242,7 @@ defmodule Archdo.Compiled.OTPTopology do
     # Look for calls to child modules' start_link or child_spec from supervisor modules
     supervisor_mods =
       process_modules
-      |> Enum.filter(fn {_mod, type} -> type == :supervisor end)
+      |> Enum.filter(fn {_mod, type} -> type == @kind_supervisor end)
       |> Enum.map(fn {mod, _} -> mod end)
       |> MapSet.new()
 

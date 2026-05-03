@@ -121,7 +121,7 @@ defmodule Archdo.Rules.OTP.BlockingInit do
     Enum.map(
       AST.find_all(body, fn
         {{:., _, [{:__aliases__, _, mod_parts}, _func]}, _meta, _args} ->
-          List.last(mod_parts) == :Repo
+          List.last(mod_parts) == AST.repo_atom()
 
         _ ->
           false

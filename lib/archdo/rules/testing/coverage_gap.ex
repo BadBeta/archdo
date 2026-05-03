@@ -4,6 +4,8 @@ defmodule Archdo.Rules.Testing.CoverageGap do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  @warning_severity :warning
+
   # Callback functions and framework helpers that don't need direct test coverage
   @ignored_functions ~w(
     init child_spec start_link handle_call handle_cast handle_info handle_continue
@@ -238,7 +240,9 @@ defmodule Archdo.Rules.Testing.CoverageGap do
       # Partial or no coverage — report summary and uncovered list
       true ->
         builder =
-          if severity_for(pct) == :warning, do: &Diagnostic.warning/2, else: &Diagnostic.info/2
+          if severity_for(pct) == @warning_severity,
+            do: &Diagnostic.warning/2,
+            else: &Diagnostic.info/2
 
         [
           builder.("7.14",

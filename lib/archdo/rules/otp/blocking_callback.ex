@@ -24,7 +24,10 @@ defmodule Archdo.Rules.OTP.BlockingCallback do
   defp blocking_for_genserver(true, file, ast) do
     callbacks = AST.extract_callbacks(ast)
 
-    Enum.flat_map([:handle_call, :handle_cast, :handle_info], &check_callback_kind(&1, callbacks, file))
+    Enum.flat_map(
+      [:handle_call, :handle_cast, :handle_info],
+      &check_callback_kind(&1, callbacks, file)
+    )
   end
 
   defp check_callback_kind(cb_name, callbacks, file) do
@@ -128,7 +131,7 @@ defmodule Archdo.Rules.OTP.BlockingCallback do
     Enum.map(
       AST.find_all(body, fn
         {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
-          List.last(mod_parts) == :Repo and func in [:all, :stream, :aggregate]
+          List.last(mod_parts) == AST.repo_atom() and func in [:all, :stream, :aggregate]
 
         _ ->
           false

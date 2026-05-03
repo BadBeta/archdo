@@ -14,6 +14,10 @@ defmodule Archdo.Compiled.DiagramOTP do
   alias Archdo.AST
   alias Archdo.Compiled.{DiagramHelpers, Graph, OTPTopology}
 
+  # Process / message kinds shared with `OTPTopology` (single source of truth).
+  @kind_supervisor :supervisor
+  @kind_unknown :unknown
+
   # Layout constants
   @process_w 200
   @process_h 56
@@ -62,7 +66,7 @@ defmodule Archdo.Compiled.DiagramOTP do
 
         orphans =
           Enum.reject(topology, fn p ->
-            p.type == :supervisor or MapSet.member?(supervised_set, p.module)
+            p.type == @kind_supervisor or MapSet.member?(supervised_set, p.module)
           end)
 
         render_full_diagram(tree, orphans, topology)
@@ -199,7 +203,7 @@ defmodule Archdo.Compiled.DiagramOTP do
       topology
       |> Enum.flat_map(fn p ->
         p.outgoing_messages
-        |> Enum.filter(fn m -> m.to != :unknown end)
+        |> Enum.filter(fn m -> m.to != @kind_unknown end)
         |> Enum.map(fn m -> {p.module, m.to, m.type, m.function} end)
       end)
       |> Enum.uniq()
@@ -364,7 +368,7 @@ defmodule Archdo.Compiled.DiagramOTP do
 
   defp wire_elements_for_process(p, positions) do
     p.outgoing_messages
-    |> Enum.filter(fn m -> m.to != :unknown and Map.has_key?(positions, m.to) end)
+    |> Enum.filter(fn m -> m.to != @kind_unknown and Map.has_key?(positions, m.to) end)
     |> Enum.flat_map(&wire_segment(&1, p.module, positions))
   end
 

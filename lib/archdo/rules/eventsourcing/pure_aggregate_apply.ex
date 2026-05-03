@@ -5,6 +5,8 @@ defmodule Archdo.Rules.EventSourcing.PureAggregateApply do
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Rules.EventSourcing.Helpers
 
+  @apply_callback :apply
+
   @impl true
   def id, do: "8.2"
 
@@ -33,7 +35,7 @@ defmodule Archdo.Rules.EventSourcing.PureAggregateApply do
     fns = AST.extract_functions(ast, :public)
 
     fns
-    |> Enum.filter(fn {name, arity, _, _, _} -> name == :apply and arity == 2 end)
+    |> Enum.filter(fn {name, arity, _, _, _} -> name == @apply_callback and arity == 2 end)
     |> Enum.flat_map(fn {_, _, _meta, _, body} ->
       side_effects = find_side_effects(body)
 

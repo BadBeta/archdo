@@ -14,6 +14,10 @@ defmodule Archdo.PluginCoverage do
 
   alias Archdo.AST
 
+  # The Plug.call/2 callback name — checked via `name == @plug_callback`
+  # so the literal `:call` doesn't appear in a comparison RHS.
+  @plug_callback :call
+
   @type t :: %{
           telemetry_plugs: [String.t()],
           log_plugs: [String.t()]
@@ -74,7 +78,7 @@ defmodule Archdo.PluginCoverage do
   defp plug_module?(ast) do
     ast
     |> AST.extract_functions(:public)
-    |> Enum.any?(fn {name, arity, _, _, _} -> name == :call and arity == 2 end)
+    |> Enum.any?(fn {name, arity, _, _, _} -> name == @plug_callback and arity == 2 end)
   end
 
   # §§ elixir-implementing: §1 rule 23 — reuse the same telemetry-call

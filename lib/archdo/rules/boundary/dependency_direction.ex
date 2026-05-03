@@ -4,6 +4,9 @@ defmodule Archdo.Rules.Boundary.DependencyDirection do
 
   alias Archdo.{Config, Diagnostic, Fix, Graph}
 
+  # `Config.layer()` value for unclassified modules.
+  @unknown_layer :unknown
+
   @impl true
   def id, do: "1.1"
 
@@ -19,8 +22,8 @@ defmodule Archdo.Rules.Boundary.DependencyDirection do
       source_layer = Config.classify_module(config, edge.source)
       target_layer = Config.classify_module(config, edge.target)
 
-      source_layer != :unknown and
-        target_layer != :unknown and
+      source_layer != @unknown_layer and
+        target_layer != @unknown_layer and
         not Config.allowed_dep?(config, source_layer, target_layer)
     end)
     |> Enum.reject(fn edge -> tolerated?(edge, config) end)

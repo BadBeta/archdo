@@ -593,6 +593,13 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  The Ecto Repo alias atom. Centralized so consumers detecting Ecto
+  Repo references don't each carry their own `== :Repo` literal.
+  """
+  @spec repo_atom() :: :Repo
+  def repo_atom, do: :Repo
+
+  @doc """
   Check if a file path starts with any of the given path roots. Used by rules
   that scope analysis to a project-configured set of directories.
   """

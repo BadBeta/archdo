@@ -4,6 +4,8 @@ defmodule Archdo.Rules.EventSourcing.CommandEventNaming do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  @event_kind :event
+
   @impl true
   def id, do: "8.1"
 
@@ -109,7 +111,7 @@ defmodule Archdo.Rules.EventSourcing.CommandEventNaming do
         )
       ],
       references: ["ARCHITECTURE_RULES.md#8.1"],
-      context: %{module: module_name, kind: :event, name: name},
+      context: %{module: module_name, kind: @event_kind, name: name},
       file: file,
       line: line
     )

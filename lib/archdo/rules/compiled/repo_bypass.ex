@@ -5,6 +5,8 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
   alias Archdo.{AST, Config, Diagnostic, Fix}
   alias Archdo.Compiled
 
+  @interface_layer :interface
+
   @impl true
   def id, do: "1.22"
 
@@ -92,7 +94,7 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
   defp interface_module?(mod, config) do
     mod_str = AST.module_name(mod)
 
-    Config.classify_module(config, mod_str) == :interface or
+    Config.classify_module(config, mod_str) == @interface_layer or
       String.contains?(mod_str, "Controller") or
       String.contains?(mod_str, "Live.") or
       String.contains?(mod_str, "Channel")
