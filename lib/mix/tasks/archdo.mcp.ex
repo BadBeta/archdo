@@ -40,7 +40,7 @@ defmodule Mix.Tasks.Archdo.Mcp do
 
   use Mix.Task
 
-  alias Archdo.Mcp.Server
+  alias Archdo.Mcp
 
   @impl Mix.Task
   def run(_args) do
@@ -48,6 +48,6 @@ defmodule Mix.Tasks.Archdo.Mcp do
     Mix.Task.run("app.config")
 
     # Run the server loop in the foreground until stdin closes.
-    Server.run()
+    Mcp.run()
   end
 end

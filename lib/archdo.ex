@@ -54,7 +54,6 @@ defmodule Archdo do
     Diagnostic,
     Formatter,
     Freeze,
-    FunctionGraph,
     Graph,
     Metrics,
     Phoenix,
@@ -62,28 +61,21 @@ defmodule Archdo do
     Runner,
     Severity
   }
-  alias Archdo.Rules.Module.MainSequenceDistance
-  alias Archdo.Rules.Testing.{CoverageGap, MissingBoundaryTests, TestMirrorsSource}
+  alias Archdo.Rules.Testing.MissingBoundaryTests
 
   alias Archdo.Rules.Boundary.{
     AnemicContext,
-    ChattyBoundary,
-    FunctionBoundary,
     GodContext,
     Mockability,
     ParallelHierarchies,
     SchemaOwnership,
-    SeamIntegrity,
-    ShotgunSurgery,
-    SyncContextCoupling
+    SeamIntegrity
   }
 
   alias Archdo.Rules.Module.{
     AdaptersWithoutBehaviour,
     DuplicatedCode,
     FatInterface,
-    FeatureEnvy,
-    FunctionFanOut,
     MissingTelemetry,
     SimilarCode,
     SpeculativeGenerality
@@ -256,11 +248,11 @@ defmodule Archdo do
         &invoke_project_path_rule(&1, source_files, opts)
       )
 
-    metrics_diagnostics = run_metrics_rules(file_asts)
+    metrics_diagnostics = Runner.run_metrics_rules(file_asts)
 
     function_graph_diagnostics =
       case Keyword.get(opts, :functions, false) do
-        true -> run_function_graph_rules(file_asts, opts)
+        true -> Runner.run_function_graph_rules(file_asts, opts)
         false -> []
       end
 
@@ -331,55 +323,6 @@ defmodule Archdo do
       end
 
     Severity.adjust_diagnostic(diag, classification)
-  end
-
-  defp run_metrics_rules(file_asts) do
-    # Build a module-level dep graph from the ASTs
-    graph = Graph.build(file_asts)
-    metrics = Metrics.compute(graph, file_asts)
-    file_map = build_module_file_map(file_asts)
-
-    MainSequenceDistance.analyze_project(metrics, file_map)
-  end
-
-  defp build_module_file_map(file_asts) do
-    Map.new(file_asts, fn {file, ast} -> {AST.extract_module_name(ast), file} end)
-  end
-
-  defp run_function_graph_rules(file_asts, _opts) do
-    config = Config.load()
-    fn_graph = FunctionGraph.build(file_asts)
-
-    contexts = config.contexts
-
-    boundary_diagnostics =
-      case contexts do
-        [_ | _] -> FunctionBoundary.analyze_project(fn_graph, contexts)
-        [] -> []
-      end
-
-    fan_out_diagnostics = FunctionFanOut.analyze_project(fn_graph)
-    fan_in_diagnostics = ShotgunSurgery.analyze_project(fn_graph)
-    feature_envy_diagnostics = FeatureEnvy.analyze_project(fn_graph)
-
-    chatty_diagnostics =
-      case contexts do
-        [_ | _] -> ChattyBoundary.analyze_project(fn_graph, contexts)
-        [] -> []
-      end
-
-    sync_coupling_diagnostics =
-      case contexts do
-        [_ | _] -> SyncContextCoupling.analyze_project(fn_graph, contexts)
-        [] -> []
-      end
-
-    boundary_diagnostics ++
-      fan_out_diagnostics ++
-      fan_in_diagnostics ++
-      feature_envy_diagnostics ++
-      chatty_diagnostics ++
-      sync_coupling_diagnostics
   end
 
   @doc """
@@ -461,15 +404,7 @@ defmodule Archdo do
   defp run_test_project_rules(paths, opts) do
     source_files = collect_files(paths)
     test_files = Path.wildcard("test/**/*_test.exs")
-
-    mirror_diagnostics = TestMirrorsSource.analyze_project(source_files, test_files)
-
-    # Coverage gap needs source + test ASTs
-    source_asts = parse_many(source_files)
-    test_asts = parse_many(test_files)
-    coverage_diagnostics = CoverageGap.analyze_project(source_asts ++ test_asts)
-
-    filter_diagnostics(mirror_diagnostics ++ coverage_diagnostics, opts)
+    Runner.run_test_project_rules(source_files, test_files, opts)
   end
 
   @doc """
@@ -484,7 +419,7 @@ defmodule Archdo do
     source_asts = parse_many(source_files)
     test_asts = parse_many(test_files)
 
-    IO.write(CoverageGap.matrix_report(source_asts ++ test_asts))
+    IO.write(Runner.coverage_matrix_report(source_asts, test_asts))
 
     0
   end

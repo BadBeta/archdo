@@ -37,6 +37,14 @@ defmodule Archdo.RunnerTest do
     end
   end
 
+  describe "coverage_matrix_report/2 (M-Plan19 Phase 3 facade)" do
+    test "returns iodata wrapping CoverageGap.matrix_report" do
+      report = Runner.coverage_matrix_report([], [])
+      flattened = IO.iodata_to_binary(report)
+      assert is_binary(flattened)
+    end
+  end
+
   describe "volatility classification wiring (M15)" do
     defmodule VolatilityProbeRule do
       @moduledoc false

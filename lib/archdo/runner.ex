@@ -1,7 +1,17 @@
 defmodule Archdo.Runner do
   @moduledoc false
 
-  alias Archdo.{AST, Config, Diagnostic, Graph, PluginCoverage}
+  alias Archdo.{AST, Config, Diagnostic, FunctionGraph, Graph, Metrics, PluginCoverage}
+
+  alias Archdo.Rules.Boundary.{
+    ChattyBoundary,
+    FunctionBoundary,
+    ShotgunSurgery,
+    SyncContextCoupling
+  }
+
+  alias Archdo.Rules.Module.{FeatureEnvy, FunctionFanOut, MainSequenceDistance}
+  alias Archdo.Rules.Testing.{CoverageGap, TestMirrorsSource}
 
   # §§ M-Plan7 — rules that consume project-level plug-coverage state.
   # The pre-pass only runs when at least one of these is enabled.
@@ -251,6 +261,116 @@ defmodule Archdo.Runner do
         []
     end)
     |> sort_diagnostics()
+  end
+
+  # §§ M-Plan19 Phase 3 follow-up — project-level rule dispatchers
+  # moved here from `Archdo` top-level. Runner is the rule executor;
+  # external orchestration (Archdo) calls these instead of importing
+  # individual rule modules. Closes the Rules-context boundary leak
+  # for these 9 rule modules.
+
+  @doc """
+  Run module-level metrics rules (currently MainSequenceDistance).
+  Returns project-level diagnostics from the metrics graph.
+  """
+  @spec run_metrics_rules([{String.t(), Macro.t()}]) :: [Archdo.Diagnostic.t()]
+  def run_metrics_rules(file_asts) do
+    graph = Graph.build(file_asts)
+    metrics = Metrics.compute(graph, file_asts)
+    file_map = build_module_file_map(file_asts)
+
+    MainSequenceDistance.analyze_project(metrics, file_map)
+  end
+
+  @doc """
+  Run function-graph rules (boundary, fan-out, fan-in, feature-envy,
+  chatty-boundary, sync-context-coupling). Some rules require a
+  populated `contexts` config; they no-op when none are configured.
+  """
+  @spec run_function_graph_rules([{String.t(), Macro.t()}], keyword()) ::
+          [Archdo.Diagnostic.t()]
+  def run_function_graph_rules(file_asts, _opts) do
+    config = Config.load()
+    fn_graph = FunctionGraph.build(file_asts)
+
+    contexts = config.contexts
+
+    boundary_diagnostics =
+      case contexts do
+        [_ | _] -> FunctionBoundary.analyze_project(fn_graph, contexts)
+        [] -> []
+      end
+
+    fan_out_diagnostics = FunctionFanOut.analyze_project(fn_graph)
+    fan_in_diagnostics = ShotgunSurgery.analyze_project(fn_graph)
+    feature_envy_diagnostics = FeatureEnvy.analyze_project(fn_graph)
+
+    chatty_diagnostics =
+      case contexts do
+        [_ | _] -> ChattyBoundary.analyze_project(fn_graph, contexts)
+        [] -> []
+      end
+
+    sync_coupling_diagnostics =
+      case contexts do
+        [_ | _] -> SyncContextCoupling.analyze_project(fn_graph, contexts)
+        [] -> []
+      end
+
+    boundary_diagnostics ++
+      fan_out_diagnostics ++
+      fan_in_diagnostics ++
+      feature_envy_diagnostics ++
+      chatty_diagnostics ++
+      sync_coupling_diagnostics
+  end
+
+  @doc """
+  Run test-project rules (TestMirrorsSource, CoverageGap). Filters
+  by opts at the end so callers don't need to know which diagnostics
+  are emitted.
+  """
+  @spec run_test_project_rules([String.t()], [String.t()], keyword()) ::
+          [Archdo.Diagnostic.t()]
+  def run_test_project_rules(source_files, test_files, opts) do
+    mirror_diagnostics = TestMirrorsSource.analyze_project(source_files, test_files)
+
+    source_asts = parse_many(source_files)
+    test_asts = parse_many(test_files)
+    coverage_diagnostics = CoverageGap.analyze_project(source_asts ++ test_asts)
+
+    apply_filter(mirror_diagnostics ++ coverage_diagnostics, opts)
+  end
+
+  @doc """
+  Render the test coverage gap matrix as a printable report. Wraps
+  the underlying CoverageGap rule so callers don't need to alias it.
+  """
+  @spec coverage_matrix_report([{String.t(), Macro.t()}], [{String.t(), Macro.t()}]) ::
+          iodata()
+  def coverage_matrix_report(source_asts, test_asts) do
+    CoverageGap.matrix_report(source_asts ++ test_asts)
+  end
+
+  defp build_module_file_map(file_asts) do
+    Map.new(file_asts, fn {file, ast} -> {AST.extract_module_name(ast), file} end)
+  end
+
+  defp parse_many(files) do
+    for file <- files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
+  end
+
+  defp apply_filter(diagnostics, opts) do
+    ignore = Keyword.get(opts, :ignore, [])
+    only = Keyword.get(opts, :only)
+
+    Enum.filter(diagnostics, fn d ->
+      cond do
+        only && d.rule_id not in only -> false
+        d.rule_id in ignore -> false
+        true -> true
+      end
+    end)
   end
 
   @doc """
