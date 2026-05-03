@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Boundary.PrivateModuleCalls do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Config, Diagnostic, Fix, Graph}
+  alias Archdo.{AST, Diagnostic, Fix, Graph}
 
   @impl true
   def id, do: "2.3"
@@ -14,10 +14,37 @@ defmodule Archdo.Rules.Boundary.PrivateModuleCalls do
   def analyze(_file, _ast, _opts), do: []
 
   @doc """
-  Graph-based: needs to know which modules are marked @moduledoc false.
-  Takes the graph, config, and a set of private module names.
+  Project-level analysis. Walks every cross-namespace call edge and
+  flags those whose target is a module marked `@moduledoc false`.
+  Production-only — test/ callers are out of scope.
+
+  Reports one diagnostic per `{source, target}` pair (deduplicates
+  multiple call sites from the same caller into the same private
+  module).
   """
-  def analyze_graph(%Graph{} = graph, %Config{} = _config, private_modules) do
+  @spec analyze_project([{String.t(), Macro.t()}]) :: [Diagnostic.t()]
+  def analyze_project(file_asts) do
+    production = Enum.reject(file_asts, fn {file, _} -> AST.test_file?(file) end)
+    private_modules = collect_private_modules(production)
+
+    case MapSet.size(private_modules) do
+      0 -> []
+      _ -> find_leaks(production, private_modules)
+    end
+  end
+
+  defp collect_private_modules(production) do
+    for {_file, ast} <- production,
+        AST.internal_module?(ast),
+        module = AST.extract_module_name(ast),
+        module != "Unknown",
+        into: MapSet.new(),
+        do: module
+  end
+
+  defp find_leaks(production, private_modules) do
+    graph = Graph.build(production)
+
     graph.edges
     |> Enum.filter(fn edge ->
       MapSet.member?(private_modules, edge.target) and
@@ -25,40 +52,42 @@ defmodule Archdo.Rules.Boundary.PrivateModuleCalls do
         edge.type == :call
     end)
     |> Enum.uniq_by(fn edge -> {edge.source, edge.target} end)
-    |> Enum.map(fn edge ->
-      parent_ns = parent_namespace(edge.target)
+    |> Enum.map(&build_diagnostic/1)
+  end
 
-      Diagnostic.warning("2.3",
-        title: "Call into private module",
-        message: "#{edge.source} calls #{edge.target}, which is marked `@moduledoc false`",
-        why:
-          "`@moduledoc false` is the project's signal that the module is internal — its functions and " <>
-            "structure are free to change without notice. External callers that reach in lock the internals " <>
-            "in place: any rename, restructure, or removal becomes a breaking change to consumers who weren't " <>
-            "supposed to depend on it. The boundary is documented; the call breaks it.",
-        alternatives: [
-          Fix.new(
-            summary: "Switch to the public API at #{parent_ns}",
-            detail:
-              "Find (or add) a public function on #{parent_ns} that does what the call needs. Update the " <>
-                "caller to use it. The internal module stays internal and the dependency points at the " <>
-                "supported surface.",
-            applies_when: "There's an obvious public counterpart, or one can be added."
-          ),
-          Fix.new(
-            summary: "Promote the called module to public if other contexts genuinely need it",
-            detail:
-              "If multiple consumers across the codebase need the helper, it isn't really internal. Replace " <>
-                "`@moduledoc false` with a real moduledoc, document the API, and accept the maintenance burden.",
-            applies_when: "The module is needed by enough callers that it should be public."
-          )
-        ],
-        references: ["ARCHITECTURE_RULES.md#2.3"],
-        context: %{source: edge.source, target: edge.target, parent: parent_ns},
-        file: edge.file,
-        line: edge.line
-      )
-    end)
+  defp build_diagnostic(edge) do
+    parent_ns = parent_namespace(edge.target)
+
+    Diagnostic.warning("2.3",
+      title: "Call into private module",
+      message: "#{edge.source} calls #{edge.target}, which is marked `@moduledoc false`",
+      why:
+        "`@moduledoc false` is the project's signal that the module is internal — its functions and " <>
+          "structure are free to change without notice. External callers that reach in lock the internals " <>
+          "in place: any rename, restructure, or removal becomes a breaking change to consumers who weren't " <>
+          "supposed to depend on it. The boundary is documented; the call breaks it.",
+      alternatives: [
+        Fix.new(
+          summary: "Switch to the public API at #{parent_ns}",
+          detail:
+            "Find (or add) a public function on #{parent_ns} that does what the call needs. Update the " <>
+              "caller to use it. The internal module stays internal and the dependency points at the " <>
+              "supported surface.",
+          applies_when: "There's an obvious public counterpart, or one can be added."
+        ),
+        Fix.new(
+          summary: "Promote the called module to public if other contexts genuinely need it",
+          detail:
+            "If multiple consumers across the codebase need the helper, it isn't really internal. Replace " <>
+              "`@moduledoc false` with a real moduledoc, document the API, and accept the maintenance burden.",
+          applies_when: "The module is needed by enough callers that it should be public."
+        )
+      ],
+      references: ["ARCHITECTURE_RULES.md#2.3"],
+      context: %{source: edge.source, target: edge.target, parent: parent_ns},
+      file: edge.file,
+      line: edge.line
+    )
   end
 
   defp same_namespace?(source, target) do
