@@ -175,6 +175,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.Boundary.UnvalidatedParams,
     Archdo.Rules.Boundary.AtomAtBoundary,
     Archdo.Rules.Boundary.RawMapInDomain,
+    Archdo.Rules.Boundary.InternalStructAsEncoder,
     Archdo.Rules.Boundary.LogicInController,
     Archdo.Rules.Boundary.LargeLiveviewAssigns,
     Archdo.Rules.Boundary.LogicInLiveview,
