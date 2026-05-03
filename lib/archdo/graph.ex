@@ -58,36 +58,43 @@ defmodule Archdo.Graph do
   def find_cycles(%__MODULE__{} = graph, root_modules) do
     # Build adjacency map between root modules only
     adjacency =
-      Map.new(root_modules, fn mod ->
-        mod_str = AST.module_name(mod)
-
-        targets =
-          graph
-          |> dependencies(mod_str)
-          |> Enum.map(& &1.target)
-          |> Enum.filter(fn target ->
-            Enum.any?(root_modules, fn rm ->
-              rm_str = AST.module_name(rm)
-
-              rm_str != mod_str and
-                (target == rm_str or String.starts_with?(target, rm_str <> "."))
-            end)
-          end)
-          |> Enum.map(fn target ->
-            AST.module_name(
-              Enum.find(root_modules, fn rm ->
-                rm_str = AST.module_name(rm)
-                target == rm_str or String.starts_with?(target, rm_str <> ".")
-              end)
-            )
-          end)
-          |> Enum.uniq()
-
-        {mod_str, targets}
-      end)
+      Map.new(root_modules, &adjacency_entry(&1, graph, root_modules))
 
     # DFS cycle detection
     detect_cycles_dfs(adjacency, Enum.map(root_modules, &AST.module_name/1))
+  end
+
+  defp adjacency_entry(mod, graph, root_modules) do
+    mod_str = AST.module_name(mod)
+
+    targets =
+      graph
+      |> dependencies(mod_str)
+      |> Enum.map(& &1.target)
+      |> Enum.filter(&target_in_root?(&1, mod_str, root_modules))
+      |> Enum.map(&resolve_target_to_root(&1, root_modules))
+      |> Enum.uniq()
+
+    {mod_str, targets}
+  end
+
+  defp target_in_root?(target, mod_str, root_modules) do
+    Enum.any?(root_modules, fn rm ->
+      rm_str = AST.module_name(rm)
+      rm_str != mod_str and target_matches_root?(target, rm_str)
+    end)
+  end
+
+  defp resolve_target_to_root(target, root_modules) do
+    AST.module_name(
+      Enum.find(root_modules, fn rm ->
+        target_matches_root?(target, AST.module_name(rm))
+      end)
+    )
+  end
+
+  defp target_matches_root?(target, rm_str) do
+    target == rm_str or String.starts_with?(target, rm_str <> ".")
   end
 
   @doc """
@@ -133,24 +140,26 @@ defmodule Archdo.Graph do
         # A WRITE has `{name, _, [value]}` (args is a list); skip those.
         {:@, meta, [{name, _, args}]} = node, {mod, edges, regs}
         when is_atom(name) and (args == nil or is_atom(args)) and mod != nil ->
-          case Map.get(regs, name) do
-            nil ->
-              {node, {mod, edges, regs}}
-
-            targets ->
-              new_edges =
-                Enum.map(targets, fn target ->
-                  %{source: mod, target: target, type: :registry, file: file, line: AST.line(meta)}
-                end)
-
-              {node, {mod, new_edges ++ edges, regs}}
-          end
+          attr_read_edges(Map.get(regs, name), node, mod, edges, regs, file, meta)
 
         node, acc ->
           {node, acc}
       end)
 
     Enum.reverse(edges)
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # whether the registry attribute is known (nil means write-only).
+  defp attr_read_edges(nil, node, mod, edges, regs, _file, _meta), do: {node, {mod, edges, regs}}
+
+  defp attr_read_edges(targets, node, mod, edges, regs, file, meta) do
+    new_edges =
+      Enum.map(targets, fn target ->
+        %{source: mod, target: target, type: :registry, file: file, line: AST.line(meta)}
+      end)
+
+    {node, {mod, new_edges ++ edges, regs}}
   end
 
   # Pre-scan a module body for `@attr [Mod, Mod, ...]` writes; return
@@ -429,28 +438,42 @@ defmodule Archdo.Graph do
 
     state =
       Enum.reduce(Map.get(adjacency, node, []), state, fn neighbor, acc ->
-        cond do
-          MapSet.member?(acc.in_stack, neighbor) ->
-            ordered = Enum.reverse(path)
-            cycle_start = Enum.find_index(ordered, &(&1 == neighbor))
-
-            case cycle_start do
-              nil ->
-                acc
-
-              idx ->
-                cycle = Enum.slice(ordered, idx..-1//1) ++ [neighbor]
-                %{acc | cycles: [cycle | acc.cycles]}
-            end
-
-          not MapSet.member?(acc.visited, neighbor) ->
-            dfs_visit(neighbor, adjacency, acc, [neighbor | path])
-
-          true ->
-            acc
-        end
+        visit_neighbor(neighbor, adjacency, acc, path)
       end)
 
     %{state | in_stack: MapSet.delete(state.in_stack, node)}
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the neighbor's classification (in-stack means cycle, unvisited
+  # means recurse, otherwise no-op). Tagged via a small classifier
+  # to keep each clause shallow.
+  defp visit_neighbor(neighbor, adjacency, acc, path) do
+    handle_neighbor(neighbor_state(neighbor, acc), neighbor, adjacency, acc, path)
+  end
+
+  defp neighbor_state(neighbor, acc) do
+    cond do
+      MapSet.member?(acc.in_stack, neighbor) -> :cycle_back_edge
+      not MapSet.member?(acc.visited, neighbor) -> :unvisited
+      true -> :already_visited
+    end
+  end
+
+  defp handle_neighbor(:cycle_back_edge, neighbor, _adjacency, acc, path) do
+    record_cycle(Enum.find_index(Enum.reverse(path), &(&1 == neighbor)), Enum.reverse(path), neighbor, acc)
+  end
+
+  defp handle_neighbor(:unvisited, neighbor, adjacency, acc, path) do
+    dfs_visit(neighbor, adjacency, acc, [neighbor | path])
+  end
+
+  defp handle_neighbor(:already_visited, _neighbor, _adjacency, acc, _path), do: acc
+
+  defp record_cycle(nil, _ordered, _neighbor, acc), do: acc
+
+  defp record_cycle(idx, ordered, neighbor, acc) do
+    cycle = Enum.slice(ordered, idx..-1//1) ++ [neighbor]
+    %{acc | cycles: [cycle | acc.cycles]}
   end
 end

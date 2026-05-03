@@ -495,15 +495,7 @@ defmodule Archdo do
           "─── Building-block CONTEXTS (#{length(building_block_contexts)} of #{length(contexts)}) ───\n"
         )
 
-        Enum.each(verdicts, fn
-          {ctx, :building_block} ->
-            IO.puts("  ✓ #{ctx}")
-
-          {ctx, {:leaks_at, modules}} ->
-            preview = modules |> Enum.take(3) |> Enum.join(", ")
-            more = if length(modules) > 3, do: " (+#{length(modules) - 3} more)", else: ""
-            IO.puts("  ✗ #{ctx} — leaks: #{preview}#{more}")
-        end)
+        Enum.each(verdicts, &print_context_verdict/1)
 
         IO.puts("")
     end
@@ -519,6 +511,20 @@ defmodule Archdo do
   end
 
   # M-Aux5: rank non-block modules by refactor distance (count of failed
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the verdict shape (:building_block vs {:leaks_at, modules}).
+  defp print_context_verdict({ctx, :building_block}) do
+    IO.puts("  ✓ #{ctx}")
+  end
+
+  defp print_context_verdict({ctx, {:leaks_at, modules}}) do
+    preview = modules |> Enum.take(3) |> Enum.join(", ")
+    IO.puts("  ✗ #{ctx} — leaks: #{preview}#{leak_overflow(length(modules))}")
+  end
+
+  defp leak_overflow(count) when count > 3, do: " (+#{count - 3} more)"
+  defp leak_overflow(_count), do: ""
+
   # components across all public fns) and print the top-20 with their
   # boundary suggestion.
   defp print_near_block_section([]), do: :ok
@@ -590,20 +596,25 @@ defmodule Archdo do
   # §§ elixir-planning: §6 — M25 Blackbox metric exposure. Per-module
   # blackbox possibility score + class distribution. Pure measurement;
   # no rule fires from these numbers (M26 will add CE-54/55/56 quadrant).
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the empty-list shape of scores.
+  defp module_blackbox_entry({_file, _ast} = pair) do
+    {file, ast} = pair
+    blackbox_entry_for(Archdo.Blackbox.score_module(ast), file, ast)
+  end
+
+  defp blackbox_entry_for([], _file, _ast), do: nil
+
+  defp blackbox_entry_for(list, file, ast) do
+    possibility = list |> Enum.map(fn {_, _, s, _} -> s end) |> Enum.sum() |> Kernel./(length(list))
+    module = AST.extract_module_name(ast)
+    {module, file, possibility, Archdo.Blackbox.classify(possibility)}
+  end
+
   defp print_blackbox_summary(file_asts) do
     per_module =
       file_asts
-      |> Enum.map(fn {file, ast} ->
-        scores = Archdo.Blackbox.score_module(ast)
-
-        case scores do
-          [] -> nil
-          list ->
-            possibility = list |> Enum.map(fn {_, _, s, _} -> s end) |> Enum.sum() |> Kernel./(length(list))
-            module = AST.extract_module_name(ast)
-            {module, file, possibility, Archdo.Blackbox.classify(possibility)}
-        end
-      end)
+      |> Enum.map(&module_blackbox_entry/1)
       |> Enum.reject(&is_nil/1)
 
     case per_module do
@@ -650,32 +661,33 @@ defmodule Archdo do
       (Runner.phase1_rules() ++ Runner.graph_rules())
       |> Quadrant.list_rules()
 
-    case rules do
-      [] ->
-        :ok
+    print_quadrants(rules, file_asts)
+  end
 
-      _ ->
-        IO.puts("\nArchdo — Quadrant Rule Cell Distributions\n")
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the empty-rules-list shape.
+  defp print_quadrants([], _file_asts), do: :ok
 
-        Enum.each(rules, fn rule ->
-          totals =
-            Enum.reduce(file_asts, %{}, fn {file, ast}, acc ->
-              rule
-              |> Quadrant.distribution_for(file, ast, [])
-              |> Map.merge(acc, fn _cell, a, b -> a + b end)
-            end)
+  defp print_quadrants(rules, file_asts) do
+    IO.puts("\nArchdo — Quadrant Rule Cell Distributions\n")
+    Enum.each(rules, &print_quadrant_for_rule(&1, file_asts))
+  end
 
-          IO.puts("  #{rule.id()} — #{rule.description()}")
+  defp print_quadrant_for_rule(rule, file_asts) do
+    totals =
+      Enum.reduce(file_asts, %{}, fn {file, ast}, acc ->
+        rule
+        |> Quadrant.distribution_for(file, ast, [])
+        |> Map.merge(acc, fn _cell, a, b -> a + b end)
+      end)
 
-          totals
-          |> Enum.sort_by(fn {cell, _} -> inspect(cell) end)
-          |> Enum.each(fn {cell, count} ->
-            IO.puts("    #{inspect(cell)}: #{count}")
-          end)
+    IO.puts("  #{rule.id()} — #{rule.description()}")
 
-          IO.puts("")
-        end)
-    end
+    totals
+    |> Enum.sort_by(fn {cell, _} -> inspect(cell) end)
+    |> Enum.each(fn {cell, count} -> IO.puts("    #{inspect(cell)}: #{count}") end)
+
+    IO.puts("")
   end
 
   defp format_metrics_table([]), do: "\nArchdo — no modules analyzed.\n"
