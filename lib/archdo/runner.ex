@@ -343,7 +343,7 @@ defmodule Archdo.Runner do
   @spec filter_rules_for_packs([module()], [Archdo.Rule.pack()]) :: [module()]
   def filter_rules_for_packs(rules, enabled_packs) when is_list(enabled_packs) do
     enabled_set = MapSet.new(enabled_packs)
-    Enum.filter(rules, &MapSet.member?(enabled_set, Archdo.Rule.pack_of(&1)))
+    Enum.filter(rules, &MapSet.member?(enabled_set, Archdo.Rule.pack_of!(&1)))
   end
 
   defp packs_from_opts(opts) do

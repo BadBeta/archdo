@@ -37,18 +37,18 @@ defmodule Archdo.RuleTest do
     def pack, do: :ce_composability
   end
 
-  describe "pack_of/1" do
+  describe "pack_of!/1" do
     test "defaults to :core when the rule does not declare pack/0" do
-      assert Rule.pack_of(WithoutPack) == :core
+      assert Rule.pack_of!(WithoutPack) == :core
     end
 
     test "returns the declared pack when pack/0 is exported" do
-      assert Rule.pack_of(WithCorePack) == :core
-      assert Rule.pack_of(WithComposabilityPack) == :ce_composability
+      assert Rule.pack_of!(WithCorePack) == :core
+      assert Rule.pack_of!(WithComposabilityPack) == :ce_composability
     end
 
     test "raises when the module does not implement Archdo.Rule" do
-      assert_raise ArgumentError, fn -> Rule.pack_of(:not_a_module) end
+      assert_raise ArgumentError, fn -> Rule.pack_of!(:not_a_module) end
     end
   end
 

@@ -248,7 +248,7 @@ defmodule Mix.Tasks.Archdo do
         Runner.graph_rules() ++
         Archdo.project_rules()
 
-    by_pack = Enum.group_by(rules, &Rule.pack_of/1)
+    by_pack = Enum.group_by(rules, &Rule.pack_of!/1)
 
     Mix.shell().info("Archdo packs:\n")
 

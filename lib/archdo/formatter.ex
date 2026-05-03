@@ -1,6 +1,12 @@
 defmodule Archdo.Formatter do
   @moduledoc false
 
+  # Diagnostic-output formatting IS the responsibility — IO.puts /
+  # File.write are intentional. Pure functions live alongside the
+  # output writers; splitting them would just add ceremony.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.{AST, Diagnostic, Fix}
 
   defguardp is_non_empty_string(s) when is_binary(s) and s != ""

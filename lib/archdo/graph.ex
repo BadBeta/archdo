@@ -227,7 +227,7 @@ defmodule Archdo.Graph do
           new_acc =
             Enum.reduce(suffixes, acc, fn
               {:__aliases__, _, suffix_parts}, inner_acc when is_list(suffix_parts) ->
-                add_alias(inner_acc, prefix_parts ++ suffix_parts)
+                add_alias(inner_acc, Enum.concat(prefix_parts, suffix_parts))
 
               _, inner_acc ->
                 inner_acc

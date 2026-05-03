@@ -42,13 +42,18 @@ defmodule Archdo.Rules.Boundary.Mockability do
     file_io =
       Enum.map(file_asts, fn {file, ast} ->
         caller = AST.extract_module_name(ast)
-        {file, find_external_io_calls(ast, caller), count_behaviours_used(ast)}
+        {file, ast, find_external_io_calls(ast, caller), count_behaviours_used(ast)}
       end)
 
-    # Direct IO surfaces: files that call external IO directly
+    # Direct IO surfaces: files that call external IO directly. Skip
+    # adapter/test paths (filtered by file convention) and any module
+    # the author has marked `@archdo_volatility :stable` — that marker
+    # asserts the I/O is intentional CLI/infrastructure with no
+    # substitutability seam needed.
     direct_io_files =
-      Enum.filter(file_io, fn {file, calls, _bhv} ->
-        calls != [] and not adapter_or_test?(file)
+      Enum.filter(file_io, fn {file, ast, calls, _bhv} ->
+        calls != [] and not adapter_or_test?(file) and
+          not AST.has_marker?(ast, :archdo_volatility)
       end)
 
     # Behaviour surfaces: behaviour definitions in the project
@@ -57,7 +62,7 @@ defmodule Archdo.Rules.Boundary.Mockability do
 
     # Per-file diagnostics: each file with direct IO and no behaviour wrapper
     file_diagnostics =
-      Enum.map(direct_io_files, fn {file, calls, _} ->
+      Enum.map(direct_io_files, fn {file, _ast, calls, _} ->
         unique_libraries =
           calls
           |> Enum.map(fn {lib, _, _} -> lib end)

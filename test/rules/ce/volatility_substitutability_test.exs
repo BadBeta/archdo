@@ -37,18 +37,22 @@ defmodule Archdo.Rules.CE.VolatilitySubstitutabilityTest do
     end
 
     test "{:high, :stable} fires CE-3 (stable core with abstraction overhead)" do
-      # Two modules: one stable + heavily-abstract, one stable + simple.
-      # Median is low; the abstract one is well above 2× median.
+      # Two modules: one stable + heavily-abstract (uses many behaviours
+      # without defining one), one stable + simple. Median is low; the
+      # abstract one is well above 2× median.
+      #
+      # IMPORTANT: a module that DEFINES a behaviour (`@callback ...` or
+      # `defprotocol ...`) is exempt — high abstraction density there is
+      # by-design, not overhead. Use `@behaviour` (consumes) here, not
+      # `@callback` (defines), to keep CE-3 firing.
       abstract_stable =
         parse(
           """
           defmodule MyApp.Domain.Calculator do
-            @callback add(integer(), integer()) :: integer()
-            @callback sub(integer(), integer()) :: integer()
             @behaviour MyApp.SomeBehaviour
-            defprotocol MyApp.Domain.Calculator.Proto do
-              def calc(x)
-            end
+            @behaviour MyApp.OtherBehaviour
+            @behaviour MyApp.ThirdBehaviour
+            def add(a, b), do: a + b
           end
           """,
           "lib/my_app/domain/calculator.ex"
@@ -66,6 +70,33 @@ defmodule Archdo.Rules.CE.VolatilitySubstitutabilityTest do
 
       diags = analyze([abstract_stable, simple_stable])
       assert Enum.any?(diags, &(&1.rule_id == "CE-3"))
+    end
+
+    test "behaviour-defining module does NOT fire CE-3 (the abstraction IS the API)" do
+      behaviour_module =
+        parse(
+          """
+          defmodule MyApp.Storage do
+            @callback get(String.t()) :: {:ok, term()} | {:error, term()}
+            @callback put(String.t(), term()) :: :ok | {:error, term()}
+            @callback delete(String.t()) :: :ok
+          end
+          """,
+          "lib/my_app/storage.ex"
+        )
+
+      simple_stable =
+        parse(
+          """
+          defmodule MyApp.Plain do
+            def add(a, b), do: a + b
+          end
+          """,
+          "lib/my_app/plain.ex"
+        )
+
+      diags = analyze([behaviour_module, simple_stable])
+      refute Enum.any?(diags, &(&1.rule_id == "CE-3"))
     end
 
     test "{:high, :volatile} does NOT fire (abstraction is earned at the boundary)" do

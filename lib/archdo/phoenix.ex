@@ -144,7 +144,7 @@ defmodule Archdo.Phoenix do
     |> Enum.reduce(%{}, fn {:use, _, [{:__aliases__, _, parts} | rest]}, acc ->
       mod = Module.concat(parts)
       args = Enum.map(rest, &AST.unwrap_literal/1)
-      Map.update(acc, mod, args, &(args ++ &1))
+      Map.update(acc, mod, args, &Enum.concat(args, &1))
     end)
   end
 

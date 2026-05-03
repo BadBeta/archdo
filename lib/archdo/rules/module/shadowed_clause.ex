@@ -134,7 +134,11 @@ defmodule Archdo.Rules.Module.ShadowedClause do
     |> Enum.flat_map(&compare_to_later_patterns(&1, patterns, file))
   end
 
-  defp compare_to_later_patterns({{earlier_meta, earlier_args, earlier_guards}, i}, patterns, file) do
+  defp compare_to_later_patterns(
+         {{earlier_meta, earlier_args, earlier_guards}, i},
+         patterns,
+         file
+       ) do
     earlier_line = AST.line(earlier_meta)
 
     patterns
@@ -142,7 +146,13 @@ defmodule Archdo.Rules.Module.ShadowedClause do
     |> Enum.flat_map(&shadowing_for_pair(&1, earlier_line, earlier_args, earlier_guards, file))
   end
 
-  defp shadowing_for_pair({later_meta, later_args, later_guards}, earlier_line, earlier_args, earlier_guards, file) do
+  defp shadowing_for_pair(
+         {later_meta, later_args, later_guards},
+         earlier_line,
+         earlier_args,
+         earlier_guards,
+         file
+       ) do
     later_line = AST.line(later_meta)
     distance_close? = abs(later_line - earlier_line) <= @max_clause_distance
 
@@ -162,7 +172,16 @@ defmodule Archdo.Rules.Module.ShadowedClause do
   # the proximity boolean, then on guard relationship.
   defp diag_for_close_clauses(false, _file, _el, _ll, _ea, _eg, _la, _lg), do: []
 
-  defp diag_for_close_clauses(true, file, earlier_line, later_line, earlier_args, earlier_guards, later_args, later_guards) do
+  defp diag_for_close_clauses(
+         true,
+         file,
+         earlier_line,
+         later_line,
+         earlier_args,
+         earlier_guards,
+         later_args,
+         later_guards
+       ) do
     classify_guards(earlier_guards, later_guards)
     |> emit_shadow_diag(file, earlier_line, later_line, earlier_args, later_args)
   end
@@ -179,7 +198,12 @@ defmodule Archdo.Rules.Module.ShadowedClause do
   defp emit_shadow_diag(:earlier_has_guard, _file, _el, _ll, _ea, _la), do: []
 
   defp emit_shadow_diag(:pattern_only, file, earlier_line, later_line, earlier_args, later_args) do
-    diag_for_pattern_shadow(pattern_shadows?(earlier_args, later_args), file, earlier_line, later_line)
+    diag_for_pattern_shadow(
+      pattern_shadows?(earlier_args, later_args),
+      file,
+      earlier_line,
+      later_line
+    )
   end
 
   defp diag_for_pattern_shadow({:shadowed, reason}, file, earlier_line, later_line),
@@ -228,7 +252,12 @@ defmodule Archdo.Rules.Module.ShadowedClause do
   # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
   # the result of single_pattern_shadows?
   defp case_pair_diag({later_meta, later_pat}, earlier_meta, earlier_pat, file) do
-    diag_for_case_shadow(single_pattern_shadows?(earlier_pat, later_pat), file, earlier_meta, later_meta)
+    diag_for_case_shadow(
+      single_pattern_shadows?(earlier_pat, later_pat),
+      file,
+      earlier_meta,
+      later_meta
+    )
   end
 
   defp diag_for_case_shadow({:shadowed, reason}, file, earlier_meta, later_meta),
@@ -363,7 +392,13 @@ defmodule Archdo.Rules.Module.ShadowedClause do
     later_keys = MapSet.new(Enum.map(later_fields, &field_key/1))
 
     # Every key in earlier must be in later (earlier is a subset of required keys)
-    map_shadow_for_subset(MapSet.subset?(earlier_keys, later_keys), earlier_fields, later_fields, earlier_keys, later_keys)
+    map_shadow_for_subset(
+      MapSet.subset?(earlier_keys, later_keys),
+      earlier_fields,
+      later_fields,
+      earlier_keys,
+      later_keys
+    )
   end
 
   # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
@@ -377,9 +412,7 @@ defmodule Archdo.Rules.Module.ShadowedClause do
 
     all_shadow? = Enum.all?(earlier_keys, &field_value_shadows?(&1, earlier_map, later_map))
 
-    map_shadow_verdict(
-      all_shadow? and MapSet.size(earlier_keys) <= MapSet.size(later_keys)
-    )
+    map_shadow_verdict(all_shadow? and MapSet.size(earlier_keys) <= MapSet.size(later_keys))
   end
 
   defp field_value_shadows?(key, earlier_map, later_map) do
@@ -493,12 +526,12 @@ defmodule Archdo.Rules.Module.ShadowedClause do
 
   # `when guard1 and guard2` — both must hold
   defp extract_type_guards({:and, _, [left, right]}) do
-    extract_type_guards(left) ++ extract_type_guards(right)
+    Enum.flat_map([left, right], &extract_type_guards/1)
   end
 
   # `when guard1 or guard2` — either holds (broadens the match)
   defp extract_type_guards({:or, _, [left, right]}) do
-    extract_type_guards(left) ++ extract_type_guards(right)
+    Enum.flat_map([left, right], &extract_type_guards/1)
   end
 
   defp extract_type_guards(_), do: []

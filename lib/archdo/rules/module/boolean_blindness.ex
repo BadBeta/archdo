@@ -87,11 +87,11 @@ defmodule Archdo.Rules.Module.BooleanBlindness do
   defp collect_returns({:cond, _, [[do: clauses]]}), do: collect_from_clauses(clauses)
 
   defp collect_returns({:if, _, [_cond, [do: do_body, else: else_body]]}) do
-    collect_returns(do_body) ++ collect_returns(else_body)
+    Enum.flat_map([do_body, else_body], &collect_returns/1)
   end
 
   defp collect_returns({:if, _, [_cond, [do: do_body]]}) do
-    collect_returns(do_body) ++ [:other_return]
+    [:other_return | collect_returns(do_body)]
   end
 
   defp collect_returns(true), do: [:true_return]

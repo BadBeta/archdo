@@ -54,9 +54,12 @@ defmodule Archdo.Rule do
   otherwise the value the module returns.
 
   Raises `ArgumentError` if the module is not loadable as an `Archdo.Rule`.
+  Bang-suffixed because the raise IS the contract for invalid input — the
+  expected use case (passing a module atom that has been verified to
+  implement the Rule behaviour) cannot fail.
   """
-  @spec pack_of(module()) :: pack()
-  def pack_of(module) when is_atom(module) do
+  @spec pack_of!(module()) :: pack()
+  def pack_of!(module) when is_atom(module) do
     Code.ensure_loaded!(module)
 
     case function_exported?(module, :pack, 0) do
@@ -65,7 +68,7 @@ defmodule Archdo.Rule do
     end
   end
 
-  def pack_of(other) do
+  def pack_of!(other) do
     raise ArgumentError, "expected a rule module, got: #{inspect(other)}"
   end
 
