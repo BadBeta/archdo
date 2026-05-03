@@ -110,6 +110,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.CollectionPerf,
     Archdo.Rules.Module.EagerEvaluation,
     Archdo.Rules.Module.SensitiveDataExposure,
+    Archdo.Rules.Module.UnsafeDeserialization,
     Archdo.Rules.Module.StringLengthCheck,
     Archdo.Rules.Module.KeywordLookupInLoop,
     Archdo.Rules.Boundary.DevDepInProd,
