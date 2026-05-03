@@ -45,23 +45,28 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
 
     context_names = MapSet.new(contexts, & &1.context)
 
-    Map.new(contexts, fn ctx ->
-      deps =
-        ctx.members
-        |> Enum.flat_map(fn member ->
-          calls_by_module
-          |> Map.get(member, [])
-          |> Enum.map(fn call -> elem(call.callee, 0) end)
-        end)
-        |> Enum.map(fn callee_mod -> Map.get(module_to_context, callee_mod) end)
-        |> Enum.filter(fn dep_ctx ->
-          dep_ctx != nil and dep_ctx != ctx.context and
-            MapSet.member?(context_names, dep_ctx)
-        end)
-        |> Enum.uniq()
+    Map.new(contexts, &context_deps_entry(&1, calls_by_module, module_to_context, context_names))
+  end
 
-      {ctx.context, deps}
-    end)
+  defp context_deps_entry(ctx, calls_by_module, module_to_context, context_names) do
+    deps =
+      ctx.members
+      |> Enum.flat_map(&callees_of_member(&1, calls_by_module))
+      |> Enum.map(&Map.get(module_to_context, &1))
+      |> Enum.filter(&valid_dep_context?(&1, ctx.context, context_names))
+      |> Enum.uniq()
+
+    {ctx.context, deps}
+  end
+
+  defp callees_of_member(member, calls_by_module) do
+    calls_by_module
+    |> Map.get(member, [])
+    |> Enum.map(fn call -> elem(call.callee, 0) end)
+  end
+
+  defp valid_dep_context?(dep_ctx, own_ctx, context_names) do
+    dep_ctx != nil and dep_ctx != own_ctx and MapSet.member?(context_names, dep_ctx)
   end
 
   # DFS cycle detection. Returns a list of cycles, each being a list of context names.
@@ -79,30 +84,25 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
 
   defp dfs_find_cycles(adjacency, current, path, visited) do
     neighbors = Map.get(adjacency, current, [])
+    Enum.flat_map(neighbors, &cycles_for_neighbor(&1, adjacency, path, visited))
+  end
 
-    Enum.flat_map(neighbors, fn neighbor ->
-      start_node = List.last(path)
+  defp cycles_for_neighbor(neighbor, adjacency, path, visited) do
+    classify_neighbor_for_cycle(neighbor, List.last(path), MapSet.member?(visited, neighbor))
+    |> handle_neighbor_kind(neighbor, adjacency, path, visited)
+  end
 
-      case neighbor == start_node do
-        true ->
-          # Found a cycle back to the start
-          [Enum.reverse(path)]
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the (cycle-closing? / already-visited?) classifier tag.
+  defp classify_neighbor_for_cycle(neighbor, start_node, _visited?) when neighbor == start_node, do: :cycle_complete
+  defp classify_neighbor_for_cycle(_neighbor, _start_node, true), do: :already_visited
+  defp classify_neighbor_for_cycle(_neighbor, _start_node, false), do: :recurse
 
-        false ->
-          case MapSet.member?(visited, neighbor) do
-            true ->
-              []
+  defp handle_neighbor_kind(:cycle_complete, _neighbor, _adjacency, path, _visited), do: [Enum.reverse(path)]
+  defp handle_neighbor_kind(:already_visited, _neighbor, _adjacency, _path, _visited), do: []
 
-            false ->
-              dfs_find_cycles(
-                adjacency,
-                neighbor,
-                [neighbor | path],
-                MapSet.put(visited, neighbor)
-              )
-          end
-      end
-    end)
+  defp handle_neighbor_kind(:recurse, neighbor, adjacency, path, visited) do
+    dfs_find_cycles(adjacency, neighbor, [neighbor | path], MapSet.put(visited, neighbor))
   end
 
   # Normalize a cycle by rotating so the lexicographically smallest element is first.

@@ -32,46 +32,50 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
     # We detect this at the module-to-module level since we can't distinguish
     # import from alias in compiled beam data.
 
-    Enum.flat_map(modules, fn {caller_mod, _info} ->
-      caller_calls = Map.get(calls_by_module, caller_mod, [])
-
-      # Group calls by callee module
-      calls_by_target =
-        Enum.group_by(caller_calls, fn call -> elem(call.callee, 0) end)
-
-      calls_by_target
-      |> Enum.filter(fn {target_mod, _calls} ->
-        # Only check project modules (those in our modules map)
-        Map.has_key?(modules, target_mod) and target_mod != caller_mod
-      end)
-      |> Enum.flat_map(fn {target_mod, calls} ->
-        target_exports = Map.get(modules, target_mod, %{exports: []}).exports
-        total_exports = length(target_exports)
-
-        case total_exports >= @min_exports do
-          true ->
-            used_fns =
-              calls
-              |> Enum.map(fn call -> {elem(call.callee, 1), elem(call.callee, 2)} end)
-              |> Enum.uniq()
-
-            used_count = length(used_fns)
-            usage_ratio = used_count / total_exports
-
-            case usage_ratio < @usage_threshold do
-              true ->
-                [build_diagnostic(caller_mod, target_mod, used_count, total_exports, used_fns)]
-
-              false ->
-                []
-            end
-
-          false ->
-            []
-        end
-      end)
-    end)
+    Enum.flat_map(modules, &caller_diags(&1, modules, calls_by_module))
   end
+
+  defp caller_diags({caller_mod, _info}, modules, calls_by_module) do
+    calls_by_module
+    |> Map.get(caller_mod, [])
+    |> Enum.group_by(fn call -> elem(call.callee, 0) end)
+    |> Enum.filter(fn {target_mod, _} ->
+      Map.has_key?(modules, target_mod) and target_mod != caller_mod
+    end)
+    |> Enum.flat_map(&target_import_diag(&1, caller_mod, modules))
+  end
+
+  defp target_import_diag({target_mod, calls}, caller_mod, modules) do
+    target_exports = Map.get(modules, target_mod, %{exports: []}).exports
+    total_exports = length(target_exports)
+    diag_for_target_exports(total_exports >= @min_exports, caller_mod, target_mod, calls, total_exports)
+  end
+
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp diag_for_target_exports(false, _caller, _target, _calls, _total), do: []
+
+  defp diag_for_target_exports(true, caller_mod, target_mod, calls, total_exports) do
+    used_fns =
+      calls
+      |> Enum.map(fn call -> {elem(call.callee, 1), elem(call.callee, 2)} end)
+      |> Enum.uniq()
+
+    used_count = length(used_fns)
+
+    diag_for_usage_ratio(
+      used_count / total_exports < @usage_threshold,
+      caller_mod,
+      target_mod,
+      used_count,
+      total_exports,
+      used_fns
+    )
+  end
+
+  defp diag_for_usage_ratio(false, _caller, _target, _used, _total, _fns), do: []
+
+  defp diag_for_usage_ratio(true, caller_mod, target_mod, used_count, total_exports, used_fns),
+    do: [build_diagnostic(caller_mod, target_mod, used_count, total_exports, used_fns)]
 
   defp build_diagnostic(caller_mod, target_mod, used_count, total_exports, used_fns) do
     caller_name = AST.module_name(caller_mod)

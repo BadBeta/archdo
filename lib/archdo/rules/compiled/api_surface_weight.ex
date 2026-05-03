@@ -24,31 +24,26 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
   def analyze_compiled(graph) do
     modules = Compiled.modules(graph)
 
-    Enum.flat_map(modules, fn {module, info} ->
-      total_exports = length(info.exports)
-
-      case total_exports >= @min_exports do
-        true ->
-          usage = Compiled.external_usage(graph, module)
-
-          externally_used =
-            Enum.count(usage, fn {_fa, count} -> count > 0 end)
-
-          ratio = externally_used / total_exports
-
-          case ratio < @usage_threshold do
-            true ->
-              [build_diagnostic(module, externally_used, total_exports, usage)]
-
-            false ->
-              []
-          end
-
-        false ->
-          []
-      end
-    end)
+    Enum.flat_map(modules, &api_weight_diag(&1, graph))
   end
+
+  defp api_weight_diag({module, info}, graph) do
+    total_exports = length(info.exports)
+    diag_for_export_count(total_exports >= @min_exports, module, total_exports, graph)
+  end
+
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp diag_for_export_count(false, _module, _total, _graph), do: []
+
+  defp diag_for_export_count(true, module, total_exports, graph) do
+    usage = Compiled.external_usage(graph, module)
+    externally_used = Enum.count(usage, fn {_fa, count} -> count > 0 end)
+    diag_for_ratio(externally_used / total_exports < @usage_threshold, module, externally_used, total_exports, usage)
+  end
+
+  defp diag_for_ratio(false, _module, _used, _total, _usage), do: []
+  defp diag_for_ratio(true, module, used, total, usage),
+    do: [build_diagnostic(module, used, total, usage)]
 
   defp build_diagnostic(module, externally_used, total_exports, usage) do
     mod_name = AST.module_name(module)
