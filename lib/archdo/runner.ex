@@ -1,7 +1,7 @@
 defmodule Archdo.Runner do
   @moduledoc """
   Project-wide rule runner. Owns the registered rule lists
-  (`@phase1_rules`, `@graph_rules`), per-file analysis, graph-mode
+  (delegated to `Archdo.Rules`), per-file analysis, graph-mode
   analysis, and the public `analyze/2` and `analyze_with_graph/2`
   entry points.
 
@@ -17,236 +17,20 @@ defmodule Archdo.Runner do
   # The pre-pass only runs when at least one of these is enabled.
   @plug_coverage_consumers ["CE-27", "CE-28"]
 
-  @phase1_rules [
-    # OTP rules
-    Archdo.Rules.OTP.UnsupervisedProcess,
-    Archdo.Rules.OTP.BlockingInit,
-    Archdo.Rules.OTP.BlockingCallback,
-    Archdo.Rules.OTP.ReceiveInCallback,
-    Archdo.Rules.OTP.SendSelfInInit,
-    Archdo.Rules.OTP.SilentCatchAll,
-    Archdo.Rules.OTP.TimeoutAsPolling,
-    Archdo.Rules.OTP.ScatteredGenserverCall,
-    Archdo.Rules.OTP.SpawnWithoutLink,
-    Archdo.Rules.OTP.TaskAsyncWithoutAwait,
-    Archdo.Rules.OTP.UnsupervisedTask,
-    Archdo.Rules.OTP.AsyncDropsLoggerMetadata,
-    Archdo.Rules.OTP.DynamicAtomName,
-    Archdo.Rules.OTP.GlobalRegistration,
-    Archdo.Rules.OTP.ProcessSleep,
-    Archdo.Rules.OTP.MaxRestarts,
-    Archdo.Rules.OTP.MissingTerminate,
-    Archdo.Rules.OTP.CastForCall,
-    Archdo.Rules.OTP.MonitorWithoutHandler,
-    Archdo.Rules.OTP.FlatSupervision,
-    Archdo.Rules.OTP.EtsNoHeir,
-    Archdo.Rules.OTP.SyncCallChains,
-    Archdo.Rules.OTP.LargeMessages,
-    Archdo.Rules.OTP.UnnecessaryProcess,
-    Archdo.Rules.OTP.SingletonBottleneck,
-    Archdo.Rules.OTP.UnboundedState,
-    Archdo.Rules.OTP.CustomRegistry,
-    Archdo.Rules.OTP.AgentMisuse,
-    Archdo.Rules.OTP.EtsAsBus,
-    Archdo.Rules.OTP.RestartTypeMismatch,
-    Archdo.Rules.OTP.ProcessDictionary,
-    Archdo.Rules.OTP.UnnamedSingleton,
-    Archdo.Rules.OTP.UnsafeTracing,
-    Archdo.Rules.OTP.GenstageNoDemand,
-    Archdo.Rules.OTP.StalePidReference,
-    Archdo.Rules.OTP.MissingHandleInfo,
-    Archdo.Rules.OTP.CallSelfDeadlock,
-    Archdo.Rules.OTP.BrutalKill,
-    Archdo.Rules.OTP.EtsOwnershipLeak,
-    Archdo.Rules.OTP.HardcodedCallTimeout,
-    Archdo.Rules.OTP.CallbackSprawl,
-    Archdo.Rules.OTP.AtomInHotPath,
-    Archdo.Rules.OTP.EtsWithoutCleanup,
-    # Module quality rules
-    Archdo.Rules.Module.MissingModuledoc,
-    Archdo.Rules.Module.MissingSpec,
-    Archdo.Rules.Module.FunctionComplexity,
-    Archdo.Rules.Module.StructFieldCount,
-    Archdo.Rules.Module.BehaviourSize,
-    Archdo.Rules.Module.ModuleCohesion,
-    Archdo.Rules.Module.ExternalDepsNoBehaviour,
-    Archdo.Rules.Module.ScatteredConfig,
-    Archdo.Rules.Module.LibConfigViaArgs,
-    Archdo.Rules.Module.TypeDispatch,
-    Archdo.Rules.Module.CrossCuttingInDomain,
-    Archdo.Rules.Module.ModuleLength,
-    Archdo.Rules.Module.TimeInjection,
-    Archdo.Rules.Module.PrimitiveObsession,
-    Archdo.Rules.Module.BooleanFlagArgs,
-    Archdo.Rules.Module.PretentiousName,
-    Archdo.Rules.Module.MixedConcerns,
-    Archdo.Rules.Module.NaturalSeams,
-    Archdo.Rules.Module.ResponsibilityClustering,
-    Archdo.Rules.Module.ReinventedPubSub,
-    Archdo.Rules.Module.ReinventedEnumerable,
-    Archdo.Rules.Module.RescueSwallowsError,
-    Archdo.Rules.Module.RaiseInNonBang,
-    Archdo.Rules.Module.InconsistentErrorShape,
-    Archdo.Rules.Module.RescueForExpected,
-    Archdo.Rules.Module.BangInOkErrorFunction,
-    Archdo.Rules.Module.MissingRescueAtBoundary,
-    Archdo.Rules.Module.NestingDepth,
-    Archdo.Rules.Module.ExceptionLaundering,
-    Archdo.Rules.Module.IfElseDispatch,
-    Archdo.Rules.Module.NonTailRecursion,
-    Archdo.Rules.Module.UnnecessaryRecursion,
-    Archdo.Rules.Module.BrokenTailRecursion,
-    Archdo.Rules.Module.UnboundedRecursion,
-    Archdo.Rules.Module.StubFunction,
-    Archdo.Rules.Module.UnreachableClause,
-    Archdo.Rules.Module.ShadowedClause,
-    Archdo.Rules.Module.ConstantExpression,
-    Archdo.Rules.Module.DefensiveNilReturn,
-    Archdo.Rules.Module.SequentialWhereParallel,
-    Archdo.Rules.Module.BuriedRescue,
-    Archdo.Rules.Module.CodeSlop,
-    Archdo.Rules.Module.IdentityTransformation,
-    Archdo.Rules.Module.RedundantGuardRecheck,
-    Archdo.Rules.Module.VerboseOkUnwrap,
-    Archdo.Rules.Module.DeadPrivateFunction,
-    Archdo.Rules.Module.SingleClauseWith,
-    Archdo.Rules.Module.LongParameterList,
-    Archdo.Rules.Module.NestedControlFlow,
-    Archdo.Rules.Module.BooleanBlindness,
-    Archdo.Rules.Module.StringConcatInLoop,
-    Archdo.Rules.Module.EnumCountEmptyCheck,
-    Archdo.Rules.Module.MapKeysLength,
-    Archdo.Rules.Module.RegexInLoop,
-    Archdo.Rules.Module.InefficientListOperation,
-    Archdo.Rules.Module.CollectionPerf,
-    Archdo.Rules.Module.EagerEvaluation,
-    Archdo.Rules.Module.SensitiveDataExposure,
-    Archdo.Rules.Module.UnsafeDeserialization,
-    Archdo.Rules.Module.DynamicApplyFromInput,
-    Archdo.Rules.Module.StacktraceInResponse,
-    Archdo.Rules.Module.IoInspectInLib,
-    Archdo.Rules.Module.SecretStructInspect,
-    Archdo.Rules.Module.StringLengthCheck,
-    Archdo.Rules.Module.KeywordLookupInLoop,
-    Archdo.Rules.Boundary.DevDepInProd,
-    Archdo.Rules.Boundary.UmbrellaDepConsistency,
-    Archdo.Rules.Boundary.UnusedAlias,
-    Archdo.Rules.Boundary.UntypedBoundary,
-    # NIF rules
-    Archdo.Rules.NIF.NifPanic,
-    Archdo.Rules.NIF.NifBehindBehaviour,
-    Archdo.Rules.NIF.NifSchedulerSafety,
-    Archdo.Rules.NIF.PortVsNif,
-    # Event sourcing rules
-    Archdo.Rules.EventSourcing.CommandEventNaming,
-    Archdo.Rules.EventSourcing.EventPayloadUnversioned,
-    Archdo.Rules.EventSourcing.PureAggregateApply,
-    Archdo.Rules.EventSourcing.ImmutableEvents,
-    Archdo.Rules.EventSourcing.EventsNeedJasonEncoder,
-    Archdo.Rules.EventSourcing.ProjectorReadsExternal,
-    Archdo.Rules.EventSourcing.ProcessManagerReadsProjection,
-    Archdo.Rules.EventSourcing.AggregateMissingBehaviour,
-    # State machine rules
-    Archdo.Rules.StateMachine.ImplicitBooleanState,
-    Archdo.Rules.StateMachine.StateReachability,
-    Archdo.Rules.StateMachine.TerminalStateIntegrity,
-    Archdo.Rules.StateMachine.UndeclaredNextState,
-    Archdo.Rules.StateMachine.StateAssignOutsideSet,
-    Archdo.Rules.StateMachine.IncompleteStateMatch,
-    # Testing rules
-    Archdo.Rules.Testing.MocksNeedBehaviours,
-    Archdo.Rules.Testing.RepoInTests,
-    Archdo.Rules.Testing.AsyncEligibility,
-    Archdo.Rules.Testing.SleepInTests,
-    Archdo.Rules.Testing.TestNaming,
-    Archdo.Rules.Testing.NoAssertion,
-    Archdo.Rules.Testing.TrivialAssertion,
-    Archdo.Rules.Testing.LongSetup,
-    Archdo.Rules.Testing.LongTest,
-    Archdo.Rules.Testing.MocksNotVerified,
-    Archdo.Rules.Testing.MockingOwnModules,
-    Archdo.Rules.Testing.RuntimeConfigForDi,
-    Archdo.Rules.Testing.GenericTestNames,
-    Archdo.Rules.Testing.WeakAssertion,
-    Archdo.Rules.Testing.MissingTestCleanup,
-    Archdo.Rules.Testing.HardcodedTestData,
-    Archdo.Rules.Testing.MissingErrorPath,
-    Archdo.Rules.Testing.OverMocking,
-    Archdo.Rules.Testing.EmptyDescribe,
-    Archdo.Rules.Testing.UntestedModule,
-    Archdo.Rules.Testing.ProcessLeak,
-    Archdo.Rules.Testing.AssertOnImplementation,
-    Archdo.Rules.Testing.FlakyTestIndicators,
-    # Composition rules
-    Archdo.Rules.Composition.ShallowUse,
-    Archdo.Rules.Composition.NamespaceDepth,
-    # Per-file boundary rules
-    Archdo.Rules.Boundary.ImportBreadth,
-    Archdo.Rules.Boundary.UnusedDependency,
-    Archdo.Rules.Boundary.UnvalidatedParams,
-    Archdo.Rules.Boundary.AtomAtBoundary,
-    Archdo.Rules.Boundary.RawMapInDomain,
-    Archdo.Rules.Boundary.InternalStructAsEncoder,
-    Archdo.Rules.Boundary.LogicInController,
-    Archdo.Rules.Boundary.LargeLiveviewAssigns,
-    Archdo.Rules.Boundary.LogicInLiveview,
-    Archdo.Rules.Boundary.PreloadInLoop,
-    Archdo.Rules.Boundary.PubsubWithoutHandler,
-    Archdo.Rules.Boundary.ReverseDependency,
-    Archdo.Rules.Boundary.QueryInInterface,
-    Archdo.Rules.Boundary.CrossContextSchema,
-    Archdo.Rules.Boundary.DirectProcessCall,
-    Archdo.Rules.Boundary.CrossContextConfig,
-    # Resilience rules
-    Archdo.Rules.Module.UnprotectedExternalCall,
-    Archdo.Rules.Module.UnboundedExternalCall,
-    # Change Economy rules (file-level)
-    Archdo.Rules.CE.CatchAllRescue,
-    Archdo.Rules.CE.OkLosesInfo,
-    Archdo.Rules.CE.AcquireRelease,
-    Archdo.Rules.CE.HardcodedVolatileDeps,
-    Archdo.Rules.CE.MixedModuleSplit,
-    Archdo.Rules.CE.VolatileCallNoTimeout,
-    Archdo.Rules.CE.VolatileNoRetry,
-    Archdo.Rules.CE.HighCognitiveComplexity,
-    Archdo.Rules.CE.ComplexityShape,
-    Archdo.Rules.CE.BlackboxQuadrant,
-    Archdo.Rules.CE.CrossCuttingDensity,
-    Archdo.Rules.CE.ErrorPathWithoutLog,
-    Archdo.Rules.CE.OpaqueProcessState,
-    Archdo.Rules.CE.BoundaryTelemetry,
-    Archdo.Rules.CE.EffectLeak,
-    Archdo.Rules.CE.UnguardedBuildingBlock
-  ]
+  # The rule registries live on `Archdo.Rules` — `Rules.phase1_rules/0`
+  # and `Rules.graph_rules/0`. Defdelegated here for the public API
+  # callers (Mix tasks, MCP tools) that historically read these lists
+  # off `Runner`.
 
-  @graph_rules [
-    Archdo.Rules.Boundary.DependencyDirection,
-    Archdo.Rules.Boundary.FrameworkInDomain,
-    Archdo.Rules.Boundary.ContextEncapsulation,
-    Archdo.Rules.Boundary.CircularDependencies,
-    Archdo.Rules.Boundary.RepoInInterface,
-    Archdo.Rules.EventSourcing.SharedProjections
-  ]
-
-  @doc """
-  Returns the list of per-file rule modules.
-  Useful for tooling that wants to enumerate rules without invoking the runner.
-  """
-  @spec phase1_rules() :: [module()]
-  def phase1_rules, do: @phase1_rules
-
-  @doc """
-  Returns the list of cross-file (graph) rule modules.
-  """
-  @spec graph_rules() :: [module()]
-  def graph_rules, do: @graph_rules
+  defdelegate phase1_rules(), to: Rules
+  defdelegate graph_rules(), to: Rules
 
   @doc """
   Analyze files with per-file rules (Phase 1).
   """
   @spec analyze([String.t()], keyword()) :: [Archdo.Diagnostic.t()]
   def analyze(files, opts \\ []) do
-    base_rules = Keyword.get(opts, :rules, @phase1_rules)
+    base_rules = Keyword.get(opts, :rules, Rules.phase1_rules())
     enabled_rules = filter_rules(base_rules, opts)
 
     # §§ elixir-planning: §9.1 — runner pre-pass for project-level
@@ -397,7 +181,7 @@ defmodule Archdo.Runner do
   end
 
   defp run_graph_rules(files, config, opts) do
-    enabled_rules = filter_rules(@graph_rules, opts)
+    enabled_rules = filter_rules(Rules.graph_rules(), opts)
 
     if enabled_rules == [] do
       []

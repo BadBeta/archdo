@@ -58,28 +58,9 @@ defmodule Archdo do
     Metrics,
     Phoenix,
     Quadrant,
+    Rules,
     Runner,
     Severity
-  }
-
-  alias Archdo.Rules.Testing.MissingBoundaryTests
-
-  alias Archdo.Rules.Boundary.{
-    AnemicContext,
-    GodContext,
-    Mockability,
-    ParallelHierarchies,
-    SchemaOwnership,
-    SeamIntegrity
-  }
-
-  alias Archdo.Rules.Module.{
-    AdaptersWithoutBehaviour,
-    DuplicatedCode,
-    FatInterface,
-    MissingTelemetry,
-    SimilarCode,
-    SpeculativeGenerality
   }
 
   @doc """
@@ -141,30 +122,7 @@ defmodule Archdo do
     Enum.filter(diagnostics, fn d -> Archdo.CleanupPass.pass_for(d.rule_id) == pass end)
   end
 
-  @compiled_rules [
-    Archdo.Rules.Compiled.DeadCode,
-    Archdo.Rules.Compiled.TransitiveDeadCode,
-    Archdo.Rules.Compiled.UnusedImports,
-    Archdo.Rules.Compiled.CompileDependencyHotspot,
-    Archdo.Rules.Compiled.WeakDependency,
-    Archdo.Rules.Compiled.TestOnlyPublic,
-    Archdo.Rules.Compiled.ApiSurfaceWeight,
-    Archdo.Rules.Compiled.CircularFunctionCalls,
-    Archdo.Rules.Compiled.ProtocolCompleteness,
-    Archdo.Rules.Compiled.ChangeRisk,
-    Archdo.Rules.Compiled.NonExhaustiveApi,
-    Archdo.Rules.Compiled.InconsistentApiReturn,
-    Archdo.Rules.Compiled.CrossBoundaryCall,
-    Archdo.Rules.Compiled.InternalModuleLeak,
-    Archdo.Rules.Compiled.PhantomDependency,
-    Archdo.Rules.Compiled.RepoBypass,
-    Archdo.Rules.Compiled.DegenerateFunction,
-    Archdo.Rules.Compiled.LookupTableCandidate,
-    Archdo.Rules.Compiled.ContextQuality,
-    Archdo.Rules.Compiled.CircularContextDeps,
-    Archdo.Rules.Compiled.OrphanModule,
-    Archdo.Rules.Compiled.UnanchoredModule
-  ]
+  # Compiled-mode rule list lives on `Archdo.Rules` — see `Rules.compiled_rules/0`.
 
   # Build the compiled graph once when --compiled is set, and put both
   # the graph itself (opts[:compiled_graph]) and a precomputed MapSet of
@@ -248,7 +206,7 @@ defmodule Archdo do
   end
 
   defp run_compiled_rules_with_graph(graph, opts) do
-    Enum.flat_map(@compiled_rules, &safe_analyze_compiled(&1, graph, opts))
+    Enum.flat_map(Rules.compiled_rules(), &safe_analyze_compiled(&1, graph, opts))
   end
 
   # Run a single compiled rule, isolating crashes so one broken rule doesn't block others.
@@ -286,51 +244,11 @@ defmodule Archdo do
     end
   end
 
-  # Project-level rules that take file_asts (most common pattern).
-  # New project rules only need to implement analyze_project/1.
-  @project_file_ast_rules [
-    Mockability,
-    DuplicatedCode,
-    SimilarCode,
-    SpeculativeGenerality,
-    ParallelHierarchies,
-    SchemaOwnership,
-    AdaptersWithoutBehaviour,
-    SeamIntegrity,
-    MissingTelemetry,
-    FatInterface,
-    MissingBoundaryTests,
-    Archdo.Rules.Boundary.SharedDbTable,
-    Archdo.Rules.Boundary.SharedEtsTable,
-    Archdo.Rules.Boundary.PrivateModuleCalls,
-    Archdo.Rules.Boundary.WidelyUsedInternalModule,
-    Archdo.Rules.CE.WrapperOverFramework,
-    Archdo.Rules.CE.UnanchoredModule,
-    Archdo.Rules.CE.UnanchoredIsland,
-    Archdo.Rules.CE.MagicLiterals,
-    Archdo.Rules.CE.VolatilitySubstitutability,
-    Archdo.Rules.CE.ScatteredTaxonomy,
-    Archdo.Rules.CE.ContractDensity,
-    Archdo.Rules.CE.ContractDensitySpecs,
-    Archdo.Rules.CE.ReturnShapeDrift,
-    Archdo.Rules.CE.ErrorCategoryDrift,
-    Archdo.Rules.CE.MissingTraceability,
-    Archdo.Rules.CE.MissingRetentionPolicy,
-    Archdo.Rules.CE.UntestedBuildingBlock,
-    Archdo.Rules.CE.PiiFieldHandling,
-    Archdo.Rules.CE.MissingDeletionPath,
-    Archdo.Rules.CE.DeadRequirement
-  ]
+  # Project-level rule lists live on `Archdo.Rules` — see
+  # `Rules.project_file_ast_rules/0`, `Rules.project_file_path_rules/0`,
+  # and `Rules.project_rules/0` (the combined list used by `--list-packs`).
 
-  # Project-level rules that take source file paths (directory-based analysis).
-  @project_file_path_rules [
-    GodContext,
-    AnemicContext
-  ]
-
-  @doc "All project-level rules combined — used by --list-packs."
-  @spec project_rules() :: [module()]
-  def project_rules, do: @project_file_ast_rules ++ @project_file_path_rules
+  defdelegate project_rules(), to: Rules
 
   defp run_project_arch_rules(paths, opts) do
     source_files = collect_files(paths)
@@ -339,11 +257,11 @@ defmodule Archdo do
       for file <- source_files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
 
     file_ast_diagnostics =
-      Enum.flat_map(@project_file_ast_rules, &invoke_project_rule(&1, file_asts, opts))
+      Enum.flat_map(Rules.project_file_ast_rules(), &invoke_project_rule(&1, file_asts, opts))
 
     file_path_diagnostics =
       Enum.flat_map(
-        @project_file_path_rules,
+        Rules.project_file_path_rules(),
         &invoke_project_path_rule(&1, source_files, opts)
       )
 

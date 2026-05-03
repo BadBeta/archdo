@@ -197,4 +197,10 @@ defmodule Archdo.CleanupPass do
   @doc "Human-readable label for a pass number."
   @spec pass_label(pass()) :: String.t()
   def pass_label(pass) when pass in 1..14, do: Map.fetch!(@pass_labels, pass)
+
+  # --- M-CG15 Coverage matrix delegates ---
+  # `Archdo.CleanupPass.Coverage` is internal to this context. External
+  # callers (Mix task, MCP tools) reach the matrix through these.
+  defdelegate coverage(rules, diagnostics), to: __MODULE__.Coverage, as: :compute
+  defdelegate format_coverage(matrix), to: __MODULE__.Coverage, as: :format
 end

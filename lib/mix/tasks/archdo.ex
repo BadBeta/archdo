@@ -188,8 +188,8 @@ defmodule Mix.Tasks.Archdo do
     run_opts = build_run_opts(opts)
     diagnostics = Archdo.run(paths, run_opts)
     rules = Runner.phase1_rules() ++ Runner.graph_rules() ++ Archdo.project_rules()
-    matrix = Archdo.CleanupPass.Coverage.compute(rules, diagnostics)
-    Mix.shell().info(Archdo.CleanupPass.Coverage.format(matrix))
+    matrix = Archdo.CleanupPass.coverage(rules, diagnostics)
+    Mix.shell().info(Archdo.CleanupPass.format_coverage(matrix))
   end
 
   defp run_normal(opts, paths) do
