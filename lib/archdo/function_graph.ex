@@ -177,6 +177,17 @@ defmodule Archdo.FunctionGraph do
     %{new_state | function: state.function, arity: state.arity}
   end
 
+  # `defdelegate name(args), to: Target [, as: ...]` — creates a public
+  # function `name/arity` in the current module that forwards to `Target`.
+  # Registering the def is what rule 1.7 needs; the forwarded call to
+  # `Target.name/arity` is intentionally NOT recorded as a separate call
+  # edge — the delegate is the public surface, not a hidden cross-context
+  # call to be flagged by 1.2 / 1.7.
+  defp walk({:defdelegate, meta, [head | _opts]}, %{module: mod} = state) when mod != nil do
+    {name, arity} = head_name_arity(head)
+    record_def(state, mod, name, arity, :public, AST.line(meta))
+  end
+
   # Private function definition
   defp walk({:defp, meta, [head | rest]}, %{module: mod} = state) when mod != nil do
     {name, arity} = head_name_arity(head)
@@ -194,6 +205,42 @@ defmodule Archdo.FunctionGraph do
        when attr in [:spec, :type, :typep, :opaque, :callback, :macrocallback] do
     # Walk children with in_spec flag so remote references aren't recorded as calls
     then(walk_children(node, %{state | in_spec: true}), fn s -> %{s | in_spec: state.in_spec} end)
+  end
+
+  # Pipe operator: `x |> Mod.fn(args...)` is semantically `Mod.fn(x, args...)`.
+  # Count the piped lhs as the first argument so the recorded arity matches
+  # the function's declared arity. Walk lhs + args separately for nested
+  # calls; do NOT recurse into the rhs's remote-call node (would re-record
+  # with the wrong arity).
+  defp walk(
+         {:|>, _pipe_meta,
+          [
+            lhs,
+            {{:., _, [{:__aliases__, _, aliases}, target_fn]}, meta, rhs_args}
+          ]} = _node,
+         %{module: mod, in_spec: false} = state
+       )
+       when is_atom(target_fn) and mod != nil do
+    target_mod =
+      case AST.safe_concat(aliases) do
+        nil -> "Unknown"
+        atom -> normalize_module(atom)
+      end
+
+    call = %{
+      caller_module: mod,
+      caller_fn: state.function,
+      caller_arity: state.arity,
+      target_module: target_mod,
+      target_fn: target_fn,
+      target_arity: arg_count(rhs_args) + 1,
+      file: state.file,
+      line: AST.line(meta)
+    }
+
+    state = %{state | calls: [call | state.calls]}
+    state = walk(lhs, state)
+    walk(rhs_args, state)
   end
 
   # Remote function call: Module.fn(args) — skip if inside @spec/@type
