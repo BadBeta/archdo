@@ -262,14 +262,14 @@ defmodule Archdo do
     file_asts =
       for file <- source_files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
 
+    file_ast_rules = filter_project_rules(Rules.project_file_ast_rules(), opts)
+    file_path_rules = filter_project_rules(Rules.project_file_path_rules(), opts)
+
     file_ast_diagnostics =
-      Enum.flat_map(Rules.project_file_ast_rules(), &invoke_project_rule(&1, file_asts, opts))
+      Enum.flat_map(file_ast_rules, &invoke_project_rule(&1, file_asts, opts))
 
     file_path_diagnostics =
-      Enum.flat_map(
-        Rules.project_file_path_rules(),
-        &invoke_project_path_rule(&1, source_files, opts)
-      )
+      Enum.flat_map(file_path_rules, &invoke_project_path_rule(&1, source_files, opts))
 
     metrics_diagnostics = Runner.run_metrics_rules(file_asts)
 
@@ -303,6 +303,22 @@ defmodule Archdo do
   # `Code.ensure_loaded` is critical: function_exported?/3 returns false
   # for any function on an unloaded module — without ensure_loaded we'd
   # always fall through to the /1 branch, silently dropping opts.
+  # Honor `--packs` and `--only` / `--ignore` for project-level rules.
+  # The phase1 / graph paths use Runner.filter_rules/2 already; this is
+  # the missing pack filter for project rules that previously fired
+  # unconditionally regardless of the user's pack selection.
+  defp filter_project_rules(rules, opts) do
+    packs =
+      case Keyword.get(opts, :packs) do
+        nil -> [:core]
+        list when is_list(list) -> list
+      end
+
+    rules
+    |> Runner.filter_rules_for_packs(packs)
+    |> Runner.filter_rules_for_cleanup_pass(Keyword.get(opts, :cleanup_pass))
+  end
+
   defp invoke_project_rule(rule, file_asts, opts) do
     _ = Code.ensure_loaded(rule)
 
