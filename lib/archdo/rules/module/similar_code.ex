@@ -58,26 +58,44 @@ defmodule Archdo.Rules.Module.SimilarCode do
     |> Enum.map(&build_diagnostic/1)
   end
 
+  # Multi-clause heads of the same {name, arity} aggregate to ONE
+  # fingerprint. Without aggregation, each clause produces a separate
+  # entry and pairwise comparison flags every cross-product of clauses
+  # — yielding the same logical pair reported once per clause-cross.
+  # 3.1 (DuplicatedCode) does the same aggregation; 3.4 mirrors it so
+  # similarity is computed over the whole function, not per clause.
   defp extract_with_fingerprints(file, ast) do
-    fns = AST.extract_functions(ast, :all)
+    module = AST.extract_module_name(ast)
 
-    for {name, arity, meta, _args, body} <- fns,
-        name not in @ignored_callbacks do
-      normalized = DuplicatedCode.normalize(body)
-      shingles = compute_shingles(normalized)
-      size = AST.ast_size(normalized)
+    ast
+    |> AST.extract_functions(:all)
+    |> Enum.reject(fn {name, _, _, _, _} -> name in @ignored_callbacks end)
+    |> Enum.group_by(
+      fn {name, arity, _, _, _} -> {name, arity} end,
+      fn {_, _, meta, _args, body} -> {meta, body} end
+    )
+    |> Enum.map(fn {{name, arity}, clauses} ->
+      aggregate_fn(file, module, name, arity, clauses)
+    end)
+  end
 
-      %{
-        file: file,
-        module: AST.extract_module_name(ast),
-        name: name,
-        arity: arity,
-        line: AST.line(meta),
-        fingerprint: shingles,
-        size: size,
-        normalized_hash: :erlang.phash2(normalized)
-      }
-    end
+  defp aggregate_fn(file, module, name, arity, clauses) do
+    normalized_clauses = Enum.map(clauses, fn {_meta, body} -> DuplicatedCode.normalize(body) end)
+    first_meta = clauses |> hd() |> elem(0)
+
+    shingles = compute_shingles(normalized_clauses)
+    size = Enum.sum(Enum.map(normalized_clauses, &AST.ast_size/1))
+
+    %{
+      file: file,
+      module: module,
+      name: name,
+      arity: arity,
+      line: AST.line(first_meta),
+      fingerprint: shingles,
+      size: size,
+      normalized_hash: :erlang.phash2(normalized_clauses)
+    }
   end
 
   # Generate shingles: walk the AST in pre-order, collect node "tokens",
@@ -125,8 +143,13 @@ defmodule Archdo.Rules.Module.SimilarCode do
   end
 
   defp collect_tokens(atom, acc) when is_atom(atom), do: [{:a, atom} | acc]
-  defp collect_tokens(num, acc) when is_number(num), do: [:NUM | acc]
-  defp collect_tokens(bin, acc) when is_binary(bin), do: [:STR | acc]
+  defp collect_tokens(num, acc) when is_number(num), do: [{:n, num} | acc]
+  # Preserve string content as part of the token. Collapsing every binary
+  # to `:STR` made functions whose ONLY differences were leaf strings
+  # (multiple `input_schema/0` variants in MCP tools, formatters with
+  # different display labels) collide at 100% similarity. The semantic
+  # signal lives in the string content; the rule must respect it.
+  defp collect_tokens(bin, acc) when is_binary(bin), do: [{:s, bin} | acc]
   defp collect_tokens(_, acc), do: acc
 
   defp jaccard(set_a, set_b) do
