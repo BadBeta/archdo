@@ -90,13 +90,18 @@ defmodule Archdo.Mcp.Tools.ExplainFinding do
         lines
         |> Enum.with_index(1)
         |> Enum.slice(start..finish)
-        |> Enum.map_join("\n", fn {text, num} ->
-          marker = if num == line, do: "→ ", else: "  "
-          "#{marker}#{num}: #{text}"
-        end)
+        |> Enum.map_join("\n", &format_snippet_line(&1, line))
 
       {:error, _} ->
         nil
     end
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # whether the line number is the highlighted one.
+  defp format_snippet_line({text, num}, target) when num == target,
+    do: "→ #{num}: #{text}"
+
+  defp format_snippet_line({text, num}, _target),
+    do: "  #{num}: #{text}"
 end

@@ -76,26 +76,37 @@ defmodule Archdo.Rules.CE.MissingTraceability do
     module = AST.extract_module_name(ast)
 
     {diags, _pending} =
-      Enum.reduce(body, {[], false}, fn node, {acc, pending_trace?} ->
-        cond do
-          trace_attr?(node) ->
-            {acc, true}
-
-          public_def?(node) ->
-            {n, a, meta} = name_arity_meta(node)
-
-            case pending_trace? do
-              true -> {acc, false}
-              false -> {[build_diagnostic(file, module, n, a, meta) | acc], false}
-            end
-
-          true ->
-            {acc, pending_trace?}
-        end
+      Enum.reduce(body, {[], false}, fn node, acc ->
+        absorb_trace_walk(trace_walk_kind(node), node, acc, file, module)
       end)
 
     Enum.reverse(diags)
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the classifier tag (trace attribute / public def / other) and
+  # the pending_trace? boolean.
+  defp trace_walk_kind(node) do
+    cond do
+      trace_attr?(node) -> :trace_attr
+      public_def?(node) -> :public_def
+      true -> :other
+    end
+  end
+
+  defp absorb_trace_walk(:trace_attr, _node, {acc, _pending}, _file, _module), do: {acc, true}
+
+  defp absorb_trace_walk(:public_def, node, {acc, pending_trace?}, file, module) do
+    {n, a, meta} = name_arity_meta(node)
+    record_def_diag(pending_trace?, acc, file, module, n, a, meta)
+  end
+
+  defp absorb_trace_walk(:other, _node, acc, _file, _module), do: acc
+
+  defp record_def_diag(true, acc, _file, _module, _n, _a, _meta), do: {acc, false}
+
+  defp record_def_diag(false, acc, file, module, n, a, meta),
+    do: {[build_diagnostic(file, module, n, a, meta) | acc], false}
 
   defp trace_attr?({:@, _, [{name, _, _}]}) when name in @trace_attrs, do: true
   defp trace_attr?(_), do: false

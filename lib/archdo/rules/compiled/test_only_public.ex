@@ -22,29 +22,26 @@ defmodule Archdo.Rules.Compiled.TestOnlyPublic do
     # Find functions that are public, have callers, but ALL callers are test modules
     modules
     |> Enum.filter(fn {mod, _info} -> not test_module?(mod) end)
-    |> Enum.flat_map(fn {module, info} ->
-      info.exports
-      |> Enum.filter(fn {func, arity} ->
-        mfa = {module, func, arity}
-        callers = Map.get(callee_index, mfa, [])
-
-        # Must have at least one caller, and all must be test modules
-        case callers do
-          [] ->
-            false
-
-          _ ->
-            Enum.all?(callers, fn call ->
-              test_module?(elem(call.caller, 0))
-            end)
-        end
-      end)
-      |> Enum.reject(fn {func, _arity} -> framework_function?(func) end)
-      |> Enum.map(fn {func, arity} ->
-        build_diagnostic(module, func, arity)
-      end)
-    end)
+    |> Enum.flat_map(&test_only_diags(&1, callee_index))
   end
+
+  defp test_only_diags({module, info}, callee_index) do
+    info.exports
+    |> Enum.filter(&export_called_only_from_tests?(&1, module, callee_index))
+    |> Enum.reject(fn {func, _arity} -> framework_function?(func) end)
+    |> Enum.map(fn {func, arity} -> build_diagnostic(module, func, arity) end)
+  end
+
+  defp export_called_only_from_tests?({func, arity}, module, callee_index) do
+    callers = Map.get(callee_index, {module, func, arity}, [])
+    all_callers_test?(callers)
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the empty-callers shape; only test-only when at least one caller
+  # exists and all are test modules.
+  defp all_callers_test?([]), do: false
+  defp all_callers_test?(callers), do: Enum.all?(callers, fn c -> test_module?(elem(c.caller, 0)) end)
 
   defp test_module?(mod) do
     mod_str = Atom.to_string(mod)
