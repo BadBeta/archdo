@@ -1,5 +1,10 @@
 defmodule Archdo.Compare do
-  @moduledoc false
+  @moduledoc """
+  Cross-codebase finding comparison and tabulation. Powers
+  `mix archdo --compare A B C ...` — runs each codebase, joins
+  diagnostics by `{rule_id, severity}`, and renders a table showing
+  finding counts per codebase. Public API.
+  """
 
   # §§ elixir-planning: §6 — M30e Comparative scoring scaffold.
   # `mix archdo --compare-with path1,path2,...` runs analysis on the

@@ -14,7 +14,12 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
   alias Archdo.{AST, Diagnostic, Fix, IrreversibleDecision}
 
   defmodule SchemaInfo do
-    @moduledoc false
+    @moduledoc """
+    Internal struct used by MissingRetentionPolicy to bind a schema's
+    table name with its declaring module. Defined as a nested
+    defmodule rather than a private map so the struct shape is named
+    in pattern matches and the type is checked at construction time.
+    """
     defstruct [:table, :module]
   end
 

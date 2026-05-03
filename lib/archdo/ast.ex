@@ -67,12 +67,19 @@ defmodule Archdo.AST do
   @doc """
   Extract the top-level module name from a file's AST as a String.
   Returns "Unknown" if no defmodule is found.
+
+  For files with nested defmodules (e.g. a private struct module
+  declared inside the file's primary module), returns the OUTER
+  module name. Without the "first wins" guard, prewalk visits the
+  outer module first then overwrites with the inner one, returning
+  the deepest nested name — wrong for callers that want the file's
+  primary module.
   """
   @spec extract_module_name(Macro.t()) :: String.t()
   def extract_module_name(ast) do
     {_, name} =
       Macro.prewalk(ast, "Unknown", fn
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, _acc ->
+        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, "Unknown" ->
           case safe_concat(aliases) do
             nil -> {node, "Unknown"}
             mod -> {node, module_name(mod)}

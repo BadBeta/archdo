@@ -1,5 +1,10 @@
 defmodule Archdo.Formatter do
-  @moduledoc false
+  @moduledoc """
+  Diagnostic output formatter. Renders the result of an Archdo run
+  as `text` / `compact` / `summary` / `json` / `sarif` / `llm` /
+  `html` / `brief`. Public API used by `mix archdo`, `mix
+  archdo.mcp`, and library consumers.
+  """
 
   # Diagnostic-output formatting IS the responsibility — IO.puts /
   # File.write are intentional. Pure functions live alongside the

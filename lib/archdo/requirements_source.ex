@@ -1,5 +1,10 @@
 defmodule Archdo.RequirementsSource do
-  @moduledoc false
+  @moduledoc """
+  Loads project-level requirements from a CSV / Markdown / TOML
+  source file, used by CE-32 (MissingTraceability) and CE-33
+  (DeadRequirement) to verify code-to-requirement linkage. Public
+  API for the compliance pack.
+  """
 
   # Reading the requirements JSON file IS the responsibility.
   Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
