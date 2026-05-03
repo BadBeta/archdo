@@ -297,7 +297,9 @@ defmodule Archdo.Rules do
     Archdo.Rules.CE.UntestedBuildingBlock,
     Archdo.Rules.CE.PiiFieldHandling,
     Archdo.Rules.CE.MissingDeletionPath,
-    Archdo.Rules.CE.DeadRequirement
+    Archdo.Rules.CE.DeadRequirement,
+    Archdo.Rules.Module.DuplicatedValidation,
+    Archdo.Rules.Module.SingleImplProtocol
   ]
 
   @project_file_path_rules [
