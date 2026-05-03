@@ -9,6 +9,10 @@ defmodule Archdo.Stats do
   layout, and the MCP `stats` tool.
   """
 
+  # Reading lib/test source files IS the responsibility.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.AST
   alias Archdo.Compiled
 

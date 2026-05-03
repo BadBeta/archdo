@@ -11,6 +11,11 @@ defmodule Archdo.AST do
   any single context.
   """
 
+  # File parsing IS the responsibility — every analysis path in Archdo
+  # depends on `parse_file/1`. Substitutability seam doesn't apply.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   @doc """
   Check if a path is a test file (under test/ or containing /test/).
   """

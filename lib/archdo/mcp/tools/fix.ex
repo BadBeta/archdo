@@ -1,6 +1,10 @@
 defmodule Archdo.Mcp.Tools.Fix do
   @moduledoc false
 
+  # Reading the source file the user is editing IS the responsibility.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.Runner
 
   @fixable_rules ["6.33", "6.41", "4.27", "6.47", "6.50"]

@@ -48,6 +48,12 @@ defmodule Archdo do
   See `mix help archdo` for the full CLI surface.
   """
 
+  # CLI tool entry point — File / project-root resolution IS the
+  # responsibility. Substitutability via behaviour seam doesn't apply
+  # here; tests exercise this module via real `System.tmp_dir!` paths.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.{
     AST,
     Config,

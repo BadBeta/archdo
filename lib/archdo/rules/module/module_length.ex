@@ -2,6 +2,10 @@ defmodule Archdo.Rules.Module.ModuleLength do
   @moduledoc false
   @behaviour Archdo.Rule
 
+  # Reading the source file to count lines IS the responsibility.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.{AST, Diagnostic, Fix}
 
   @warn_lines 500

@@ -1,6 +1,10 @@
 defmodule Archdo.RequirementsSource do
   @moduledoc false
 
+  # Reading the requirements JSON file IS the responsibility.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   # §§ elixir-planning: §6 — Foundation for CE-33 (dead requirement).
   # Reads a JSON file enumerating the project's requirement IDs.
   # Two accepted shapes:

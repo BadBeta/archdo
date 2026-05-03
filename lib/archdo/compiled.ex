@@ -19,6 +19,10 @@ defmodule Archdo.Compiled do
   pattern-match its fields.
   """
 
+  # Reading beam files from `_build/*/lib/*/ebin` IS the responsibility.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.Compiled.{Graph, Query}
 
   # §§ M-Plan19 Phase 3 — public type alias so external @spec lines

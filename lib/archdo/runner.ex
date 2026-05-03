@@ -11,6 +11,10 @@ defmodule Archdo.Runner do
   API surface.
   """
 
+  # Reading source files for analysis IS the responsibility.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.{AST, Config, Diagnostic, FunctionGraph, Graph, Metrics, PluginCoverage, Rules}
 
   # §§ M-Plan7 — rules that consume project-level plug-coverage state.

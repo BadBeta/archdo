@@ -16,6 +16,10 @@ defmodule Archdo.Freeze do
   # 5. `--freeze-stats` reports how many baseline items are still present
   #    vs resolved
 
+  # Baseline file read/write IS the responsibility — File access is by design.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.Diagnostic
 
   @default_path ".archdo_baseline.exs"

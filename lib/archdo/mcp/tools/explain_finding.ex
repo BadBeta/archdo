@@ -1,6 +1,10 @@
 defmodule Archdo.Mcp.Tools.ExplainFinding do
   @moduledoc false
 
+  # Reading the file the user is editing IS the responsibility.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.Runner
 
   def name, do: "archdo_explain_finding"

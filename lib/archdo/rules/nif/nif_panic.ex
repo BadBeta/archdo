@@ -2,6 +2,10 @@ defmodule Archdo.Rules.NIF.NifPanic do
   @moduledoc false
   @behaviour Archdo.Rule
 
+  # Reading the .rs source file IS the responsibility.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.{Diagnostic, Fix}
 
   @impl true

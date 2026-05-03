@@ -5,6 +5,10 @@ defmodule Archdo.GitDiff do
   one home.
   """
 
+  # Shell-out to `git` IS the responsibility — the module IS the seam.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   @doc """
   Return the list of `.ex` files changed (added/copied/modified/renamed)
   between `ref` and the working tree, scoped to `base_paths`. Files that

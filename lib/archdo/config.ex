@@ -10,6 +10,11 @@ defmodule Archdo.Config do
   thresholds depends on this shape.
   """
 
+  # Loading `.archdo.exs` and `mix.exs` IS the responsibility — File
+  # access is by design.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   @type layer :: :interface | :domain | :infrastructure | :unknown
   @type t :: %__MODULE__{
           layers: %{layer() => Regex.t()},

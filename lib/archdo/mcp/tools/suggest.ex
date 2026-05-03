@@ -1,6 +1,10 @@
 defmodule Archdo.Mcp.Tools.Suggest do
   @moduledoc false
 
+  # Reading the source file the user is editing IS the responsibility.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   alias Archdo.AST
   alias Archdo.Mcp.Encoder
   alias Archdo.Runner
