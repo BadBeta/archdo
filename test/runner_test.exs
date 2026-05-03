@@ -12,6 +12,10 @@ defmodule Archdo.RunnerTest do
 
     test "all rule modules implement the Archdo.Rule behaviour" do
       for rule <- Runner.phase1_rules() do
+        # Code.ensure_loaded? — function_exported?/2 returns false when the
+        # module hasn't been loaded yet under the parallel test runner.
+        assert Code.ensure_loaded?(rule), "#{inspect(rule)} could not be loaded"
+
         assert function_exported?(rule, :id, 0),
                "#{inspect(rule)} missing id/0"
 
@@ -119,6 +123,7 @@ defmodule Archdo.RunnerTest do
           }
         ]
       end
+
       @impl true
       def pack, do: :core
     end
@@ -143,6 +148,7 @@ defmodule Archdo.RunnerTest do
           }
         ]
       end
+
       @impl true
       def pack, do: :ce_composability
     end

@@ -113,6 +113,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.UnsafeDeserialization,
     Archdo.Rules.Module.DynamicApplyFromInput,
     Archdo.Rules.Module.StacktraceInResponse,
+    Archdo.Rules.Module.IoInspectInLib,
     Archdo.Rules.Module.StringLengthCheck,
     Archdo.Rules.Module.KeywordLookupInLoop,
     Archdo.Rules.Boundary.DevDepInProd,
