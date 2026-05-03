@@ -12,9 +12,6 @@ defmodule Archdo.Rules.Compiled.LookupTableCandidate do
   def description,
     do: "Function is a pure literal-to-literal mapping — replace with a lookup table"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Minimum clauses to consider — 2-clause functions aren't worth converting
   @min_clauses 3
 

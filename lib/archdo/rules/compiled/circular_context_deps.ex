@@ -13,9 +13,6 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
     do:
       "Circular context dependencies — Context A depends on Context B which depends on Context A"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Compiled-mode analysis: detect context-level dependency cycles.
   """
@@ -94,11 +91,15 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
 
   # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
   # the (cycle-closing? / already-visited?) classifier tag.
-  defp classify_neighbor_for_cycle(neighbor, start_node, _visited?) when neighbor == start_node, do: :cycle_complete
+  defp classify_neighbor_for_cycle(neighbor, start_node, _visited?) when neighbor == start_node,
+    do: :cycle_complete
+
   defp classify_neighbor_for_cycle(_neighbor, _start_node, true), do: :already_visited
   defp classify_neighbor_for_cycle(_neighbor, _start_node, false), do: :recurse
 
-  defp handle_neighbor_kind(:cycle_complete, _neighbor, _adjacency, path, _visited), do: [Enum.reverse(path)]
+  defp handle_neighbor_kind(:cycle_complete, _neighbor, _adjacency, path, _visited),
+    do: [Enum.reverse(path)]
+
   defp handle_neighbor_kind(:already_visited, _neighbor, _adjacency, _path, _visited), do: []
 
   defp handle_neighbor_kind(:recurse, neighbor, adjacency, path, visited) do

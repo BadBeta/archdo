@@ -20,9 +20,6 @@ defmodule Archdo.Rules.CE.PiiFieldHandling do
   @impl true
   def pack, do: :ce_privacy
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc "Project-level. One Diagnostic per schema with unprotected PII fields."
   @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
   def analyze_project(file_asts, _opts \\ []) do

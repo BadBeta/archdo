@@ -369,6 +369,37 @@ defmodule Archdo.Rules.Module.DuplicatedCodeTest do
              "different arities should not be considered structural clones"
     end
 
+    test "predicates with same body shape but different head patterns are NOT duplicates" do
+      file1 =
+        parse(
+          ~S"""
+          defmodule MyApp.A do
+            def catch_all_arg?({:_, _, ctx}) when is_atom(ctx), do: true
+            def catch_all_arg?({var, _, ctx}) when is_atom(var) and is_atom(ctx), do: true
+            def catch_all_arg?(_), do: false
+          end
+          """,
+          "lib/a.ex"
+        )
+
+      file2 =
+        parse(
+          ~S"""
+          defmodule MyApp.B do
+            def def_node?({:def, _, [{name, _, _} | _]}) when is_atom(name), do: true
+            def def_node?({:def, _, [{:when, _, [{name, _, _} | _]} | _]}) when is_atom(name), do: true
+            def def_node?(_), do: false
+          end
+          """,
+          "lib/b.ex"
+        )
+
+      diags = DuplicatedCode.analyze_project([file1, file2])
+
+      refute Enum.any?(diags, &(&1.message =~ "catch_all_arg?" or &1.message =~ "def_node?")),
+             "predicates discriminating different patterns must not be flagged as duplicates"
+    end
+
     test "multi-clause heads of the same function do NOT self-clone within a file" do
       file =
         parse(

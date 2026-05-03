@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Testing.TestMirrorsSource do
   @impl true
   def description, do: "Test file structure should mirror source structure"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level analysis. Takes lists of source and test files.
   """

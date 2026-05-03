@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.ChangeRisk do
   @impl true
   def description, do: "Module change has high blast radius — many transitive dependents"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Flag modules where total transitive impact exceeds this
   @total_threshold 20
   # Flag modules where depth exceeds this

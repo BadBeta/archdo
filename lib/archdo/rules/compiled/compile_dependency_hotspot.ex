@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.CompileDependencyHotspot do
   @impl true
   def description, do: "Module depended on by many others — compile dependency hotspot"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Flag modules with more than this many dependents
   @dependent_threshold 10
 

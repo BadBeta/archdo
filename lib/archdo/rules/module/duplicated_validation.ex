@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Module.DuplicatedValidation do
   @impl true
   def description, do: "Same validation rule should not appear in both web and domain layers"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: compare validation patterns between web and domain modules.
   Takes lists of {file, validations} for each layer.

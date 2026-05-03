@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Module.FatInterface do
   def description,
     do: "Behaviour implementations with no-op stubs suggest the interface should be split"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # No-op body patterns — these indicate a callback the implementation doesn't need.
   @noop_bodies [
     :ok,

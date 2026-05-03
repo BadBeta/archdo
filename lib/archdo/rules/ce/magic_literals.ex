@@ -18,9 +18,6 @@ defmodule Archdo.Rules.CE.MagicLiterals do
   def description,
     do: "Same magic value compared or assigned in 2+ modules without a shared symbolic constant"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Stable numeric constants that don't merit symbolic naming.
   @stable_numeric MapSet.new([
                     0,
@@ -128,7 +125,8 @@ defmodule Archdo.Rules.CE.MagicLiterals do
     end
   end
 
-  defp extract_one(value, meta) when is_atom(value) and not is_nil(value) and not is_boolean(value) do
+  defp extract_one(value, meta)
+       when is_atom(value) and not is_nil(value) and not is_boolean(value) do
     case magic_atom?(value) do
       true -> [{value, AST.line(meta)}]
       false -> []
@@ -151,7 +149,7 @@ defmodule Archdo.Rules.CE.MagicLiterals do
     name = Atom.to_string(value)
 
     cond do
-      value in [:ok, :error, :nil, true, false, nil] -> false
+      value in [:ok, :error, nil, true, false, nil] -> false
       String.starts_with?(name, "Elixir.") -> false
       String.length(name) < 4 -> false
       true -> true

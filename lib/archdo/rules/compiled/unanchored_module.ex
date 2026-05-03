@@ -20,9 +20,6 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
   def description,
     do: "Module not anchor-reachable in the Compiled call graph (post-macro-expansion)"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Compiled-mode analysis. Requires the AST anchor set to be passed via
   `opts[:ast_anchor_modules]` (a `MapSet` of module atoms). The

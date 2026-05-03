@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.CrossBoundaryCall do
   @impl true
   def description, do: "Function call crosses context boundary — compiled ground-truth"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
   def analyze_compiled(graph) do
     calls = Compiled.calls(graph)

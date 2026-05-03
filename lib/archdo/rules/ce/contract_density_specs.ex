@@ -19,9 +19,6 @@ defmodule Archdo.Rules.CE.ContractDensitySpecs do
   def description,
     do: "Public API module with low @spec coverage (Ecto schemas, Supervisors, public-API paths)"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc "Project-level. Returns one Diagnostic per under-spec'd public API module."
   @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
   def analyze_project(file_asts, opts \\ []) do

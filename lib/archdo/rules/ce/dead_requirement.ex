@@ -27,9 +27,6 @@ defmodule Archdo.Rules.CE.DeadRequirement do
   @impl true
   def pack, do: :ce_compliance
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level. Off unless `requirements_source: <path>` in opts.
   Returns one Diagnostic per requirement present in the source but

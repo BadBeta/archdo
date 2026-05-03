@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.TransitiveDeadCode do
   @impl true
   def description, do: "Function only called from dead functions — transitively dead"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
   def analyze_compiled(graph) do
     modules = Compiled.modules(graph)

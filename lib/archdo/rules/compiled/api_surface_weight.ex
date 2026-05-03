@@ -12,9 +12,6 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
   @impl true
   def description, do: "Module exports many functions but few are used externally"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Flag when less than this fraction of exports are used externally
   @usage_threshold 0.25
   # Minimum exports to consider — don't flag small modules
@@ -38,10 +35,18 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
   defp diag_for_export_count(true, module, total_exports, graph) do
     usage = Compiled.external_usage(graph, module)
     externally_used = Enum.count(usage, fn {_fa, count} -> count > 0 end)
-    diag_for_ratio(externally_used / total_exports < @usage_threshold, module, externally_used, total_exports, usage)
+
+    diag_for_ratio(
+      externally_used / total_exports < @usage_threshold,
+      module,
+      externally_used,
+      total_exports,
+      usage
+    )
   end
 
   defp diag_for_ratio(false, _module, _used, _total, _usage), do: []
+
   defp diag_for_ratio(true, module, used, total, usage),
     do: [build_diagnostic(module, used, total, usage)]
 

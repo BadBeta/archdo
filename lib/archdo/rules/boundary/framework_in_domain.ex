@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Boundary.FrameworkInDomain do
   @impl true
   def description, do: "Domain modules must not depend on framework-specific packages"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   def analyze_graph(%Graph{} = graph, %Config{} = config) do
     graph.edges
     |> Enum.filter(fn edge ->

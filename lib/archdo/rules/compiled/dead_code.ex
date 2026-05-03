@@ -12,9 +12,6 @@ defmodule Archdo.Rules.Compiled.DeadCode do
   def description, do: "Public function exported but never called — dead code"
 
   # Per-file analysis returns nothing — this rule requires compiled beam data
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Compiled-mode analysis using the interaction graph.
   """

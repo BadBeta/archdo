@@ -13,9 +13,6 @@ defmodule Archdo.Rules.Boundary.GodContext do
   @impl true
   def description, do: "Context with too many sub-modules — likely doing too much"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: count files under each top-level context directory.
   """

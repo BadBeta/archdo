@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Boundary.SchemaOwnership do
   def description,
     do: "Each Ecto schema has one owning context — no cross-context schema construction"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: scan ASTs to find real Ecto schemas, then look for
   cross-context construction (`%MyApp.Other.Schema{...}`) of those schemas.

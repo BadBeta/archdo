@@ -30,9 +30,6 @@ defmodule Archdo.Rules.CE.ContractDensity do
   def description,
     do: "Irreversible-decision module (schema/supervisor/public API) lacks contract density"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc "Project-level. Returns one Diagnostic per under-density candidate."
   @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
   def analyze_project(file_asts, opts \\ []) do
@@ -70,6 +67,7 @@ defmodule Archdo.Rules.CE.ContractDensity do
   end
 
   defp diag_if_failed([], _file, _ast, _scores, _medians), do: []
+
   defp diag_if_failed(list, file, ast, scores, medians),
     do: [build_diagnostic(file, ast, scores, list, medians)]
 
@@ -159,7 +157,7 @@ defmodule Archdo.Rules.CE.ContractDensity do
 
     {_set, _last_doc} =
       result =
-        Enum.reduce(body, {MapSet.new(), false}, &accumulate_documented_def/2)
+      Enum.reduce(body, {MapSet.new(), false}, &accumulate_documented_def/2)
 
     {set, _} = result
     set
@@ -196,8 +194,14 @@ defmodule Archdo.Rules.CE.ContractDensity do
   defp doc_attr?({:@, _, [{:doc, _, _}]}), do: true
   defp doc_attr?(_), do: false
 
-  defp def_node?({:def, _, [{name, _, args} | _]}) when is_atom(name) and (is_list(args) or args == nil), do: true
-  defp def_node?({:def, _, [{:when, _, [{name, _, args} | _]} | _]}) when is_atom(name) and (is_list(args) or args == nil), do: true
+  defp def_node?({:def, _, [{name, _, args} | _]})
+       when is_atom(name) and (is_list(args) or args == nil),
+       do: true
+
+  defp def_node?({:def, _, [{:when, _, [{name, _, args} | _]} | _]})
+       when is_atom(name) and (is_list(args) or args == nil),
+       do: true
+
   defp def_node?(_), do: false
 
   defp name_and_arity({:def, _, [{name, _, args} | _]}) when is_atom(name),

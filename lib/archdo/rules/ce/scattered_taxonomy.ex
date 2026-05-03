@@ -23,9 +23,6 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
   def description,
     do: "Scattered cross-cutting taxonomy — same conceptual event named inconsistently"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level. Returns one Diagnostic per scattered-name cluster.
   """
@@ -69,6 +66,7 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
   end
 
   defp record_canon(nil, _kind, _surface, _module, _file, _line), do: []
+
   defp record_canon(canon, kind, surface, module, file, line),
     do: [{kind, surface, canon, module, file, line}]
 
@@ -95,7 +93,10 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
   # Lists of literals come through as `{:__block__, _, [list]}` under the
   # encoder; the inner list's elements are themselves wrapped atoms.
   defp unwrap_arg({:__block__, _, [s]}) when is_binary(s), do: s
-  defp unwrap_arg({:__block__, _, [list]}) when is_list(list), do: Enum.map(list, &AST.unwrap_atom/1)
+
+  defp unwrap_arg({:__block__, _, [list]}) when is_list(list),
+    do: Enum.map(list, &AST.unwrap_atom/1)
+
   defp unwrap_arg(other), do: other
 
   defp classify(:telemetry, fun, name) when fun in [:execute, :span] and is_list(name),

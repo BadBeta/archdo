@@ -21,8 +21,8 @@ defmodule Archdo.Rules.Compiled.OrphanModuleTest do
       assert is_binary(OrphanModule.description())
     end
 
-    test "AST-mode analyze/3 returns empty" do
-      assert OrphanModule.analyze("lib/test.ex", {:defmodule, [], []}, []) == []
+    test "AST-mode analyze/3 is not implemented (project-only rule)" do
+      refute function_exported?(OrphanModule, :analyze, 3)
     end
   end
 

@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Module.SingleImplProtocol do
   @impl true
   def description, do: "Protocols with only one implementation may be over-engineering"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level analysis. Takes a map of protocol_name => [impl_types].
   Built by scanning all files for defprotocol and defimpl.

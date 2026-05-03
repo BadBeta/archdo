@@ -14,9 +14,6 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
   @impl true
   def description, do: "Context facade module has test file but exercises < 30% of public API"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level rule. Takes file_asts (list of {file, ast} tuples).
   Detects context facades where the test file covers a small fraction of the public API.

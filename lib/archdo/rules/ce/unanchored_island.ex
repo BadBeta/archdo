@@ -22,9 +22,6 @@ defmodule Archdo.Rules.CE.UnanchoredIsland do
   @impl true
   def description, do: "Unanchored island — mutually-reachable cluster, no anchored caller"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level analysis. Returns one Diagnostic per cluster.
   """

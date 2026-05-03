@@ -13,9 +13,6 @@ defmodule Archdo.Rules.Boundary.SyncContextCoupling do
 
   @write_prefixes ~w(create update delete insert remove destroy upsert)
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Function-graph-based: detect cross-context calls to write operations.
   """

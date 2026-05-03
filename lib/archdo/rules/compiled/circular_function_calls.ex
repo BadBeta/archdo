@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
   @impl true
   def description, do: "Function-level circular calls detected via Tarjan's SCC"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
   def analyze_compiled(graph) do
     graph

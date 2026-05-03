@@ -16,9 +16,6 @@ defmodule Archdo.Rules.Boundary.ParallelHierarchies do
   def description,
     do: "Parallel hierarchies — feature additions creating thin files in many directories"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: detect feature names that appear in 3+ parallel directories
   (commands/, events/, projections/, aggregates/) where the files are thin wrappers.

@@ -17,9 +17,6 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
       "Multiple contexts access the same named ETS table directly — consider a shared API module"
 
   # Project-level rule
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @ets_access_fns [
     :lookup,
     :insert,
@@ -63,6 +60,7 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
 
   defp emit_when_shared(true, table, entries, contexts) do
     context_names = Enum.join(contexts, ", ")
+
     Enum.map(entries, fn {_table, _ctx, file, line} ->
       build_diagnostic(file, line, table, context_names)
     end)

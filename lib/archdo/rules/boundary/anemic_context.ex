@@ -15,9 +15,6 @@ defmodule Archdo.Rules.Boundary.AnemicContext do
   @impl true
   def description, do: "Anemic contexts — contexts too small to justify being a context"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: count files per context directory. Contexts with fewer
   than `min_files` files that are heavily depended on from outside

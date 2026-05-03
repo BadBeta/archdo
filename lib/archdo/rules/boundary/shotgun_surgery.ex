@@ -12,9 +12,6 @@ defmodule Archdo.Rules.Boundary.ShotgunSurgery do
   @impl true
   def description, do: "Functions with too many distinct callers — change ripple risk"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: for each function definition, count distinct caller modules.
   High fan-in means a change to this function will require updates across many modules.

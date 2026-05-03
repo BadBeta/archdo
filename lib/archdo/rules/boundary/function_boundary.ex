@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Boundary.FunctionBoundary do
   @impl true
   def description, do: "Cross-context calls must target the receiving context's public API"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: walk the function graph and flag cross-context calls
   that hit non-API functions.

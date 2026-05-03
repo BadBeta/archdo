@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Boundary.DependencyDirection do
   @impl true
   def description, do: "Dependencies must flow inward (hexagonal architecture)"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Graph-based analysis. Takes the full module graph and config.
   """

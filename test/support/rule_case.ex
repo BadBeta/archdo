@@ -19,7 +19,18 @@ defmodule Archdo.RuleCase do
             token_metadata: true
           )
 
-        rule.analyze(file, ast, opts)
+        # `analyze/3` is optional in the Archdo.Rule behaviour — project-only
+        # rules don't implement it. Tests that call this helper against a
+        # project-only rule get an empty diagnostic list (the rule's actual
+        # work is in analyze_project/N or analyze_compiled/N).
+        # `Code.ensure_loaded/1` first because `function_exported?/3`
+        # returns `false` for modules not yet loaded into the runtime.
+        _ = Code.ensure_loaded(rule)
+
+        case function_exported?(rule, :analyze, 3) do
+          true -> rule.analyze(file, ast, opts)
+          false -> []
+        end
       end
 
       @doc """

@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Module.MissingTelemetry do
   @impl true
   def description, do: "Context facade modules should have telemetry instrumentation"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: find context facade modules and check for telemetry calls.
   A context facade is a file at `lib/app/foo.ex` that has a corresponding

@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
   @impl true
   def description, do: "Multiple *Adapter modules should share a behaviour contract"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: find modules named `*Adapter` and group them by parent namespace.
   Flag groups where 2+ siblings exist but none implement a common @behaviour.
@@ -56,8 +53,7 @@ defmodule Archdo.Rules.Module.AdaptersWithoutBehaviour do
   defp build_adapter_diag(parent, members, names, first_file) do
     Diagnostic.info("4.16",
       title: "Adapter siblings without shared behaviour",
-      message:
-        "#{length(members)} adapter modules under #{parent} share no @behaviour: #{names}",
+      message: "#{length(members)} adapter modules under #{parent} share no @behaviour: #{names}",
       why:
         "When two or more `*Adapter` modules live side-by-side without a shared behaviour, the " <>
           "implicit contract between them only exists in your head. Adding a method to one and forgetting " <>

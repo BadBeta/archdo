@@ -14,9 +14,6 @@ defmodule Archdo.Rules.Module.FunctionFanOut do
   def description,
     do: "Function fan-out — individual functions depending on too many distinct modules"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: compute per-function fan-out and flag functions
   that depend on too many distinct external modules.

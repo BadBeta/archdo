@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
   @impl true
   def description, do: "Behaviours with no implementations or only mock implementations"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: walk all files, find behaviour declarations and @behaviour usages,
   flag behaviours with zero or only-test implementations.

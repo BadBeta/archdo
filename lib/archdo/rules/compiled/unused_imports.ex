@@ -12,9 +12,6 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
   @impl true
   def description, do: "Import brings many functions but few are used"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Threshold: if less than this fraction of imported functions are used, flag it
   @usage_threshold 0.5
   # Minimum exports to consider — don't flag imports of small modules
@@ -48,7 +45,14 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
   defp target_import_diag({target_mod, calls}, caller_mod, modules) do
     target_exports = Map.get(modules, target_mod, %{exports: []}).exports
     total_exports = length(target_exports)
-    diag_for_target_exports(total_exports >= @min_exports, caller_mod, target_mod, calls, total_exports)
+
+    diag_for_target_exports(
+      total_exports >= @min_exports,
+      caller_mod,
+      target_mod,
+      calls,
+      total_exports
+    )
   end
 
   # §§ elixir-implementing: §2.1 — boolean → multi-clause head

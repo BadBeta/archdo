@@ -43,7 +43,11 @@ defmodule Archdo.Rule do
   """
   @callback cleanup_pass() :: 1..14 | nil
 
-  @optional_callbacks [pack: 0, cleanup_pass: 0]
+  # `analyze/3` is optional: project-level rules implement
+  # `analyze_project/{1,2}` or `analyze_compiled/{1,2}` and have no
+  # per-file work, so they have no `analyze/3` to provide. The runner
+  # checks `function_exported?(rule, :analyze, 3)` before calling.
+  @optional_callbacks [analyze: 3, pack: 0, cleanup_pass: 0]
 
   @doc """
   Resolve a rule module's pack — `:core` if `pack/0` is not implemented,

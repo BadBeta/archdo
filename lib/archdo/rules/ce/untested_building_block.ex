@@ -21,9 +21,6 @@ defmodule Archdo.Rules.CE.UntestedBuildingBlock do
   @impl true
   def pack, do: :ce_composability
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc "Project-level. One Diagnostic per untested building-block function."
   @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
   def analyze_project(file_asts, _opts \\ []) do

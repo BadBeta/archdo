@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
   @impl true
   def description, do: "Module references another module but never calls any of its functions"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
   def analyze_compiled(graph) do
     case Compiled.beam_dir(graph) do

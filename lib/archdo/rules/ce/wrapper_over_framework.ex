@@ -22,9 +22,6 @@ defmodule Archdo.Rules.CE.WrapperOverFramework do
   def description,
     do: "Wrapper layer over framework-provided abstraction (with existing test seam)"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level analysis. Walks `file_asts`, builds the behaviour /
   implementor registry, and fires on each behaviour whose single

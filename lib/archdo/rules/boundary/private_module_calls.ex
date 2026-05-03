@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Boundary.PrivateModuleCalls do
   @impl true
   def description, do: "No external calls to @moduledoc false modules"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level analysis. Walks every cross-namespace call edge and
   flags those whose target is a module marked `@moduledoc false`.

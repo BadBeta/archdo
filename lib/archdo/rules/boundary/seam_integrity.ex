@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
   def description,
     do: "Calls to behaviour/protocol implementations must go through the seam, not directly"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: build a seam registry from all file ASTs, then detect direct
   calls to implementation modules that bypass the behaviour/protocol seam.

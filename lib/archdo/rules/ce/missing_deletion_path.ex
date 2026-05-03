@@ -26,9 +26,6 @@ defmodule Archdo.Rules.CE.MissingDeletionPath do
   @impl true
   def pack, do: :ce_privacy
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc "Project-level. Off unless `gdpr_scope: true` in opts."
   @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
   def analyze_project(file_asts, opts \\ []) do

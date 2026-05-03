@@ -29,9 +29,6 @@ defmodule Archdo.Rules.CE.VolatilitySubstitutability do
   def description,
     do: "Volatility/Substitutability matching — fires CE-2 or CE-3 per quadrant cell"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Policy table: cell → action. The abstraction axis is three-valued
   # because CE-2 and CE-3 fire on different conditions:
   #
@@ -47,8 +44,7 @@ defmodule Archdo.Rules.CE.VolatilitySubstitutability do
   #   :normal  earned          correct       (CE-4)
   #   :high    earned          CE-3 fire     (CE-4)
   @policy %{
-    {:none, :volatile} =>
-      {:fire, :warning, "CE-2", "Volatile boundary lacks abstraction layer"},
+    {:none, :volatile} => {:fire, :warning, "CE-2", "Volatile boundary lacks abstraction layer"},
     {:high, :stable} =>
       {:fire, :warning, "CE-3", "Stable core with abstraction density above codebase median"}
   }

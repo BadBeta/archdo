@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
   @impl true
   def description, do: "Orphan module — zero incoming and zero outgoing dependencies"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Compiled-mode analysis: detect modules with no connections to the rest of the project.
   """

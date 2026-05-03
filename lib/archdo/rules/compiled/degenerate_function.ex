@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.DegenerateFunction do
   @impl true
   def description, do: "Public function always raises or returns a fixed value — likely a stub"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
   def analyze_compiled(graph) do
     case Compiled.beam_dir(graph) do

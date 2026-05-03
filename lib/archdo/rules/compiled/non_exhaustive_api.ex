@@ -12,9 +12,6 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
   @impl true
   def description, do: "Public API function has no catch-all clause — crashes on unexpected input"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Minimum clauses to consider — single-clause functions don't need a catch-all
   @min_clauses 2
 

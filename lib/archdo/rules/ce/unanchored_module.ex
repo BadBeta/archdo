@@ -17,9 +17,6 @@ defmodule Archdo.Rules.CE.UnanchoredModule do
   @impl true
   def description, do: "Module not reachable from any anchor (route, task, supervisor, ...)"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level analysis. Returns one Diagnostic per unanchored module.
   Test files are excluded — they're driven by ExUnit.run, not the

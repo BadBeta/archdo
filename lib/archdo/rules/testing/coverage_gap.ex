@@ -19,9 +19,6 @@ defmodule Archdo.Rules.Testing.CoverageGap do
   @impl true
   def description, do: "Public API coverage gap — public functions not referenced in test file"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: for each source file, find its test file and check which
   public functions are referenced.

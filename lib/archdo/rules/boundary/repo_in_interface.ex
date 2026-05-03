@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Boundary.RepoInInterface do
   @impl true
   def description, do: "No direct Repo access from interface layer"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   def analyze_graph(%Graph{} = graph, %Config{} = config) do
     graph.edges
     |> Enum.filter(fn edge ->

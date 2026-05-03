@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
   @impl true
   def description, do: "Module calls Repo directly instead of through owning context"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Repo function names that indicate data access
   @repo_functions ~w(
     get get! get_by get_by! one one! all
@@ -83,6 +80,7 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
   end
 
   defp diag_unless_context(true, _caller_mod, _repo_calls, _config), do: []
+
   defp diag_unless_context(false, caller_mod, repo_calls, config),
     do: [build_diagnostic(caller_mod, repo_calls, config)]
 

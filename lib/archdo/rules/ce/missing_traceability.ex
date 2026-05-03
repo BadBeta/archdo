@@ -23,9 +23,6 @@ defmodule Archdo.Rules.CE.MissingTraceability do
   @impl true
   def pack, do: :ce_compliance
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level. Returns one Diagnostic per untraced public function
   on a traceability-required path. Off by default — `opts` must

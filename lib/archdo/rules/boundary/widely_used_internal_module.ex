@@ -22,9 +22,6 @@ defmodule Archdo.Rules.Boundary.WidelyUsedInternalModule do
 
   @default_threshold 3
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level analysis. Fires one diagnostic per `@moduledoc false`
   module whose call-site set spans `:threshold` or more distinct

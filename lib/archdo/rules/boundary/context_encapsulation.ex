@@ -10,9 +10,6 @@ defmodule Archdo.Rules.Boundary.ContextEncapsulation do
   @impl true
   def description, do: "External modules must not reach into a context's internal modules"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   def analyze_graph(%Graph{} = graph, %Config{} = config) do
     graph.edges
     |> Enum.filter(fn edge ->

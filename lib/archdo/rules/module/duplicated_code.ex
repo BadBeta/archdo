@@ -21,9 +21,6 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   def description,
     do: "Detect code duplication — Type-2 clones (structurally identical functions)"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: walk all functions in all files, normalize, hash, group by hash.
   Functions sharing a hash are structural duplicates.
@@ -159,18 +156,35 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
     |> Enum.reject(fn {name, _arity, _meta, _args, _body} -> name in @ignored_callbacks end)
     |> Enum.group_by(
       fn {name, arity, _, _, _} -> {name, arity} end,
-      fn {_, _, meta, _, body} -> {meta, body} end
+      fn {_, _, meta, args, body} -> {meta, args, body} end
     )
     |> Enum.map(&hash_function_group(&1, file))
     |> Enum.filter(fn {_hash, info} -> info.size >= @min_node_count end)
   end
 
+  # The hash includes both ARG PATTERNS and BODIES of every clause. Two
+  # functions whose bodies are identical (e.g. `do: true` / `do: false`)
+  # but whose head patterns differ (`f({:_, _, _})` vs `f({:def, _, _})`)
+  # are NOT duplicates — they're discriminating different shapes. Hashing
+  # `{arity, [{normalized_args, normalized_body}, ...]}` distinguishes
+  # them, while still grouping multi-clause heads of the same function.
   defp hash_function_group({{name, arity}, clauses}, file) do
-    clauses_sorted = Enum.sort_by(clauses, fn {meta, _} -> AST.line(meta) end)
-    bodies = Enum.map(clauses_sorted, fn {_meta, body} -> normalize(body) end)
-    size = Enum.sum(Enum.map(bodies, &AST.ast_size/1))
-    hash = :erlang.phash2({arity, bodies})
-    {first_meta, _} = hd(clauses_sorted)
+    clauses_sorted = Enum.sort_by(clauses, fn {meta, _, _} -> AST.line(meta) end)
+
+    clause_shapes =
+      Enum.map(clauses_sorted, fn {_meta, args, body} ->
+        {normalize(args), normalize(body)}
+      end)
+
+    size =
+      Enum.sum(
+        Enum.map(clause_shapes, fn {args_n, body_n} ->
+          AST.ast_size(args_n) + AST.ast_size(body_n)
+        end)
+      )
+
+    hash = :erlang.phash2({arity, clause_shapes})
+    {first_meta, _, _} = hd(clauses_sorted)
 
     {hash,
      %{

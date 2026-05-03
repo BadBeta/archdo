@@ -33,9 +33,6 @@ defmodule Archdo.Rules.Boundary.Mockability do
     [:File]
   ]
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: scan all files for direct external IO usage,
   count behaviour definitions, and compute a mockability score.

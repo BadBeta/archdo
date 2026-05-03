@@ -15,9 +15,6 @@ defmodule Archdo.Rules.Boundary.ChattyBoundary do
   def description,
     do: "Chatty boundaries — two contexts that call each other often are in the wrong place"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Graph-based: count cross-context calls. High call volume between two contexts
   suggests they're actually one concept that was split incorrectly.

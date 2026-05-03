@@ -10,9 +10,6 @@ defmodule Archdo.Rules.EventSourcing.SharedProjections do
   @impl true
   def description, do: "Projectors must not share read models"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Graph-based: detect multiple projector modules writing to the same Ecto schema.
   Only applies when Commanded is actually in use.

@@ -12,9 +12,6 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
   @impl true
   def description, do: "Public API function returns inconsistent shapes across clauses"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Minimum clauses to check — single-clause functions always return one shape
   @min_clauses 2
 
@@ -52,6 +49,7 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
   end
 
   defp diag_for_consistency(:consistent, _fn_info, _module), do: []
+
   defp diag_for_consistency({:inconsistent, shapes}, fn_info, module),
     do: [build_diagnostic(module, fn_info, shapes)]
 
@@ -72,6 +70,7 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
   end
 
   defp consistency_if_unique(false, _shapes), do: :consistent
+
   defp consistency_if_unique(true, shapes) do
     inconsistent_unless_ok_error(valid_ok_error_pattern?(shapes), shapes)
   end

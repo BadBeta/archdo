@@ -487,8 +487,17 @@ defmodule Archdo.Runner do
 
   # Run a single rule, isolating crashes so one broken rule doesn't block others.
   # A rule crash is a bug in Archdo, not in the analyzed code — log visibly and continue.
+  # Project-only rules (`analyze_project/N` / `analyze_compiled/N`) skip
+  # the per-file path entirely — `analyze/3` is optional in the behaviour.
+  # `Code.ensure_loaded/1` first because `function_exported?/3` returns
+  # `false` for modules not yet loaded into the runtime.
   defp safe_analyze(rule, file, ast, opts) do
-    rule.analyze(file, ast, opts)
+    _ = Code.ensure_loaded(rule)
+
+    case function_exported?(rule, :analyze, 3) do
+      true -> rule.analyze(file, ast, opts)
+      false -> []
+    end
   rescue
     e ->
       IO.puts(

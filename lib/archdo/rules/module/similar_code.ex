@@ -24,9 +24,6 @@ defmodule Archdo.Rules.Module.SimilarCode do
   @impl true
   def description, do: "Detect Type-3 clones — similar functions with minor variations"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: walk all functions, compute shingle fingerprints,
   pairwise compare via Jaccard similarity, report similar pairs above threshold.

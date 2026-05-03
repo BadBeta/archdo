@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.TestOnlyPublic do
   @impl true
   def description, do: "Public function only called from test files"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
   def analyze_compiled(graph) do
     modules = Compiled.modules(graph)
@@ -41,7 +38,9 @@ defmodule Archdo.Rules.Compiled.TestOnlyPublic do
   # the empty-callers shape; only test-only when at least one caller
   # exists and all are test modules.
   defp all_callers_test?([]), do: false
-  defp all_callers_test?(callers), do: Enum.all?(callers, fn c -> test_module?(elem(c.caller, 0)) end)
+
+  defp all_callers_test?(callers),
+    do: Enum.all?(callers, fn c -> test_module?(elem(c.caller, 0)) end)
 
   defp test_module?(mod) do
     mod_str = Atom.to_string(mod)

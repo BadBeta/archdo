@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.WeakDependency do
   @impl true
   def description, do: "Module depends on another but uses very few of its exports"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Flag when using <= this many functions from a module with >= @min_target_exports
   @max_used_functions 2
   @min_target_exports 10
@@ -39,7 +36,9 @@ defmodule Archdo.Rules.Compiled.WeakDependency do
   defp target_diagnostic({target_mod, calls}, caller_mod, modules) do
     target_exports = Map.get(modules, target_mod, %{exports: []}).exports
     total_exports = length(target_exports)
-    used_fns = calls |> Enum.map(fn c -> {elem(c.callee, 1), elem(c.callee, 2)} end) |> Enum.uniq()
+
+    used_fns =
+      calls |> Enum.map(fn c -> {elem(c.callee, 1), elem(c.callee, 2)} end) |> Enum.uniq()
 
     weak_enough? =
       total_exports >= @min_target_exports and length(used_fns) <= @max_used_functions

@@ -105,6 +105,37 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  Is the AST argument node a catch-all? Matches the wildcard `_` and any
+  bare variable (`{name, _, ctx}` where both `name` and `ctx` are atoms).
+  Used by rules that classify argument shapes.
+  """
+  @spec catch_all_arg?(Macro.t()) :: boolean()
+  def catch_all_arg?({:_, _, ctx}) when is_atom(ctx), do: true
+  def catch_all_arg?({var, _, ctx}) when is_atom(var) and is_atom(ctx), do: true
+  def catch_all_arg?(_), do: false
+
+  @doc """
+  Unwrap a string literal possibly wrapped by `Code.string_to_quoted/2`'s
+  `literal_encoder` option (which produces `{:__block__, _, [s]}`). Returns
+  `nil` for non-strings — use a different helper if you need a fallback to
+  `Macro.to_string/1`.
+  """
+  @spec unwrap_string(Macro.t()) :: String.t() | nil
+  def unwrap_string({:__block__, _, [s]}) when is_binary(s), do: s
+  def unwrap_string(s) when is_binary(s), do: s
+  def unwrap_string(_), do: nil
+
+  @doc """
+  Return the list of statements at the top of an AST body. A bare body is
+  wrapped in a one-element list; a `{:__block__, _, statements}` is
+  unwrapped; nil yields an empty list.
+  """
+  @spec body_statements(Macro.t() | nil) :: [Macro.t()]
+  def body_statements(nil), do: []
+  def body_statements({:__block__, _, statements}) when is_list(statements), do: statements
+  def body_statements(single), do: [single]
+
+  @doc """
   Collect the names of `@moduledoc false` modules across a list of
   `{file, ast}` tuples. Skips modules whose name resolves to `"Unknown"`
   (no `defmodule` block found). Returned as a `MapSet.t(String.t())`
@@ -754,9 +785,6 @@ defmodule Archdo.AST do
   defp recurse_module_children({_form, _meta, args}, acc) when is_list(args) do
     Enum.reduce(args, acc, &all_module_bodies/2)
   end
-
-  defp body_statements({:__block__, _, statements}), do: statements
-  defp body_statements(single), do: [single]
 
   defp scan_impl_marks([], _flag, acc), do: acc
 

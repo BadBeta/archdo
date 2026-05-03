@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
   @impl true
   def description, do: "Protocol implementation missing required functions"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
   def analyze_compiled(graph) do
     modules = Compiled.modules(graph)
@@ -46,7 +43,9 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
   end
 
   defp emit_diag_if_missing([], _module, _behaviour), do: []
-  defp emit_diag_if_missing(missing, module, behaviour), do: [build_diagnostic(module, behaviour, missing)]
+
+  defp emit_diag_if_missing(missing, module, behaviour),
+    do: [build_diagnostic(module, behaviour, missing)]
 
   defp build_diagnostic(module, behaviour, missing) do
     mod_name = AST.module_name(module)

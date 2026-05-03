@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
   @impl true
   def description, do: "Internal module (child of a context) called from outside its context"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # A module used by more than this many external modules is infrastructure, not internal
   @widely_used_threshold 5
 

@@ -16,9 +16,6 @@ defmodule Archdo.Rules.Module.MainSequenceDistance do
   def description,
     do: "Distance from main sequence — concrete/stable or abstract/unstable modules"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level: takes the metrics output from Archdo.Metrics.compute/2
   and flags modules far from the main sequence.

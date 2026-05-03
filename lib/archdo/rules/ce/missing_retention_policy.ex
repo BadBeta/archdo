@@ -32,9 +32,6 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
   @impl true
   def pack, do: :ce_privacy
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc "Project-level. One Diagnostic per user-data schema lacking retention."
   @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
   def analyze_project(file_asts, _opts \\ []) do

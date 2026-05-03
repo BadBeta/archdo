@@ -27,9 +27,6 @@ defmodule Archdo.Rules.CE.ReturnShapeDrift do
   def description,
     do: "Bang public function (name!/n) lacking a non-bang sibling — caller forced into rescue"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc "Project-level. One Diagnostic per orphan bang function."
   @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
   def analyze_project(file_asts, _opts \\ []) do
@@ -88,7 +85,6 @@ defmodule Archdo.Rules.CE.ReturnShapeDrift do
   end
 
   defp build_diagnostic(file, module, name, arity, meta, base) do
-
     Diagnostic.warning("CE-47",
       title: "Bang function without non-bang sibling",
       message:
@@ -120,7 +116,11 @@ defmodule Archdo.Rules.CE.ReturnShapeDrift do
         )
       ],
       references: ["ARCHITECTURE_RULES_CHANGE_ECONOMY.md#CE-47"],
-      context: %{module: module, function: "#{name}/#{arity}", missing_sibling: "#{base}/#{arity}"},
+      context: %{
+        module: module,
+        function: "#{name}/#{arity}",
+        missing_sibling: "#{base}/#{arity}"
+      },
       file: file,
       line: AST.line(meta)
     )

@@ -21,9 +21,6 @@ defmodule Archdo.Rules.CE.ErrorCategoryDrift do
   @impl true
   def description, do: "Error atoms scattered as synonyms across modules — error category drift"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc "Project-level. One Diagnostic per scattered error-atom cluster."
   @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
   def analyze_project(file_asts, _opts \\ []) do

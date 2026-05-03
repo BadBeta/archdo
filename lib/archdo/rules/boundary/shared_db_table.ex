@@ -15,9 +15,6 @@ defmodule Archdo.Rules.Boundary.SharedDbTable do
   def description, do: "Multiple schemas for the same database table — shared table ownership"
 
   # This is a project-level rule — needs all file ASTs
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   @doc """
   Project-level analysis: find database tables referenced by schemas
   in different contexts.
@@ -48,6 +45,7 @@ defmodule Archdo.Rules.Boundary.SharedDbTable do
 
   defp diags_when_shared(true, table, entries, contexts) do
     context_names = Enum.map_join(contexts, ", ", fn {_, ctx, _, _} -> ctx end)
+
     Enum.map(entries, fn {_table, _ctx, file, line} ->
       build_diagnostic(file, line, table, context_names)
     end)

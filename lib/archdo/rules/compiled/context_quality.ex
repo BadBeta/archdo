@@ -11,9 +11,6 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
   @impl true
   def description, do: "Context boundary quality — cohesion, coupling, and encapsulation analysis"
 
-  @impl true
-  def analyze(_file, _ast, _opts), do: []
-
   # Minimum members to consider a context worth analyzing
   @min_members 3
   # Context with leak ratio above this is flagged
