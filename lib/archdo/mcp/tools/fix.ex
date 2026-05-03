@@ -34,44 +34,44 @@ defmodule Archdo.Mcp.Tools.Fix do
   end
 
   def call(%{"file" => file} = args) do
-    case File.exists?(file) do
-      true ->
-        rule_filter =
-          case Map.get(args, "rule_id") do
-            nil -> @fixable_rules
-            id -> [id]
-          end
-
-        diagnostics = Runner.analyze([file], only: rule_filter)
-        fixable = Enum.filter(diagnostics, &(&1.rule_id in @fixable_rules))
-
-        case File.read(file) do
-          {:ok, content} ->
-            lines = String.split(content, "\n")
-
-            fixes =
-              fixable
-              |> Enum.map(fn d -> generate_fix(d, lines) end)
-              |> Enum.reject(&is_nil/1)
-
-            {:ok,
-             %{
-               file: file,
-               fixable_count: length(fixes),
-               total_findings: length(diagnostics),
-               fixes: fixes
-             }}
-
-          {:error, reason} ->
-            {:error, "Cannot read #{file}: #{reason}"}
-        end
-
-      false ->
-        {:error, "File not found: #{file}"}
-    end
+    call_for_existing(File.exists?(file), file, args)
   end
 
   def call(_), do: {:error, "Missing required argument: file"}
+
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head dispatch
+  # on file existence and on the read result tag.
+  defp call_for_existing(false, file, _args), do: {:error, "File not found: #{file}"}
+
+  defp call_for_existing(true, file, args) do
+    rule_filter = rule_filter(Map.get(args, "rule_id"))
+    diagnostics = Runner.analyze([file], only: rule_filter)
+    fixable = Enum.filter(diagnostics, &(&1.rule_id in @fixable_rules))
+    build_fixes(File.read(file), file, fixable, diagnostics)
+  end
+
+  defp rule_filter(nil), do: @fixable_rules
+  defp rule_filter(id), do: [id]
+
+  defp build_fixes({:error, reason}, file, _fixable, _diagnostics),
+    do: {:error, "Cannot read #{file}: #{reason}"}
+
+  defp build_fixes({:ok, content}, file, fixable, diagnostics) do
+    lines = String.split(content, "\n")
+
+    fixes =
+      fixable
+      |> Enum.map(fn d -> generate_fix(d, lines) end)
+      |> Enum.reject(&is_nil/1)
+
+    {:ok,
+     %{
+       file: file,
+       fixable_count: length(fixes),
+       total_findings: length(diagnostics),
+       fixes: fixes
+     }}
+  end
 
   # Generate a fix for single-clause with → case
   defp generate_fix(%{rule_id: "6.41", line: line}, lines) do

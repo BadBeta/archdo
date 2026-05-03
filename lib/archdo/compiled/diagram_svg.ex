@@ -191,61 +191,56 @@ defmodule Archdo.Compiled.DiagramSVG do
   end
 
   defp render_column(entries, x, y_start, available_height, role) do
-    count = length(entries)
-
-    case count do
-      0 ->
-        {[], %{}}
-
-      _ ->
-        spacing = min(available_height / count, 60)
-
-        {elements, ports} =
-          entries
-          |> Enum.with_index()
-          |> Enum.reduce({[], %{}}, fn {entry, idx}, {elems, ports} ->
-            ey = y_start + idx * spacing
-            node_h = 36
-
-            mod_name = AST.short_name(entry.module)
-            fns = Enum.map_join(entry.functions_called, ", ", fn {f, a} -> "#{f}/#{a}" end)
-            fns_truncated = String.slice(fns, 0, 28)
-
-            bg_color =
-              case role do
-                :caller -> "#1E3A5F"
-                :dependency -> "#3D2E1E"
-              end
-
-            border_color =
-              case role do
-                :caller -> "#2563EB"
-                :dependency -> "#D97706"
-              end
-
-            box = [
-              ~s(<rect x="#{x}" y="#{ey}" width="#{@node_width}" height="#{node_h}" rx="4" fill="#{bg_color}" stroke="#{border_color}" stroke-width="1"/>),
-              ~s(<text x="#{x + 10}" y="#{ey + 15}" fill="#{@text_color}" font-size="#{@font_size}" font-weight="500" font-family="monospace">#{mod_name}</text>),
-              ~s(<text x="#{x + 10}" y="#{ey + 28}" fill="#{@dim_text}" font-size="9" font-family="monospace">#{fns_truncated}</text>)
-            ]
-
-            # Port position
-            port =
-              case role do
-                :caller -> {x + @node_width, ey + node_h / 2}
-                :dependency -> {x, ey + node_h / 2}
-              end
-
-            port_circle = [
-              ~s(<circle cx="#{elem(port, 0)}" cy="#{elem(port, 1)}" r="#{@port_radius}" fill="#{border_color}" stroke="#{@node_border}"/>)
-            ]
-
-            {[port_circle, box | elems], Map.put(ports, idx, port)}
-          end)
-
-        {List.flatten(Enum.reverse(elements)), ports}
-    end
+    render_column_entries(length(entries), entries, x, y_start, available_height, role)
   end
+
+  # §§ elixir-implementing: §2.1 — empty-vs-nonempty dispatch on count.
+  defp render_column_entries(0, _entries, _x, _y_start, _avail, _role), do: {[], %{}}
+
+  defp render_column_entries(count, entries, x, y_start, available_height, role) do
+    spacing = min(available_height / count, 60)
+
+    {elements, ports} =
+      entries
+      |> Enum.with_index()
+      |> Enum.reduce({[], %{}}, &accumulate_column_entry(&1, &2, x, y_start, spacing, role))
+
+    {List.flatten(Enum.reverse(elements)), ports}
+  end
+
+  defp accumulate_column_entry({entry, idx}, {elems, ports}, x, y_start, spacing, role) do
+    ey = y_start + idx * spacing
+    node_h = 36
+
+    mod_name = AST.short_name(entry.module)
+    fns = Enum.map_join(entry.functions_called, ", ", fn {f, a} -> "#{f}/#{a}" end)
+    fns_truncated = String.slice(fns, 0, 28)
+
+    bg_color = column_bg_color(role)
+    border_color = column_border_color(role)
+    port = column_port(role, x, ey, node_h)
+
+    box = [
+      ~s(<rect x="#{x}" y="#{ey}" width="#{@node_width}" height="#{node_h}" rx="4" fill="#{bg_color}" stroke="#{border_color}" stroke-width="1"/>),
+      ~s(<text x="#{x + 10}" y="#{ey + 15}" fill="#{@text_color}" font-size="#{@font_size}" font-weight="500" font-family="monospace">#{mod_name}</text>),
+      ~s(<text x="#{x + 10}" y="#{ey + 28}" fill="#{@dim_text}" font-size="9" font-family="monospace">#{fns_truncated}</text>)
+    ]
+
+    port_circle = [
+      ~s(<circle cx="#{elem(port, 0)}" cy="#{elem(port, 1)}" r="#{@port_radius}" fill="#{border_color}" stroke="#{@node_border}"/>)
+    ]
+
+    {[port_circle, box | elems], Map.put(ports, idx, port)}
+  end
+
+  defp column_bg_color(:caller), do: "#1E3A5F"
+  defp column_bg_color(:dependency), do: "#3D2E1E"
+
+  defp column_border_color(:caller), do: "#2563EB"
+  defp column_border_color(:dependency), do: "#D97706"
+
+  defp column_port(:caller, x, ey, node_h), do: {x + @node_width, ey + node_h / 2}
+  defp column_port(:dependency, x, ey, node_h), do: {x, ey + node_h / 2}
 
   defp render_wire({x1, y1}, {x2, y2}, call_count, _direction) do
     # Bezier control points for smooth curve

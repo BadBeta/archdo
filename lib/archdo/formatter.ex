@@ -208,32 +208,40 @@ defmodule Archdo.Formatter do
       |> Enum.each(fn line -> IO.puts("         why: #{line}") end)
     end
 
-    case d.alternatives do
-      [] ->
-        :ok
-
-      alts ->
-        IO.puts("         fixes:")
-
-        alts
-        |> Enum.with_index(1)
-        |> Enum.each(fn {%Fix{} = fix, idx} ->
-          IO.puts("           #{idx}. #{fix.summary}")
-
-          if is_non_empty_string(fix.detail) do
-            fix.detail
-            |> wrap(76)
-            |> Enum.each(fn line -> IO.puts("              #{line}") end)
-          end
-
-          if is_non_empty_string(fix.applies_when) do
-            IO.puts("              when: #{fix.applies_when}")
-          end
-        end)
-    end
+    print_alternatives(d.alternatives)
 
     IO.puts("")
   end
+
+  # §§ elixir-implementing: §2.1 — empty list → noop, otherwise print.
+  defp print_alternatives([]), do: :ok
+
+  defp print_alternatives(alts) do
+    IO.puts("         fixes:")
+
+    alts
+    |> Enum.with_index(1)
+    |> Enum.each(fn {%Fix{} = fix, idx} -> print_alternative(fix, idx) end)
+  end
+
+  defp print_alternative(%Fix{} = fix, idx) do
+    IO.puts("           #{idx}. #{fix.summary}")
+    print_fix_detail(fix.detail)
+    print_fix_applies_when(fix.applies_when)
+  end
+
+  defp print_fix_detail(detail) when is_binary(detail) and detail != "" do
+    detail
+    |> wrap(76)
+    |> Enum.each(fn line -> IO.puts("              #{line}") end)
+  end
+
+  defp print_fix_detail(_), do: :ok
+
+  defp print_fix_applies_when(applies_when) when is_binary(applies_when) and applies_when != "",
+    do: IO.puts("              when: #{applies_when}")
+
+  defp print_fix_applies_when(_), do: :ok
 
   # ───────────────────────────────────────────── :compact ──────────────────────────────────────────
 

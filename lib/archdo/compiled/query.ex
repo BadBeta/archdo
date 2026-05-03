@@ -725,7 +725,15 @@ defmodule Archdo.Compiled.Query do
       end)
 
     other_count = length(other_context_calls)
-    misplaced_if_skewed(other_count > own_calls and other_count >= 3, mod, own_calls, other_context_calls, other_count, context_name)
+
+    misplaced_if_skewed(
+      other_count > own_calls and other_count >= 3,
+      mod,
+      own_calls,
+      other_context_calls,
+      other_count,
+      context_name
+    )
   end
 
   # §§ elixir-implementing: §2.1 — boolean → multi-clause head

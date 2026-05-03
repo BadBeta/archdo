@@ -207,29 +207,28 @@ defmodule Archdo.Compiled.DiagramSystem do
     # Look for return values containing {:next_state, atom, ...}
     # or state atoms in return positions that differ from input states
     fns
-    |> Enum.flat_map(fn fn_info ->
-      Enum.flat_map(fn_info.clauses, fn clause ->
-        from_state =
-          case clause.patterns do
-            [{:atom, _, state} | _] when is_atom(state) -> state
-            _ -> nil
-          end
-
-        to_state =
-          case clause.return_shape do
-            {:tagged_tuple, :next_state} -> :unknown
-            {:atom, state} when state != from_state -> state
-            _ -> nil
-          end
-
-        case from_state != nil and to_state != nil do
-          true -> [{from_state, to_state}]
-          false -> []
-        end
-      end)
-    end)
+    |> Enum.flat_map(&transitions_for_fn/1)
     |> Enum.uniq()
   end
+
+  defp transitions_for_fn(fn_info), do: Enum.flat_map(fn_info.clauses, &transition_for_clause/1)
+
+  defp transition_for_clause(clause) do
+    from_state = clause_from_state(clause.patterns)
+    to_state = clause_to_state(clause.return_shape, from_state)
+    transition_pair(from_state, to_state)
+  end
+
+  defp clause_from_state([{:atom, _, state} | _]) when is_atom(state), do: state
+  defp clause_from_state(_), do: nil
+
+  defp clause_to_state({:tagged_tuple, :next_state}, _from), do: :unknown
+  defp clause_to_state({:atom, state}, from) when state != from, do: state
+  defp clause_to_state(_, _from), do: nil
+
+  defp transition_pair(nil, _to), do: []
+  defp transition_pair(_from, nil), do: []
+  defp transition_pair(from, to), do: [{from, to}]
 
   # --- Inside tools detection ---
 
@@ -531,21 +530,13 @@ defmodule Archdo.Compiled.DiagramSystem do
       # Find calls from upper → lower
       down_connections =
         upper_mods
-        |> Enum.flat_map(fn upper_mod ->
-          Query.module_dependencies(graph, upper_mod)
-          |> Enum.filter(&MapSet.member?(lower_set, &1))
-          |> Enum.map(fn lower_mod -> {upper_mod, lower_mod} end)
-        end)
+        |> Enum.flat_map(&directed_edges(&1, graph, lower_set))
         |> Enum.uniq()
 
       # Find calls from lower → upper (return/callback)
       up_connections =
         lower_mods
-        |> Enum.flat_map(fn lower_mod ->
-          Query.module_dependencies(graph, lower_mod)
-          |> Enum.filter(&MapSet.member?(upper_set, &1))
-          |> Enum.map(fn upper_mod -> {lower_mod, upper_mod} end)
-        end)
+        |> Enum.flat_map(&directed_edges(&1, graph, upper_set))
         |> Enum.uniq()
 
       shown_down = Enum.take(down_connections, 5)
@@ -586,27 +577,30 @@ defmodule Archdo.Compiled.DiagramSystem do
           )
         end)
 
-      # "+N more" badge
-      badge =
-        case hidden_count > 0 do
-          true ->
-            case Map.values(upper_positions) do
-              [{_cx, _ty, by} | _] ->
-                [
-                  ~s[<text x="#{@margin + 4}" y="#{by + 14}" fill="#{@dim}" font-size="8" font-family="monospace" opacity="0.6">+#{hidden_count} more</text>]
-                ]
-
-              _ ->
-                []
-            end
-
-          false ->
-            []
-        end
+      badge = hidden_more_badge(hidden_count, upper_positions)
 
       down_elems ++ up_elems ++ badge
     end)
   end
+
+  defp directed_edges(source_mod, graph, target_set) do
+    graph
+    |> Query.module_dependencies(source_mod)
+    |> Enum.filter(&MapSet.member?(target_set, &1))
+    |> Enum.map(fn target_mod -> {source_mod, target_mod} end)
+  end
+
+  # §§ elixir-implementing: §2.1 — guard-dispatched on hidden_count.
+  defp hidden_more_badge(count, _positions) when count <= 0, do: []
+  defp hidden_more_badge(count, positions), do: badge_for_positions(Map.values(positions), count)
+
+  defp badge_for_positions([{_cx, _ty, by} | _], hidden_count) do
+    [
+      ~s[<text x="#{@margin + 4}" y="#{by + 14}" fill="#{@dim}" font-size="8" font-family="monospace" opacity="0.6">+#{hidden_count} more</text>]
+    ]
+  end
+
+  defp badge_for_positions(_, _hidden_count), do: []
 
   defp render_tunnel_wire(
          source_positions,
@@ -722,43 +716,49 @@ defmodule Archdo.Compiled.DiagramSystem do
         state_elems =
           states
           |> Enum.with_index()
-          |> Enum.flat_map(fn {state, idx} ->
-            sx = x + 20
-            sy = y + 34 + idx * 20
-            color = state_color(state, idx, length(states))
-
-            [
-              ~s[<circle cx="#{sx}" cy="#{sy}" r="#{@state_radius / 2}" fill="#{color}" opacity="0.8"/>],
-              ~s[<text x="#{sx + 14}" y="#{sy + 4}" fill="#{@text}" font-size="9" font-family="monospace">:#{state}</text>]
-            ]
-          end)
+          |> Enum.flat_map(&state_glyph(&1, x, y, length(states)))
 
         # Render transitions as small arrows between states
         transition_elems =
           sm_info.transitions
           |> Enum.take(4)
-          |> Enum.flat_map(fn {from, to} ->
-            from_idx = Enum.find_index(states, &(&1 == from))
-            to_idx = Enum.find_index(states, &(&1 == to))
-
-            case from_idx != nil and to_idx != nil do
-              true ->
-                fy = y + 34 + from_idx * 20
-                ty = y + 34 + to_idx * 20
-                ax = x + @node_w - 20
-
-                [
-                  ~s[<path d="M #{ax - 10} #{fy} C #{ax} #{fy}, #{ax} #{ty}, #{ax - 10} #{ty}" fill="none" stroke="#{@wire_color}" stroke-width="0.8" marker-end="url(#arrowhead)"/>]
-                ]
-
-              false ->
-                []
-            end
-          end)
+          |> Enum.flat_map(&transition_arrow(&1, states, x, y))
 
         header ++ state_elems ++ transition_elems
       end
     end)
+  end
+
+  defp state_glyph({state, idx}, x, y, total) do
+    sx = x + 20
+    sy = y + 34 + idx * 20
+    color = state_color(state, idx, total)
+
+    [
+      ~s[<circle cx="#{sx}" cy="#{sy}" r="#{@state_radius / 2}" fill="#{color}" opacity="0.8"/>],
+      ~s[<text x="#{sx + 14}" y="#{sy + 4}" fill="#{@text}" font-size="9" font-family="monospace">:#{state}</text>]
+    ]
+  end
+
+  defp transition_arrow({from, to}, states, x, y) do
+    from_idx = Enum.find_index(states, &(&1 == from))
+    to_idx = Enum.find_index(states, &(&1 == to))
+    transition_arrow_for(from_idx, to_idx, x, y)
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the missing-index nil case.
+  defp transition_arrow_for(nil, _to_idx, _x, _y), do: []
+  defp transition_arrow_for(_from_idx, nil, _x, _y), do: []
+
+  defp transition_arrow_for(from_idx, to_idx, x, y) do
+    fy = y + 34 + from_idx * 20
+    ty = y + 34 + to_idx * 20
+    ax = x + @node_w - 20
+
+    [
+      ~s[<path d="M #{ax - 10} #{fy} C #{ax} #{fy}, #{ax} #{ty}, #{ax - 10} #{ty}" fill="none" stroke="#{@wire_color}" stroke-width="0.8" marker-end="url(#arrowhead)"/>]
+    ]
   end
 
   defp render_tool_nodes(tools) do

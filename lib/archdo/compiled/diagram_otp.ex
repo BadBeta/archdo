@@ -340,35 +340,7 @@ defmodule Archdo.Compiled.DiagramOTP do
       end)
 
     # Message wires
-    wire_elements =
-      Enum.flat_map(topology, fn p ->
-        p.outgoing_messages
-        |> Enum.filter(fn m -> m.to != :unknown and Map.has_key?(positions, m.to) end)
-        |> Enum.flat_map(fn m ->
-          {from_x, from_y} = Map.get(positions, p.module, {0, 0})
-          {to_x, to_y} = Map.get(positions, m.to, {0, 0})
-
-          # Wire from outbox (bottom-right) to mailbox (top-left)
-          fx = from_x + @process_w - 4
-          fy = from_y + @process_h - 4
-          tx = to_x + 4
-          ty = to_y + 4
-
-          mid_x = (fx + tx) / 2
-
-          color =
-            case m.type do
-              :call -> @genserver_accent
-              :cast -> @agent_accent
-              :send -> @task_accent
-            end
-
-          [
-            ~s(<path d="M #{fx} #{fy} C #{mid_x} #{fy}, #{mid_x} #{ty}, #{tx} #{ty}" fill="none" stroke="#{color}" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>),
-            ~s(<circle cx="#{tx}" cy="#{ty}" r="3" fill="#{color}" opacity="0.8"/>)
-          ]
-        end)
-      end)
+    wire_elements = Enum.flat_map(topology, &wire_elements_for_process(&1, positions))
 
     title = [
       ~s(<text x="#{@margin}" y="24" fill="#{@text_color}" font-size="14" font-weight="600" font-family="monospace">OTP Process Messaging</text>)
@@ -389,6 +361,33 @@ defmodule Archdo.Compiled.DiagramOTP do
   end
 
   # --- Helpers ---
+
+  defp wire_elements_for_process(p, positions) do
+    p.outgoing_messages
+    |> Enum.filter(fn m -> m.to != :unknown and Map.has_key?(positions, m.to) end)
+    |> Enum.flat_map(&wire_segment(&1, p.module, positions))
+  end
+
+  defp wire_segment(m, from_module, positions) do
+    {from_x, from_y} = Map.get(positions, from_module, {0, 0})
+    {to_x, to_y} = Map.get(positions, m.to, {0, 0})
+
+    fx = from_x + @process_w - 4
+    fy = from_y + @process_h - 4
+    tx = to_x + 4
+    ty = to_y + 4
+    mid_x = (fx + tx) / 2
+    color = wire_color(m.type)
+
+    [
+      ~s(<path d="M #{fx} #{fy} C #{mid_x} #{fy}, #{mid_x} #{ty}, #{tx} #{ty}" fill="none" stroke="#{color}" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>),
+      ~s(<circle cx="#{tx}" cy="#{ty}" r="3" fill="#{color}" opacity="0.8"/>)
+    ]
+  end
+
+  defp wire_color(:call), do: @genserver_accent
+  defp wire_color(:cast), do: @agent_accent
+  defp wire_color(:send), do: @task_accent
 
   defp accent_color(:supervisor), do: @supervisor_accent
   defp accent_color(:genserver), do: @genserver_accent

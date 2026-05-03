@@ -66,80 +66,81 @@ defmodule Archdo.Rules.Testing.CoverageGap do
   # --- Per-source analysis ---
 
   defp check_source(source_file, source_ast, test_index) do
-    if ignore_source?(source_file, source_ast) do
-      []
-    else
-      public_fns = collect_public_fns(source_ast)
+    check_source_for(ignore_source?(source_file, source_ast), source_file, source_ast, test_index)
+  end
 
-      if public_fns == [] do
-        []
-      else
-        module_name = AST.extract_module_name(source_ast)
-        {module_referenced?, test_refs} = analyze_test_file(source_file, module_name, test_index)
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head dispatch
+  # on the ignore predicate and on the empty publics shape.
+  defp check_source_for(true, _source_file, _source_ast, _test_index), do: []
 
-        uncovered =
-          Enum.reject(public_fns, fn {name, arity} ->
-            directly_referenced?(test_refs, name, arity)
-          end)
+  defp check_source_for(false, source_file, source_ast, test_index),
+    do: check_publics(collect_public_fns(source_ast), source_file, source_ast, test_index)
 
-        # If the module is referenced at all (via alias/use) but specific functions
-        # aren't, that's still lower confidence coverage — report as an info
-        # summary rather than per-function diagnostics.
-        build_diagnostics(source_file, source_ast, public_fns, uncovered, module_referenced?)
-      end
-    end
+  defp check_publics([], _source_file, _source_ast, _test_index), do: []
+
+  defp check_publics(public_fns, source_file, source_ast, test_index) do
+    module_name = AST.extract_module_name(source_ast)
+    {module_referenced?, test_refs} = analyze_test_file(source_file, module_name, test_index)
+
+    uncovered =
+      Enum.reject(public_fns, fn {name, arity} ->
+        directly_referenced?(test_refs, name, arity)
+      end)
+
+    # If the module is referenced at all (via alias/use) but specific functions
+    # aren't, that's still lower confidence coverage — report as an info
+    # summary rather than per-function diagnostics.
+    build_diagnostics(source_file, source_ast, public_fns, uncovered, module_referenced?)
   end
 
   defp build_row(source_file, source_ast, test_index) do
-    if ignore_source?(source_file, source_ast) do
-      nil
-    else
-      public_fns = collect_public_fns(source_ast)
-
-      if public_fns == [] do
-        nil
-      else
-        module_name = AST.extract_module_name(source_ast)
-        {module_referenced?, test_refs} = analyze_test_file(source_file, module_name, test_index)
-
-        direct_covered =
-          Enum.count(public_fns, fn {name, arity} ->
-            directly_referenced?(test_refs, name, arity)
-          end)
-
-        total = length(public_fns)
-
-        # If the module is referenced (aliased) but no specific functions, count
-        # this as partial/indirect coverage (50% confidence).
-        {covered, confidence} =
-          cond do
-            direct_covered == total -> {total, :full}
-            direct_covered > 0 -> {direct_covered, :partial}
-            module_referenced? -> {0, :indirect}
-            true -> {0, :none}
-          end
-
-        pct =
-          case confidence do
-            :full -> 100
-            :partial -> round(direct_covered * 100 / total)
-            :indirect -> 50
-            :none -> 0
-          end
-
-        %{
-          module: module_name,
-          file: source_file,
-          total: total,
-          covered: covered,
-          uncovered: total - covered,
-          coverage_pct: pct,
-          confidence: confidence,
-          has_test: Map.has_key?(test_index, source_key(source_file))
-        }
-      end
-    end
+    build_row_for(ignore_source?(source_file, source_ast), source_file, source_ast, test_index)
   end
+
+  defp build_row_for(true, _source_file, _source_ast, _test_index), do: nil
+
+  defp build_row_for(false, source_file, source_ast, test_index),
+    do: build_row_publics(collect_public_fns(source_ast), source_file, source_ast, test_index)
+
+  defp build_row_publics([], _source_file, _source_ast, _test_index), do: nil
+
+  defp build_row_publics(public_fns, source_file, source_ast, test_index) do
+    module_name = AST.extract_module_name(source_ast)
+    {module_referenced?, test_refs} = analyze_test_file(source_file, module_name, test_index)
+
+    direct_covered =
+      Enum.count(public_fns, fn {name, arity} ->
+        directly_referenced?(test_refs, name, arity)
+      end)
+
+    total = length(public_fns)
+
+    # If the module is referenced (aliased) but no specific functions, count
+    # this as partial/indirect coverage (50% confidence).
+    {covered, confidence} = coverage_verdict(direct_covered, total, module_referenced?)
+    pct = coverage_pct(confidence, direct_covered, total)
+
+    %{
+      module: module_name,
+      file: source_file,
+      total: total,
+      covered: covered,
+      uncovered: total - covered,
+      coverage_pct: pct,
+      confidence: confidence,
+      has_test: Map.has_key?(test_index, source_key(source_file))
+    }
+  end
+
+  defp coverage_verdict(total, total, _ref?) when total > 0, do: {total, :full}
+  defp coverage_verdict(direct, _total, _ref?) when direct > 0, do: {direct, :partial}
+  defp coverage_verdict(_direct, _total, true), do: {0, :indirect}
+  defp coverage_verdict(_direct, _total, _ref?), do: {0, :none}
+
+  defp coverage_pct(:full, _direct, _total), do: 100
+  defp coverage_pct(:partial, direct, total), do: round(direct * 100 / total)
+  defp coverage_pct(:indirect, _direct, _total), do: 50
+  defp coverage_pct(:none, _direct, _total), do: 0
 
   defp directly_referenced?(refs, name, arity) do
     {name, arity} in refs or {name, :any} in refs

@@ -106,25 +106,26 @@ defmodule Archdo.Compiled.OTPTopology do
         }
 
   defp build_tree_node(process, process_map, supervisors, visited) do
-    # Prevent cycles
-    case MapSet.member?(visited, process.module) do
-      true ->
-        %{process: process, children: []}
-
-      false ->
-        visited = MapSet.put(visited, process.module)
-
-        child_nodes =
-          Enum.flat_map(process.children, fn child_mod ->
-            case Map.get(process_map, child_mod) do
-              nil -> []
-              child -> [build_tree_node(child, process_map, supervisors, visited)]
-            end
-          end)
-
-        %{process: process, children: child_nodes}
-    end
+    build_tree_node_for(MapSet.member?(visited, process.module), process, process_map, supervisors, visited)
   end
+
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head on cycle visit.
+  defp build_tree_node_for(true, process, _process_map, _supervisors, _visited),
+    do: %{process: process, children: []}
+
+  defp build_tree_node_for(false, process, process_map, supervisors, visited) do
+    visited = MapSet.put(visited, process.module)
+    child_nodes = Enum.flat_map(process.children, &child_tree_node(&1, process_map, supervisors, visited))
+    %{process: process, children: child_nodes}
+  end
+
+  defp child_tree_node(child_mod, process_map, supervisors, visited) do
+    child_tree_node_for(Map.get(process_map, child_mod), process_map, supervisors, visited)
+  end
+
+  defp child_tree_node_for(nil, _process_map, _supervisors, _visited), do: []
+  defp child_tree_node_for(child, process_map, supervisors, visited),
+    do: [build_tree_node(child, process_map, supervisors, visited)]
 
   # --- Private helpers ---
 
@@ -144,48 +145,7 @@ defmodule Archdo.Compiled.OTPTopology do
 
     # Find calls that represent messaging: GenServer.call/cast, send, etc.
     # Also find direct calls between process modules' client API functions
-    message_calls =
-      Enum.flat_map(calls, fn call ->
-        caller_mod = elem(call.caller, 0)
-        callee_mod = elem(call.callee, 0)
-        callee_fn = elem(call.callee, 1)
-
-        cond do
-          # GenServer.call/cast from a process module
-          callee_mod == GenServer and callee_fn in [:call, :cast] ->
-            # The target is typically the first argument — we can't easily
-            # extract it from abstract code, but we know the caller
-            case MapSet.member?(process_set, caller_mod) do
-              true ->
-                msg_type = if callee_fn == :call, do: :call, else: :cast
-                [%{from: caller_mod, to: :unknown, type: msg_type, function: callee_fn}]
-
-              false ->
-                []
-            end
-
-          # Direct send via :erlang.send or Kernel.send
-          callee_mod in [:erlang, Kernel] and callee_fn == :send ->
-            case MapSet.member?(process_set, caller_mod) do
-              true -> [%{from: caller_mod, to: :unknown, type: :send, function: :send}]
-              false -> []
-            end
-
-          # One process module calling another process module's client API
-          MapSet.member?(process_set, caller_mod) and
-            MapSet.member?(process_set, callee_mod) and
-              caller_mod != callee_mod ->
-            [%{from: caller_mod, to: callee_mod, type: :call, function: callee_fn}]
-
-          # Non-process calling a process module's client API
-          not MapSet.member?(process_set, caller_mod) and
-              MapSet.member?(process_set, callee_mod) ->
-            [%{from: caller_mod, to: callee_mod, type: :call, function: callee_fn}]
-
-          true ->
-            []
-        end
-      end)
+    message_calls = Enum.flat_map(calls, &classify_message_call(&1, process_set))
 
     # Group into incoming/outgoing per process
     incoming =
@@ -200,6 +160,64 @@ defmodule Archdo.Compiled.OTPTopology do
 
     %{incoming: incoming, outgoing: outgoing}
   end
+
+  defp classify_message_call(call, process_set) do
+    caller_mod = elem(call.caller, 0)
+    callee_mod = elem(call.callee, 0)
+    callee_fn = elem(call.callee, 1)
+
+    message_call(
+      call_kind(caller_mod, callee_mod, callee_fn, process_set),
+      caller_mod,
+      callee_mod,
+      callee_fn
+    )
+  end
+
+  defp call_kind(caller_mod, GenServer, fn_name, process_set) when fn_name in [:call, :cast] do
+    genserver_kind(MapSet.member?(process_set, caller_mod), fn_name)
+  end
+
+  defp call_kind(caller_mod, callee_mod, :send, process_set) when callee_mod in [:erlang, Kernel] do
+    send_kind(MapSet.member?(process_set, caller_mod))
+  end
+
+  defp call_kind(caller_mod, callee_mod, _fn_name, process_set) when caller_mod != callee_mod do
+    interprocess_kind(
+      MapSet.member?(process_set, caller_mod),
+      MapSet.member?(process_set, callee_mod)
+    )
+  end
+
+  defp call_kind(_caller, _callee, _fn_name, _process_set), do: :other
+
+  defp genserver_kind(true, :call), do: :genserver_call
+  defp genserver_kind(true, :cast), do: :genserver_cast
+  defp genserver_kind(false, _fn_name), do: :other
+
+  defp send_kind(true), do: :send
+  defp send_kind(false), do: :other
+
+  defp interprocess_kind(true, true), do: :process_to_process
+  defp interprocess_kind(false, true), do: :external_to_process
+  defp interprocess_kind(_caller_in, _callee_in), do: :other
+
+  defp message_call(:genserver_call, caller_mod, _callee_mod, callee_fn),
+    do: [%{from: caller_mod, to: :unknown, type: :call, function: callee_fn}]
+
+  defp message_call(:genserver_cast, caller_mod, _callee_mod, callee_fn),
+    do: [%{from: caller_mod, to: :unknown, type: :cast, function: callee_fn}]
+
+  defp message_call(:send, caller_mod, _callee_mod, _callee_fn),
+    do: [%{from: caller_mod, to: :unknown, type: :send, function: :send}]
+
+  defp message_call(:process_to_process, caller_mod, callee_mod, callee_fn),
+    do: [%{from: caller_mod, to: callee_mod, type: :call, function: callee_fn}]
+
+  defp message_call(:external_to_process, caller_mod, callee_mod, callee_fn),
+    do: [%{from: caller_mod, to: callee_mod, type: :call, function: callee_fn}]
+
+  defp message_call(:other, _caller_mod, _callee_mod, _callee_fn), do: []
 
   defp extract_supervision(calls, process_modules, _all_modules) do
     # Find Supervisor modules and their children
