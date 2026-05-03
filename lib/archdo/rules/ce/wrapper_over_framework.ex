@@ -102,7 +102,7 @@ defmodule Archdo.Rules.CE.WrapperOverFramework do
     |> Enum.flat_map(fn
       {:@, _, [{:behaviour, _, [{:__aliases__, _, parts}]}]} ->
         case Enum.all?(parts, &is_atom/1) do
-          true -> [join_module(parts)]
+          true -> [AST.join_alias_parts(parts)]
           false -> []
         end
 
@@ -145,7 +145,7 @@ defmodule Archdo.Rules.CE.WrapperOverFramework do
     end)
     |> Enum.flat_map(fn
       {{:., _, [{:__aliases__, _, parts}, _fun]}, _, _} ->
-        target = join_module(parts)
+        target = AST.join_alias_parts(parts)
 
         case target == own_module or self_call?(own_module, target) do
           true -> []
@@ -248,6 +248,4 @@ defmodule Archdo.Rules.CE.WrapperOverFramework do
       line: 1
     )
   end
-
-  defp join_module(parts), do: Enum.map_join(parts, ".", &Atom.to_string/1)
 end

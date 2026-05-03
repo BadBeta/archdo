@@ -414,4 +414,185 @@ defmodule Archdo.ASTTest do
       assert length(callbacks[:handle_info]) == 1
     end
   end
+
+  describe "short_name/1 (binary clause)" do
+    test "returns the last dotted segment of a binary module name" do
+      assert AST.short_name("MyApp.Accounts.User") == "User"
+      assert AST.short_name("Foo") == "Foo"
+    end
+
+    test "still works for atoms" do
+      assert AST.short_name(MyApp.Accounts.User) == "User"
+    end
+  end
+
+  describe "safe_existing_atom/1" do
+    test "returns the atom for an existing module name" do
+      _ = MyApp.Pretendo
+      assert AST.safe_existing_atom("MyApp.Pretendo") == MyApp.Pretendo
+    end
+
+    test "returns nil for an unknown module name" do
+      assert AST.safe_existing_atom("Definitely.Not.A.Real.Module.#{:rand.uniform(99_999)}") ==
+               nil
+    end
+  end
+
+  describe "try_existing_atom/1" do
+    test "returns {:ok, atom} when the atom exists" do
+      :a_known_atom_for_test
+      assert AST.try_existing_atom("a_known_atom_for_test") == {:ok, :a_known_atom_for_test}
+    end
+
+    test "returns :error when the atom doesn't exist" do
+      assert AST.try_existing_atom("not_an_atom_#{:rand.uniform(99_999)}") == :error
+    end
+  end
+
+  describe "mix_exs?/1" do
+    test "true for paths ending in mix.exs" do
+      assert AST.mix_exs?("mix.exs")
+      assert AST.mix_exs?("apps/foo/mix.exs")
+      assert AST.mix_exs?("/tmp/proj/mix.exs")
+    end
+
+    test "false for non-mix.exs paths" do
+      refute AST.mix_exs?("lib/my_app.ex")
+      refute AST.mix_exs?("config/config.exs")
+    end
+  end
+
+  describe "path_contains_any?/2" do
+    test "true when any marker is a substring" do
+      assert AST.path_contains_any?("lib/foo/_controller.ex", ["_controller.ex", "/views/"])
+      assert AST.path_contains_any?("lib/foo/views/x.ex", ["_controller.ex", "/views/"])
+    end
+
+    test "false when no marker matches" do
+      refute AST.path_contains_any?("lib/foo/bar.ex", ["_controller.ex", "/views/"])
+    end
+
+    test "false for empty marker list" do
+      refute AST.path_contains_any?("anything", [])
+    end
+  end
+
+  describe "path_starts_with_any?/2" do
+    test "true when file starts with any root" do
+      assert AST.path_starts_with_any?("lib/api/foo.ex", ["lib/api/", "lib/web/"])
+    end
+
+    test "false otherwise" do
+      refute AST.path_starts_with_any?("lib/internal/foo.ex", ["lib/api/", "lib/web/"])
+    end
+  end
+
+  describe "module_under_namespace?/2" do
+    test "true when the names are equal" do
+      assert AST.module_under_namespace?("MyApp.Accounts", "MyApp.Accounts")
+    end
+
+    test "true when name is under the namespace" do
+      assert AST.module_under_namespace?("MyApp.Accounts.User", "MyApp.Accounts")
+    end
+
+    test "false when name is a sibling, not a child" do
+      refute AST.module_under_namespace?("MyApp.AccountsX", "MyApp.Accounts")
+      refute AST.module_under_namespace?("MyApp.Other", "MyApp.Accounts")
+    end
+  end
+
+  describe "repo_module?/1" do
+    test "true when the last segment is :Repo" do
+      assert AST.repo_module?([:MyApp, :Repo])
+      assert AST.repo_module?([:Repo])
+    end
+
+    test "true when :Repo appears in the middle" do
+      assert AST.repo_module?([:MyApp, :Repo, :Helpers])
+    end
+
+    test "false when no :Repo segment" do
+      refute AST.repo_module?([:MyApp, :Accounts])
+    end
+  end
+
+  describe "join_alias_parts/1" do
+    test "joins atoms into a dotted name" do
+      assert AST.join_alias_parts([:MyApp, :Accounts, :User]) == "MyApp.Accounts.User"
+    end
+
+    test "single segment" do
+      assert AST.join_alias_parts([:Foo]) == "Foo"
+    end
+  end
+
+  describe "parse_files/1" do
+    test "returns {file, ast} tuples for parseable files; drops failures silently" do
+      good = Path.join(System.tmp_dir!(), "parse_files_good_#{:rand.uniform(99_999)}.ex")
+      bad = Path.join(System.tmp_dir!(), "parse_files_bad_#{:rand.uniform(99_999)}.ex")
+      File.write!(good, "defmodule Good do\n  def x, do: 1\nend")
+      File.write!(bad, "defmodule Bad do\n  def x, do: 1")
+
+      try do
+        result = AST.parse_files([good, bad, "/nonexistent/path/x.ex"])
+        assert length(result) == 1
+        assert [{^good, _ast}] = result
+      after
+        File.rm(good)
+        File.rm(bad)
+      end
+    end
+  end
+
+  describe "module_file_map/1" do
+    test "builds a {module_name => file} map" do
+      ast1 =
+        quote do
+          defmodule MyApp.A do
+            def x, do: 1
+          end
+        end
+
+      ast2 =
+        quote do
+          defmodule MyApp.B do
+            def y, do: 2
+          end
+        end
+
+      map = AST.module_file_map([{"a.ex", ast1}, {"b.ex", ast2}])
+      assert map["MyApp.A"] == "a.ex"
+      assert map["MyApp.B"] == "b.ex"
+    end
+  end
+
+  describe "collect_internal_modules/1" do
+    test "collects only @moduledoc false modules" do
+      private_ast =
+        quote do
+          defmodule MyApp.Private do
+            @moduledoc false
+            def x, do: 1
+          end
+        end
+
+      public_ast =
+        quote do
+          defmodule MyApp.Public do
+            @moduledoc "I am public."
+            def y, do: 2
+          end
+        end
+
+      result =
+        AST.collect_internal_modules([
+          {"private.ex", private_ast},
+          {"public.ex", public_ast}
+        ])
+
+      assert MapSet.member?(result, "MyApp.Private")
+      refute MapSet.member?(result, "MyApp.Public")
+    end
+  end
 end

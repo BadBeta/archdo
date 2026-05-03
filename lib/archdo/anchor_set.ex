@@ -174,23 +174,21 @@ defmodule Archdo.AnchorSet do
 
   defp extract_child_module({:__aliases__, _, parts}) when is_list(parts) do
     case Enum.all?(parts, &is_atom/1) do
-      true -> [join_module(parts)]
+      true -> [AST.join_alias_parts(parts)]
       false -> []
     end
   end
 
   defp extract_child_module({{:__aliases__, _, parts}, _opts}) when is_list(parts) do
-    [join_module(parts)]
+    [AST.join_alias_parts(parts)]
   end
 
   defp extract_child_module({:{}, _, [{:__aliases__, _, parts} | _]}) when is_list(parts) do
-    [join_module(parts)]
+    [AST.join_alias_parts(parts)]
   end
 
   # literal_encoder wraps tuple literals as `{:__block__, _, [{tuple}]}`.
   # Unwrap and recurse so `{Phoenix.PubSub, name: ...}` still surfaces.
   defp extract_child_module({:__block__, _, [inner]}), do: extract_child_module(inner)
   defp extract_child_module(_), do: []
-
-  defp join_module(parts), do: Enum.map_join(parts, ".", &Atom.to_string/1)
 end

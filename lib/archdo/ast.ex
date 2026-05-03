@@ -95,6 +95,32 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  Join an alias parts list (`[:Foo, :Bar, :Baz]`) into a dotted module
+  name string (`"Foo.Bar.Baz"`). Pure helper used wherever a rule walks
+  `{:__aliases__, _, parts}` AST nodes.
+  """
+  @spec join_alias_parts([atom()]) :: String.t()
+  def join_alias_parts(parts) when is_list(parts) do
+    Enum.map_join(parts, ".", &Atom.to_string/1)
+  end
+
+  @doc """
+  Collect the names of `@moduledoc false` modules across a list of
+  `{file, ast}` tuples. Skips modules whose name resolves to `"Unknown"`
+  (no `defmodule` block found). Returned as a `MapSet.t(String.t())`
+  for O(1) membership checks.
+  """
+  @spec collect_internal_modules([{String.t(), Macro.t()}]) :: MapSet.t(String.t())
+  def collect_internal_modules(file_asts) when is_list(file_asts) do
+    for {_file, ast} <- file_asts,
+        internal_module?(ast),
+        module = extract_module_name(ast),
+        module != "Unknown",
+        into: MapSet.new(),
+        do: module
+  end
+
+  @doc """
   Parse a file into its quoted AST. Returns `{:ok, ast}` or `{:error, reason}`.
   """
   @spec parse_file(String.t()) :: {:ok, Macro.t()} | {:error, String.t()}

@@ -82,7 +82,7 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
     new_itb =
       Enum.reduce(behaviour_refs, itb, fn
         {:@, _, [{:behaviour, _, [{:__aliases__, _, parts}]}]}, acc ->
-          bhv_name = join_module(parts)
+          bhv_name = AST.join_alias_parts(parts)
           Map.update(acc, module_name, [bhv_name], &[bhv_name | &1])
 
         {:@, _, [{:behaviour, _, [atom_bhv]}]}, acc when is_atom(atom_bhv) ->
@@ -120,8 +120,8 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
       Enum.reduce(impls, itp, fn
         {:defimpl, _, [{:__aliases__, _, proto_parts}, [for: {:__aliases__, _, for_parts}] | _]},
         acc ->
-          proto_name = join_module(proto_parts)
-          for_name = join_module(for_parts)
+          proto_name = AST.join_alias_parts(proto_parts)
+          for_name = AST.join_alias_parts(for_parts)
           # defimpl Proto, for: Type creates module Proto.Type
           impl_module = "#{proto_name}.#{for_name}"
           Map.update(acc, impl_module, [proto_name], &[proto_name | &1])
@@ -148,7 +148,7 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
       end)
 
     for {{:., _, [{:__aliases__, _, parts}, func]}, meta, args} <- calls,
-        target = join_module(parts),
+        target = AST.join_alias_parts(parts),
         MapSet.member?(protected, target),
         not type_accessor?(func, args),
         not legitimate?(caller, target, registry) do
@@ -264,8 +264,6 @@ defmodule Archdo.Rules.Boundary.SeamIntegrity do
       line: line
     )
   end
-
-  defp join_module(parts), do: Enum.map_join(parts, ".", &Atom.to_string/1)
 
   defp key_name(seam) do
     seam

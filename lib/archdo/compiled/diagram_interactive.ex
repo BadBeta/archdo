@@ -203,15 +203,11 @@ defmodule Archdo.Compiled.DiagramInteractive do
 
   defp classify_layer(mod_name, info) do
     cond do
-      contains_any?(mod_name, @interface_substrings) -> "interface"
-      contains_any?(mod_name, @infrastructure_substrings) -> "infrastructure"
+      AST.path_contains_any?(mod_name, @interface_substrings) -> "interface"
+      AST.path_contains_any?(mod_name, @infrastructure_substrings) -> "infrastructure"
       Enum.any?(info.behaviours, &(&1 in @otp_behaviours)) -> "otp"
       true -> "domain"
     end
-  end
-
-  defp contains_any?(name, substrings) do
-    Enum.any?(substrings, &String.contains?(name, &1))
   end
 
   # --- HTML Template ---

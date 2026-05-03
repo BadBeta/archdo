@@ -41,7 +41,7 @@ defmodule Archdo.Rules.Boundary.WidelyUsedInternalModule do
     threshold = Keyword.get(opts, :threshold, @default_threshold)
 
     production = Enum.reject(file_asts, fn {file, _} -> AST.test_file?(file) end)
-    private_modules = collect_private_modules(production)
+    private_modules = AST.collect_internal_modules(production)
 
     case MapSet.size(private_modules) do
       0 -> []
@@ -56,15 +56,6 @@ defmodule Archdo.Rules.Boundary.WidelyUsedInternalModule do
       [single] -> single
       [a, b | _] -> a <> "." <> b
     end
-  end
-
-  defp collect_private_modules(production) do
-    for {_file, ast} <- production,
-        AST.internal_module?(ast),
-        module = AST.extract_module_name(ast),
-        module != "Unknown",
-        into: MapSet.new(),
-        do: module
   end
 
   defp find_widely_used(production, private_modules, threshold) do

@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.Rules.Testing.UntestedModule
 
   @min_public_functions 8
   @coverage_threshold 0.30
@@ -59,7 +60,7 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
   defp enough_publics?(false, _file, _ast, _public_fns, _test_asts), do: []
 
   defp enough_publics?(true, file, ast, public_fns, test_asts) do
-    test_file = source_to_test_path(file)
+    test_file = UntestedModule.source_to_test_path(file)
     coverage_check(find_test_ast(test_file, test_asts), file, ast, public_fns)
   end
 
@@ -127,12 +128,6 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
       file: file,
       line: 1
     )
-  end
-
-  defp source_to_test_path(file) do
-    file
-    |> String.replace_prefix("lib/", "test/")
-    |> String.replace_suffix(".ex", "_test.exs")
   end
 
   defp find_test_ast(test_file, test_asts) do

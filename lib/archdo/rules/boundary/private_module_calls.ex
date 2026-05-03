@@ -25,21 +25,12 @@ defmodule Archdo.Rules.Boundary.PrivateModuleCalls do
   @spec analyze_project([{String.t(), Macro.t()}]) :: [Diagnostic.t()]
   def analyze_project(file_asts) do
     production = Enum.reject(file_asts, fn {file, _} -> AST.test_file?(file) end)
-    private_modules = collect_private_modules(production)
+    private_modules = AST.collect_internal_modules(production)
 
     case MapSet.size(private_modules) do
       0 -> []
       _ -> find_leaks(production, private_modules)
     end
-  end
-
-  defp collect_private_modules(production) do
-    for {_file, ast} <- production,
-        AST.internal_module?(ast),
-        module = AST.extract_module_name(ast),
-        module != "Unknown",
-        into: MapSet.new(),
-        do: module
   end
 
   defp find_leaks(production, private_modules) do
