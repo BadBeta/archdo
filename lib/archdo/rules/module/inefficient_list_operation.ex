@@ -65,65 +65,15 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
       Macro.prewalk(ast, [], fn
         {{:., _, [{:__aliases__, _, mod}, func]}, _meta, args} = node, acc
         when func in @reduce_fns and mod in [[:Enum], [:Stream]] and is_list(args) ->
-          new_diags =
-            args
-            |> Enum.filter(fn
-              {:fn, _, _} -> true
-              {:&, _, _} -> true
-              _ -> false
-            end)
-            |> Enum.flat_map(fn callback ->
-              Enum.map(AST.find_all(callback, predicate), fn {_, meta, _} ->
-                build_diagnostic(file, AST.line(meta), kind)
-              end)
-            end)
-
-          {node, new_diags ++ acc}
+          {node, callback_diags(args, file, kind, predicate) ++ acc}
 
         # :lists.foldl/foldr are reduce equivalents
         {{:., _, [:lists, fold_fn]}, _meta, args} = node, acc
         when fold_fn in [:foldl, :foldr] and is_list(args) ->
-          new_diags =
-            args
-            |> Enum.filter(fn
-              {:fn, _, _} -> true
-              {:&, _, _} -> true
-              _ -> false
-            end)
-            |> Enum.flat_map(fn callback ->
-              Enum.map(AST.find_all(callback, predicate), fn {_, meta, _} ->
-                build_diagnostic(file, AST.line(meta), kind)
-              end)
-            end)
-
-          {node, new_diags ++ acc}
+          {node, callback_diags(args, file, kind, predicate) ++ acc}
 
         {:for, _meta, args} = node, acc when is_list(args) ->
-          case has_reduce_option?(args) do
-            true ->
-              do_block =
-                Enum.find_value(args, fn
-                  [do: body] -> body
-                  {:do, body} -> body
-                  _ -> nil
-                end)
-
-              new_diags =
-                case do_block do
-                  nil ->
-                    []
-
-                  body ->
-                    Enum.map(AST.find_all(body, predicate), fn {_, meta, _} ->
-                      build_diagnostic(file, AST.line(meta), kind)
-                    end)
-                end
-
-              {node, new_diags ++ acc}
-
-            false ->
-              {node, acc}
-          end
+          {node, for_reduce_diags(has_reduce_option?(args), args, file, kind, predicate, acc)}
 
         node, acc ->
           {node, acc}
@@ -137,6 +87,45 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
       {:reduce, _} -> true
       {{:__block__, _, [:reduce]}, _} -> true
       _ -> false
+    end)
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the has_reduce_option? boolean and the do_block nil-vs-body shape.
+  defp for_reduce_diags(false, _args, _file, _kind, _predicate, acc), do: acc
+
+  defp for_reduce_diags(true, args, file, kind, predicate, acc) do
+    do_block =
+      Enum.find_value(args, fn
+        [do: body] -> body
+        {:do, body} -> body
+        _ -> nil
+      end)
+
+    diags_for_block(do_block, file, kind, predicate) ++ acc
+  end
+
+  defp diags_for_block(nil, _file, _kind, _predicate), do: []
+
+  defp diags_for_block(body, file, kind, predicate) do
+    Enum.map(AST.find_all(body, predicate), fn {_, meta, _} ->
+      build_diagnostic(file, AST.line(meta), kind)
+    end)
+  end
+
+  defp callback_diags(args, file, kind, predicate) do
+    args
+    |> Enum.filter(&callback_arg?/1)
+    |> Enum.flat_map(&diags_in_callback(&1, file, kind, predicate))
+  end
+
+  defp callback_arg?({:fn, _, _}), do: true
+  defp callback_arg?({:&, _, _}), do: true
+  defp callback_arg?(_), do: false
+
+  defp diags_in_callback(callback, file, kind, predicate) do
+    Enum.map(AST.find_all(callback, predicate), fn {_, meta, _} ->
+      build_diagnostic(file, AST.line(meta), kind)
     end)
   end
 

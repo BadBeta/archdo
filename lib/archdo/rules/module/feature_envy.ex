@@ -36,80 +36,94 @@ defmodule Archdo.Rules.Module.FeatureEnvy do
     graph.calls
     |> Enum.filter(fn call -> call.caller_fn != nil end)
     |> Enum.group_by(fn call -> {call.caller_module, call.caller_fn, call.caller_arity} end)
-    |> Enum.flat_map(fn {{caller_mod, name, arity}, calls} ->
-      # Group target counts
-      target_counts =
-        calls
-        |> Enum.map(fn call -> call.target_module end)
-        |> Enum.frequencies()
+    |> Enum.flat_map(&envy_diags_for_caller(&1, graph))
+  end
 
-      self_calls = Map.get(target_counts, caller_mod, 0)
+  defp envy_diags_for_caller({{caller_mod, name, arity}, calls}, graph) do
+    target_counts = calls |> Enum.map(& &1.target_module) |> Enum.frequencies()
+    self_calls = Map.get(target_counts, caller_mod, 0)
 
-      # Find the dominant external module — exclude stdlib (you can't move into Enum)
-      external =
-        target_counts
-        |> Map.delete(caller_mod)
-        |> Enum.reject(fn {mod, _} -> stdlib?(mod) end)
-        |> Map.new()
+    # Find the dominant external module — exclude stdlib (you can't move into Enum)
+    external =
+      target_counts
+      |> Map.delete(caller_mod)
+      |> Enum.reject(fn {mod, _} -> stdlib?(mod) end)
+      |> Map.new()
 
-      case Enum.max_by(external, fn {_mod, c} -> c end, fn -> nil end) do
-        {dominant_mod, count} when count >= @min_external_calls ->
-          if envious?(count, self_calls) do
-            {file, line} =
-              case Map.get(graph.definitions, {caller_mod, name, arity}) do
-                nil -> {"unknown", 0}
-                meta -> {meta.file, meta.line}
-              end
+    diag_for_dominant(
+      Enum.max_by(external, fn {_mod, c} -> c end, fn -> nil end),
+      caller_mod,
+      name,
+      arity,
+      self_calls,
+      graph
+    )
+  end
 
-            [
-              Diagnostic.info("4.9",
-                title: "Feature envy",
-                message:
-                  "#{caller_mod}.#{name}/#{arity} calls #{dominant_mod} #{count}x but its own module only #{self_calls}x",
-                why:
-                  "When a function reaches into another module much more than its own, that other module is " <>
-                    "where the function naturally belongs. Splitting the function from the data it operates on " <>
-                    "creates feature envy: the caller module knows nothing useful and the dependency direction " <>
-                    "is wrong. Refactoring it back into #{dominant_mod} reduces coupling and clarifies ownership.",
-                alternatives: [
-                  Fix.new(
-                    summary: "Move the function into #{dominant_mod}",
-                    detail:
-                      "Cut the function from #{caller_mod} and paste it into #{dominant_mod}. Update " <>
-                        "callers to point at the new location. The function ends up next to the data it " <>
-                        "manipulates and the inter-module dependency disappears.",
-                    applies_when: "#{dominant_mod} is the natural home for this logic."
-                  ),
-                  Fix.new(
-                    summary:
-                      "Add a higher-level operation to #{dominant_mod} and have #{caller_mod} call it",
-                    detail:
-                      "If the function does something specific to #{caller_mod} but also pokes deep into " <>
-                        "#{dominant_mod}'s internals, add a new public operation on #{dominant_mod} that hides " <>
-                        "the internal accesses. #{caller_mod} keeps its function but only makes one outbound call.",
-                    applies_when:
-                      "The function belongs in caller_mod conceptually but needs cleaner access to dominant_mod."
-                  )
-                ],
-                references: ["ARCHITECTURE_RULES.md#4.9"],
-                context: %{
-                  function: "#{caller_mod}.#{name}/#{arity}",
-                  envious_target: dominant_mod,
-                  external_calls: count,
-                  self_calls: self_calls
-                },
-                file: file,
-                line: line
-              )
-            ]
-          else
-            []
-          end
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the dominant-module shape (nil / below threshold / envious /
+  # not envious).
+  defp diag_for_dominant({dominant_mod, count}, caller_mod, name, arity, self_calls, graph)
+       when count >= @min_external_calls do
+    diag_if_envious(envious?(count, self_calls), dominant_mod, count, caller_mod, name, arity, self_calls, graph)
+  end
 
-        _ ->
-          []
-      end
-    end)
+  defp diag_for_dominant(_other, _caller_mod, _name, _arity, _self_calls, _graph) do
+    fallback_no_diag()
+  end
+
+  defp diag_if_envious(false, _dominant_mod, _count, _caller_mod, _name, _arity, _self_calls, _graph), do: []
+
+  defp diag_if_envious(true, dominant_mod, count, caller_mod, name, arity, self_calls, graph) do
+    {file, line} = caller_location(Map.get(graph.definitions, {caller_mod, name, arity}))
+    [build_envy_diagnostic(caller_mod, name, arity, dominant_mod, count, self_calls, file, line)]
+  end
+
+  defp caller_location(nil), do: {"unknown", 0}
+  defp caller_location(meta), do: {meta.file, meta.line}
+
+  defp fallback_no_diag, do: []
+
+  defp build_envy_diagnostic(caller_mod, name, arity, dominant_mod, count, self_calls, file, line) do
+    Diagnostic.info("4.9",
+      title: "Feature envy",
+      message:
+        "#{caller_mod}.#{name}/#{arity} calls #{dominant_mod} #{count}x but its own module only #{self_calls}x",
+      why:
+        "When a function reaches into another module much more than its own, that other module is " <>
+          "where the function naturally belongs. Splitting the function from the data it operates on " <>
+          "creates feature envy: the caller module knows nothing useful and the dependency direction " <>
+          "is wrong. Refactoring it back into #{dominant_mod} reduces coupling and clarifies ownership.",
+      alternatives: [
+        Fix.new(
+          summary: "Move the function into #{dominant_mod}",
+          detail:
+            "Cut the function from #{caller_mod} and paste it into #{dominant_mod}. Update " <>
+              "callers to point at the new location. The function ends up next to the data it " <>
+              "manipulates and the inter-module dependency disappears.",
+          applies_when: "#{dominant_mod} is the natural home for this logic."
+        ),
+        Fix.new(
+          summary:
+            "Add a higher-level operation to #{dominant_mod} and have #{caller_mod} call it",
+          detail:
+            "If the function does something specific to #{caller_mod} but also pokes deep into " <>
+              "#{dominant_mod}'s internals, add a new public operation on #{dominant_mod} that hides " <>
+              "the internal accesses. #{caller_mod} keeps its function but only makes one outbound call.",
+          applies_when:
+            "The function belongs in caller_mod conceptually but needs cleaner access to dominant_mod."
+        )
+      ],
+      references: ["ARCHITECTURE_RULES.md#4.9"],
+      context: %{
+        function: "#{caller_mod}.#{name}/#{arity}",
+        envious_target: dominant_mod,
+        external_calls: count,
+        self_calls: self_calls
+      },
+      file: file,
+      line: line
+    )
   end
 
   # Require the function to make at least some self-references (otherwise
