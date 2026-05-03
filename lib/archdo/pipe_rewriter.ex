@@ -61,24 +61,28 @@ defmodule Archdo.PipeRewriter do
   """
   @spec rewrite(String.t(), String.t()) :: String.t() | nil
   def rewrite(input, call) when is_binary(input) and is_binary(call) do
-    case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)\((.*)\)$/s, call) do
-      [_, func_name, existing_args] ->
-        new_args =
-          case String.trim(existing_args) do
-            "" -> input
-            args -> "#{input}, #{args}"
-          end
+    rewrite_classified(classify_call(call), input)
+  end
 
-        "#{func_name}(#{new_args})"
+  @func_call_re ~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)\((.*)\)$/s
+  @bare_name_re ~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/
 
-      _ ->
-        case Regex.run(
-               ~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/,
-               String.trim(call)
-             ) do
-          [_, func_name] -> "#{func_name}(#{input})"
-          _ -> nil
-        end
+  defp classify_call(call) do
+    case Regex.run(@func_call_re, call) do
+      [_, name, args] -> {:func_call, name, String.trim(args)}
+      _ -> classify_bare_name(call)
     end
   end
+
+  defp classify_bare_name(call) do
+    case Regex.run(@bare_name_re, String.trim(call)) do
+      [_, name] -> {:bare_name, name}
+      _ -> :unrecognized
+    end
+  end
+
+  defp rewrite_classified({:func_call, name, ""}, input), do: "#{name}(#{input})"
+  defp rewrite_classified({:func_call, name, args}, input), do: "#{name}(#{input}, #{args})"
+  defp rewrite_classified({:bare_name, name}, input), do: "#{name}(#{input})"
+  defp rewrite_classified(:unrecognized, _input), do: nil
 end
