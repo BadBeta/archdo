@@ -1,5 +1,15 @@
 defmodule Archdo.Runner do
-  @moduledoc false
+  @moduledoc """
+  Project-wide rule runner. Owns the registered rule lists
+  (`@phase1_rules`, `@graph_rules`), per-file analysis, graph-mode
+  analysis, and the public `analyze/2` and `analyze_with_graph/2`
+  entry points.
+
+  Stable infrastructure: Mix tasks (`Mix.Tasks.Archdo`), the MCP tool
+  surface, and `Archdo.run/2` all dispatch through this module. The
+  rule-list shape and `analyze*` signatures are part of the public
+  API surface.
+  """
 
   alias Archdo.{AST, Config, Diagnostic, FunctionGraph, Graph, Metrics, PluginCoverage, Rules}
 

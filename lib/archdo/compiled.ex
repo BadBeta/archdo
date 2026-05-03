@@ -1,18 +1,23 @@
 defmodule Archdo.Compiled do
-  @moduledoc false
+  @moduledoc """
+  Project-wide compiled-mode analysis facade. Compilation-tracer-based
+  cross-reference: when a project is compiled with Archdo's tracer
+  enabled, this module captures every remote function call, import,
+  struct expansion, and module definition.
 
-  # Compilation tracer-based cross-reference analysis.
-  #
-  # When a project is compiled with Archdo's tracer enabled, we capture
-  # every remote function call, import, struct expansion, and module
-  # definition. This gives us ground-truth data that AST-only analysis
-  # can't provide:
-  #
-  #   - Macro-injected functions (visible after expansion)
-  #   - Resolved imports (which module each unqualified call targets)
-  #   - Protocol dispatch targets
-  #   - Dead code detection (exported functions never called)
-  #   - Complete behaviour callback lists (including @optional_callbacks)
+  Ground-truth data the AST analysis can't provide:
+
+    - Macro-injected functions (visible after expansion)
+    - Resolved imports (which module each unqualified call targets)
+    - Protocol dispatch targets
+    - Dead code detection (exported functions never called)
+    - Complete behaviour callback lists (including @optional_callbacks)
+
+  Stable public API: every `Archdo.Rules.Compiled.*` rule consumes the
+  query functions defdelegated below. The opaque `Compiled.t()` type
+  alias hides the internal `Compiled.Graph` struct so callers don't
+  pattern-match its fields.
+  """
 
   alias Archdo.Compiled.{Graph, Query}
 

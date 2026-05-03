@@ -1,5 +1,15 @@
 defmodule Archdo.AST do
-  @moduledoc false
+  @moduledoc """
+  Project-wide AST helpers. Every rule that walks Elixir source
+  consults this module for parsing, file classification (test vs
+  production, controller vs LiveView), module-name extraction,
+  function enumeration, and the `@moduledoc false` predicate.
+
+  Stable infrastructure: signature changes here ripple through every
+  per-file rule. See `elixir-implementing` §10.1 for the decision
+  behind keeping AST helpers at the top level rather than under
+  any single context.
+  """
 
   @doc """
   Check if a path is a test file (under test/ or containing /test/).

@@ -1,5 +1,14 @@
 defmodule Archdo.Config do
-  @moduledoc false
+  @moduledoc """
+  Project-wide configuration loader and threshold accessor. Loads
+  `.archdo.exs` once at the entry point; rules read configurable
+  thresholds (max-logger-calls, min-files, etc.) via
+  `threshold/4`. Threading via `opts[:config]` preserves the test
+  seam.
+
+  Stable infrastructure: every rule that respects configurable
+  thresholds depends on this shape.
+  """
 
   @type layer :: :interface | :domain | :infrastructure | :unknown
   @type t :: %__MODULE__{
@@ -89,7 +98,11 @@ defmodule Archdo.Config do
   end
 
   def classify_module(%__MODULE__{layers: layers}, module_name) when is_binary(module_name) do
-    Enum.find_value([:interface, :domain, :infrastructure], :unknown, &layer_for(&1, layers, module_name))
+    Enum.find_value(
+      [:interface, :domain, :infrastructure],
+      :unknown,
+      &layer_for(&1, layers, module_name)
+    )
   end
 
   # Returns `layer` when the module matches its regex, `false` otherwise

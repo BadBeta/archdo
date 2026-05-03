@@ -1,5 +1,15 @@
 defmodule Archdo.Diagnostic do
-  @moduledoc false
+  @moduledoc """
+  Project-wide diagnostic-builder API. Every rule across `Archdo.Rules.*`
+  constructs findings via `error/2`, `warning/2`, `info/2`, `nitpick/2`
+  — this module is the single shape every rule emits.
+
+  Stable infrastructure: a rename or signature change here is a
+  breaking change to every rule module. See
+  `elixir-implementing` §10.1 (\"When an @moduledoc false module is
+  widely used\") for the architectural decision behind keeping this
+  at the top level.
+  """
 
   @type severity :: :error | :warning | :info | :nitpick
 

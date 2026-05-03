@@ -1,5 +1,13 @@
 defmodule Archdo.Stats do
-  @moduledoc false
+  @moduledoc """
+  Project-wide statistics collector. Aggregates source/test file
+  counts, line counts, module counts, public/private function ratio,
+  `@spec` and `@moduledoc` coverage, GenServer / Ecto schema /
+  behaviour counts, and per-context coupling/cohesion metrics.
+
+  Public API consumed by `mix archdo --stats`, the standard report
+  layout, and the MCP `stats` tool.
+  """
 
   alias Archdo.AST
   alias Archdo.Compiled
@@ -113,7 +121,9 @@ defmodule Archdo.Stats do
   defp sibling_test_path(path), do: maybe_test_for_lib(String.ends_with?(path, "/lib"), path)
 
   defp maybe_test_for_lib(false, _path), do: []
-  defp maybe_test_for_lib(true, path), do: dir_or_empty(String.replace_suffix(path, "/lib", "/test"))
+
+  defp maybe_test_for_lib(true, path),
+    do: dir_or_empty(String.replace_suffix(path, "/lib", "/test"))
 
   defp dir_or_empty(dir), do: existing_dir(File.dir?(dir), dir)
   defp existing_dir(false, _dir), do: []
