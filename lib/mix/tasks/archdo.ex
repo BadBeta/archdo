@@ -78,6 +78,7 @@ defmodule Mix.Tasks.Archdo do
           ignore: :string,
           packs: :string,
           list_packs: :boolean,
+          cleanup_pass: :integer,
           paths: :string,
           since: :string,
           explain: :string,
@@ -209,6 +210,7 @@ defmodule Mix.Tasks.Archdo do
       requirements_source: Keyword.get(opts, :requirements_source)
     ]
     |> maybe_add(:only, only)
+    |> maybe_add(:cleanup_pass, Keyword.get(opts, :cleanup_pass))
   end
 
   # §§ elixir-planning: §6 — Pack abstraction (M13). CLI parses
@@ -256,9 +258,7 @@ defmodule Mix.Tasks.Archdo do
           atom
 
         false ->
-          Mix.raise(
-            "Unknown pack: #{inspect(atom)}. Known packs: #{inspect(known)}"
-          )
+          Mix.raise("Unknown pack: #{inspect(atom)}. Known packs: #{inspect(known)}")
       end
     end)
   rescue

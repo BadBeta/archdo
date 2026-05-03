@@ -10,7 +10,7 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundaryTest do
         use Phoenix.Controller
 
         def show(conn, %{"sort_by" => sort}) do
-          # RULE-EXCEPTION: elixir-string-to-atom-untrusted reason: rule-under-test fixture
+          # RULE-EXCEPTION: elixir-string-to-atom-untrusted — rule-under-test fixture
           render(conn, :show, sort: String.to_atom(sort))
         end
       end
@@ -77,7 +77,7 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundaryTest do
         use Phoenix.Channel
 
         def handle_in("event", %{"type" => type}, socket) do
-          # RULE-EXCEPTION: elixir-string-to-atom-untrusted reason: rule-under-test fixture
+          # RULE-EXCEPTION: elixir-string-to-atom-untrusted — rule-under-test fixture
           dispatch(String.to_atom(type), socket)
           {:reply, :ok, socket}
         end
@@ -95,7 +95,7 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundaryTest do
         use Oban.Worker
 
         def perform(%{args: %{"action" => action}}) do
-          # RULE-EXCEPTION: elixir-string-to-atom-untrusted reason: rule-under-test fixture
+          # RULE-EXCEPTION: elixir-string-to-atom-untrusted — rule-under-test fixture
           do_action(String.to_atom(action))
         end
       end
@@ -114,7 +114,7 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundaryTest do
         def init(opts), do: opts
 
         def call(conn, _opts) do
-          # RULE-EXCEPTION: elixir-string-to-atom-untrusted reason: rule-under-test fixture
+          # RULE-EXCEPTION: elixir-string-to-atom-untrusted — rule-under-test fixture
           role = String.to_atom(conn.params["role"])
           assign(conn, :role, role)
         end
@@ -129,7 +129,7 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundaryTest do
     test "does not flag String.to_atom in a domain context module" do
       code = ~S"""
       defmodule MyApp.Accounts do
-        # RULE-EXCEPTION: elixir-string-to-atom-untrusted reason: rule-under-test fixture
+        # RULE-EXCEPTION: elixir-string-to-atom-untrusted — rule-under-test fixture
         def parse_role(role), do: String.to_atom(role)
       end
       """
@@ -141,7 +141,7 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundaryTest do
       code = ~S"""
       defmodule Mix.Tasks.MyApp.Sync do
         use Mix.Task
-        # RULE-EXCEPTION: elixir-string-to-atom-untrusted reason: rule-under-test fixture
+        # RULE-EXCEPTION: elixir-string-to-atom-untrusted — rule-under-test fixture
         def run([flag | _]), do: String.to_atom(flag)
       end
       """
@@ -152,7 +152,7 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundaryTest do
     test "skips test files" do
       code = ~S"""
       defmodule MyAppWeb.OrderControllerTest do
-        # RULE-EXCEPTION: elixir-string-to-atom-untrusted reason: rule-under-test fixture
+        # RULE-EXCEPTION: elixir-string-to-atom-untrusted — rule-under-test fixture
         def helper(input), do: String.to_atom(input)
       end
       """

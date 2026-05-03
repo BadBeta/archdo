@@ -498,7 +498,23 @@ defmodule Archdo.Runner do
   defp filter_rules(rules, opts) do
     rules
     |> filter_rules_for_packs(packs_from_opts(opts))
+    |> filter_rules_for_cleanup_pass(Keyword.get(opts, :cleanup_pass))
     |> apply_only_ignore(opts)
+  end
+
+  @doc """
+  Filter `rules` to those tagged with the given cleanup-guide pass
+  (1..14). When `pass` is `nil`, returns the input unchanged. When
+  `pass` is an integer outside 1..14 (or no rule matches), returns `[]`.
+
+  Public so tests can exercise it without the runner pipeline.
+  """
+  @spec filter_rules_for_cleanup_pass([module()], integer() | nil) :: [module()]
+  def filter_rules_for_cleanup_pass(rules, nil) when is_list(rules), do: rules
+
+  def filter_rules_for_cleanup_pass(rules, pass)
+      when is_list(rules) and is_integer(pass) do
+    Archdo.CleanupPass.rules_for(pass, rules)
   end
 
   defp apply_only_ignore(rules, opts) do

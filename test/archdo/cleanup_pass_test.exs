@@ -115,19 +115,19 @@ defmodule Archdo.CleanupPassTest do
       assert Archdo.Rules.EventSourcing.EventPayloadUnversioned.cleanup_pass() == 10
     end
 
-    test "Archdo.Rule.cleanup_pass_of/1 falls back to mapping when callback absent" do
+    test "Archdo.CleanupPass.cleanup_pass_of/1 falls back to mapping when callback absent" do
       # A rule without the callback uses the curated mapping
-      assert Archdo.Rule.cleanup_pass_of(Archdo.Rules.Module.ScatteredConfig) == 4
+      assert Archdo.CleanupPass.cleanup_pass_of(Archdo.Rules.Module.ScatteredConfig) == 4
     end
 
-    test "Archdo.Rule.cleanup_pass_of/1 prefers the callback when present" do
-      assert Archdo.Rule.cleanup_pass_of(Archdo.Rules.Module.UnsafeDeserialization) == 6
+    test "Archdo.CleanupPass.cleanup_pass_of/1 prefers the callback when present" do
+      assert Archdo.CleanupPass.cleanup_pass_of(Archdo.Rules.Module.UnsafeDeserialization) == 6
     end
 
-    test "Archdo.Rule.cleanup_pass_of/1 returns nil for fully untagged rules" do
+    test "Archdo.CleanupPass.cleanup_pass_of/1 returns nil for fully untagged rules" do
       # Pick a rule that isn't tagged in either place — e.g. a CE rule
       # the cleanup guide doesn't address (project-Archdo-unique architectural).
-      result = Archdo.Rule.cleanup_pass_of(Archdo.Rules.CE.BlackboxQuadrant)
+      result = Archdo.CleanupPass.cleanup_pass_of(Archdo.Rules.CE.BlackboxQuadrant)
       # nil OR a deliberate mapping if we choose to add one — current expectation: nil
       assert result == nil
     end

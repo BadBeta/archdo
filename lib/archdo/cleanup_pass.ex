@@ -163,13 +163,31 @@ defmodule Archdo.CleanupPass do
   def pass_for(rule_id) when is_binary(rule_id), do: Map.get(@rule_passes, rule_id)
 
   @doc """
+  Resolve a rule module's cleanup-guide pass. Prefers the rule's
+  `cleanup_pass/0` callback if defined; falls back to the curated
+  mapping by rule id; returns `nil` if neither source assigns a pass.
+
+  Lives here (not in `Archdo.Rule`) to keep the dependency direction
+  one-way: Archdo.Rule does not depend on Archdo.CleanupPass.
+  """
+  @spec cleanup_pass_of(module()) :: pass() | nil
+  def cleanup_pass_of(module) when is_atom(module) do
+    Code.ensure_loaded!(module)
+
+    case function_exported?(module, :cleanup_pass, 0) do
+      true -> module.cleanup_pass()
+      false -> pass_for(module.id())
+    end
+  end
+
+  @doc """
   Filters a list of rule modules to those tagged with the given pass.
   Resolution honors `cleanup_pass/0` callback first, mapping second.
   Returns `[]` for any non-1..14 pass value rather than raising.
   """
   @spec rules_for(integer(), [module()]) :: [module()]
   def rules_for(pass, rules) when is_integer(pass) and is_list(rules) do
-    Enum.filter(rules, fn rule -> Archdo.Rule.cleanup_pass_of(rule) == pass end)
+    Enum.filter(rules, fn rule -> cleanup_pass_of(rule) == pass end)
   end
 
   @doc "Returns the canonical 1..14 pass list."

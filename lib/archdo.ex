@@ -61,6 +61,7 @@ defmodule Archdo do
     Runner,
     Severity
   }
+
   alias Archdo.Rules.Testing.MissingBoundaryTests
 
   alias Archdo.Rules.Boundary.{
@@ -116,10 +117,21 @@ defmodule Archdo do
         false -> []
       end
 
-    Enum.sort_by(
-      per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ compiled_diagnostics,
-      fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end
-    )
+    (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ compiled_diagnostics)
+    |> apply_cleanup_pass_filter(Keyword.get(opts, :cleanup_pass))
+    |> Enum.sort_by(fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end)
+  end
+
+  # §§ elixir-planning: §10.5 — diagnostic-level filter applied AFTER all
+  # subsystems run, so phase1, graph, project-arch, and compiled findings
+  # get filtered by the same cleanup-pass rule. The rule-level filter in
+  # Runner.filter_rules already prunes phase1/graph rules; this step
+  # catches the project-arch and compiled findings whose rules don't
+  # route through the runner's filter pipeline.
+  defp apply_cleanup_pass_filter(diagnostics, nil), do: diagnostics
+
+  defp apply_cleanup_pass_filter(diagnostics, pass) when is_integer(pass) do
+    Enum.filter(diagnostics, fn d -> Archdo.CleanupPass.pass_for(d.rule_id) == pass end)
   end
 
   @compiled_rules [
@@ -446,9 +458,12 @@ defmodule Archdo do
       Enum.split_with(module_results, fn {_, _, _, v} -> v == :building_block end)
 
     IO.puts("\nArchdo — Building Block Audit (M-Aux4)\n")
-    IO.puts("Modules where EVERY public function scores ≥ 0.9 on the Blackbox\n" <>
-            "possibility metric (input_closure × determinism × output_completeness ×\n" <>
-            "totality × side_effect_free × errors_as_values).\n")
+
+    IO.puts(
+      "Modules where EVERY public function scores ≥ 0.9 on the Blackbox\n" <>
+        "possibility metric (input_closure × determinism × output_completeness ×\n" <>
+        "totality × side_effect_free × errors_as_values).\n"
+    )
 
     IO.puts("─── Building-block MODULES (#{length(blocks)} of #{length(module_results)}) ───\n")
 
@@ -606,7 +621,9 @@ defmodule Archdo do
   defp blackbox_entry_for([], _file, _ast), do: nil
 
   defp blackbox_entry_for(list, file, ast) do
-    possibility = list |> Enum.map(fn {_, _, s, _} -> s end) |> Enum.sum() |> Kernel./(length(list))
+    possibility =
+      list |> Enum.map(fn {_, _, s, _} -> s end) |> Enum.sum() |> Kernel./(length(list))
+
     module = AST.extract_module_name(ast)
     {module, file, possibility, Archdo.Blackbox.classify(possibility)}
   end
@@ -626,9 +643,7 @@ defmodule Archdo do
         IO.puts("Per-module mean of (input_closure × determinism × output_completeness ×")
         IO.puts("totality × side_effect_free × errors_as_values).\n")
 
-        IO.puts(
-          :io_lib.format("~-55ts ~10ts ~-15ts~n", ["Module", "Possibility", "Class"])
-        )
+        IO.puts(:io_lib.format("~-55ts ~10ts ~-15ts~n", ["Module", "Possibility", "Class"]))
 
         IO.puts(String.duplicate("-", 84))
 

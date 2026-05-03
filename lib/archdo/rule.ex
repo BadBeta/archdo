@@ -71,20 +71,4 @@ defmodule Archdo.Rule do
   """
   @spec known_packs() :: [pack(), ...]
   def known_packs, do: @known_packs
-
-  @doc """
-  Resolve a rule module's cleanup-guide pass. Prefers the rule's
-  `cleanup_pass/0` callback if defined; falls back to the curated
-  `Archdo.CleanupPass` mapping by rule id; returns `nil` if neither
-  source assigns a pass.
-  """
-  @spec cleanup_pass_of(module()) :: 1..14 | nil
-  def cleanup_pass_of(module) when is_atom(module) do
-    Code.ensure_loaded!(module)
-
-    case function_exported?(module, :cleanup_pass, 0) do
-      true -> module.cleanup_pass()
-      false -> Archdo.CleanupPass.pass_for(module.id())
-    end
-  end
 end
