@@ -2,9 +2,15 @@ defmodule Archdo.Rules.Testing.UntestedModule do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  # §§ elixir-planning: §6 — operational layer carve-out via Archdo.Phoenix.
+  # Operational layer carve-out via Archdo.Phoenix.
   # Mix tasks, release scripts, and seeds aren't unit-tested in isolation;
   # they're integration boundaries.
+  #
+  # File reads on test files IS the boundary work — this rule checks
+  # whether each lib/ module has a corresponding test/ file by hitting
+  # the file system. The file system IS the input.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
 
   alias Archdo.{AST, Diagnostic, Fix, Phoenix}
 

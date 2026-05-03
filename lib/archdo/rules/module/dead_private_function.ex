@@ -4,6 +4,13 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  # File.exists? + File.read for HEEx templates IS the boundary work —
+  # this rule looks at template files to find function references via
+  # `<.fn_name>` syntax that AST analysis can't see. The file content
+  # IS the input; no substitutability hole.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   @impl true
   def id, do: "6.34"
 

@@ -5,6 +5,12 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Rules.Testing.UntestedModule
 
+  # File reads on test files IS the boundary work — this rule
+  # checks whether boundary modules have matching tests by
+  # scanning the test/ directory. The file system IS the input.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   @min_public_functions 8
   @coverage_threshold 0.30
 

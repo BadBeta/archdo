@@ -4,6 +4,12 @@ defmodule Archdo.Rules.Boundary.UnusedDependency do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  # File.read! IS the boundary work — this rule reads source files
+  # to detect unused alias declarations by string comparison. There
+  # is no substitutability hole: the file content IS the input.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   @impl true
   def id, do: "4.6"
 

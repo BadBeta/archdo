@@ -4,6 +4,12 @@ defmodule Archdo.Rules.Testing.HardcodedTestData do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  # File reads on test fixtures IS the boundary work — this rule
+  # scans test files for hardcoded data shapes. The file content
+  # IS the input.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   @impl true
   def id, do: "7.20"
 

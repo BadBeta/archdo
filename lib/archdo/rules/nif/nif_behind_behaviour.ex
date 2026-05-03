@@ -4,6 +4,12 @@ defmodule Archdo.Rules.NIF.NifBehindBehaviour do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
+  # File reads on NIF artifact paths IS the boundary work — this
+  # rule inspects compiled NIF .so / .cpp metadata that doesn't
+  # reach the AST. The file content IS the input.
+  Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
+  @archdo_volatility :stable
+
   @impl true
   def id, do: "11.1"
 
