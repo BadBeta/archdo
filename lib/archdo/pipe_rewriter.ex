@@ -26,6 +26,27 @@ defmodule Archdo.PipeRewriter do
   end
 
   @doc """
+  Rewrite a single line containing one `|>` into a direct call. Returns
+  the rewritten source string, or `nil` if the line doesn't match the
+  pipe shape or the input expression isn't safe to rewrite.
+  """
+  @spec rewrite_line(String.t()) :: String.t() | nil
+  def rewrite_line(line) when is_binary(line) do
+    case Regex.run(~r/^(.+?)\s*\|>\s*(.+)$/, line) do
+      [_, input, call] ->
+        input = String.trim(input)
+
+        case safe_to_rewrite?(input, line) do
+          true -> rewrite(input, call)
+          false -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
   Rewrite a pipe call. `input` is the left-hand side of the `|>`,
   `call` is the right-hand side. Returns the rewritten source as a
   string, or `nil` if the call shape isn't recognized.

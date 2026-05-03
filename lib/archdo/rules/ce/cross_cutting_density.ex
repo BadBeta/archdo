@@ -93,13 +93,10 @@ defmodule Archdo.Rules.CE.CrossCuttingDensity do
   # element so both shapes match.
 
   defp classify_call({{:., _, [target, fun]}, _, _}) do
-    classify_target(unwrap_atom(target), fun)
+    classify_target(AST.unwrap_atom(target), fun)
   end
 
   defp classify_call(_), do: nil
-
-  defp unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
-  defp unwrap_atom(other), do: other
 
   # Logger.x(...)
   defp classify_target({:__aliases__, _, [:Logger]}, _), do: "Logger"

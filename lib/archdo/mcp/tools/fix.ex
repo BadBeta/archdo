@@ -161,7 +161,7 @@ defmodule Archdo.Mcp.Tools.Fix do
       original_line ->
         trimmed = String.trim(original_line)
 
-        case rewrite_single_pipe(trimmed) do
+        case Archdo.PipeRewriter.rewrite_line(trimmed) do
           nil ->
             nil
 
@@ -204,21 +204,6 @@ defmodule Archdo.Mcp.Tools.Fix do
   #   - input is a keyword value (key: expr |> func())
   #   - input is inside a list/map/struct literal
   #   - line has trailing comma (embedded in larger expression)
-  defp rewrite_single_pipe(line) do
-    case Regex.run(~r/^(.+?)\s*\|>\s*(.+)$/, line) do
-      [_, input, call] ->
-        input = String.trim(input)
-
-        case Archdo.PipeRewriter.safe_to_rewrite?(input, line) do
-          true -> Archdo.PipeRewriter.rewrite(input, call)
-          false -> nil
-        end
-
-      _ ->
-        nil
-    end
-  end
-
   # Rewrite single-clause with to case
   defp rewrite_single_with(line, _lines, _start_line) do
     case Regex.run(~r/^with\s+(.+?)\s*<-\s*(.+?),\s*do:\s*(.+)$/, line) do

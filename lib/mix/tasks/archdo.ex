@@ -653,7 +653,7 @@ defmodule Mix.Tasks.Archdo do
         prefix = String.duplicate(" ", indent)
         trimmed = String.trim(original)
 
-        case rewrite_single_pipe(trimmed) do
+        case Archdo.PipeRewriter.rewrite_line(trimmed) do
           nil -> :skip
           ^trimmed -> :skip
           fixed -> {:fixed, List.replace_at(lines, idx, prefix <> fixed)}
@@ -723,21 +723,6 @@ defmodule Mix.Tasks.Archdo do
   defp error_clause_for("{:ok" <> _), do: "{:error, _} = error -> error"
   defp error_clause_for(":ok" <> _), do: "{:error, _} = error -> error"
   defp error_clause_for(_), do: "other -> other"
-
-  defp rewrite_single_pipe(line) do
-    case Regex.run(~r/^(.+?)\s*\|>\s*(.+)$/, line) do
-      [_, input, call] ->
-        input = String.trim(input)
-
-        case Archdo.PipeRewriter.safe_to_rewrite?(input, line) do
-          true -> Archdo.PipeRewriter.rewrite(input, call)
-          false -> nil
-        end
-
-      _ ->
-        nil
-    end
-  end
 
   # --- --watch ---
 
