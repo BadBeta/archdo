@@ -46,30 +46,12 @@ defmodule Archdo.Rules.Boundary.UnusedAlias do
       Macro.prewalk(ast, [], fn
         # Simple alias: alias Foo.Bar
         {:alias, meta, [{:__aliases__, _, parts}]} = node, acc when is_list(parts) ->
-          case skip_alias?(parts) do
-            true ->
-              {node, acc}
-
-            false ->
-              short = List.last(parts)
-              {node, [{atom_to_string(short), parts, meta} | acc]}
-          end
+          {node, accumulate_simple_alias(skip_alias?(parts), parts, meta, acc)}
 
         # Alias with :as option: alias Foo.Bar, as: Baz
         {:alias, meta, [{:__aliases__, _, parts}, opts]} = node, acc
         when is_list(parts) and is_list(opts) ->
-          case skip_multi_alias?(opts) do
-            true ->
-              {node, acc}
-
-            false ->
-              short_name = extract_as_name(opts, parts)
-
-              case short_name do
-                nil -> {node, acc}
-                name -> {node, [{name, parts, meta} | acc]}
-              end
-          end
+          {node, accumulate_as_alias(skip_multi_alias?(opts), opts, parts, meta, acc)}
 
         node, acc ->
           {node, acc}
@@ -77,6 +59,24 @@ defmodule Archdo.Rules.Boundary.UnusedAlias do
 
     Enum.reverse(aliases)
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the skip-alias and short-name shape booleans.
+  defp accumulate_simple_alias(true, _parts, _meta, acc), do: acc
+
+  defp accumulate_simple_alias(false, parts, meta, acc) do
+    short = List.last(parts)
+    [{atom_to_string(short), parts, meta} | acc]
+  end
+
+  defp accumulate_as_alias(true, _opts, _parts, _meta, acc), do: acc
+
+  defp accumulate_as_alias(false, opts, parts, meta, acc) do
+    record_as_alias(extract_as_name(opts, parts), parts, meta, acc)
+  end
+
+  defp record_as_alias(nil, _parts, _meta, acc), do: acc
+  defp record_as_alias(name, parts, meta, acc), do: [{name, parts, meta} | acc]
 
   defp extract_as_name(opts, parts) do
     # Handle both bare :as and literal_encoder wrapped {:__block__, _, [:as]}

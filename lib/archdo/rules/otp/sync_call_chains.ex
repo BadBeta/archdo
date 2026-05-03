@@ -12,19 +12,25 @@ defmodule Archdo.Rules.OTP.SyncCallChains do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case AST.genserver_module?(ast) do
-      false ->
-        []
+    chains_for_genserver(AST.genserver_module?(ast), file, ast)
+  end
 
-      true ->
-        callbacks = AST.extract_callbacks(ast)
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp chains_for_genserver(false, _file, _ast), do: []
 
-        Enum.flat_map([:handle_call, :handle_cast, :handle_info], fn cb_name ->
-          Enum.flat_map(callbacks[cb_name] || [], fn {_meta, _args, body} ->
-            find_genserver_calls_in_callback(file, body, cb_name)
-          end)
-        end)
-    end
+  defp chains_for_genserver(true, file, ast) do
+    callbacks = AST.extract_callbacks(ast)
+
+    Enum.flat_map(
+      [:handle_call, :handle_cast, :handle_info],
+      &chains_in_callback_kind(&1, callbacks, file)
+    )
+  end
+
+  defp chains_in_callback_kind(cb_name, callbacks, file) do
+    Enum.flat_map(callbacks[cb_name] || [], fn {_meta, _args, body} ->
+      find_genserver_calls_in_callback(file, body, cb_name)
+    end)
   end
 
   defp find_genserver_calls_in_callback(_file, nil, _cb_name), do: []

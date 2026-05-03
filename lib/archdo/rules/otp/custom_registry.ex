@@ -89,16 +89,22 @@ defmodule Archdo.Rules.OTP.CustomRegistry do
 
   defp stores_pids_in_state?(ast) do
     callbacks = AST.extract_callbacks(ast)
-
-    Enum.any?([:handle_call, :handle_cast, :handle_info], fn cb ->
-      Enum.any?(callbacks[cb] || [], fn {_, _, body} ->
-        body != nil and
-          AST.contains?(body, fn
-            {:pid, _, nil} -> true
-            {:pid, _, ctx} when is_atom(ctx) -> true
-            _ -> false
-          end)
-      end)
-    end)
+    Enum.any?([:handle_call, :handle_cast, :handle_info], &any_pid_clause?(&1, callbacks))
   end
+
+  defp any_pid_clause?(cb, callbacks) do
+    Enum.any?(callbacks[cb] || [], &clause_stores_pid?/1)
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the body's nil-vs-AST shape.
+  defp clause_stores_pid?({_, _, nil}), do: false
+
+  defp clause_stores_pid?({_, _, body}) do
+    AST.contains?(body, &pid_node?/1)
+  end
+
+  defp pid_node?({:pid, _, nil}), do: true
+  defp pid_node?({:pid, _, ctx}) when is_atom(ctx), do: true
+  defp pid_node?(_), do: false
 end

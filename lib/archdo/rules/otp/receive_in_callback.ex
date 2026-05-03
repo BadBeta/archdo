@@ -14,19 +14,22 @@ defmodule Archdo.Rules.OTP.ReceiveInCallback do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case AST.genserver_module?(ast) do
-      false ->
-        []
+    receives_for_genserver(AST.genserver_module?(ast), file, ast)
+  end
 
-      true ->
-        callbacks = AST.extract_callbacks(ast)
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp receives_for_genserver(false, _file, _ast), do: []
 
-        Enum.flat_map(@genserver_callbacks, fn cb_name ->
-          Enum.flat_map(callbacks[cb_name] || [], fn {_meta, _args, body} ->
-            find_receives(file, body, cb_name)
-          end)
-        end)
-    end
+  defp receives_for_genserver(true, file, ast) do
+    callbacks = AST.extract_callbacks(ast)
+
+    Enum.flat_map(@genserver_callbacks, &receives_in_callback_kind(&1, callbacks, file))
+  end
+
+  defp receives_in_callback_kind(cb_name, callbacks, file) do
+    Enum.flat_map(callbacks[cb_name] || [], fn {_meta, _args, body} ->
+      find_receives(file, body, cb_name)
+    end)
   end
 
   defp find_receives(_file, nil, _cb_name), do: []
