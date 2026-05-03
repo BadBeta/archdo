@@ -518,35 +518,55 @@ defmodule Archdo.AST do
           {atom(), non_neg_integer(), keyword(), [Macro.t()], Macro.t()}
         ]
   def extract_functions(ast, visibility \\ :all) do
-    {_, fns} =
-      Macro.prewalk(ast, [], fn
-        # Guarded clauses wrap the head in a `:when` tuple:
-        #   {:def, _, [{:when, _, [{name, _, args}, _guard]}, body]}
-        # Match those FIRST — otherwise the catch-all clauses below pick up
-        # `:when` as the function name and the guard's arg list as the args.
-        {:def, meta, [{:when, _, [{name, _, args} | _]}, body]} = node, acc
-        when visibility in [:all, :public] ->
-          arity = length(args || [])
-          {node, [{name, arity, meta, args || [], body} | acc]}
-
-        {:defp, meta, [{:when, _, [{name, _, args} | _]}, body]} = node, acc
-        when visibility in [:all, :private] ->
-          arity = length(args || [])
-          {node, [{name, arity, meta, args || [], body} | acc]}
-
-        {:def, meta, [{name, _, args}, body]} = node, acc when visibility in [:all, :public] ->
-          arity = length(args || [])
-          {node, [{name, arity, meta, args || [], body} | acc]}
-
-        {:defp, meta, [{name, _, args}, body]} = node, acc when visibility in [:all, :private] ->
-          arity = length(args || [])
-          {node, [{name, arity, meta, args || [], body} | acc]}
-
-        node, acc ->
-          {node, acc}
-      end)
-
+    {_, fns} = Macro.prewalk(ast, [], &collect_function(&1, &2, visibility))
     Enum.reverse(fns)
+  end
+
+  # Guarded clauses wrap the head in a `:when` tuple:
+  #   {:def, _, [{:when, _, [{name, _, args}, _guard]}, body]}
+  # Match those FIRST — otherwise the catch-all clauses below pick up
+  # `:when` as the function name and the guard's arg list as the args.
+  defp collect_function(
+         {:def, meta, [{:when, _, [{name, _, args} | _]}, body]} = node,
+         acc,
+         visibility
+       )
+       when visibility in [:all, :public] do
+    add_extracted_fn(node, acc, name, args, meta, body)
+  end
+
+  defp collect_function(
+         {:defp, meta, [{:when, _, [{name, _, args} | _]}, body]} = node,
+         acc,
+         visibility
+       )
+       when visibility in [:all, :private] do
+    add_extracted_fn(node, acc, name, args, meta, body)
+  end
+
+  defp collect_function(
+         {:def, meta, [{name, _, args}, body]} = node,
+         acc,
+         visibility
+       )
+       when visibility in [:all, :public] do
+    add_extracted_fn(node, acc, name, args, meta, body)
+  end
+
+  defp collect_function(
+         {:defp, meta, [{name, _, args}, body]} = node,
+         acc,
+         visibility
+       )
+       when visibility in [:all, :private] do
+    add_extracted_fn(node, acc, name, args, meta, body)
+  end
+
+  defp collect_function(node, acc, _visibility), do: {node, acc}
+
+  defp add_extracted_fn(node, acc, name, args, meta, body) do
+    arity = length(args || [])
+    {node, [{name, arity, meta, args || [], body} | acc]}
   end
 
   @doc """

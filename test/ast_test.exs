@@ -104,6 +104,23 @@ defmodule Archdo.ASTTest do
       assert :pub in names
       assert :priv in names
     end
+
+    test "extracts only private functions with :private" do
+      {:ok, ast} =
+        Code.string_to_quoted("""
+        defmodule Foo do
+          def pub(x), do: x
+          defp priv_one(x), do: x
+          defp priv_guarded(s) when is_binary(s), do: s
+        end
+        """)
+
+      fns = AST.extract_functions(ast, :private)
+      names = Enum.map(fns, fn {name, _, _, _, _} -> name end)
+      refute :pub in names
+      assert :priv_one in names
+      assert :priv_guarded in names
+    end
   end
 
   describe "genserver_module?/1" do
