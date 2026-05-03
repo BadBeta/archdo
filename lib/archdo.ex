@@ -162,7 +162,8 @@ defmodule Archdo do
     Archdo.Rules.Compiled.LookupTableCandidate,
     Archdo.Rules.Compiled.ContextQuality,
     Archdo.Rules.Compiled.CircularContextDeps,
-    Archdo.Rules.Compiled.OrphanModule
+    Archdo.Rules.Compiled.OrphanModule,
+    Archdo.Rules.Compiled.UnanchoredModule
   ]
 
   # Build the compiled graph once when --compiled is set, and put both
@@ -179,11 +180,14 @@ defmodule Archdo do
         case build_compiled_graph(paths) do
           {:ok, graph} ->
             reached = compute_reached_modules(graph)
+            {anchors, ast_graph} = compute_ast_anchors_and_graph(paths)
 
             new_opts =
               opts
               |> Keyword.put(:compiled_graph, graph)
               |> Keyword.put(:compiled_reached_modules, reached)
+              |> Keyword.put(:ast_anchor_modules, anchors)
+              |> Keyword.put(:ast_graph, ast_graph)
 
             {new_opts, graph}
 
@@ -192,6 +196,33 @@ defmodule Archdo do
             {opts, nil}
         end
     end
+  end
+
+  # Compute AST-side anchors AND build the AST graph in one pass — both
+  # are needed by 1.26 (compiled/unanchored_module) which unions
+  # compiled-graph function edges with AST :registry edges.
+  defp compute_ast_anchors_and_graph(paths) do
+    files = collect_files(paths)
+    file_asts = for file <- files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
+    production = Enum.reject(file_asts, fn {file, _} -> AST.test_file?(file) end)
+
+    anchors =
+      production
+      |> Archdo.AnchorSet.compute()
+      |> MapSet.to_list()
+      |> Enum.map(&safe_module_atom/1)
+      |> Enum.reject(&is_nil/1)
+      |> MapSet.new()
+
+    ast_graph = Graph.build(production)
+
+    {anchors, ast_graph}
+  end
+
+  defp safe_module_atom(name) when is_binary(name) do
+    String.to_existing_atom("Elixir." <> name)
+  rescue
+    ArgumentError -> nil
   end
 
   defp build_compiled_graph(paths) do
@@ -222,13 +253,20 @@ defmodule Archdo do
     |> MapSet.new()
   end
 
-  defp run_compiled_rules_with_graph(graph, _opts) do
-    Enum.flat_map(@compiled_rules, &safe_analyze_compiled(&1, graph))
+  defp run_compiled_rules_with_graph(graph, opts) do
+    Enum.flat_map(@compiled_rules, &safe_analyze_compiled(&1, graph, opts))
   end
 
   # Run a single compiled rule, isolating crashes so one broken rule doesn't block others.
-  defp safe_analyze_compiled(rule, graph) do
-    rule.analyze_compiled(graph)
+  # Arity-aware dispatch: rules that opt into opts (e.g. 1.26 needs anchor data)
+  # implement analyze_compiled/2; the rest stay on /1.
+  defp safe_analyze_compiled(rule, graph, opts) do
+    _ = Code.ensure_loaded(rule)
+
+    case function_exported?(rule, :analyze_compiled, 2) do
+      true -> rule.analyze_compiled(graph, opts)
+      false -> rule.analyze_compiled(graph)
+    end
   rescue
     e ->
       IO.puts(
