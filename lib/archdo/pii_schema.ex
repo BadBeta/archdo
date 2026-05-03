@@ -1,5 +1,11 @@
 defmodule Archdo.PiiSchema do
-  @moduledoc false
+  @moduledoc """
+  PII (personally-identifiable information) field detection on
+  Ecto schemas. Recognises common PII shapes — `email`, `phone`,
+  `ssn`, `password*`, `*_token` — and surfaces them for privacy-
+  pack rules (CE-51 PiiFieldHandling, CE-52 MissingRetentionPolicy,
+  CE-53 PiiSchemaWithoutDeletion). Public API.
+  """
 
   # §§ elixir-planning: §6 — Group N foundation. Identifies Ecto
   # schemas that contain PII fields and reports which fields they are.

@@ -1,5 +1,12 @@
 defmodule Archdo.CognitiveComplexity do
-  @moduledoc false
+  @moduledoc """
+  Cognitive-complexity scorer (Campbell 2018). Counts nesting
+  depth and structural complexity in a way that better matches
+  how hard a function is to read than McCabe cyclomatic counts.
+  Used by CE-23 (HighCognitiveComplexity) and CE-24
+  (ComplexityShape) to distinguish twisty-nested code from flat
+  dispatch. Public API.
+  """
 
   # §§ elixir-planning: §6 — Cognitive complexity engine (Campbell,
   # SonarSource 2018). Distinct from McCabe cyclomatic: tracks human

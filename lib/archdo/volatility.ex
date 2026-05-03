@@ -1,7 +1,14 @@
 defmodule Archdo.Volatility do
-  @moduledoc false
+  @moduledoc """
+  Per-module dependency-stability classifier. Tags each module as
+  `:stable` / `:volatile` / `:mixed` based on the volatility of
+  its outbound dependencies, plus author / path / entry-point
+  overrides. Public API for rule writers — every CE rule
+  (CE-1, CE-2, CE-3, CE-4, CE-34, CE-35) consumes this
+  classification via `classification_for/3`. See GUIDE.md
+  §3.4.2 for thresholds and the override precedence.
+  """
 
-  # §§ elixir-planning: §6 — second classifier (after Archdo.Phoenix).
   # Tags each module by the volatility of its outbound dependencies. The
   # ~30 future CE rules consume this via opts[:volatility]; this module
   # owns the policy and the dual-purpose call-site resolution.

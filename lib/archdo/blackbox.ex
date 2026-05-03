@@ -1,7 +1,14 @@
 defmodule Archdo.Blackbox do
-  @moduledoc false
+  @moduledoc """
+  Composability scorer — answers "is this function structurally a
+  building block?" Returns a 0.0–1.0 score per public function based
+  on purity, determinism, closed input domain, side-effect freedom,
+  errors-as-values, and naming. Used by CE-54 (BlackboxQuadrant),
+  CE-55 (UntestedBuildingBlock), CE-56 (EffectLeak), CE-57
+  (UnguardedBuildingBlock). Public API for composability-aware rules.
+  """
 
-  # §§ elixir-planning: §6 — Blackbox composability score (Group O
+  # Blackbox composability score (Group O
   # axis 1 — "is it possible to make a building block out of this?").
   # Six components multiplied together — high score means the function
   # has every property property-based testing requires (purity,

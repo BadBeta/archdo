@@ -1,5 +1,19 @@
 defmodule Archdo.Graph do
-  @moduledoc false
+  @moduledoc """
+  Module-level dependency graph extracted from source ASTs.
+
+  Build with `build/1`, query with `dependencies/2` /
+  `dependents/2` / `find_cycles/2`. The graph captures `alias`,
+  `import`, `use`, qualified remote calls (with short-form
+  alias-table resolution), `defdelegate ..., to: ...`,
+  `__MODULE__.Sub` references, `%Foo.Bar{...}` struct construction,
+  and module-attribute registry lists. See GUIDE.md §3.4.8 for
+  the full extraction shape.
+
+  Public API for rule writers and metrics consumers. The compiled
+  counterpart `Archdo.Compiled.Graph` covers BEAM-level analysis
+  beyond AST reach.
+  """
 
   alias Archdo.AST
 

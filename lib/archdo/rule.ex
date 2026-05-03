@@ -1,7 +1,17 @@
 defmodule Archdo.Rule do
-  @moduledoc false
+  @moduledoc """
+  The `Archdo.Rule` behaviour every rule module implements.
 
-  # §§ elixir-planning: §6 — Pack abstraction (M13). Rules optionally declare
+  Required callbacks: `id/0`, `description/0`. Optional callbacks:
+  `analyze/3` (per-file), `analyze_project/1,2` / `analyze_compiled/1`
+  (project-level), `pack/0` (opt-in pack identifier — defaults to
+  `:core`), `cleanup_pass/0` (1..14 mapping to the cleanup-guide
+  pass).
+
+  Public API for rule writers.
+  """
+
+  # Pack abstraction. Rules optionally declare
   # `pack/0` to opt into one of the optional CE packs; runner filters by
   # enabled packs before invoking rules. Default `:core` keeps every existing
   # rule active without code change.

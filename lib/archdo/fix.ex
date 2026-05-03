@@ -1,5 +1,21 @@
 defmodule Archdo.Fix do
-  @moduledoc false
+  @moduledoc """
+  Suggested-fix struct attached to every Diagnostic via `:alternatives`.
+
+  Each rule emits one or more `Fix` structs explaining how to address
+  the finding. A Fix has:
+
+    * `summary`      — one-line description ("Replace X with Y")
+    * `detail`       — multi-line rationale and steps
+    * `example`      — optional code-block example (markdown-formatted)
+    * `applies_when` — optional precondition for when the fix is the
+                       right move (other Fix structs in the same
+                       diagnostic may apply otherwise)
+
+  This module is the canonical Fix shape for every rule across
+  `Archdo.Rules.*`. Public API for rule writers; the struct itself is
+  the contract.
+  """
 
   @type t :: %__MODULE__{
           summary: String.t(),

@@ -1,5 +1,12 @@
 defmodule Archdo.FunctionGraph do
-  @moduledoc false
+  @moduledoc """
+  Function-level call graph derived from AST. Tracks `def`/`defp`
+  declarations, qualified remote calls, function captures
+  (`&Mod.f/n`), and pipe-arity-aware call edges. Sister module to
+  `Archdo.Graph` (module-level) and `Archdo.Compiled.Graph`
+  (BEAM-level). Public API for rules that need per-function
+  reachability or call-shape analysis.
+  """
 
   # Function-level call graph.
   #

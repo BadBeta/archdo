@@ -1,5 +1,11 @@
 defmodule Archdo.IrreversibleDecision do
-  @moduledoc false
+  @moduledoc """
+  Classifier for "irreversible decision" modules — Ecto schemas,
+  supervisors, and public-API entry points where a wrong call
+  costs disproportionately more than a fixable one. Used by CE-11
+  (ContractDensity) to require above-cohort contract coverage on
+  these modules. Public API for rule writers.
+  """
 
   # §§ elixir-planning: §6 — Group D foundation. Identifies modules
   # representing hard-to-reverse decisions: Ecto schemas (data shape

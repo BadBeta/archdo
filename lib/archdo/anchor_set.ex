@@ -1,5 +1,14 @@
 defmodule Archdo.AnchorSet do
-  @moduledoc false
+  @moduledoc """
+  Reachability anchor discovery + transitive closure. An "anchor"
+  is a module with externally-justified existence (Phoenix routes,
+  Mix tasks, Oban workers, supervised processes, application
+  lifecycle callbacks, public API entries, explicit
+  `@archdo_anchor`). The closure is the set of modules
+  transitively reachable from any anchor via the dependency graph.
+  Used by CE-30 (UnanchoredModule) and CE-31 (UnanchoredIsland).
+  Public API.
+  """
 
   # §§ elixir-planning: §6 — anchor discovery + reachability closure for
   # CE-30 (unanchored module) and CE-31 (unanchored island). An "anchor"

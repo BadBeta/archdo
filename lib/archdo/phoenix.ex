@@ -1,11 +1,17 @@
 defmodule Archdo.Phoenix do
-  @moduledoc false
+  @moduledoc """
+  Phoenix-aware file-layer classifier.
 
-  # §§ elixir-planning: §6 — single context module owning Phoenix-aware file
-  # classification. Boundary rules (1.26, 6.10, etc.) used to each re-derive
-  # "is this an application supervisor / Mix task / live view?" via path
-  # heuristics scattered across modules; centralizing here gives one
-  # registry that every rule consumes via opts[:phoenix].
+  Single context module owning Phoenix-aware file classification.
+  Boundary rules (1.26, 6.10, etc.) used to each re-derive "is this
+  an application supervisor / Mix task / live view?" via path
+  heuristics scattered across modules; centralizing here gives one
+  registry that every rule consumes via `opts[:phoenix]`.
+
+  Public API for rule writers — every rule that branches on
+  Phoenix layer should call `classify_file/2` rather than rolling
+  its own path-and-AST inspection.
+  """
 
   alias Archdo.AST
 

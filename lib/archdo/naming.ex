@@ -1,5 +1,11 @@
 defmodule Archdo.Naming do
-  @moduledoc false
+  @moduledoc """
+  Identifier-stem normalization. Used by rules that cluster
+  related-but-not-identical names (CE-26 ScatteredTaxonomy,
+  CE-48 ErrorCategoryDrift) to recognise that `:user_not_found`,
+  `:no_user_found`, and `:not_found_user` are the same canonical
+  concept under different surface forms. Public API for rule writers.
+  """
 
   # §§ elixir-planning: §6 — Shared canonicalization helpers for rules
   # that cluster surface forms (CE-26 ScatteredTaxonomy, CE-48

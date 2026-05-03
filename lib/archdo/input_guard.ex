@@ -1,5 +1,11 @@
 defmodule Archdo.InputGuard do
-  @moduledoc false
+  @moduledoc """
+  Clause-constraint analyzer. Inspects function clauses to determine
+  whether their argument patterns + guards constrain the input space
+  to safe shapes (typed, bounded, validated). Used by CE-57
+  (UnguardedBuildingBlock) and the Blackbox composability scorer.
+  Public API.
+  """
 
   # §§ elixir-planning: §6 — shared input-guard analyzer used by
   # both CE-57 (UnguardedBuildingBlock) and Blackbox.module_verdict
