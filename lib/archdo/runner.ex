@@ -128,6 +128,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.NIF.PortVsNif,
     # Event sourcing rules
     Archdo.Rules.EventSourcing.CommandEventNaming,
+    Archdo.Rules.EventSourcing.EventPayloadUnversioned,
     Archdo.Rules.EventSourcing.PureAggregateApply,
     Archdo.Rules.EventSourcing.ImmutableEvents,
     Archdo.Rules.EventSourcing.EventsNeedJasonEncoder,
