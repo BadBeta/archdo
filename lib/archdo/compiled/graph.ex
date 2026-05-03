@@ -342,7 +342,10 @@ defmodule Archdo.Compiled.Graph do
           |> Map.keys()
           |> Enum.reject(&(&1 == :__struct__))
         rescue
-          _ -> []
+          # `__struct__/0` is exported as a function, not a struct accessor —
+          # rare but happens for macro-generated `defstruct` shapes.
+          UndefinedFunctionError -> []
+          ArgumentError -> []
         end
 
       false ->
@@ -356,7 +359,10 @@ defmodule Archdo.Compiled.Graph do
         try do
           mod.behaviour_info(:callbacks)
         rescue
-          _ -> []
+          # Some macro-generated modules export `behaviour_info/1` but
+          # raise on `:callbacks`. Treat as "no callbacks discoverable."
+          UndefinedFunctionError -> []
+          FunctionClauseError -> []
         end
 
       false ->
@@ -460,6 +466,8 @@ defmodule Archdo.Compiled.Graph do
   defp impl_protocol(mod) do
     mod.__impl__(:protocol)
   rescue
-    _ -> nil
+    # `__impl__/1` exists only on protocol-implementation modules.
+    # Anything else raises UndefinedFunctionError; treat as "not an impl."
+    UndefinedFunctionError -> nil
   end
 end

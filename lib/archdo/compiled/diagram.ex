@@ -700,7 +700,8 @@ defmodule Archdo.Compiled.Diagram do
   defp string_to_module(str) when is_binary(str) do
     Module.concat([str])
   rescue
-    _ -> nil
+    # `Module.concat/1` raises ArgumentError for an empty/malformed name.
+    ArgumentError -> nil
   end
 
   # --- Dataflow Diagram (LabVIEW/Grasshopper inspired) ---
@@ -1011,9 +1012,10 @@ defmodule Archdo.Compiled.Diagram do
     caller_short = AST.short_name(caller)
     targets = Enum.map(calls, &callee_id_and_fns/1)
 
-    edge_lines = Enum.map(targets, fn {callee_id, fn_str} ->
-      "  #{caller_id} -->|\"#{fn_str}\"| #{callee_id}"
-    end)
+    edge_lines =
+      Enum.map(targets, fn {callee_id, fn_str} ->
+        "  #{caller_id} -->|\"#{fn_str}\"| #{callee_id}"
+      end)
 
     ["  #{caller_id}([\"#{caller_short}\"])" | edge_lines]
   end
@@ -1033,9 +1035,10 @@ defmodule Archdo.Compiled.Diagram do
       |> Enum.map(&caller_id_and_fns/1)
       |> Enum.take(3)
 
-    edge_lines = Enum.map(sources, fn {caller_id, fn_str} ->
-      "  #{caller_id} -.->|\"#{fn_str}\"| #{dep_id}"
-    end)
+    edge_lines =
+      Enum.map(sources, fn {caller_id, fn_str} ->
+        "  #{caller_id} -.->|\"#{fn_str}\"| #{dep_id}"
+      end)
 
     ["  #{dep_id}([\"#{dep_short}\"])" | edge_lines]
   end

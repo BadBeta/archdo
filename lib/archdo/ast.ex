@@ -664,7 +664,10 @@ defmodule Archdo.AST do
       false -> Module.concat(parts)
     end
   rescue
-    _ -> nil
+    # `Module.concat/1` raises ArgumentError for malformed input that
+    # slipped past the parts-filter above (empty list, exotic non-atoms).
+    # The function's contract returns `nil` for unparseable aliases.
+    ArgumentError -> nil
   end
 
   @doc """
