@@ -28,54 +28,55 @@ defmodule Archdo.Rules.Testing.HardcodedTestData do
   end
 
   defp check_hardcoded_data(file) do
-    case File.read(file) do
-      {:ok, content} ->
-        findings =
-          suspicious_patterns()
-          |> Enum.flat_map(fn pattern ->
-            case Regex.run(pattern, content) do
-              [match | _] -> [match]
-              _ -> []
-            end
-          end)
-          |> Enum.take(3)
+    diagnose_for_read(File.read(file), file)
+  end
 
-        case findings do
-          [] ->
-            []
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the File.read result tag and on the findings shape.
+  defp diagnose_for_read({:error, _}, _file), do: []
 
-          [match | _] ->
-            [
-              Diagnostic.info("7.20",
-                title: "Hardcoded test data",
-                message: "Test file contains real-looking data: #{String.slice(match, 0, 40)}",
-                why:
-                  "Hardcoded real email addresses, API keys, or production URLs in tests risk " <>
-                    "accidental side effects (sending real emails, hitting real APIs) and make " <>
-                    "tests brittle. Use factories, faker libraries, or @example.com domains.",
-                alternatives: [
-                  Fix.new(
-                    summary: "Use @example.com for email addresses",
-                    detail: "RFC 2606 reserves example.com for testing. Use `user@example.com`.",
-                    applies_when: "Tests need email addresses."
-                  ),
-                  Fix.new(
-                    summary: "Use factories or fixtures for test data",
-                    detail:
-                      "Generate unique test data with ExMachina, Faker, or custom fixtures.",
-                    applies_when: "Tests need realistic but non-production data."
-                  )
-                ],
-                references: ["ARCHITECTURE_RULES.md#7.20"],
-                context: %{sample: String.slice(match, 0, 40)},
-                file: file,
-                line: 1
-              )
-            ]
-        end
+  defp diagnose_for_read({:ok, content}, file) do
+    findings =
+      suspicious_patterns()
+      |> Enum.flat_map(&first_match(&1, content))
+      |> Enum.take(3)
 
-      {:error, _} ->
-        []
-    end
+    diagnose_findings(findings, file)
+  end
+
+  defp first_match(pattern, content), do: pattern_first_match(Regex.run(pattern, content))
+
+  defp pattern_first_match([match | _]), do: [match]
+  defp pattern_first_match(_), do: []
+
+  defp diagnose_findings([], _file), do: []
+  defp diagnose_findings([match | _], file), do: [build_hardcoded_diag(match, file)]
+
+  defp build_hardcoded_diag(match, file) do
+    Diagnostic.info("7.20",
+      title: "Hardcoded test data",
+      message: "Test file contains real-looking data: #{String.slice(match, 0, 40)}",
+      why:
+        "Hardcoded real email addresses, API keys, or production URLs in tests risk " <>
+          "accidental side effects (sending real emails, hitting real APIs) and make " <>
+          "tests brittle. Use factories, faker libraries, or @example.com domains.",
+      alternatives: [
+        Fix.new(
+          summary: "Use @example.com for email addresses",
+          detail: "RFC 2606 reserves example.com for testing. Use `user@example.com`.",
+          applies_when: "Tests need email addresses."
+        ),
+        Fix.new(
+          summary: "Use factories or fixtures for test data",
+          detail:
+            "Generate unique test data with ExMachina, Faker, or custom fixtures.",
+          applies_when: "Tests need realistic but non-production data."
+        )
+      ],
+      references: ["ARCHITECTURE_RULES.md#7.20"],
+      context: %{sample: String.slice(match, 0, 40)},
+      file: file,
+      line: 1
+    )
   end
 end

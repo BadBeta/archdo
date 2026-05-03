@@ -30,20 +30,25 @@ defmodule Archdo.Rules.StateMachine.UndeclaredNextState do
   defp find_undeclared_targets(file, ast, states) do
     {_, found} =
       Macro.prewalk(ast, [], fn node, acc ->
-        case extract_next_state(node) do
-          nil -> {node, acc}
-          {target, line} ->
-            case MapSet.member?(states, target) do
-              true -> {node, acc}
-              false -> {node, [{target, line} | acc]}
-            end
-        end
+        absorb_next_state(extract_next_state(node), node, acc, states)
       end)
 
     found
     |> Enum.reverse()
     |> Enum.map(fn {target, line} -> build_diagnostic(file, line, target, states) end)
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the extract_next_state result and on whether the target is a
+  # declared state.
+  defp absorb_next_state(nil, node, acc, _states), do: {node, acc}
+
+  defp absorb_next_state({target, line}, node, acc, states) do
+    record_undeclared(MapSet.member?(states, target), node, acc, target, line)
+  end
+
+  defp record_undeclared(true, node, acc, _target, _line), do: {node, acc}
+  defp record_undeclared(false, node, acc, target, line), do: {node, [{target, line} | acc]}
 
   # `{:next_state, :foo, _}` parses (with literal_encoder) as
   # `{:{}, _meta, [{:__block__, _, [:next_state]}, {:__block__, _, [:foo]}, _data]}`.

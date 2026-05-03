@@ -54,19 +54,23 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
   # Each occurrence: {kind, surface_form, canonical_key, module, file, line}
   # kind ∈ :telemetry | :logger
   defp collect_occurrences(file_asts) do
-    Enum.flat_map(file_asts, fn {file, ast} ->
-      module = AST.extract_module_name(ast)
-
-      ast
-      |> find_calls()
-      |> Enum.flat_map(fn {kind, surface, line} ->
-        case canonical(kind, surface) do
-          nil -> []
-          canon -> [{kind, surface, canon, module, file, line}]
-        end
-      end)
-    end)
+    Enum.flat_map(file_asts, &occurrences_in_file/1)
   end
+
+  defp occurrences_in_file({file, ast}) do
+    module = AST.extract_module_name(ast)
+    ast |> find_calls() |> Enum.flat_map(&canonical_occurrence(&1, module, file))
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the canonical/2 result.
+  defp canonical_occurrence({kind, surface, line}, module, file) do
+    record_canon(canonical(kind, surface), kind, surface, module, file, line)
+  end
+
+  defp record_canon(nil, _kind, _surface, _module, _file, _line), do: []
+  defp record_canon(canon, kind, surface, module, file, line),
+    do: [{kind, surface, canon, module, file, line}]
 
   # Walk the AST looking for telemetry/logger calls. Handles both the
   # raw shape (test ASTs from Code.string_to_quoted/1) and the

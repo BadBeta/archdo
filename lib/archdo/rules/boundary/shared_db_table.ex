@@ -35,19 +35,21 @@ defmodule Archdo.Rules.Boundary.SharedDbTable do
     # Group by table name, find tables with schemas in multiple contexts
     schemas
     |> Enum.group_by(fn {table, _ctx, _file, _line} -> table end)
-    |> Enum.flat_map(fn {table, entries} ->
-      contexts = Enum.uniq_by(entries, fn {_, ctx, _, _} -> ctx end)
+    |> Enum.flat_map(&shared_table_diags/1)
+  end
 
-      case length(contexts) > 1 do
-        true ->
-          Enum.map(entries, fn {_table, _ctx, file, line} ->
-            context_names = Enum.map_join(contexts, ", ", fn {_, ctx, _, _} -> ctx end)
-            build_diagnostic(file, line, table, context_names)
-          end)
+  defp shared_table_diags({table, entries}) do
+    contexts = Enum.uniq_by(entries, fn {_, ctx, _, _} -> ctx end)
+    diags_when_shared(length(contexts) > 1, table, entries, contexts)
+  end
 
-        false ->
-          []
-      end
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp diags_when_shared(false, _table, _entries, _contexts), do: []
+
+  defp diags_when_shared(true, table, entries, contexts) do
+    context_names = Enum.map_join(contexts, ", ", fn {_, ctx, _, _} -> ctx end)
+    Enum.map(entries, fn {_table, _ctx, file, line} ->
+      build_diagnostic(file, line, table, context_names)
     end)
   end
 
