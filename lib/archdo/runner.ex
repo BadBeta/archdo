@@ -20,6 +20,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.OTP.SpawnWithoutLink,
     Archdo.Rules.OTP.TaskAsyncWithoutAwait,
     Archdo.Rules.OTP.UnsupervisedTask,
+    Archdo.Rules.OTP.AsyncDropsLoggerMetadata,
     Archdo.Rules.OTP.DynamicAtomName,
     Archdo.Rules.OTP.GlobalRegistration,
     Archdo.Rules.OTP.ProcessSleep,
