@@ -271,7 +271,14 @@ defmodule Archdo do
       []
   end
 
-  defp find_project_root(path) do
+  @doc """
+  Walk up from `path` looking for the closest ancestor directory containing
+  a `mix.exs`. Returns that directory, or `File.cwd!/0` if no `mix.exs` is
+  found before the filesystem root. Used by both the top-level facade and
+  the Mix task to resolve the target project's root.
+  """
+  @spec find_project_root(String.t()) :: String.t()
+  def find_project_root(path) do
     cond do
       File.exists?(Path.join(path, "mix.exs")) -> path
       path == "/" -> File.cwd!()

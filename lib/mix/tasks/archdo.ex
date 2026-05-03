@@ -298,7 +298,7 @@ defmodule Mix.Tasks.Archdo do
         [path | _] ->
           path
           |> Path.expand()
-          |> find_project_root()
+          |> Archdo.find_project_root()
 
         _ ->
           File.cwd!()
@@ -533,7 +533,7 @@ defmodule Mix.Tasks.Archdo do
   defp run_since(opts, base_paths) do
     ref = Keyword.fetch!(opts, :since)
 
-    case changed_files_since(ref, base_paths) do
+    case Archdo.GitDiff.changed_files(ref, base_paths) do
       {:ok, []} ->
         IO.puts("\nNo .ex files changed since #{ref}\n")
 
@@ -547,23 +547,6 @@ defmodule Mix.Tasks.Archdo do
 
       {:error, reason} ->
         IO.puts(:standard_error, "[archdo] #{reason}")
-    end
-  end
-
-  defp changed_files_since(ref, base_paths) do
-    case System.cmd("git", ["diff", "--name-only", "--diff-filter=ACMR", ref, "--"] ++ base_paths,
-           stderr_to_stdout: true
-         ) do
-      {output, 0} ->
-        files =
-          output
-          |> String.split("\n", trim: true)
-          |> Enum.filter(&(String.ends_with?(&1, ".ex") and File.exists?(&1)))
-
-        {:ok, files}
-
-      {error, _} ->
-        {:error, "git diff failed: #{String.trim(error)}"}
     end
   end
 
@@ -746,42 +729,13 @@ defmodule Mix.Tasks.Archdo do
       [_, input, call] ->
         input = String.trim(input)
 
-        case safe_pipe_rewrite?(input, line) do
-          true -> rewrite_pipe_call_cli(input, call)
+        case Archdo.PipeRewriter.safe_to_rewrite?(input, line) do
+          true -> Archdo.PipeRewriter.rewrite(input, call)
           false -> nil
         end
 
       _ ->
         nil
-    end
-  end
-
-  defp safe_pipe_rewrite?(input, _line) do
-    String.match?(input, ~r/^[a-z_]\w*$/) or
-      String.match?(input, ~r/^[a-z_]\w*\(.*\)$/) or
-      String.match?(input, ~r/^[A-Z]\w*(?:\.[A-Z]\w*)*\.[a-z_]\w*\(.*\)$/) or
-      String.match?(input, ~r/^\[.*\]$/)
-  end
-
-  defp rewrite_pipe_call_cli(input, call) do
-    case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)\((.*)\)$/s, call) do
-      [_, func_name, existing_args] ->
-        new_args =
-          case String.trim(existing_args) do
-            "" -> input
-            args -> "#{input}, #{args}"
-          end
-
-        "#{func_name}(#{new_args})"
-
-      _ ->
-        case Regex.run(
-               ~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/,
-               String.trim(call)
-             ) do
-          [_, func_name] -> "#{func_name}(#{input})"
-          _ -> nil
-        end
     end
   end
 
@@ -822,14 +776,6 @@ defmodule Mix.Tasks.Archdo do
         _ -> {file, nil}
       end
     end)
-  end
-
-  defp find_project_root(path) do
-    cond do
-      File.exists?(Path.join(path, "mix.exs")) -> path
-      path == "/" -> File.cwd!()
-      true -> find_project_root(Path.dirname(path))
-    end
   end
 
   defp maybe_exit(exit_status) do

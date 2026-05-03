@@ -209,44 +209,13 @@ defmodule Archdo.Mcp.Tools.Fix do
       [_, input, call] ->
         input = String.trim(input)
 
-        case safe_to_rewrite_pipe?(input, line) do
-          true -> rewrite_pipe_call(input, call)
+        case Archdo.PipeRewriter.safe_to_rewrite?(input, line) do
+          true -> Archdo.PipeRewriter.rewrite(input, call)
           false -> nil
         end
 
       _ ->
         nil
-    end
-  end
-
-  # Only safe when input is a simple expression — variable, function call,
-  # or module.function call. Anything more complex risks semantic breakage.
-  defp safe_to_rewrite_pipe?(input, _line) do
-    String.match?(input, ~r/^[a-z_]\w*$/) or
-      String.match?(input, ~r/^[a-z_]\w*\(.*\)$/) or
-      String.match?(input, ~r/^[A-Z]\w*(?:\.[A-Z]\w*)*\.[a-z_]\w*\(.*\)$/) or
-      String.match?(input, ~r/^\[.*\]$/)
-  end
-
-  defp rewrite_pipe_call(input, call) do
-    case Regex.run(~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)\((.*)\)$/s, call) do
-      [_, func_name, existing_args] ->
-        new_args =
-          case String.trim(existing_args) do
-            "" -> input
-            args -> "#{input}, #{args}"
-          end
-
-        "#{func_name}(#{new_args})"
-
-      _ ->
-        case Regex.run(
-               ~r/^([A-Za-z_][A-Za-z0-9_.]*(?:\.[a-z_][a-z0-9_!?]*)?)$/,
-               String.trim(call)
-             ) do
-          [_, func_name] -> "#{func_name}(#{input})"
-          _ -> nil
-        end
     end
   end
 

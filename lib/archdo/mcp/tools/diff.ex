@@ -45,7 +45,7 @@ defmodule Archdo.Mcp.Tools.Diff do
     base_paths = Map.get(args, "paths", ["lib"])
     ref = Map.get(args, "ref", "HEAD~1")
 
-    case changed_files(ref, base_paths) do
+    case Archdo.GitDiff.changed_files(ref, base_paths) do
       {:ok, files} when files != [] ->
         opts = build_opts(args)
         diagnostics = Runner.analyze(files, opts)
@@ -69,23 +69,6 @@ defmodule Archdo.Mcp.Tools.Diff do
 
       {:error, reason} ->
         {:error, reason}
-    end
-  end
-
-  defp changed_files(ref, base_paths) do
-    case System.cmd("git", ["diff", "--name-only", "--diff-filter=ACMR", ref, "--"] ++ base_paths,
-           stderr_to_stdout: true
-         ) do
-      {output, 0} ->
-        files =
-          output
-          |> String.split("\n", trim: true)
-          |> Enum.filter(&(String.ends_with?(&1, ".ex") and File.exists?(&1)))
-
-        {:ok, files}
-
-      {error, _code} ->
-        {:error, "git diff failed: #{String.trim(error)}"}
     end
   end
 
