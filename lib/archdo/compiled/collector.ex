@@ -63,9 +63,12 @@ defmodule Archdo.Compiled.Collector do
     {:noreply, %{state | modules: [data | state.modules]}}
   end
 
-  def handle_info(_msg, state) do
-    {:noreply, state}
-  end
+  # No catch-all on handle_info — let GenServer's default
+  # implementation log any unexpected message at :error level
+  # (Elixir 1.15+). The tracer sends only the three tagged
+  # messages above; anything else (stray :DOWN from a monitor we
+  # don't have, etc.) is genuinely unexpected and worth a log
+  # entry, not a silent drop.
 
   @impl true
   def handle_call(:get_data, _from, state) do
