@@ -1126,6 +1126,15 @@ GenServer with too many distinct `handle_call`/`handle_cast`/`handle_info` messa
 - **Tolerate:** Tables created in Application.start (owned by the application, not a process). Tables with `:heir` option set.
 - **Severity:** `info`
 
+### 5.50 Unsafe Deserialization or Runtime Eval
+
+`:erlang.binary_to_term` without `:safe`, `Code.eval_string/eval_quoted`, or `Jason.decode` with `keys: :atoms` on untrusted input.
+
+- **Why:** ETF deserialization without `:safe` can instantiate arbitrary terms including atoms, funs, and pids — any of which can exhaust resources or trigger unexpected behaviour. `Code.eval_string/eval_quoted` execute arbitrary Elixir source — if the argument reaches attacker-controlled input this is remote code execution. `Jason.decode(json, keys: :atoms)` creates a new atom per unique JSON key, exhausting the finite atom table on untrusted input. (Security, RCE, Atom-Table Exhaustion)
+- **Check:** Flag `:erlang.binary_to_term/1,2` without `[:safe]` in options; `Code.eval_string`, `Code.eval_quoted`, `Code.compile_string` calls; `Jason.decode/decode!` with `keys: :atoms` option.
+- **Tolerate:** `:erlang.binary_to_term(data, [:safe])` — safe mode only allows already-existing atoms. `keys: :atoms!` raises on unknown keys (bounded set). Internal process communication over trusted channels.
+- **Severity:** `error`
+
 ---
 
 ## 6. Module Quality
@@ -1184,6 +1193,15 @@ Module has independent function clusters suggesting multiple responsibilities.
 - **Why:** If a module's public functions form 2+ disconnected clusters (user_* functions never call order_* functions and vice versa), the module has multiple responsibilities that happen to share a file. They should be separated into focused modules. (Single Responsibility, Cohesion)
 - **Check:** Build an intra-module call graph of public→private function calls. Detect disconnected components.
 - **Tolerate:** Small modules with few functions, thin facade modules.
+- **Severity:** `info`
+
+### 6.13 Unbounded Mailbox Pressure
+
+Module sends messages to a GenServer in a loop without backpressure — can overwhelm the mailbox.
+
+- **Why:** Sending messages to a GenServer in a tight loop without waiting for confirmation or applying backpressure fills the receiver's mailbox faster than it can drain. The mailbox grows unboundedly, consuming memory until the scheduler degrades or the node runs out of memory. Backpressure patterns (call instead of cast, demand-driven flow, bounded buffer) keep the system stable under load. (Backpressure, Memory Safety, Mailbox Bounds)
+- **Check:** Flag patterns where a GenServer.cast or send is called inside a loop body (Enum, for, recursive function) without a corresponding GenServer.call acknowledgment or rate-limiting mechanism in the same function.
+- **Tolerate:** Low-volume message sends, systems with explicit flow control at the supervisor level (Broadway, GenStage with demand).
 - **Severity:** `info`
 
 ### 6B. Naming & Design
@@ -1464,6 +1482,15 @@ Function body re-checks a type that's already guaranteed by the pattern match or
 - **Tolerate:** Guards on struct fields that add narrower constraints.
 - **Severity:** `info`
 
+### 6.37 Missing Observability at Error Path
+
+Error branches (rescue, `{:error, _}` clauses, catch) that silently swallow failures without emitting a log line or telemetry event.
+
+- **Why:** Silent error paths are the leading cause of invisible production failures. When an error branch returns a fallback value without logging, the failure is indistinguishable from a successful result. Correlation between user-reported issues and root cause becomes impossible. Every error path that doesn't crash the process needs at minimum a `Logger.warning` so the event appears in logs. (Observability, Debuggability)
+- **Check:** Flag rescue/catch blocks and `{:error, _}` clauses in public functions that return a non-error result without calling Logger or :telemetry.execute.
+- **Tolerate:** Error branches that reraise or return `{:error, _}` (the caller handles observability). Test files. Boundary modules that log at a higher level.
+- **Severity:** `info`
+
 ### 6.38 Identity Transformation
 
 No-op function call that returns its input unchanged.
@@ -1692,6 +1719,24 @@ Test files should declare `async: true` when eligible.
 - **Tolerate:** None — `assert_receive`, polling with `eventually`, or explicit synchronization is always better.
 - **Severity:** `warning`
 
+### 7.6 Test File Without async Declaration
+
+Test file uses `ExUnit.Case` but has neither `async: true` nor a documented reason for synchronous execution.
+
+- **Why:** Tests that don't explicitly set `async: true` or `async: false` default to synchronous. A missing declaration is ambiguous — it may be intentional (the test truly needs isolation) or simply forgotten. Explicit declarations make the intent visible and reviewable. Missing `async: true` where it would be safe unnecessarily serializes CI runs. (Test Performance, Explicitness)
+- **Check:** Flag test files using `ExUnit.Case` without an `async:` option in the `use` call.
+- **Tolerate:** Test support modules that don't define test cases. Files that set `async: false` explicitly with a comment.
+- **Severity:** `info`
+
+### 7.7 Test Without Context Tag
+
+Test `describe` block has no `@moduletag` and no `@tag` — cannot be selectively run.
+
+- **Why:** ExUnit tags enable selective test execution (`mix test --only slow`, `mix test --only integration`). Without tags, all tests run on every CI pipeline stage. Tags allow fast/slow, unit/integration, and wip/stable splits. A test suite without any tags becomes an all-or-nothing run as it grows. (Test Organization, CI Performance)
+- **Check:** Flag test files that define `describe` blocks but have no `@moduletag` or `@tag` declarations anywhere in the file.
+- **Tolerate:** Very small test files with only 1-2 test cases. Test support and helper files.
+- **Severity:** `info`
+
 ### 7.8 Test Naming
 
 Test modules should be named `*Test` in `*_test.exs` files.
@@ -1818,7 +1863,7 @@ Public function only called from test modules — never from production code.
 - **Tolerate:** Test helper functions intentionally public, functions called dynamically.
 - **Severity:** `info`
 
-**7.22 Missing Error Path Tests**
+### 7.22 Missing Error Path Tests
 
 Test module with 5+ tests but no assertions exercising error paths.
 
@@ -1827,7 +1872,7 @@ Test module with 5+ tests but no assertions exercising error paths.
 - **Tolerate:** Test modules for pure data-transformation code that genuinely has no error paths.
 - **Severity:** `info`
 
-**7.23 Over-Mocking**
+### 7.23 Over-Mocking
 
 Tests with 4+ `Mox.expect` calls or 3+ `Mox.stub` calls in a single test.
 
@@ -1836,7 +1881,7 @@ Tests with 4+ `Mox.expect` calls or 3+ `Mox.stub` calls in a single test.
 - **Tolerate:** Integration tests that legitimately coordinate multiple external services.
 - **Severity:** `info`
 
-**7.24 Empty Describe Block**
+### 7.24 Empty Describe Block
 
 `describe` block containing no `test` blocks.
 
@@ -1845,7 +1890,7 @@ Tests with 4+ `Mox.expect` calls or 3+ `Mox.stub` calls in a single test.
 - **Tolerate:** Describe blocks with only `setup` (the setup is used by nested describes).
 - **Severity:** `info`
 
-**7.25 Untested Module**
+### 7.25 Untested Module
 
 Source module has no corresponding test file.
 
@@ -1854,7 +1899,7 @@ Source module has no corresponding test file.
 - **Tolerate:** `@moduledoc false` internal modules, config files, migrations, generated code, routers, endpoints.
 - **Severity:** `info`
 
-**7.26 Process Leak in Tests**
+### 7.26 Process Leak in Tests
 
 `GenServer.start_link` or `start_link` in test files without `start_supervised!`.
 
@@ -1863,7 +1908,7 @@ Source module has no corresponding test file.
 - **Tolerate:** Integration tests with explicit cleanup in `on_exit/1`.
 - **Severity:** `info`
 
-**7.27 Assert on Implementation Detail**
+### 7.27 Assert on Implementation Detail
 
 Tests use `:sys.get_state` or `Agent.get(pid, & &1)` to inspect internal process state.
 
@@ -1872,7 +1917,7 @@ Tests use `:sys.get_state` or `Agent.get(pid, & &1)` to inspect internal process
 - **Tolerate:** Debugging helpers, tests explicitly verifying internal state for infrastructure modules.
 - **Severity:** `info`
 
-**7.28 Missing Boundary Tests**
+### 7.28 Missing Boundary Tests
 
 Context facade module has a test file but exercises fewer than 30% of its public API.
 
@@ -1881,7 +1926,7 @@ Context facade module has a test file but exercises fewer than 30% of its public
 - **Tolerate:** Modules with fewer than 8 public functions. Modules tested through integration tests.
 - **Severity:** `info`
 
-**7.29 Flaky Test Indicators**
+### 7.29 Flaky Test Indicators
 
 Test patterns that commonly cause intermittent failures.
 
@@ -1894,7 +1939,7 @@ Test patterns that commonly cause intermittent failures.
 
 ## 8. Event Sourcing Architecture
 
-#### 8.1 Command/Event Naming
+### 8.1 Command/Event Naming
 
 Commands use imperative form (CreateAccount), events use past tense (AccountCreated).
 
@@ -1903,7 +1948,7 @@ Commands use imperative form (CreateAccount), events use past tense (AccountCrea
 - **Tolerate:** Non-event-sourced modules, modules outside Commands/Events namespaces.
 - **Severity:** `warning`
 
-#### 8.2 Pure Aggregate Apply
+### 8.2 Pure Aggregate Apply
 
 `apply/2` in aggregate modules must be pure — no side effects.
 
@@ -1912,7 +1957,7 @@ Commands use imperative form (CreateAccount), events use past tense (AccountCrea
 - **Tolerate:** Pure state transformations, calculations, struct updates.
 - **Severity:** `error`
 
-#### 8.3 Immutable Events
+### 8.3 Immutable Events
 
 Events must be immutable structs with `defstruct` and `@derive Jason.Encoder`.
 
@@ -1921,7 +1966,7 @@ Events must be immutable structs with `defstruct` and `@derive Jason.Encoder`.
 - **Tolerate:** Event macro usage (defstruct generated internally), upcaster modules (explicitly transform events on read).
 - **Severity:** `error` / `warning`
 
-#### 8.4 Shared Projections
+### 8.4 Shared Projections
 
 Projectors must not share read models — rebuilding one corrupts the other.
 
@@ -1930,7 +1975,7 @@ Projectors must not share read models — rebuilding one corrupts the other.
 - **Tolerate:** Reference data tables (countries, currencies) that are populated outside the event stream.
 - **Severity:** `warning`
 
-#### 8.5 Events Need Jason.Encoder
+### 8.5 Events Need Jason.Encoder
 
 Event structs must `@derive Jason.Encoder` for event store serialization.
 
@@ -1939,7 +1984,7 @@ Event structs must `@derive Jason.Encoder` for event store serialization.
 - **Tolerate:** Events using custom serialization, events with `@derive {Jason.Encoder, only: [...]}`.
 - **Severity:** `warning`
 
-#### 8.6 Projector Reads External
+### 8.6 Projector Reads External
 
 Projectors must not call HTTP/external services or non-deterministic functions during projection.
 
@@ -1948,7 +1993,7 @@ Projectors must not call HTTP/external services or non-deterministic functions d
 - **Tolerate:** `Repo.get` (reading own projection table — common load-then-update pattern), event metadata timestamps.
 - **Severity:** `warning`
 
-#### 8.7 Process Manager Reads Projection
+### 8.7 Process Manager Reads Projection
 
 Process manager state must come from events, not from Repo reads on projections.
 
@@ -1957,7 +2002,7 @@ Process manager state must come from events, not from Repo reads on projections.
 - **Tolerate:** None in event-handling callbacks.
 - **Severity:** `warning`
 
-#### 8.8 Aggregate Missing Behaviour
+### 8.8 Aggregate Missing Behaviour
 
 Modules with `execute/2` and `apply/2` but no `use Commanded.Aggregates.Aggregate`.
 
@@ -1970,7 +2015,7 @@ Modules with `execute/2` and `apply/2` but no `use Commanded.Aggregates.Aggregat
 
 ## 9. State Machine Architecture
 
-#### 9.1 State Reachability
+### 9.1 State Reachability
 
 All defined states must be reachable from initial states via transitions.
 
@@ -1979,7 +2024,7 @@ All defined states must be reachable from initial states via transitions.
 - **Tolerate:** States explicitly documented as "reserved for future use."
 - **Severity:** `warning`
 
-#### 9.2 Terminal State Integrity
+### 9.2 Terminal State Integrity
 
 States named like terminal states (completed, cancelled, failed) should have no outgoing transitions except self-loops.
 
@@ -1988,7 +2033,7 @@ States named like terminal states (completed, cancelled, failed) should have no 
 - **Tolerate:** Self-loops (e.g., `completed → completed` for idempotent retries).
 - **Severity:** `warning`
 
-#### 9.3 Implicit Boolean State
+### 9.3 Implicit Boolean State
 
 Schemas with 3+ state-suggesting boolean fields (is_active, is_verified, is_suspended) — use a single status enum.
 
@@ -2001,7 +2046,7 @@ Schemas with 3+ state-suggesting boolean fields (is_active, is_verified, is_susp
 
 ## 10. Composition and Extensibility
 
-#### 10.1 Shallow Use
+### 10.1 Shallow Use
 
 Prefer composition over deep `use` chains. More than 2 non-standard `use` statements per module.
 
@@ -2010,7 +2055,7 @@ Prefer composition over deep `use` chains. More than 2 non-standard `use` statem
 - **Tolerate:** Test files (often use multiple test case templates).
 - **Severity:** `info`
 
-#### 10.2 Namespace Depth
+### 10.2 Namespace Depth
 
 Module nesting should not exceed the configured maximum depth.
 
@@ -2023,7 +2068,7 @@ Module nesting should not exceed the configured maximum depth.
 
 ## 11. Native Interop (NIFs, Ports, Rustler)
 
-#### 11.1 NIF Behind Behaviour
+### 11.1 NIF Behind Behaviour
 
 NIF modules should implement a behaviour for replaceability and testing.
 
@@ -2032,7 +2077,7 @@ NIF modules should implement a behaviour for replaceability and testing.
 - **Tolerate:** None — all NIFs should have a behaviour boundary.
 - **Severity:** `warning`
 
-#### 11.2 NIF Scheduler Safety
+### 11.2 NIF Scheduler Safety
 
 NIFs processing variable-size input should use dirty schedulers to avoid blocking the BEAM.
 
@@ -2041,7 +2086,7 @@ NIFs processing variable-size input should use dirty schedulers to avoid blockin
 - **Tolerate:** NIFs proven to complete in <1ms, fixed-size operations.
 - **Severity:** `warning`
 
-#### 11.3 NIF Panic Patterns
+### 11.3 NIF Panic Patterns
 
 Rust NIF code must not contain `unwrap()`, `expect()`, `panic!()`, or `todo!()` — these crash the entire VM.
 
@@ -2050,7 +2095,7 @@ Rust NIF code must not contain `unwrap()`, `expect()`, `panic!()`, or `todo!()` 
 - **Tolerate:** Test modules, static initialization that cannot fail.
 - **Severity:** `warning`
 
-#### 11.4 Port vs NIF Decision
+### 11.4 Port vs NIF Decision
 
 Choose Port when safety matters more than NIF latency. Ports run in a separate OS process.
 
