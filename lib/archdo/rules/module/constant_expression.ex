@@ -60,7 +60,7 @@ defmodule Archdo.Rules.Module.ConstantExpression do
   defp literal_true?(_), do: false
 
   defp build_if_diagnostic(file, line, condition) do
-    value = extract_boolean(condition)
+    value = AST.unwrap_literal(condition)
 
     Diagnostic.info("6.42",
       title: "Constant expression",
@@ -117,9 +117,6 @@ defmodule Archdo.Rules.Module.ConstantExpression do
       line: line
     )
   end
-
-  defp extract_boolean({:__block__, _, [val]}), do: val
-  defp extract_boolean(val), do: val
 
   defp if_branch_desc(true), do: "always taken"
   defp if_branch_desc(false), do: "never taken"

@@ -41,8 +41,8 @@ defmodule Archdo.Rules.OTP.RestartTypeMismatch do
     |> Enum.map(fn {:%{}, meta, pairs} ->
       restart_value =
         Enum.find_value(pairs, fn
-          {{:__block__, _, [:restart]}, val} -> extract_atom(val)
-          {:restart, val} -> extract_atom(val)
+          {{:__block__, _, [:restart]}, val} -> AST.try_unwrap_atom(val)
+          {:restart, val} -> AST.try_unwrap_atom(val)
           _ -> nil
         end)
 
@@ -50,10 +50,6 @@ defmodule Archdo.Rules.OTP.RestartTypeMismatch do
     end)
     |> Enum.reject(fn {v, _} -> is_nil(v) end)
   end
-
-  defp extract_atom({:__block__, _, [atom]}) when is_atom(atom), do: atom
-  defp extract_atom(atom) when is_atom(atom), do: atom
-  defp extract_atom(_), do: nil
 
   defp classify_module(ast) do
     cond do

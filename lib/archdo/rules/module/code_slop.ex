@@ -140,7 +140,7 @@ defmodule Archdo.Rules.Module.CodeSlop do
         _ -> false
       end),
       fn {op, meta, [_expr, val]} ->
-        bool_val = unwrap_literal(val)
+        bool_val = AST.unwrap_literal(val)
 
         build_diagnostic(file, AST.line(meta), :redundant_boolean, %{
           comparison: "#{op} #{bool_val}"
@@ -148,9 +148,6 @@ defmodule Archdo.Rules.Module.CodeSlop do
       end
     )
   end
-
-  defp unwrap_literal({:__block__, _, [val]}), do: val
-  defp unwrap_literal(val), do: val
 
   # --- Empty @doc "" ---
 

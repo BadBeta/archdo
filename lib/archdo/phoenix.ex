@@ -143,13 +143,10 @@ defmodule Archdo.Phoenix do
     end)
     |> Enum.reduce(%{}, fn {:use, _, [{:__aliases__, _, parts} | rest]}, acc ->
       mod = Module.concat(parts)
-      args = Enum.map(rest, &unwrap_literal/1)
+      args = Enum.map(rest, &AST.unwrap_literal/1)
       Map.update(acc, mod, args, &(args ++ &1))
     end)
   end
-
-  defp unwrap_literal({:__block__, _, [v]}), do: v
-  defp unwrap_literal(other), do: other
 
   # --- embed_templates ---
 
@@ -164,7 +161,7 @@ defmodule Archdo.Phoenix do
 
   # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
   # the unwrap_literal result shape.
-  defp literal_string(arg), do: maybe_string(unwrap_literal(arg))
+  defp literal_string(arg), do: maybe_string(AST.unwrap_literal(arg))
 
   defp maybe_string(v) when is_binary(v), do: [v]
   defp maybe_string(_), do: []

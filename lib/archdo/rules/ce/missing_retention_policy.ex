@@ -103,15 +103,11 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
   end
 
   defp user_fk?({:belongs_to, _, [name_arg | _]}) do
-    a = unwrap_atom(name_arg)
+    a = AST.try_unwrap_atom(name_arg)
     a in @user_fk_names
   end
 
   defp user_fk?(_), do: false
-
-  defp unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
-  defp unwrap_atom(a) when is_atom(a), do: a
-  defp unwrap_atom(_), do: nil
 
   defp timestamps?({:timestamps, _, _}), do: true
   defp timestamps?(_), do: false

@@ -264,6 +264,28 @@ defmodule Archdo.AST do
   def unwrap_atom(other), do: other
 
   @doc """
+  Strict variant of `unwrap_atom/1`: returns the atom if the input is one
+  (possibly literal-encoder-wrapped), or `nil` for anything else. Use
+  when downstream code filters via `Enum.reject(&is_nil/1)` and would
+  silently misbehave on non-atom passthrough.
+  """
+  @spec try_unwrap_atom(Macro.t()) :: atom() | nil
+  def try_unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
+  def try_unwrap_atom(a) when is_atom(a), do: a
+  def try_unwrap_atom(_), do: nil
+
+  @doc """
+  Unwrap a literal value possibly wrapped by `Code.string_to_quoted/2`'s
+  `literal_encoder` option. Returns the inner value for any literal type;
+  returns the input unchanged for non-literals (similar to
+  `unwrap_atom/1` but type-agnostic — use when the unwrap target could
+  be an atom, integer, float, string, or any other literal).
+  """
+  @spec unwrap_literal(Macro.t()) :: Macro.t()
+  def unwrap_literal({:__block__, _, [v]}), do: v
+  def unwrap_literal(other), do: other
+
+  @doc """
   True when the AST contains a module attribute named `marker_name`
   with any value. Use for opt-out / opt-in markers like
   `@archdo_no_telemetry`, `@archdo_silent_error`, `@retention`, etc.
