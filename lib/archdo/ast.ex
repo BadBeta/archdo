@@ -126,6 +126,29 @@ defmodule Archdo.AST do
   def catch_all_arg?(_), do: false
 
   @doc """
+  Walk an AST collecting diagnostics. The `collector` is invoked
+  per-node with `(node, acc, file)` and returns `{node, acc}`.
+  Reverses the accumulated list before returning so callers see
+  diagnostics in source order.
+
+  Multiple rules share the same shape:
+  `Macro.prewalk(ast, [], fn n, acc -> collect(n, acc, file) end)`
+  followed by `Enum.reverse`. Centralising the dispatch here
+  eliminates that boilerplate; the rule's actual logic stays
+  in its `collect/3` clauses.
+  """
+  @spec prewalk_collect(
+          String.t(),
+          Macro.t(),
+          (Macro.t(), [acc], String.t() -> {Macro.t(), [acc]})
+        ) :: [acc]
+        when acc: term()
+  def prewalk_collect(file, ast, collector) when is_function(collector, 3) do
+    {_, hits} = Macro.prewalk(ast, [], fn node, acc -> collector.(node, acc, file) end)
+    Enum.reverse(hits)
+  end
+
+  @doc """
   Predicate: do these args (a clause's argument list) include at least
   one shape-destructuring pattern (tuple, list-cons, list literal, map,
   struct)?

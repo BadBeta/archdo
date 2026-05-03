@@ -17,7 +17,7 @@ defmodule Archdo.Rules.Module.IoInspectInLib do
   @impl true
   def analyze(file, ast, _opts) do
     case in_scope?(file) do
-      true -> find_debug_prints(ast, file)
+      true -> AST.prewalk_collect(file, ast, &collect/3)
       false -> []
     end
   end
@@ -29,11 +29,6 @@ defmodule Archdo.Rules.Module.IoInspectInLib do
       not String.contains?(file, "/priv/") and
       not String.starts_with?(file, "scripts/") and
       file != "mix.exs"
-  end
-
-  defp find_debug_prints(ast, file) do
-    {_, hits} = Macro.prewalk(ast, [], fn node, acc -> collect(node, acc, file) end)
-    Enum.reverse(hits)
   end
 
   # §§ elixir-implementing: §5.2 — multi-clause head, no if/else.

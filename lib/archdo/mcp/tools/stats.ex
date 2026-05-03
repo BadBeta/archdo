@@ -1,6 +1,8 @@
 defmodule Archdo.Mcp.Tools.Stats do
   @moduledoc false
 
+  alias Archdo.Mcp.Tools.Schemas
+
   def name, do: "archdo_stats"
 
   def description do
@@ -9,19 +11,7 @@ defmodule Archdo.Mcp.Tools.Stats do
       "@spec coverage, @moduledoc coverage. Like tokei but Elixir-aware."
   end
 
-  def input_schema do
-    %{
-      "type" => "object",
-      "properties" => %{
-        "paths" => %{
-          "type" => "array",
-          "items" => %{"type" => "string"},
-          "description" => "Paths to analyze. Default: [\"lib\"]."
-        }
-      },
-      "additionalProperties" => false
-    }
-  end
+  def input_schema, do: Schemas.paths_only()
 
   def call(args) when is_map(args) do
     paths = Map.get(args, "paths", ["lib"])

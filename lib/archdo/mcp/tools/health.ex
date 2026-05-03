@@ -1,6 +1,7 @@
 defmodule Archdo.Mcp.Tools.Health do
   @moduledoc false
 
+  alias Archdo.Mcp.Tools.Schemas
   alias Archdo.Runner
 
   def name, do: "archdo_health"
@@ -11,19 +12,7 @@ defmodule Archdo.Mcp.Tools.Health do
       "Use this for a quick status check before diving into details."
   end
 
-  def input_schema do
-    %{
-      "type" => "object",
-      "properties" => %{
-        "paths" => %{
-          "type" => "array",
-          "items" => %{"type" => "string"},
-          "description" => "Paths to analyze. Default: [\"lib\"]."
-        }
-      },
-      "additionalProperties" => false
-    }
-  end
+  def input_schema, do: Schemas.paths_only()
 
   def call(args) when is_map(args) do
     paths = Map.get(args, "paths", ["lib"])

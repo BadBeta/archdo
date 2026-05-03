@@ -19,15 +19,8 @@ defmodule Archdo.Rules.OTP.AsyncDropsLoggerMetadata do
   def analyze(file, ast, _opts) do
     case AST.test_file?(file) do
       true -> []
-      false -> find_async_metadata_drops(file, ast)
+      false -> AST.prewalk_collect(file, ast, &collect/3)
     end
-  end
-
-  defp find_async_metadata_drops(file, ast) do
-    {_, hits} =
-      Macro.prewalk(ast, [], fn node, acc -> collect(node, acc, file) end)
-
-    Enum.reverse(hits)
   end
 
   # §§ elixir-implementing: §5.2 — multi-clause head dispatch on the async-

@@ -2,6 +2,7 @@ defmodule Archdo.Mcp.Tools.PerfAudit do
   @moduledoc false
 
   alias Archdo.Mcp.Encoder
+  alias Archdo.Mcp.Tools.Schemas
   alias Archdo.Runner
 
   @perf_rules ["6.46", "6.47", "6.48", "6.49", "6.50", "6.51", "6.52", "6.53"]
@@ -15,19 +16,7 @@ defmodule Archdo.Mcp.Tools.PerfAudit do
       "Use this for targeted performance review."
   end
 
-  def input_schema do
-    %{
-      "type" => "object",
-      "properties" => %{
-        "paths" => %{
-          "type" => "array",
-          "items" => %{"type" => "string"},
-          "description" => "Paths to analyze. Default: [\"lib\"]."
-        }
-      },
-      "additionalProperties" => false
-    }
-  end
+  def input_schema, do: Schemas.paths_only()
 
   def call(args) when is_map(args) do
     paths = Map.get(args, "paths", ["lib"])

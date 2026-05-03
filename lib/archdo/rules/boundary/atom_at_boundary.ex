@@ -35,7 +35,7 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundary do
   @impl true
   def analyze(file, ast, _opts) do
     case in_scope?(file) do
-      true -> find_atom_creation(file, ast)
+      true -> AST.prewalk_collect(file, ast, &collect/3)
       false -> []
     end
   end
@@ -45,11 +45,6 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundary do
       not String.contains?(file, "/mix/tasks/") and
       not String.contains?(file, "/tasks/") and
       AST.path_contains_any?(file, @boundary_markers)
-  end
-
-  defp find_atom_creation(file, ast) do
-    {_, hits} = Macro.prewalk(ast, [], fn node, acc -> collect(node, acc, file) end)
-    Enum.reverse(hits)
   end
 
   # §§ elixir-implementing: §5.2, §7.6 — multi-clause head dispatch on AST shape.

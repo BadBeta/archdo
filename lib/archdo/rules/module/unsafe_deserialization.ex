@@ -18,13 +18,8 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
   def analyze(file, ast, _opts) do
     case AST.test_file?(file) do
       true -> []
-      false -> find_unsafe_calls(ast, file)
+      false -> AST.prewalk_collect(file, ast, &collect/3)
     end
-  end
-
-  defp find_unsafe_calls(ast, file) do
-    {_, hits} = Macro.prewalk(ast, [], fn node, acc -> collect(node, acc, file) end)
-    Enum.reverse(hits)
   end
 
   # §§ elixir-implementing: §5.2, §7.6 — multi-clause head dispatch over `case`
