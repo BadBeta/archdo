@@ -168,22 +168,29 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   # args — clone detection treats `f(x) when is_atom(x)` and
   # `f(x) when is_binary(x)` as distinct even if their bodies coincide.
   defp extract_with_guards(ast) do
-    {_, fns} =
-      Macro.prewalk(ast, [], fn
-        {kind, meta, [{:when, _, [{name, _, args} | guards]}, body]} = node, acc
-        when kind in [:def, :defp] and is_atom(name) and is_list(args) ->
-          {node, [{name, length(args), meta, args, guards, body} | acc]}
-
-        {kind, meta, [{name, _, args}, body]} = node, acc
-        when kind in [:def, :defp] and is_atom(name) and (is_list(args) or args == nil) ->
-          {node, [{name, length(args || []), meta, args || [], [], body} | acc]}
-
-        node, acc ->
-          {node, acc}
-      end)
-
+    {_, fns} = Macro.prewalk(ast, [], &collect_def_with_guards/2)
     Enum.reverse(fns)
   end
+
+  defp collect_def_with_guards(
+         {kind, meta, [{:when, _, [{name, _, args} | guards]}, body]} = node,
+         acc
+       )
+       when kind in [:def, :defp] and is_atom(name) and is_list(args) do
+    {node, [{name, length(args), meta, args, guards, body} | acc]}
+  end
+
+  defp collect_def_with_guards({kind, meta, [{name, _, args}, body]} = node, acc)
+       when kind in [:def, :defp] and is_atom(name) and is_list(args) do
+    {node, [{name, length(args), meta, args, [], body} | acc]}
+  end
+
+  defp collect_def_with_guards({kind, meta, [{name, _, nil}, body]} = node, acc)
+       when kind in [:def, :defp] and is_atom(name) do
+    {node, [{name, 0, meta, [], [], body} | acc]}
+  end
+
+  defp collect_def_with_guards(node, acc), do: {node, acc}
 
   # The hash includes both ARG PATTERNS and BODIES of every clause. Two
   # functions whose bodies are identical (e.g. `do: true` / `do: false`)

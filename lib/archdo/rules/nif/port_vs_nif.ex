@@ -56,26 +56,19 @@ defmodule Archdo.Rules.NIF.PortVsNif do
     end
   end
 
+  @io_markers ~w[read write fetch download upload send recv connect request]
+
   defp does_io?(ast) do
-    # Heuristic: check for function names suggesting I/O
-    fns = AST.extract_functions(ast, :public)
-
-    Enum.any?(fns, fn
-      {name, _arity, _, _, _} when is_atom(name) ->
-        name_str = Atom.to_string(name)
-
-        String.contains?(name_str, "read") or
-          String.contains?(name_str, "write") or
-          String.contains?(name_str, "fetch") or
-          String.contains?(name_str, "download") or
-          String.contains?(name_str, "upload") or
-          String.contains?(name_str, "send") or
-          String.contains?(name_str, "recv") or
-          String.contains?(name_str, "connect") or
-          String.contains?(name_str, "request")
-
-      _ ->
-        false
-    end)
+    # Heuristic: check for function names suggesting I/O.
+    ast
+    |> AST.extract_functions(:public)
+    |> Enum.any?(&io_function?/1)
   end
+
+  defp io_function?({name, _arity, _, _, _}) when is_atom(name) do
+    name_str = Atom.to_string(name)
+    Enum.any?(@io_markers, &String.contains?(name_str, &1))
+  end
+
+  defp io_function?(_), do: false
 end

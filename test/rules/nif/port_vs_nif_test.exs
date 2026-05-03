@@ -31,4 +31,22 @@ defmodule Archdo.Rules.NIF.PortVsNifTest do
 
     assert_clean(PortVsNif, code)
   end
+
+  # Each I/O marker (read/write/fetch/download/upload/send/recv/connect/request)
+  # should trigger flagging. Pin each one so a future change to the
+  # marker list breaks the suite loudly.
+  for marker <- ~w[read write fetch download upload send recv connect request] do
+    test "I/O marker '#{marker}' in a NIF function name flags" do
+      code = """
+      defmodule MyApp.IoNif do
+        use Rustler, otp_app: :my_app
+
+        def #{unquote(marker)}_data(_x), do: :erlang.nif_error(:not_loaded)
+      end
+      """
+
+      diags = assert_flagged(PortVsNif, code)
+      assert hd(diags).rule_id == "11.4"
+    end
+  end
 end
