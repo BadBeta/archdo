@@ -111,12 +111,8 @@ defmodule Archdo.Blackbox do
   # All args are bare variables / underscores (no atom / tuple / map
   # patterns matching specific shapes).
   defp args_are_catch_all?(args) when is_list(args) do
-    Enum.all?(args, &catch_all_arg?/1)
+    Enum.all?(args, &AST.catch_all_arg?/1)
   end
-
-  defp catch_all_arg?({:_, _, ctx}) when is_atom(ctx), do: true
-  defp catch_all_arg?({var, _, ctx}) when is_atom(var) and is_atom(ctx), do: true
-  defp catch_all_arg?(_), do: false
 
   @doc """
   Compute the blackbox possibility score for a single function or

@@ -71,9 +71,6 @@ defmodule Archdo.Diagnostic do
   def builder_for(:nitpick), do: &nitpick/2
 
   @doc "Numeric sort key for severity: error=0, warning=1, info=2, nitpick=3."
-  @spec severity_order(severity()) :: 0 | 1 | 2 | 3
-  def severity_order(:error), do: 0
-  def severity_order(:warning), do: 1
-  def severity_order(:info), do: 2
-  def severity_order(:nitpick), do: 3
+  @spec severity_order(severity()) :: 0..3
+  defdelegate severity_order(severity), to: Archdo.Severity, as: :order
 end

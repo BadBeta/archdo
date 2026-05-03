@@ -95,10 +95,7 @@ defmodule Archdo.Formatter do
     exit_code(errors, warnings)
   end
 
-  defp severity_sort(:error), do: 0
-  defp severity_sort(:warning), do: 1
-  defp severity_sort(:info), do: 2
-  defp severity_sort(:nitpick), do: 3
+  defp severity_sort(severity), do: Archdo.Severity.order(severity)
 
   defp severity_label(:error), do: "error"
   defp severity_label(:warning), do: "warn"
@@ -128,6 +125,7 @@ defmodule Archdo.Formatter do
     IO.puts(
       "Found #{errors} errors, #{warnings} warnings, #{infos} info, #{nitpicks} nitpicks.\n"
     )
+
     IO.puts(@llm_instruction)
     exit_code(errors, warnings)
   end
@@ -144,7 +142,10 @@ defmodule Archdo.Formatter do
 
   defp format_brief(diagnostics) do
     {non_passed, passed} = split_passed(diagnostics)
-    {actionable, infos} = Enum.split_with(non_passed, fn d -> d.severity not in [:info, :nitpick] end)
+
+    {actionable, infos} =
+      Enum.split_with(non_passed, fn d -> d.severity not in [:info, :nitpick] end)
+
     passed_n = length(passed)
 
     case actionable do

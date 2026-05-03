@@ -36,14 +36,15 @@ defmodule Archdo.PiiSchema do
   schema declares at least one PII field. Returns `nil` for non-schema
   modules and for schemas with no PII fields.
   """
-  @spec schema_info(Macro.t()) :: %{module: String.t(), table: String.t(), pii_fields: [atom()]} | nil
+  @spec schema_info(Macro.t()) ::
+          %{module: String.t(), table: String.t(), pii_fields: [atom()]} | nil
   def schema_info(ast) do
     case find_schema_block(ast) do
       nil ->
         nil
 
       {table, body} ->
-        statements = body_statements(body)
+        statements = AST.body_statements(body)
         pii = Enum.flat_map(statements, &maybe_pii_field/1)
 
         case pii do
@@ -60,7 +61,7 @@ defmodule Archdo.PiiSchema do
           {node, found}
 
         {:schema, _, [table_arg, kw]} = node, nil when is_list(kw) ->
-          case unwrap_string(table_arg) do
+          case AST.unwrap_string(table_arg) do
             nil -> {node, nil}
             table -> {node, {table, AST.do_body(kw)}}
           end
@@ -71,14 +72,6 @@ defmodule Archdo.PiiSchema do
 
     found
   end
-
-  defp unwrap_string({:__block__, _, [s]}) when is_binary(s), do: s
-  defp unwrap_string(s) when is_binary(s), do: s
-  defp unwrap_string(_), do: nil
-
-  defp body_statements({:__block__, _, statements}), do: statements
-  defp body_statements(nil), do: []
-  defp body_statements(single), do: [single]
 
   defp maybe_pii_field({:field, _, [name_arg | _]}) do
     case AST.unwrap_atom(name_arg) do

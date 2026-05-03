@@ -68,7 +68,7 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
         nil
 
       {table, schema_body} ->
-        statements = body_statements(schema_body)
+        statements = AST.body_statements(schema_body)
         has_user_fk = Enum.any?(statements, &user_fk?/1)
         has_timestamps = Enum.any?(statements, &timestamps?/1)
 
@@ -86,7 +86,7 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
           {node, found}
 
         {:schema, _, [table_arg, kw]} = node, nil when is_list(kw) ->
-          case unwrap_string(table_arg) do
+          case AST.unwrap_string(table_arg) do
             nil ->
               {node, nil}
 
@@ -101,14 +101,6 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
 
     found
   end
-
-  defp unwrap_string({:__block__, _, [s]}) when is_binary(s), do: s
-  defp unwrap_string(s) when is_binary(s), do: s
-  defp unwrap_string(_), do: nil
-
-  defp body_statements({:__block__, _, statements}), do: statements
-  defp body_statements(nil), do: []
-  defp body_statements(single), do: [single]
 
   defp user_fk?({:belongs_to, _, [name_arg | _]}) do
     a = unwrap_atom(name_arg)
