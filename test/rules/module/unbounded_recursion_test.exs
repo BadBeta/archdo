@@ -81,6 +81,39 @@ defmodule Archdo.Rules.Module.UnboundedRecursionTest do
       assert_clean(UnboundedRecursion, code)
     end
 
+    test "allows shape walker — tuple destructure + catch-all terminator" do
+      # Canonical Elixir AST-walker shape:
+      # - one or more clauses pattern-matching on tuple/list/map shapes
+      # - a catch-all `def f(_), do: <literal>` terminator
+      # The shape grammar IS the depth bound. Body recursion is fine.
+      code = ~S"""
+      defmodule MyApp.AST do
+        def size(nil), do: 0
+        def size({_form, _meta, args}), do: 1 + size(args)
+        def size({a, b}), do: 1 + size(a) + size(b)
+        def size(list) when is_list(list), do: Enum.sum(Enum.map(list, &size/1))
+        def size(_), do: 1
+      end
+      """
+
+      assert_clean(UnboundedRecursion, code)
+    end
+
+    test "allows multi-arg shape walker with accumulator terminator" do
+      # collect_module_bodies/2-style: catch-all `def f(_, acc), do: acc`
+      # qualifies because all args are bare variables / wildcards.
+      code = ~S"""
+      defmodule MyApp.AST do
+        def collect({:defmodule, _, [_, [do: body]]}, acc), do: [body | collect(body, acc)]
+        def collect({_form, _meta, args}, acc) when is_list(args), do: Enum.reduce(args, acc, &collect/2)
+        def collect(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect/2)
+        def collect(_, acc), do: acc
+      end
+      """
+
+      assert_clean(UnboundedRecursion, code)
+    end
+
     test "skips test files" do
       code = ~S"""
       defmodule MyApp.WalkerTest do

@@ -108,12 +108,18 @@ defmodule Archdo.Rules.Module.UnboundedRecursion do
 
   defp matches_empty_collection?(_), do: false
 
-  # Tree traversal typically pattern matches on children/nodes
+  # Tree traversal typically pattern matches on children/nodes. Three signals:
+  #   1. A clause head matches a struct (`%Foo{} = node`)
+  #   2. The body uses `Enum.flat_map` (canonical tree-walk fan-out)
+  #   3. A catch-all `_` clause returns a non-recursive value — the
+  #      universal "shape exhaustion" terminator used by AST walkers
+  #      (Macro.prewalk-style, ast_size/1, collect_module_bodies/2, etc.)
   defp looks_like_tree_walk?(clauses) do
     Enum.any?(clauses, fn {_, _, _, args, body} ->
       args_match_struct?(args) or
         (body != nil and calls_flat_map_self?(body))
-    end)
+    end) or
+      has_shape_exhaustion_terminator?(clauses)
   end
 
   defp args_match_struct?(args) when is_list(args) do
@@ -131,6 +137,51 @@ defmodule Archdo.Rules.Module.UnboundedRecursion do
       _ -> false
     end)
   end
+
+  # A "shape exhaustion" terminator: a clause whose head is all wildcards
+  # (`_` or bare variables — no destructure) AND whose body is non-recursive.
+  # This is the canonical Elixir tree-walker base case:
+  #
+  #   def ast_size(_), do: 1
+  #   def collect_module_bodies(_, acc), do: acc
+  #   def collect_returns(_), do: [:other_return]
+  #
+  # When this clause sits alongside shape-destructuring clauses that recurse
+  # on the parts, the recursion is bounded by input-shape exhaustion: every
+  # path eventually hits the catch-all and stops. The shape grammar IS the
+  # depth bound.
+  defp has_shape_exhaustion_terminator?(clauses) do
+    has_destructure = Enum.any?(clauses, fn {_, _, _, args, _} -> destructures?(args) end)
+    has_terminator = Enum.any?(clauses, &catch_all_terminator?/1)
+    has_destructure and has_terminator
+  end
+
+  # Clause args are all wildcards or bare variables (no nested patterns).
+  defp catch_all_terminator?({_name, _arity, _meta, args, _body}) when is_list(args) do
+    Enum.all?(args, &catch_all_arg?/1)
+  end
+
+  defp catch_all_terminator?(_), do: false
+
+  defp catch_all_arg?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: true
+  defp catch_all_arg?(_), do: false
+
+  # Args include at least one shape-destructuring pattern (tuple, list cons,
+  # map pattern). Distinguishes a shape-walker from `def f(x), do: x + 1`.
+  defp destructures?(args) when is_list(args) do
+    Enum.any?(args, fn
+      {a, b} when not (is_atom(a) and is_atom(b)) -> true
+      {:{}, _, _} -> true
+      [{:|, _, _}] -> true
+      [_ | _] -> true
+      [] -> true
+      {:%{}, _, _} -> true
+      {:%, _, _} -> true
+      _ -> false
+    end)
+  end
+
+  defp destructures?(_), do: false
 
   defp all_tail_calls?(clauses, name, arity) do
     recursive_clauses =

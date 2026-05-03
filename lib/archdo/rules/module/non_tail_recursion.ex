@@ -43,7 +43,7 @@ defmodule Archdo.Rules.Module.NonTailRecursion do
         body != nil and AST.has_self_call?(body, name, arity)
       end)
 
-    if is_recursive and non_tail do
+    if is_recursive and non_tail and not shape_walker?(clauses) do
       meta =
         clauses
         |> Enum.map(fn {_, _, m, _, _} -> m end)
@@ -95,6 +95,42 @@ defmodule Archdo.Rules.Module.NonTailRecursion do
       []
     end
   end
+
+  # A shape walker is a multi-clause function that destructures input shapes
+  # (tuples, lists, maps) and terminates via a catch-all `_` clause that
+  # returns a non-recursive value. Body recursion on bounded shape grammars
+  # (AST trees, expression grammars) is idiomatic: the shape grammar IS the
+  # depth bound, the catch-all is the universal terminator, and stack depth
+  # is bounded by input-tree depth — not by an arbitrary user value.
+  defp shape_walker?(clauses) do
+    has_destructure = Enum.any?(clauses, fn {_, _, _, args, _} -> destructures?(args) end)
+    has_terminator = Enum.any?(clauses, &catch_all_terminator?/1)
+    has_destructure and has_terminator
+  end
+
+  defp catch_all_terminator?({_name, _arity, _meta, args, _body}) when is_list(args) do
+    Enum.all?(args, &catch_all_arg?/1)
+  end
+
+  defp catch_all_terminator?(_), do: false
+
+  defp catch_all_arg?({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: true
+  defp catch_all_arg?(_), do: false
+
+  defp destructures?(args) when is_list(args) do
+    Enum.any?(args, fn
+      {a, b} when not (is_atom(a) and is_atom(b)) -> true
+      {:{}, _, _} -> true
+      [{:|, _, _}] -> true
+      [_ | _] -> true
+      [] -> true
+      {:%{}, _, _} -> true
+      {:%, _, _} -> true
+      _ -> false
+    end)
+  end
+
+  defp destructures?(_), do: false
 
   # Non-tail: recursive call appears inside a wrapper expression
   # e.g., [h | recurse(t)], result + recurse(t), Enum.concat(x, recurse(t))

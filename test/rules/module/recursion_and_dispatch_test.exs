@@ -124,6 +124,23 @@ defmodule Archdo.Rules.Module.RecursionAndDispatchTest do
 
       assert_clean(NonTailRecursion, code)
     end
+
+    test "allows shape walkers (multi-clause tuple destructure + catch-all terminator)" do
+      # Canonical Elixir AST walker: pattern matches on tuple shapes,
+      # recurses on parts, terminates via def f(_), do: <literal>.
+      # Stack depth is bounded by input-tree depth, not by user input.
+      code = ~S"""
+      defmodule MyApp.AST do
+        def size(nil), do: 0
+        def size({_form, _meta, args}), do: 1 + size(args)
+        def size({a, b}), do: 1 + size(a) + size(b)
+        def size(list) when is_list(list), do: Enum.sum(Enum.map(list, &size/1))
+        def size(_), do: 1
+      end
+      """
+
+      assert_clean(NonTailRecursion, code)
+    end
   end
 
   describe "6.21 UnnecessaryRecursion" do
