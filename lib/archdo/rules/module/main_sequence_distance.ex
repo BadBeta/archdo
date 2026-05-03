@@ -37,19 +37,50 @@ defmodule Archdo.Rules.Module.MainSequenceDistance do
     end
   end
 
-  # Modules that are stable + concrete by design — not a smell
+  # Modules that are stable + concrete by design — not a smell.
+  #
+  # The Martin metric pathologises any module with A=0 (no behaviours
+  # defined), but for many shapes this is the correct end state:
+  #
+  #   - Framework conventions: Repo, Web, Config — depended on by
+  #     design.
+  #   - Per-domain leaf data: schema-like Reading / Event modules with
+  #     no callees.
+  #   - Stdlib-style utility modules: pure functions only, no
+  #     behaviours, used widely. These cannot reach the main sequence
+  #     by introducing abstractions because the abstraction has nothing
+  #     to dispatch over — they ARE the leaf primitives that other
+  #     code uses. Detection: A=0 AND Ce ≤ 2 (very low fan-out).
+  #   - Naming convention helpers: `*.Helpers`, `*.Util`, `*.Utils`,
+  #     `*.AST`, `*.Naming` — community-standard "this is a utility
+  #     module" suffixes.
   defp stable_by_design?(m) do
     mod_str = m.module
 
-    # Ecto Repo — designed to be depended on
-    # Phoenix web wrapper — high afferent coupling is the convention
-    # Config modules — centralized readers, many consumers
-    # Pure data structs with no behaviour to abstract
     String.ends_with?(mod_str, ".Repo") or
       String.ends_with?(mod_str, "Web") or
       String.ends_with?(mod_str, ".Config") or String.ends_with?(mod_str, ".Configuration") or
+      utility_suffix?(mod_str) or
       ((String.ends_with?(mod_str, ".Reading") or String.ends_with?(mod_str, ".Event")) and
-         m.abstractness == 0.0 and m.ce <= 1)
+         m.abstractness == 0.0 and m.ce <= 1) or
+      leaf_utility?(m)
+  end
+
+  defp utility_suffix?(mod_str) do
+    String.ends_with?(mod_str, ".Helpers") or
+      String.ends_with?(mod_str, ".Helper") or
+      String.ends_with?(mod_str, ".Util") or
+      String.ends_with?(mod_str, ".Utils") or
+      String.ends_with?(mod_str, ".AST") or
+      String.ends_with?(mod_str, ".Naming")
+  end
+
+  # A leaf utility module: no abstractness AND very low fan-out.
+  # Such a module can't reach the main sequence by introducing
+  # abstractions (it doesn't HAVE behaviour callees to abstract).
+  # Stdlib-style helpers (Enum, Map, String) all match this shape.
+  defp leaf_utility?(m) do
+    m.abstractness == 0.0 and m.ce <= 2
   end
 
   defp build_distance_diag(m, zone, severity, file) do
