@@ -61,5 +61,59 @@ defmodule Archdo.Rules.Module.ReinventedPubSubTest do
 
       assert_clean(ReinventedPubSub, code, file: "test/event_bus_test.exs")
     end
+
+    test "allows module using Registry for fan-out" do
+      code = ~S"""
+      defmodule MyApp.Notifications do
+        def subscribe(topic) do
+          Registry.register(MyApp.Reg, topic, [])
+        end
+
+        def broadcast(topic, msg) do
+          Registry.dispatch(MyApp.Reg, topic, fn entries ->
+            for {pid, _} <- entries, do: send(pid, msg)
+          end)
+        end
+      end
+      """
+
+      assert_clean(ReinventedPubSub, code)
+    end
+
+    test "allows module using :pg" do
+      code = ~S"""
+      defmodule MyApp.Notifications do
+        def subscribe(topic), do: :pg.join(:my_app, topic, self())
+        def broadcast(topic, msg) do
+          for pid <- :pg.get_members(:my_app, topic), do: send(pid, msg)
+        end
+      end
+      """
+
+      assert_clean(ReinventedPubSub, code)
+    end
+
+    test "does not flag a module that has subscribe but no broadcast" do
+      code = ~S"""
+      defmodule MyApp.Notifications do
+        use GenServer
+        def subscribe(_topic), do: :ok
+        def init(_), do: {:ok, %{subscribers: []}}
+      end
+      """
+
+      assert_clean(ReinventedPubSub, code)
+    end
+
+    test "does not flag a module that has both names but does not maintain a subscriber list" do
+      code = ~S"""
+      defmodule MyApp.Notifications do
+        def subscribe(_topic), do: :ok
+        def broadcast(_topic, _msg), do: :ok
+      end
+      """
+
+      assert_clean(ReinventedPubSub, code)
+    end
   end
 end

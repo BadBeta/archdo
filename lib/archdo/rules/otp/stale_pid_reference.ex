@@ -65,44 +65,44 @@ defmodule Archdo.Rules.OTP.StalePidReference do
 
   # Pattern: Map.put(state, :pid, pid) or %{state | pid: pid} without monitor
   defp stores_pid_in_map_without_monitor?(body, file) do
-    stores_pid_field =
-      AST.contains?(body, fn
-        # %{state | pid: variable}
-        {:%{}, _, [{:|, _, [_, pairs]}]} when is_list(pairs) ->
-          Enum.any?(pairs, fn
-            {key, {var, _, ctx}} when is_atom(key) and is_atom(var) and is_atom(ctx) ->
-              pid_key?(key)
-
-            {{:__block__, _, [key]}, {var, _, ctx}}
-            when is_atom(key) and is_atom(var) and is_atom(ctx) ->
-              pid_key?(key)
-
-            _ ->
-              false
-          end)
-
-        # Map.put(state, :pid, variable)
-        {{:., _, [{:__aliases__, _, [:Map]}, :put]}, _, [_, key, _]} ->
-          pid_key_value?(key)
-
-        _ ->
-          false
-      end)
-
-    has_monitor =
-      AST.contains?(body, fn
-        {{:., _, [{:__aliases__, _, [:Process]}, :monitor]}, _, _} -> true
-        {{:., _, [{:__aliases__, _, [:Process]}, :link]}, _, _} -> true
-        _ -> false
-      end)
-
-    if stores_pid_field and not has_monitor do
-      # Can't easily get the line, use 0
-      [build_diagnostic(file, 0, :map)]
-    else
-      []
-    end
+    stores_pid_field = AST.contains?(body, &pid_storing_node?/1)
+    has_monitor = AST.contains?(body, &monitor_or_link_node?/1)
+    emit_stale_map_diag(stores_pid_field and not has_monitor, file)
   end
+
+  # %{state | pid: variable}
+  defp pid_storing_node?({:%{}, _, [{:|, _, [_, pairs]}]}) when is_list(pairs),
+    do: Enum.any?(pairs, &pid_pair?/1)
+
+  # Map.put(state, :pid, variable)
+  defp pid_storing_node?(
+         {{:., _, [{:__aliases__, _, [:Map]}, :put]}, _, [_, key, _]}
+       ),
+       do: pid_key_value?(key)
+
+  defp pid_storing_node?(_), do: false
+
+  defp pid_pair?({key, {var, _, ctx}})
+       when is_atom(key) and is_atom(var) and is_atom(ctx),
+       do: pid_key?(key)
+
+  defp pid_pair?({{:__block__, _, [key]}, {var, _, ctx}})
+       when is_atom(key) and is_atom(var) and is_atom(ctx),
+       do: pid_key?(key)
+
+  defp pid_pair?(_), do: false
+
+  defp monitor_or_link_node?({{:., _, [{:__aliases__, _, [:Process]}, :monitor]}, _, _}),
+    do: true
+
+  defp monitor_or_link_node?({{:., _, [{:__aliases__, _, [:Process]}, :link]}, _, _}),
+    do: true
+
+  defp monitor_or_link_node?(_), do: false
+
+  defp emit_stale_map_diag(false, _file), do: []
+  # Can't easily get the line, use 0
+  defp emit_stale_map_diag(true, file), do: [build_diagnostic(file, 0, :map)]
 
   defp tuple_contains_pid_variable?({:{}, _, elements}) when is_list(elements) do
     Enum.any?(elements, fn

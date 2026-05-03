@@ -66,6 +66,36 @@ defmodule Archdo.Rules.OTP.StalePidReferenceTest do
       assert_clean(StalePidReference, code)
     end
 
+    test "flags PID stored via Map.put without monitor" do
+      code = ~S"""
+      defmodule MyApp.Manager do
+        use GenServer
+
+        def handle_call({:set, pid}, _from, state) do
+          {:reply, :ok, Map.put(state, :worker_pid, pid)}
+        end
+      end
+      """
+
+      diags = assert_flagged(StalePidReference, code)
+      assert hd(diags).rule_id == "5.36"
+    end
+
+    test "allows PID stored via Map.put when Process.link is used" do
+      code = ~S"""
+      defmodule MyApp.Manager do
+        use GenServer
+
+        def handle_call({:set, pid}, _from, state) do
+          Process.link(pid)
+          {:reply, :ok, Map.put(state, :worker_pid, pid)}
+        end
+      end
+      """
+
+      assert_clean(StalePidReference, code)
+    end
+
     test "skips test files" do
       code = ~S"""
       defmodule MyApp.TrackerTest do

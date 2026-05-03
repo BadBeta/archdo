@@ -12,54 +12,52 @@ defmodule Archdo.Rules.Module.ReinventedPubSub do
 
   @impl true
   def analyze(file, ast, _opts) do
-    if AST.test_file?(file) do
-      []
-    else
-      check_reinvented_pubsub(file, ast)
-    end
+    run_analysis(AST.test_file?(file), file, ast)
   end
+
+  defp run_analysis(true, _file, _ast), do: []
+  defp run_analysis(false, file, ast), do: check_reinvented_pubsub(file, ast)
 
   defp check_reinvented_pubsub(file, ast) do
     fns = AST.extract_functions(ast, :public)
     names = Enum.map(fns, fn {name, _arity, _, _, _} -> name end)
+    signals = pubsub_signals(ast, fns, names)
+    emit_pubsub_diag(reinventing?(signals), signals, file, ast)
+  end
 
-    has_subscribe = has_pubsub_function?(names, ["subscribe", "listen", "watch"])
-    has_broadcast = has_pubsub_function?(names, ["broadcast", "notify", "publish", "emit"])
-    has_unsubscribe = has_pubsub_function?(names, ["unsubscribe", "unlisten", "unwatch"])
+  defp pubsub_signals(ast, fns, names) do
+    %{
+      has_subscribe: has_pubsub_function?(names, ["subscribe", "listen", "watch"]),
+      has_broadcast: has_pubsub_function?(names, ["broadcast", "notify", "publish", "emit"]),
+      has_unsubscribe: has_pubsub_function?(names, ["unsubscribe", "unlisten", "unwatch"]),
+      # If pubsub functions delegate to another module, it's a wrapper, not reinvention.
+      delegates: delegates_pubsub?(fns),
+      # Real reinvention: tracks subscribers in process state, ETS, or a Map.
+      maintains_list: maintains_subscriber_list?(ast),
+      uses_pubsub_lib: uses_pubsub_lib?(ast)
+    }
+  end
 
-    uses_registry? = uses_module?(ast, [:Registry])
-    uses_phoenix_pubsub? = uses_module?(ast, [:Phoenix, :PubSub])
-    uses_pg? = uses_module?(ast, [:pg]) or uses_erlang_pg?(ast)
-    uses_telemetry? = uses_module?(ast, [:Telemetry, :Metrics]) or uses_erlang_telemetry?(ast)
+  defp uses_pubsub_lib?(ast) do
+    uses_module?(ast, [:Registry]) or
+      uses_module?(ast, [:Phoenix, :PubSub]) or
+      uses_module?(ast, [:pg]) or uses_erlang_pg?(ast) or
+      uses_module?(ast, [:Telemetry, :Metrics]) or uses_erlang_telemetry?(ast)
+  end
 
-    # If the pubsub functions just delegate to another module's pubsub functions,
-    # that's a wrapper, not a reinvention
-    delegates_to_another_module? = delegates_pubsub?(fns)
+  defp reinventing?(s) do
+    s.has_subscribe and s.has_broadcast and not s.delegates and
+      s.maintains_list and not s.uses_pubsub_lib
+  end
 
-    # Real reinvention signals: sends messages to tracked pids, holds a
-    # subscriber list in GenServer state, or uses ets/Map for subscribers.
-    maintains_subscriber_list? = maintains_subscriber_list?(ast)
+  defp emit_pubsub_diag(false, _signals, _file, _ast), do: []
 
-    reinventing? =
-      has_subscribe and has_broadcast and
-        not delegates_to_another_module? and
-        maintains_subscriber_list? and
-        not (uses_registry? or uses_phoenix_pubsub? or uses_pg? or uses_telemetry?)
+  defp emit_pubsub_diag(true, signals, file, ast) do
+    module_name = AST.extract_module_name(ast)
+    fn_list = format_pubsub_fn_list(signals)
 
-    if reinventing? do
-      module_name = AST.extract_module_name(ast)
-
-      fn_list =
-        [
-          has_subscribe && "subscribe",
-          has_unsubscribe && "unsubscribe",
-          has_broadcast && "broadcast"
-        ]
-        |> Enum.filter(& &1)
-        |> Enum.join("/")
-
-      [
-        Diagnostic.warning("4.15",
+    [
+      Diagnostic.warning("4.15",
           title: "Hand-rolled pubsub",
           message: "#{module_name} implements #{fn_list} on top of its own subscriber list",
           why:
@@ -98,10 +96,17 @@ defmodule Archdo.Rules.Module.ReinventedPubSub do
           file: file,
           line: 1
         )
-      ]
-    else
-      []
-    end
+    ]
+  end
+
+  defp format_pubsub_fn_list(signals) do
+    [
+      {signals.has_subscribe, "subscribe"},
+      {signals.has_unsubscribe, "unsubscribe"},
+      {signals.has_broadcast, "broadcast"}
+    ]
+    |> Enum.filter(fn {flag, _} -> flag end)
+    |> Enum.map_join("/", fn {_, name} -> name end)
   end
 
   defp has_pubsub_function?(names, patterns) do
