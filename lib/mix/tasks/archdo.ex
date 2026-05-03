@@ -79,6 +79,7 @@ defmodule Mix.Tasks.Archdo do
           packs: :string,
           list_packs: :boolean,
           cleanup_pass: :integer,
+          report_tier: :string,
           paths: :string,
           since: :string,
           explain: :string,
@@ -211,6 +212,16 @@ defmodule Mix.Tasks.Archdo do
     ]
     |> maybe_add(:only, only)
     |> maybe_add(:cleanup_pass, Keyword.get(opts, :cleanup_pass))
+    |> maybe_add(:report_tier, parse_report_tier(Keyword.get(opts, :report_tier)))
+  end
+
+  defp parse_report_tier(nil), do: nil
+
+  defp parse_report_tier(str) do
+    case Archdo.ReportTier.parse(str) do
+      {:ok, tier} -> tier
+      {:error, msg} -> Mix.raise(msg)
+    end
   end
 
   # §§ elixir-planning: §6 — Pack abstraction (M13). CLI parses

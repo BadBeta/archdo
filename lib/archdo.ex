@@ -119,6 +119,7 @@ defmodule Archdo do
 
     (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ compiled_diagnostics)
     |> apply_cleanup_pass_filter(Keyword.get(opts, :cleanup_pass))
+    |> Archdo.ReportTier.filter(Keyword.get(opts, :report_tier))
     |> Enum.sort_by(fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end)
   end
 
