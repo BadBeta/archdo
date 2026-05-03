@@ -391,15 +391,19 @@ defmodule Archdo.Runner do
       graph = Graph.build(file_asts)
 
       enabled_rules
-      |> Enum.flat_map(fn rule ->
-        case function_exported?(rule, :analyze_graph, 2) do
-          true -> rule.analyze_graph(graph, config)
-          false -> []
-        end
-      end)
+      |> Enum.flat_map(&run_graph_rule(&1, graph, config))
       |> Enum.map(&Archdo.Severity.adjust_diagnostic(&1, nil))
     end
   end
+
+  # §§ elixir-implementing: §2.1 — boolean (function_exported?) →
+  # multi-clause head dispatching on the predicate result.
+  defp run_graph_rule(rule, graph, config) do
+    invoke_graph_rule(function_exported?(rule, :analyze_graph, 2), rule, graph, config)
+  end
+
+  defp invoke_graph_rule(false, _rule, _graph, _config), do: []
+  defp invoke_graph_rule(true, rule, graph, config), do: rule.analyze_graph(graph, config)
 
   defp maybe_compute_plug_coverage(opts, files, enabled_rules) do
     cond do

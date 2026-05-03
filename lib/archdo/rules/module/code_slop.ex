@@ -82,25 +82,31 @@ defmodule Archdo.Rules.Module.CodeSlop do
 
   defp trivial_delegation?(name, arity, args, body) do
     # Body is a single remote call: Module.func(same_args)
-    case unwrap_body(body) do
-      {{:., _, [{:__aliases__, _, mod_parts}, func_name]}, _, call_args}
-      when is_list(call_args) ->
-        case length(call_args) == arity and args_match?(args, call_args) do
-          true ->
-            target = Enum.map_join(mod_parts, ".", &Atom.to_string/1) <> ".#{func_name}"
-            # Don't flag if the wrapper has a different name (intentional rename/alias)
-            case func_name == name do
-              true -> {:yes, target}
-              false -> :no
-            end
+    body
+    |> unwrap_body()
+    |> classify_wrapper(name, args, arity)
+  end
 
-          false ->
-            :no
-        end
+  defp classify_wrapper(
+         {{:., _, [{:__aliases__, _, mod_parts}, func_name]}, _, call_args},
+         name,
+         args,
+         arity
+       )
+       when is_list(call_args) do
+    matches? = length(call_args) == arity and args_match?(args, call_args)
+    same_name? = func_name == name
+    wrapper_verdict(matches? and same_name?, mod_parts, func_name)
+  end
 
-      _ ->
-        :no
-    end
+  defp classify_wrapper(_other, _name, _args, _arity), do: :no
+
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp wrapper_verdict(false, _mod_parts, _func_name), do: :no
+
+  defp wrapper_verdict(true, mod_parts, func_name) do
+    target = Enum.map_join(mod_parts, ".", &Atom.to_string/1) <> ".#{func_name}"
+    {:yes, target}
   end
 
   defp unwrap_body({:__block__, _, [single]}), do: single

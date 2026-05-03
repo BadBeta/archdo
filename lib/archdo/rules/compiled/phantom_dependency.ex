@@ -33,23 +33,30 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
     beam_dir
     |> Path.join("Elixir.*.beam")
     |> Path.wildcard()
-    |> Enum.flat_map(fn beam_path ->
-      charlist = to_charlist(beam_path)
+    |> Enum.flat_map(&phantoms_for_beam(&1, project_modules, calls_by_module))
+  end
 
-      case :beam_lib.chunks(charlist, [:abstract_code]) do
-        {:ok, {caller_mod, [{:abstract_code, {:raw_abstract_v1, forms}}]}} ->
-          case MapSet.member?(project_modules, caller_mod) do
-            true ->
-              find_phantoms(caller_mod, forms, calls_by_module, project_modules)
+  defp phantoms_for_beam(beam_path, project_modules, calls_by_module) do
+    case :beam_lib.chunks(to_charlist(beam_path), [:abstract_code]) do
+      {:ok, {caller_mod, [{:abstract_code, {:raw_abstract_v1, forms}}]}} ->
+        phantoms_for_caller(
+          MapSet.member?(project_modules, caller_mod),
+          caller_mod,
+          forms,
+          calls_by_module,
+          project_modules
+        )
 
-            false ->
-              []
-          end
+      _ ->
+        []
+    end
+  end
 
-        _ ->
-          []
-      end
-    end)
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp phantoms_for_caller(false, _caller, _forms, _calls, _projects), do: []
+
+  defp phantoms_for_caller(true, caller_mod, forms, calls_by_module, project_modules) do
+    find_phantoms(caller_mod, forms, calls_by_module, project_modules)
   end
 
   defp find_phantoms(caller_mod, forms, calls_by_module, project_modules) do

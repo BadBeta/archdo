@@ -111,17 +111,22 @@ defmodule Archdo.Compiled.Query do
     Map.new(modules, fn {module, info} ->
       callback_set =
         info.behaviours
-        |> Enum.flat_map(fn bhv ->
-          case Map.get(modules, bhv) do
-            %{callback_fns: fns} -> fns
-            _ -> []
-          end
-        end)
+        |> Enum.flat_map(&behaviour_callbacks(modules, &1))
         |> MapSet.new()
 
       {module, callback_set}
     end)
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatches on
+  # whether the behaviour module is in the project map (and has
+  # callback_fns). Replaces a case-inside-flat_map.
+  defp behaviour_callbacks(modules, bhv) do
+    behaviour_callback_fns(Map.get(modules, bhv))
+  end
+
+  defp behaviour_callback_fns(%{callback_fns: fns}), do: fns
+  defp behaviour_callback_fns(_), do: []
 
   defp has_external_callers?(callee_index, module, func, arity) do
     mfa = {module, func, arity}
@@ -643,37 +648,52 @@ defmodule Archdo.Compiled.Query do
   end
 
   defp classify_context_calls(all_calls, member_set, project_set, boundary_module) do
-    Enum.reduce(all_calls, {[], [], [], [], []}, fn call,
-                                                    {internal, incoming, outgoing, boundary_in,
-                                                     leak_in} ->
-      caller_mod = elem(call.caller, 0)
-      callee_mod = elem(call.callee, 0)
-      caller_in = MapSet.member?(member_set, caller_mod)
-      callee_in = MapSet.member?(member_set, callee_mod)
-      caller_project = MapSet.member?(project_set, caller_mod)
-      callee_project = MapSet.member?(project_set, callee_mod)
-
-      cond do
-        caller_in and callee_in ->
-          {[call | internal], incoming, outgoing, boundary_in, leak_in}
-
-        not caller_in and callee_in and caller_project ->
-          case callee_mod == boundary_module do
-            true ->
-              {internal, [call | incoming], outgoing, [call | boundary_in], leak_in}
-
-            false ->
-              {internal, [call | incoming], outgoing, boundary_in, [call | leak_in]}
-          end
-
-        caller_in and not callee_in and callee_project ->
-          {internal, incoming, [call | outgoing], boundary_in, leak_in}
-
-        true ->
-          {internal, incoming, outgoing, boundary_in, leak_in}
-      end
+    Enum.reduce(all_calls, {[], [], [], [], []}, fn call, acc ->
+      classify_one_call(call, acc, member_set, project_set, boundary_module)
     end)
   end
+
+  defp classify_one_call(call, acc, member_set, project_set, boundary_module) do
+    caller_mod = elem(call.caller, 0)
+    callee_mod = elem(call.callee, 0)
+    caller_in = MapSet.member?(member_set, caller_mod)
+    callee_in = MapSet.member?(member_set, callee_mod)
+    caller_project = MapSet.member?(project_set, caller_mod)
+    callee_project = MapSet.member?(project_set, callee_mod)
+
+    classify_call_kind(
+      call_kind(caller_in, callee_in, caller_project, callee_project, callee_mod, boundary_module),
+      call,
+      acc
+    )
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on the
+  # tagged kind atom. Replaces a cond+nested-case at depth 3. Each
+  # clause encodes a row of the original cond truth table.
+  defp call_kind(true, true, _caller_p, _callee_p, _callee_mod, _boundary), do: :internal
+
+  defp call_kind(false, true, true, _callee_p, callee_mod, boundary)
+       when callee_mod == boundary,
+       do: :boundary_incoming
+
+  defp call_kind(false, true, true, _callee_p, _callee_mod, _boundary), do: :leak_incoming
+  defp call_kind(true, false, _caller_p, true, _callee_mod, _boundary), do: :outgoing
+  defp call_kind(_, _, _, _, _, _), do: :ignore
+
+  defp classify_call_kind(:internal, call, {internal, incoming, outgoing, boundary_in, leak_in}),
+    do: {[call | internal], incoming, outgoing, boundary_in, leak_in}
+
+  defp classify_call_kind(:boundary_incoming, call, {internal, incoming, outgoing, boundary_in, leak_in}),
+    do: {internal, [call | incoming], outgoing, [call | boundary_in], leak_in}
+
+  defp classify_call_kind(:leak_incoming, call, {internal, incoming, outgoing, boundary_in, leak_in}),
+    do: {internal, [call | incoming], outgoing, boundary_in, [call | leak_in]}
+
+  defp classify_call_kind(:outgoing, call, {internal, incoming, outgoing, boundary_in, leak_in}),
+    do: {internal, incoming, [call | outgoing], boundary_in, leak_in}
+
+  defp classify_call_kind(:ignore, _call, acc), do: acc
 
   defp find_leaking_modules(leak_calls, boundary_module) do
     leak_calls
@@ -692,47 +712,47 @@ defmodule Archdo.Compiled.Query do
   end
 
   defp find_misplaced_modules(graph, members, member_set, project_set, context_name) do
-    Enum.flat_map(members, fn mod ->
-      deps = module_dependencies(graph, mod)
+    Enum.flat_map(members, &misplaced_for_member(&1, graph, member_set, project_set, context_name))
+  end
 
-      own_calls =
-        Enum.count(deps, fn dep ->
-          MapSet.member?(member_set, dep)
-        end)
+  defp misplaced_for_member(mod, graph, member_set, project_set, context_name) do
+    deps = module_dependencies(graph, mod)
+    own_calls = Enum.count(deps, &MapSet.member?(member_set, &1))
 
-      other_context_calls =
-        Enum.filter(deps, fn dep ->
-          MapSet.member?(project_set, dep) and not MapSet.member?(member_set, dep)
-        end)
+    other_context_calls =
+      Enum.filter(deps, fn dep ->
+        MapSet.member?(project_set, dep) and not MapSet.member?(member_set, dep)
+      end)
 
-      other_count = length(other_context_calls)
+    other_count = length(other_context_calls)
+    misplaced_if_skewed(other_count > own_calls and other_count >= 3, mod, own_calls, other_context_calls, other_count, context_name)
+  end
 
-      case other_count > own_calls and other_count >= 3 do
-        true ->
-          strongest =
-            other_context_calls
-            |> Enum.map(fn dep ->
-              dep
-              |> Module.split()
-              |> Enum.take(2)
-              |> Enum.join(".")
-            end)
-            |> Enum.frequencies()
-            |> Enum.max_by(fn {_ctx, count} -> count end, fn -> {context_name, 0} end)
-            |> elem(0)
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp misplaced_if_skewed(false, _mod, _own, _other_calls, _other_count, _ctx_name), do: []
 
-          [
-            %{
-              module: mod,
-              calls_to_own: own_calls,
-              calls_to_other: other_count,
-              strongest_affinity: strongest
-            }
-          ]
+  defp misplaced_if_skewed(true, mod, own_calls, other_context_calls, other_count, context_name) do
+    strongest = strongest_external_context(other_context_calls, context_name)
 
-        false ->
-          []
-      end
-    end)
+    [
+      %{
+        module: mod,
+        calls_to_own: own_calls,
+        calls_to_other: other_count,
+        strongest_affinity: strongest
+      }
+    ]
+  end
+
+  defp strongest_external_context(other_context_calls, context_name) do
+    other_context_calls
+    |> Enum.map(&context_prefix/1)
+    |> Enum.frequencies()
+    |> Enum.max_by(fn {_ctx, count} -> count end, fn -> {context_name, 0} end)
+    |> elem(0)
+  end
+
+  defp context_prefix(dep) do
+    dep |> Module.split() |> Enum.take(2) |> Enum.join(".")
   end
 end

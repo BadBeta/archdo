@@ -50,75 +50,77 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
       |> Enum.map(fn {name, _arity, _meta, _args, _body} -> name end)
       |> Enum.uniq()
 
-    public_count = length(public_fns)
+    enough_publics?(length(public_fns) >= @min_public_functions, file, ast, public_fns, test_asts)
+  end
 
-    case public_count >= @min_public_functions do
-      false ->
-        []
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head, then
+  # dispatch on test-AST presence (nil vs {file, ast}) via a second
+  # multi-clause head. Each stage is depth 1.
+  defp enough_publics?(false, _file, _ast, _public_fns, _test_asts), do: []
 
-      true ->
-        test_file = source_to_test_path(file)
+  defp enough_publics?(true, file, ast, public_fns, test_asts) do
+    test_file = source_to_test_path(file)
+    coverage_check(find_test_ast(test_file, test_asts), file, ast, public_fns)
+  end
 
-        case find_test_ast(test_file, test_asts) do
-          nil ->
-            []
+  defp coverage_check(nil, _file, _ast, _public_fns), do: []
 
-          {_test_file, test_ast} ->
-            tested_fns = extract_tested_function_names(test_ast)
-            covered = MapSet.intersection(MapSet.new(public_fns), tested_fns)
-            coverage = MapSet.size(covered) / public_count
+  defp coverage_check({_test_file, test_ast}, file, ast, public_fns) do
+    tested_fns = extract_tested_function_names(test_ast)
+    covered = MapSet.intersection(MapSet.new(public_fns), tested_fns)
+    coverage = MapSet.size(covered) / length(public_fns)
 
-            case coverage < @coverage_threshold do
-              false ->
-                []
+    diagnostic_if_below_threshold(coverage < @coverage_threshold, coverage, covered, public_fns, file, ast)
+  end
 
-              true ->
-                module_name = AST.extract_module_name(ast)
-                pct = Float.round(coverage * 100, 1)
+  defp diagnostic_if_below_threshold(false, _coverage, _covered, _public_fns, _file, _ast), do: []
 
-                [
-                  Diagnostic.info("7.28",
-                    title: "Low boundary test coverage",
-                    message:
-                      "#{module_name} has #{public_count} public functions but test covers ~#{pct}% " <>
-                        "(#{MapSet.size(covered)}/#{public_count})",
-                    why:
-                      "Context facades are the primary API boundary for a domain. When a context " <>
-                        "has many public functions but few are exercised in tests, regressions in " <>
-                        "the untested functions go undetected. Boundary tests are the most valuable " <>
-                        "tests in a Phoenix application because they verify the contract other modules depend on.",
-                    alternatives: [
-                      Fix.new(
-                        summary: "Add tests for the uncovered public functions",
-                        detail:
-                          "The following functions appear untested: " <>
-                            "#{inspect(Enum.sort(MapSet.to_list(MapSet.difference(MapSet.new(public_fns), covered))))}. " <>
-                            "Add at least a happy-path test for each.",
-                        applies_when: "The functions contain meaningful logic."
-                      ),
-                      Fix.new(
-                        summary: "Consolidate the public API if some functions are unused",
-                        detail:
-                          "If some public functions are never called from outside the context, " <>
-                            "make them private (defp). A smaller public API is easier to test thoroughly.",
-                        applies_when:
-                          "Some public functions are internal helpers exposed accidentally."
-                      )
-                    ],
-                    references: ["ARCHITECTURE_RULES.md#7.28"],
-                    context: %{
-                      module: module_name,
-                      public_count: public_count,
-                      covered_count: MapSet.size(covered),
-                      coverage_pct: pct
-                    },
-                    file: file,
-                    line: 1
-                  )
-                ]
-            end
-        end
-    end
+  defp diagnostic_if_below_threshold(true, coverage, covered, public_fns, file, ast) do
+    [build_coverage_diag(coverage, covered, public_fns, file, ast)]
+  end
+
+  defp build_coverage_diag(coverage, covered, public_fns, file, ast) do
+    module_name = AST.extract_module_name(ast)
+    pct = Float.round(coverage * 100, 1)
+
+    Diagnostic.info("7.28",
+      title: "Low boundary test coverage",
+      message:
+        "#{module_name} has #{length(public_fns)} public functions but test covers ~#{pct}% " <>
+          "(#{MapSet.size(covered)}/#{length(public_fns)})",
+      why:
+        "Context facades are the primary API boundary for a domain. When a context " <>
+          "has many public functions but few are exercised in tests, regressions in " <>
+          "the untested functions go undetected. Boundary tests are the most valuable " <>
+          "tests in a Phoenix application because they verify the contract other modules depend on.",
+      alternatives: [
+        Fix.new(
+          summary: "Add tests for the uncovered public functions",
+          detail:
+            "The following functions appear untested: " <>
+              "#{inspect(Enum.sort(MapSet.to_list(MapSet.difference(MapSet.new(public_fns), covered))))}. " <>
+              "Add at least a happy-path test for each.",
+          applies_when: "The functions contain meaningful logic."
+        ),
+        Fix.new(
+          summary: "Consolidate the public API if some functions are unused",
+          detail:
+            "If some public functions are never called from outside the context, " <>
+              "make them private (defp). A smaller public API is easier to test thoroughly.",
+          applies_when:
+            "Some public functions are internal helpers exposed accidentally."
+        )
+      ],
+      references: ["ARCHITECTURE_RULES.md#7.28"],
+      context: %{
+        module: module_name,
+        public_count: length(public_fns),
+        covered_count: MapSet.size(covered),
+        coverage_pct: pct
+      },
+      file: file,
+      line: 1
+    )
   end
 
   defp source_to_test_path(file) do

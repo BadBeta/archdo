@@ -50,23 +50,21 @@ defmodule Archdo.Rules.Boundary.SharedEtsTable do
     # Group by table name, find tables accessed from multiple contexts
     accesses
     |> Enum.group_by(fn {table, _ctx, _file, _line} -> table end)
-    |> Enum.flat_map(fn {table, entries} ->
-      contexts =
-        entries
-        |> Enum.map(fn {_, ctx, _, _} -> ctx end)
-        |> Enum.uniq()
+    |> Enum.flat_map(&shared_table_diagnostics/1)
+  end
 
-      case length(contexts) > 1 do
-        true ->
-          context_names = Enum.join(contexts, ", ")
+  defp shared_table_diagnostics({table, entries}) do
+    contexts = entries |> Enum.map(fn {_, ctx, _, _} -> ctx end) |> Enum.uniq()
+    emit_when_shared(length(contexts) > 1, table, entries, contexts)
+  end
 
-          Enum.map(entries, fn {_table, _ctx, file, line} ->
-            build_diagnostic(file, line, table, context_names)
-          end)
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp emit_when_shared(false, _table, _entries, _contexts), do: []
 
-        false ->
-          []
-      end
+  defp emit_when_shared(true, table, entries, contexts) do
+    context_names = Enum.join(contexts, ", ")
+    Enum.map(entries, fn {_table, _ctx, file, line} ->
+      build_diagnostic(file, line, table, context_names)
     end)
   end
 

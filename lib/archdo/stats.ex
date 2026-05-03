@@ -100,23 +100,24 @@ defmodule Archdo.Stats do
   defp expand_with_tests(paths) do
     test_paths =
       paths
-      |> Enum.flat_map(fn path ->
-        cond do
-          String.ends_with?(path, "/lib") ->
-            sibling = String.replace_suffix(path, "/lib", "/test")
-            if File.dir?(sibling), do: [sibling], else: []
-
-          path == "lib" ->
-            if File.dir?("test"), do: ["test"], else: []
-
-          true ->
-            []
-        end
-      end)
+      |> Enum.flat_map(&sibling_test_path/1)
       |> Enum.uniq()
 
     Enum.uniq(paths ++ test_paths)
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatches on the
+  # path shape (the suffix); helpers dispatch on the boolean predicate
+  # results via multi-clause heads, never if/else.
+  defp sibling_test_path("lib"), do: dir_or_empty("test")
+  defp sibling_test_path(path), do: maybe_test_for_lib(String.ends_with?(path, "/lib"), path)
+
+  defp maybe_test_for_lib(false, _path), do: []
+  defp maybe_test_for_lib(true, path), do: dir_or_empty(String.replace_suffix(path, "/lib", "/test"))
+
+  defp dir_or_empty(dir), do: existing_dir(File.dir?(dir), dir)
+  defp existing_dir(false, _dir), do: []
+  defp existing_dir(true, dir), do: [dir]
 
   # --- File analysis ---
 

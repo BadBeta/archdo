@@ -131,16 +131,18 @@ defmodule Archdo.Compiled do
 
       app_name ->
         # Look for _build/ENV/lib/APP/ebin — try dev first, then prod
-        Enum.find_value(["dev", "prod", "test"], fn env ->
-          dir = Path.join([build_dir, env, "lib", app_name, "ebin"])
-
-          case File.dir?(dir) and Path.wildcard(Path.join(dir, "*.beam")) != [] do
-            true -> dir
-            false -> nil
-          end
-        end)
+        Enum.find_value(["dev", "prod", "test"], &beam_dir_for_env(&1, build_dir, app_name))
     end
   end
+
+  defp beam_dir_for_env(env, build_dir, app_name) do
+    dir = Path.join([build_dir, env, "lib", app_name, "ebin"])
+    valid_beam_dir(File.dir?(dir) and Path.wildcard(Path.join(dir, "*.beam")) != [], dir)
+  end
+
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp valid_beam_dir(false, _dir), do: nil
+  defp valid_beam_dir(true, dir), do: dir
 
   defp detect_app_name(project_path) do
     mix_file = Path.join(project_path, "mix.exs")
