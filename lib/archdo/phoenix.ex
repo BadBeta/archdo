@@ -159,13 +159,13 @@ defmodule Archdo.Phoenix do
       {:embed_templates, _, args} when is_list(args) -> true
       _ -> false
     end)
-    |> Enum.flat_map(fn {:embed_templates, _, args} ->
-      Enum.flat_map(args, fn arg ->
-        case unwrap_literal(arg) do
-          v when is_binary(v) -> [v]
-          _ -> []
-        end
-      end)
-    end)
+    |> Enum.flat_map(fn {:embed_templates, _, args} -> Enum.flat_map(args, &literal_string/1) end)
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the unwrap_literal result shape.
+  defp literal_string(arg), do: maybe_string(unwrap_literal(arg))
+
+  defp maybe_string(v) when is_binary(v), do: [v]
+  defp maybe_string(_), do: []
 end

@@ -597,9 +597,9 @@ defmodule Archdo do
   # blackbox possibility score + class distribution. Pure measurement;
   # no rule fires from these numbers (M26 will add CE-54/55/56 quadrant).
   # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
-  # the empty-list shape of scores.
-  defp module_blackbox_entry({_file, _ast} = pair) do
-    {file, ast} = pair
+  # the empty-list shape of scores. Function-head destructure
+  # extracts file/ast directly — no separate `{file, ast} = pair`.
+  defp module_blackbox_entry({file, ast}) do
     blackbox_entry_for(Archdo.Blackbox.score_module(ast), file, ast)
   end
 

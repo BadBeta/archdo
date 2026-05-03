@@ -75,12 +75,21 @@ defmodule Archdo.Rules.Module.FeatureEnvy do
   defp diag_if_envious(false, _dominant_mod, _count, _caller_mod, _name, _arity, _self_calls, _graph), do: []
 
   defp diag_if_envious(true, dominant_mod, count, caller_mod, name, arity, self_calls, graph) do
-    {file, line} = caller_location(Map.get(graph.definitions, {caller_mod, name, arity}))
-    [build_envy_diagnostic(caller_mod, name, arity, dominant_mod, count, self_calls, file, line)]
+    [
+      graph.definitions
+      |> Map.get({caller_mod, name, arity})
+      |> build_envy_with_meta(caller_mod, name, arity, dominant_mod, count, self_calls)
+    ]
   end
 
-  defp caller_location(nil), do: {"unknown", 0}
-  defp caller_location(meta), do: {meta.file, meta.line}
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the meta nil-vs-struct shape; the diagnostic builder owns
+  # file/line defaulting directly (no tuple destructure).
+  defp build_envy_with_meta(nil, caller_mod, name, arity, dominant_mod, count, self_calls),
+    do: build_envy_diagnostic(caller_mod, name, arity, dominant_mod, count, self_calls, "unknown", 0)
+
+  defp build_envy_with_meta(meta, caller_mod, name, arity, dominant_mod, count, self_calls),
+    do: build_envy_diagnostic(caller_mod, name, arity, dominant_mod, count, self_calls, meta.file, meta.line)
 
   defp fallback_no_diag, do: []
 

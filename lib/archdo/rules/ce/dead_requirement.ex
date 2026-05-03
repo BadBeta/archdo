@@ -37,26 +37,28 @@ defmodule Archdo.Rules.CE.DeadRequirement do
   """
   @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
   def analyze_project(file_asts, opts \\ []) do
-    case Keyword.get(opts, :requirements_source) do
-      nil ->
-        []
+    diags_for_source(Keyword.get(opts, :requirements_source), file_asts)
+  end
 
-      path ->
-        case RequirementsSource.load(path) do
-          {:error, _} ->
-            []
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the source path (nil vs binary) and the load result tag.
+  defp diags_for_source(nil, _file_asts), do: []
 
-          {:ok, entries} ->
-            referenced_ids = collect_referenced_ids(file_asts)
-            actionable = RequirementsSource.actionable_ids(entries)
-            missing = MapSet.difference(actionable, referenced_ids)
+  defp diags_for_source(path, file_asts) do
+    diags_for_load(RequirementsSource.load(path), file_asts, path)
+  end
 
-            entries
-            |> Enum.filter(fn %{id: id} -> MapSet.member?(missing, id) end)
-            |> Enum.sort_by(& &1.id)
-            |> Enum.map(&build_diagnostic(&1, path))
-        end
-    end
+  defp diags_for_load({:error, _}, _file_asts, _path), do: []
+
+  defp diags_for_load({:ok, entries}, file_asts, path) do
+    referenced_ids = collect_referenced_ids(file_asts)
+    actionable = RequirementsSource.actionable_ids(entries)
+    missing = MapSet.difference(actionable, referenced_ids)
+
+    entries
+    |> Enum.filter(fn %{id: id} -> MapSet.member?(missing, id) end)
+    |> Enum.sort_by(& &1.id)
+    |> Enum.map(&build_diagnostic(&1, path))
   end
 
   defp collect_referenced_ids(file_asts) do

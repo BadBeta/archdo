@@ -33,9 +33,9 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
     first = normalize(hd(cycle))
     second = normalize(Enum.at(cycle, 1))
 
-    {file, line} = edge_location(find_cycle_edge(graph.edges, first, second))
-
-    build_cycle_diag(cycle_str, file, line)
+    graph.edges
+    |> find_cycle_edge(first, second)
+    |> build_cycle_diag(cycle_str)
   end
 
   defp find_cycle_edge(edges, first, second) do
@@ -45,10 +45,14 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
     end)
   end
 
-  defp edge_location(nil), do: {"unknown", 0}
-  defp edge_location(edge), do: {edge.file, edge.line}
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the edge's nil-vs-struct shape. Eliminates the awkward
+  # 2-tuple destructure-from-helper pattern; the diagnostic builder
+  # owns the file/line defaulting directly.
+  defp build_cycle_diag(nil, cycle_str), do: do_build_cycle_diag(cycle_str, "unknown", 0)
+  defp build_cycle_diag(edge, cycle_str), do: do_build_cycle_diag(cycle_str, edge.file, edge.line)
 
-  defp build_cycle_diag(cycle_str, file, line) do
+  defp do_build_cycle_diag(cycle_str, file, line) do
 
         Diagnostic.error("1.3",
           title: "Circular dependency between contexts",

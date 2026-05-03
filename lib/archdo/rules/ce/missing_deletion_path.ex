@@ -73,20 +73,29 @@ defmodule Archdo.Rules.CE.MissingDeletionPath do
   # function across the project.
   defp collect_deletion_targets(file_asts) do
     file_asts
-    |> Enum.flat_map(fn {_file, ast} ->
-      ast
-      |> AST.extract_functions(:public)
-      |> Enum.flat_map(fn {name, _arity, _meta, _args, body} ->
-        case is_atom(name) and deletion_prefix?(name) do
-          true -> body && references_in(body)
-          false -> []
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
-    end)
+    |> Enum.flat_map(&deletion_refs_in_file/1)
     |> List.flatten()
     |> MapSet.new()
   end
+
+  defp deletion_refs_in_file({_file, ast}) do
+    ast
+    |> AST.extract_functions(:public)
+    |> Enum.flat_map(&deletion_refs_in_fn/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the deletion-prefix boolean. body && refs() preserved as the
+  # idiomatic short-circuit for the nil/AST shape.
+  defp deletion_refs_in_fn({name, _arity, _meta, _args, body}) when is_atom(name) do
+    refs_for_deletion_fn(deletion_prefix?(name), body)
+  end
+
+  defp deletion_refs_in_fn(_), do: []
+
+  defp refs_for_deletion_fn(false, _body), do: []
+  defp refs_for_deletion_fn(true, body), do: body && references_in(body)
 
   defp deletion_prefix?(name) do
     s = Atom.to_string(name)

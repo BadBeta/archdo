@@ -97,15 +97,17 @@ defmodule Archdo.Rules.CE.MissingTraceability do
   defp absorb_trace_walk(:trace_attr, _node, {acc, _pending}, _file, _module), do: {acc, true}
 
   defp absorb_trace_walk(:public_def, node, {acc, pending_trace?}, file, module) do
-    {n, a, meta} = name_arity_meta(node)
-    record_def_diag(pending_trace?, acc, file, module, n, a, meta)
+    record_def_diag(pending_trace?, acc, file, module, name_arity_meta(node))
   end
 
   defp absorb_trace_walk(:other, _node, acc, _file, _module), do: acc
 
-  defp record_def_diag(true, acc, _file, _module, _n, _a, _meta), do: {acc, false}
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the pending_trace? boolean. The {n, a, meta} 3-tuple stays intact
+  # all the way to the diagnostic call, no separate destructure.
+  defp record_def_diag(true, acc, _file, _module, _name_arity_meta), do: {acc, false}
 
-  defp record_def_diag(false, acc, file, module, n, a, meta),
+  defp record_def_diag(false, acc, file, module, {n, a, meta}),
     do: {[build_diagnostic(file, module, n, a, meta) | acc], false}
 
   defp trace_attr?({:@, _, [{name, _, _}]}) when name in @trace_attrs, do: true
