@@ -109,12 +109,18 @@ defmodule Archdo do
         false -> []
       end
 
-    project_diagnostics = run_project_arch_rules(paths, opts)
+    # §§ elixir-implementing: §10.5 — build the compiled graph once when
+    # `--compiled` is set and thread it via opts so project-arch rules
+    # (CE-30) can cross-suppress macro-driven false positives, and
+    # compiled rules (1.25, 1.26, etc.) can consume it without rebuilding.
+    {opts_with_graph, compiled_graph} = maybe_attach_compiled_graph(opts, paths)
+
+    project_diagnostics = run_project_arch_rules(paths, opts_with_graph)
 
     compiled_diagnostics =
-      case Keyword.get(opts, :compiled, false) do
-        true -> run_compiled_rules(paths, opts)
-        false -> []
+      case compiled_graph do
+        nil -> []
+        graph -> run_compiled_rules_with_graph(graph, opts_with_graph)
       end
 
     (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ compiled_diagnostics)
@@ -159,7 +165,36 @@ defmodule Archdo do
     Archdo.Rules.Compiled.OrphanModule
   ]
 
-  defp run_compiled_rules(paths, _opts) do
+  # Build the compiled graph once when --compiled is set, and put both
+  # the graph itself (opts[:compiled_graph]) and a precomputed MapSet of
+  # modules with non-empty incoming edges (opts[:compiled_reached_modules])
+  # into opts. The MapSet is the seam CE-30 uses to cross-suppress
+  # macro-driven false positives.
+  defp maybe_attach_compiled_graph(opts, paths) do
+    case Keyword.get(opts, :compiled, false) do
+      false ->
+        {opts, nil}
+
+      true ->
+        case build_compiled_graph(paths) do
+          {:ok, graph} ->
+            reached = compute_reached_modules(graph)
+
+            new_opts =
+              opts
+              |> Keyword.put(:compiled_graph, graph)
+              |> Keyword.put(:compiled_reached_modules, reached)
+
+            {new_opts, graph}
+
+          {:error, reason} ->
+            IO.puts(:standard_error, "[archdo] compiled: #{reason}")
+            {opts, nil}
+        end
+    end
+  end
+
+  defp build_compiled_graph(paths) do
     project_root =
       case paths do
         [path | _] ->
@@ -171,14 +206,24 @@ defmodule Archdo do
           File.cwd!()
       end
 
-    case Archdo.Compiled.analyze(project_root) do
-      {:ok, graph} ->
-        Enum.flat_map(@compiled_rules, &safe_analyze_compiled(&1, graph))
+    Archdo.Compiled.analyze(project_root)
+  end
 
-      {:error, reason} ->
-        IO.puts(:standard_error, "[archdo] compiled: #{reason}")
-        []
-    end
+  # MapSet of modules that have at least one incoming module-level edge
+  # in the compiled graph. Built once per run to avoid O(N) lookups in
+  # the rule-level cross-suppression check.
+  defp compute_reached_modules(graph) do
+    graph
+    |> Archdo.Compiled.modules()
+    |> Map.keys()
+    |> Enum.filter(fn mod ->
+      Archdo.Compiled.module_dependents(graph, mod) != []
+    end)
+    |> MapSet.new()
+  end
+
+  defp run_compiled_rules_with_graph(graph, _opts) do
+    Enum.flat_map(@compiled_rules, &safe_analyze_compiled(&1, graph))
   end
 
   # Run a single compiled rule, isolating crashes so one broken rule doesn't block others.
