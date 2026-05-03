@@ -30,19 +30,33 @@ defmodule Archdo.Rules.Module.FunctionComplexityTest do
     assert_clean(FunctionComplexity, code)
   end
 
-  test "flags high cyclomatic complexity" do
-    # Build a function with many branches
-    branches =
-      Enum.map_join(1..12, "\n", fn i ->
-        "      :val_#{i} -> :result_#{i}"
-      end)
-
+  test "flags high cyclomatic complexity for twisty-nested code" do
+    # Twisty-nested: high cyclomatic AND high cognitive (nested control flow,
+    # not flat dispatch). 6.2 fires; CE-24 would also fire as :twisty.
     code = """
-    defmodule MyApp.Complex do
+    defmodule MyApp.Twisty do
       @moduledoc false
-      def complex_fn(x) do
-        case x do
-    #{branches}
+      def go(x, y, z) do
+        if x > 0 do
+          if y > 0 do
+            if z > 0 do
+              case x + y + z do
+                n when n > 100 -> :high
+                n when n > 50 -> :mid
+                _ -> :low
+              end
+            else
+              if x > y, do: :left, else: :right
+            end
+          else
+            cond do
+              x > 10 and y < 0 -> :a
+              x < 5 or z > 0 -> :b
+              true -> :c
+            end
+          end
+        else
+          :neg
         end
       end
     end
@@ -50,5 +64,28 @@ defmodule Archdo.Rules.Module.FunctionComplexityTest do
 
     diags = assert_flagged(FunctionComplexity, code)
     assert Enum.any?(diags, &(&1.message =~ "cyclomatic complexity"))
+  end
+
+  test "does NOT flag flat-dispatch shapes (CE-24 covers them)" do
+    # Pure dispatch table: cyclomatic high, cognitive ~0. CE-24-flat-dispatch
+    # surfaces this informationally; 6.2 should defer instead of double-firing.
+    branches =
+      Enum.map_join(1..12, "\n", fn i ->
+        "      :val_#{i} -> :result_#{i}"
+      end)
+
+    code = """
+    defmodule MyApp.FlatDispatch do
+      @moduledoc false
+      def lookup(x) do
+        case x do
+    #{branches}
+          _ -> :unknown
+        end
+      end
+    end
+    """
+
+    assert_clean(FunctionComplexity, code)
   end
 end

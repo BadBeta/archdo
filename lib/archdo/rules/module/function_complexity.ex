@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Module.FunctionComplexity do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{AST, Diagnostic, Fix}
+  alias Archdo.{AST, CognitiveComplexity, Diagnostic, Fix}
 
   @max_arity 5
   # Private/internal recursive functions get a higher arity limit since
@@ -10,6 +10,14 @@ defmodule Archdo.Rules.Module.FunctionComplexity do
   @max_arity_private 8
   @max_complexity 9
   @error_complexity 15
+
+  # Flat-dispatch threshold mirrors CE-24's classifier — when a
+  # function's cyclomatic count is dominated by independent dispatch
+  # branches (each shallow), cognitive complexity stays low and the
+  # cyclomatic number is misleading. CE-24 already flags this shape
+  # as `flat_dispatch` informationally; 6.2 defers to it instead of
+  # double-firing on the same function.
+  @flat_dispatch_ratio 2
 
   @impl true
   def id, do: "6.2"
@@ -85,12 +93,24 @@ defmodule Archdo.Rules.Module.FunctionComplexity do
       complexity > @error_complexity ->
         [complexity_diag(file, name, arity, meta, complexity, :very_high)]
 
-      complexity > @max_complexity ->
+      complexity > @max_complexity and not flat_dispatch?(body, complexity) ->
         [complexity_diag(file, name, arity, meta, complexity, :high)]
 
       true ->
         []
     end
+  end
+
+  # A function is "flat dispatch" when its cyclomatic count is high
+  # but cognitive complexity stays low — i.e. many shallow clauses
+  # rather than nested logic. This pattern is benign: each clause
+  # is easy to read in isolation, the dispatch table itself is the
+  # documentation, and refactoring rarely improves it. CE-24 already
+  # surfaces these shapes informationally; firing 6.2 on top would
+  # double-count the same function.
+  defp flat_dispatch?(body, cyclo) do
+    cogn = CognitiveComplexity.score(body)
+    cyclo > cogn * @flat_dispatch_ratio
   end
 
   defp complexity_diag(file, name, arity, meta, complexity, kind) do
