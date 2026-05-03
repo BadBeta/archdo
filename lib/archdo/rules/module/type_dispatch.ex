@@ -87,11 +87,20 @@ defmodule Archdo.Rules.Module.TypeDispatch do
   # where 4+ clauses each match a distinct atom as the first argument.
 
   defp find_multi_clause_dispatch(file, ast) do
-    # Collect all def/defp clauses grouped by {name, arity}
+    # Collect all PUBLIC `def` clauses grouped by {name, arity}.
+    # Private (`defp`) multi-clause dispatch is exempt — the
+    # OCP-violation argument the rule rests on doesn't apply to
+    # internal helpers. Adding a new variant to a private dispatch
+    # already requires editing the module; multi-clause `defp` is
+    # idiomatic Elixir for internal categorization (state-machine
+    # transitions, format helpers, classifier lookups). The rule's
+    # own "Tolerate" entry says: "Keep if the type set is genuinely
+    # fixed" — for private dispatch, the set is BY DEFINITION fixed
+    # to whatever the owning module emits.
     {_, clauses_by_fn} =
       Macro.prewalk(ast, %{}, fn
-        {kind, meta, [{name, _, args} | _]} = node, acc
-        when kind in [:def, :defp] and is_atom(name) and is_list(args) ->
+        {:def, meta, [{name, _, args} | _]} = node, acc
+        when is_atom(name) and is_list(args) ->
           key = {name, length(args)}
           entry = %{atom: first_arg_atom(args), line: AST.line(meta)}
           {node, Map.update(acc, key, [entry], &[entry | &1])}

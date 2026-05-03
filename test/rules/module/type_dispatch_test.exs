@@ -79,6 +79,26 @@ defmodule Archdo.Rules.Module.TypeDispatchTest do
     assert_clean(TypeDispatch, code)
   end
 
+  test "allows multi-clause private function dispatch (defp exemption)" do
+    # Private dispatch is internal categorization. The OCP-violation
+    # argument doesn't apply: adding a new variant requires editing
+    # the module regardless. Multi-clause `defp` over a closed set
+    # (OTP types, layer kinds, format shapes) is idiomatic Elixir.
+    code = ~S"""
+    defmodule MyApp.Internal do
+      def render(layer, data), do: do_render(layer, data)
+
+      defp do_render(:supervisor, data), do: render_supervisor(data)
+      defp do_render(:genserver, data), do: render_genserver(data)
+      defp do_render(:agent, data), do: render_agent(data)
+      defp do_render(:task, data), do: render_task(data)
+      defp do_render(:gen_statem, data), do: render_statem(data)
+    end
+    """
+
+    assert_clean(TypeDispatch, code)
+  end
+
   test "ignores ok/error in multi-clause dispatch" do
     code = ~S"""
     defmodule MyApp.Handler do
