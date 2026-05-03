@@ -40,7 +40,7 @@ defmodule Archdo.Rules.CE.WrapperOverFramework do
     for {behaviour_name, b_file, b_ast} <- behaviours,
         not extension_point?(b_ast),
         impls = Map.get(implementors, behaviour_name, []),
-        non_test_impls = Enum.reject(impls, &test_impl?/1),
+        non_test_impls = Enum.reject(impls, fn {_m, file, _ast} -> AST.test_file?(file) end),
         # v1 conservatism: only fire when there's exactly one production
         # impl AND it wraps a framework-seam target. The 0-impl path is
         # off because it false-positives heavily on Ecto.Type behaviours
@@ -109,10 +109,6 @@ defmodule Archdo.Rules.CE.WrapperOverFramework do
       _ ->
         []
     end)
-  end
-
-  defp test_impl?({_module, file, _ast}) do
-    String.contains?(file, "/test/") or String.starts_with?(file, "test/")
   end
 
   # --- principal call target ---
@@ -204,9 +200,14 @@ defmodule Archdo.Rules.CE.WrapperOverFramework do
 
     impl_summary =
       case impls do
-        [] -> "no production implementor"
-        [{m, _, _}] -> "single implementor: #{m}"
-        many -> "#{length(many)} implementors: #{Enum.map_join(many, ", ", fn {m, _, _} -> m end)}"
+        [] ->
+          "no production implementor"
+
+        [{m, _, _}] ->
+          "single implementor: #{m}"
+
+        many ->
+          "#{length(many)} implementors: #{Enum.map_join(many, ", ", fn {m, _, _} -> m end)}"
       end
 
     Diagnostic.warning("CE-15",

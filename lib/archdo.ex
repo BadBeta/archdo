@@ -210,19 +210,13 @@ defmodule Archdo do
       production
       |> Archdo.AnchorSet.compute()
       |> MapSet.to_list()
-      |> Enum.map(&safe_module_atom/1)
+      |> Enum.map(&AST.safe_existing_atom/1)
       |> Enum.reject(&is_nil/1)
       |> MapSet.new()
 
     ast_graph = Graph.build(production)
 
     {anchors, ast_graph}
-  end
-
-  defp safe_module_atom(name) when is_binary(name) do
-    String.to_existing_atom("Elixir." <> name)
-  rescue
-    ArgumentError -> nil
   end
 
   defp build_compiled_graph(paths) do

@@ -43,15 +43,7 @@ defmodule Archdo.Pattern do
   Normalize a module name (atom or string) to a string without the "Elixir." prefix.
   """
   @spec normalize(module() | String.t()) :: String.t()
-  def normalize(mod) when is_atom(mod) do
-    mod
-    |> Atom.to_string()
-    |> normalize()
-  end
-
-  def normalize(mod) when is_binary(mod) do
-    String.replace_leading(mod, "Elixir.", "")
-  end
+  defdelegate normalize(mod), to: Archdo.AST, as: :module_name
 
   @doc """
   Filter a list of module names by a glob pattern.

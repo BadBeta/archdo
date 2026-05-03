@@ -54,7 +54,6 @@ defmodule Archdo.Rules.Boundary.WidelyUsedInternalModule do
   def caller_context(name) when is_binary(name) do
     case String.split(name, ".") do
       [single] -> single
-      [a, b] -> a <> "." <> b
       [a, b | _] -> a <> "." <> b
     end
   end

@@ -1,7 +1,7 @@
 defmodule Archdo.Mcp.Tools.Diagram do
   @moduledoc false
 
-  alias Archdo.Compiled
+  alias Archdo.{AST, Compiled}
 
   def name, do: "archdo_diagram"
 
@@ -81,19 +81,13 @@ defmodule Archdo.Mcp.Tools.Diagram do
     # let a malicious caller exhaust the atom table over many requests.
     # `to_existing_atom` raises ArgumentError for unknown modules; we
     # catch and convert to an explicit error.
-    case existing_module_atom(name) do
-      {:ok, module} -> {:ok, Compiled.blast_radius_diagram(graph, module)}
-      :error -> {:error, "Unknown module: #{name}"}
+    case AST.safe_existing_atom(name) do
+      nil -> {:error, "Unknown module: #{name}"}
+      module -> {:ok, Compiled.blast_radius_diagram(graph, module)}
     end
   end
 
   defp generate(_, type, _), do: {:error, "Unknown diagram type: #{type}"}
-
-  defp existing_module_atom(name) when is_binary(name) do
-    {:ok, String.to_existing_atom("Elixir." <> name)}
-  rescue
-    ArgumentError -> :error
-  end
 
   defp format_for("system"), do: "svg"
   defp format_for(_), do: "mermaid"

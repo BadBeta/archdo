@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Boundary.UmbrellaDepConsistency do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
 
   @impl true
   def id, do: "4.30"
@@ -36,7 +36,7 @@ defmodule Archdo.Rules.Boundary.UmbrellaDepConsistency do
         when is_atom(dep_name) and is_list(opts) ->
           case in_umbrella_without_override?(opts) do
             true ->
-              {node, [build_diagnostic(file, meta_line(meta), dep_name, :missing_override) | acc]}
+              {node, [build_diagnostic(file, AST.line(meta), dep_name, :missing_override) | acc]}
 
             false ->
               {node, acc}
@@ -51,7 +51,7 @@ defmodule Archdo.Rules.Boundary.UmbrellaDepConsistency do
         when is_atom(dep_name) and is_list(opts) ->
           case in_umbrella_without_override?(opts) do
             true ->
-              {node, [build_diagnostic(file, meta_line(meta), dep_name, :missing_override) | acc]}
+              {node, [build_diagnostic(file, AST.line(meta), dep_name, :missing_override) | acc]}
 
             false ->
               {node, acc}
@@ -99,10 +99,6 @@ defmodule Archdo.Rules.Boundary.UmbrellaDepConsistency do
       {:only, _} -> true
       _ -> false
     end)
-  end
-
-  defp meta_line(meta) do
-    Keyword.get(meta, :line, 0)
   end
 
   defp build_diagnostic(file, line, dep_name, :missing_override) do

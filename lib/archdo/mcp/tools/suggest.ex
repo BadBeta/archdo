@@ -1,6 +1,7 @@
 defmodule Archdo.Mcp.Tools.Suggest do
   @moduledoc false
 
+  alias Archdo.AST
   alias Archdo.Mcp.Encoder
   alias Archdo.Runner
 
@@ -58,14 +59,9 @@ defmodule Archdo.Mcp.Tools.Suggest do
     end
   end
 
-  defp path_signal?(:test, file), do: String.contains?(file, "/test/")
-
-  defp path_signal?(:liveview, file),
-    do: String.contains?(file, "_live.ex") or String.contains?(file, "/live/")
-
-  defp path_signal?(:controller, file),
-    do: String.contains?(file, "_controller.ex") or String.contains?(file, "/controllers/")
-
+  defp path_signal?(:test, file), do: AST.test_file?(file)
+  defp path_signal?(:liveview, file), do: AST.live_view_file?(file)
+  defp path_signal?(:controller, file), do: AST.controller_file?(file)
   defp path_signal?(:mix, file), do: String.contains?(file, "mix.exs")
 
   defp path_signal?(:nif, file),
@@ -86,7 +82,8 @@ defmodule Archdo.Mcp.Tools.Suggest do
   defp content_signal?(:genserver, content), do: String.contains?(content, "use GenServer")
 
   defp content_signal?(:state_machine, content),
-    do: String.contains?(content, "use GenStateMachine") or String.contains?(content, ":gen_statem")
+    do:
+      String.contains?(content, "use GenStateMachine") or String.contains?(content, ":gen_statem")
 
   defp content_signal?(:event_sourcing, content), do: String.contains?(content, "use Commanded")
   defp content_signal?(:schema, content), do: String.contains?(content, "use Ecto.Schema")

@@ -400,6 +400,18 @@ defmodule Archdo.AST do
   def short_name(mod) when is_atom(mod), do: List.last(Module.split(mod))
 
   @doc """
+  Resolve a module-name string to its existing atom. Returns `nil` when no
+  such atom exists in the BEAM atom table (avoids unbounded atom creation
+  on untrusted input). Strips/restores the `Elixir.` prefix automatically.
+  """
+  @spec safe_existing_atom(String.t()) :: module() | nil
+  def safe_existing_atom(name) when is_binary(name) do
+    String.to_existing_atom("Elixir." <> name)
+  rescue
+    ArgumentError -> nil
+  end
+
+  @doc """
   Safely concatenate alias parts into a module atom.
   Handles `__MODULE__` and other non-atom AST nodes by converting to string.
   Returns nil if the alias list is empty or entirely dynamic.

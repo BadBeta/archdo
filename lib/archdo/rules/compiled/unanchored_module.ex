@@ -11,7 +11,7 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
   # anchor set. A module that fires here is unreached even after all
   # macro expansion — strong signal it's genuinely dead.
 
-  alias Archdo.{Compiled, Diagnostic, Fix, Graph}
+  alias Archdo.{AST, Compiled, Diagnostic, Fix, Graph}
 
   @impl true
   def id, do: "1.26"
@@ -122,26 +122,13 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
   end
 
   defp registry_edges_for(ast_graph, source_atom) do
-    source_name = atom_to_module_name(source_atom)
+    source_name = AST.module_name(source_atom)
 
     ast_graph
     |> Graph.dependencies(source_name)
     |> Enum.filter(fn edge -> Map.get(edge, :type) == :registry end)
-    |> Enum.map(fn edge -> module_name_to_atom(edge.target) end)
+    |> Enum.map(fn edge -> AST.safe_existing_atom(edge.target) end)
     |> Enum.reject(&is_nil/1)
-  end
-
-  defp atom_to_module_name(atom) when is_atom(atom) do
-    case Atom.to_string(atom) do
-      "Elixir." <> name -> name
-      other -> other
-    end
-  end
-
-  defp module_name_to_atom(name) when is_binary(name) do
-    String.to_existing_atom("Elixir." <> name)
-  rescue
-    ArgumentError -> nil
   end
 
   # §§ elixir-implementing: §5.2 — multi-clause head; mirrors the
