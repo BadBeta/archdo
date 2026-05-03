@@ -14,31 +14,41 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
   def analyze(_file, _ast, _opts), do: []
 
   def analyze_graph(%Graph{} = graph, %Config{} = config) do
-    contexts = config.contexts
+    cycles_for_contexts(config.contexts, graph)
+  end
 
-    if contexts == [] do
-      []
-    else
-      cycles = Graph.find_cycles(graph, contexts)
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the empty-contexts list (no contexts → no analysis possible).
+  defp cycles_for_contexts([], _graph), do: []
 
-      Enum.map(cycles, fn cycle ->
-        cycle_str = Enum.map_join(cycle, " → ", &normalize/1)
+  defp cycles_for_contexts(contexts, graph) do
+    cycles = Graph.find_cycles(graph, contexts)
+    Enum.map(cycles, &cycle_diagnostic(&1, graph))
+  end
 
-        # Use the first module's file for location
-        first = normalize(hd(cycle))
-        second = normalize(Enum.at(cycle, 1))
+  defp cycle_diagnostic(cycle, graph) do
+    cycle_str = Enum.map_join(cycle, " → ", &normalize/1)
 
-        edge =
-          Enum.find(graph.edges, fn e ->
-            (e.source == first or String.starts_with?(e.source, first <> ".")) and
-              (e.target == second or String.starts_with?(e.target, second <> "."))
-          end)
+    # Use the first module's file for location
+    first = normalize(hd(cycle))
+    second = normalize(Enum.at(cycle, 1))
 
-        {file, line} =
-          case edge do
-            nil -> {"unknown", 0}
-            edge -> {edge.file, edge.line}
-          end
+    {file, line} = edge_location(find_cycle_edge(graph.edges, first, second))
+
+    build_cycle_diag(cycle_str, file, line)
+  end
+
+  defp find_cycle_edge(edges, first, second) do
+    Enum.find(edges, fn e ->
+      (e.source == first or String.starts_with?(e.source, first <> ".")) and
+        (e.target == second or String.starts_with?(e.target, second <> "."))
+    end)
+  end
+
+  defp edge_location(nil), do: {"unknown", 0}
+  defp edge_location(edge), do: {edge.file, edge.line}
+
+  defp build_cycle_diag(cycle_str, file, line) do
 
         Diagnostic.error("1.3",
           title: "Circular dependency between contexts",
@@ -79,8 +89,6 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
           file: file,
           line: line
         )
-      end)
-    end
   end
 
   defp normalize(mod) when is_atom(mod), do: AST.module_name(mod)

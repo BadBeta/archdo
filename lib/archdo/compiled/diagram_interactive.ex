@@ -72,25 +72,9 @@ defmodule Archdo.Compiled.DiagramInteractive do
 
       exports =
         info.exports
-        |> Enum.reject(fn {name, _} ->
-          name in [
-            :__struct__,
-            :__schema__,
-            :__changeset__,
-            :__impl__,
-            :__protocol__,
-            :__info__,
-            :__using__,
-            :behaviour_info,
-            :module_info
-          ]
-        end)
+        |> Enum.reject(&framework_export?/1)
         |> Enum.take(15)
-        |> Enum.map(fn {name, arity} ->
-          callers = Query.callers_of(graph, {mod, name, arity})
-          external = Enum.reject(callers, fn c -> elem(c.caller, 0) == mod end)
-          %{name: "#{name}/#{arity}", callers: length(external), type: "export"}
-        end)
+        |> Enum.map(&export_with_caller_count(&1, mod, graph))
 
       layer = classify_layer(mod_name, info)
 
@@ -113,6 +97,28 @@ defmodule Archdo.Compiled.DiagramInteractive do
         is_boundary: is_boundary
       }
     end)
+  end
+
+  @framework_exports MapSet.new([
+                       :__struct__,
+                       :__schema__,
+                       :__changeset__,
+                       :__impl__,
+                       :__protocol__,
+                       :__info__,
+                       :__using__,
+                       :behaviour_info,
+                       :module_info
+                     ])
+
+  defp framework_export?({name, _}), do: MapSet.member?(@framework_exports, name)
+
+  # §§ elixir-implementing: §2.1 — extracted to flatten the depth-3
+  # Enum.map(fn -> ... reject(fn c -> ...) end).
+  defp export_with_caller_count({name, arity}, mod, graph) do
+    callers = Query.callers_of(graph, {mod, name, arity})
+    external = Enum.reject(callers, fn c -> elem(c.caller, 0) == mod end)
+    %{name: "#{name}/#{arity}", callers: length(external), type: "export"}
   end
 
   defp build_edges(graph, nodes, _membership) do
