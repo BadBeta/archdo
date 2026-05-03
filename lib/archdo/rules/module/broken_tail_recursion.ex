@@ -38,30 +38,28 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
         body != nil and AST.has_self_call?(body, name, arity)
       end)
 
-    case is_recursive do
-      false ->
-        []
+    diagnose_if_recursive(is_recursive, file, name, arity, clauses)
+  end
 
-      true ->
-        breakers =
-          Enum.flat_map(clauses, fn
-            {_, _, _, _, nil} -> []
-            {_, _, _, _, body} -> find_tco_breakers(body, name, arity)
-          end)
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp diagnose_if_recursive(false, _file, _name, _arity, _clauses), do: []
 
-        case breakers do
-          [] ->
-            []
+  defp diagnose_if_recursive(true, file, name, arity, clauses) do
+    diagnose_breakers(find_breakers_in_clauses(clauses, name, arity), file, name, arity, clauses)
+  end
 
-          [first_breaker | _] ->
-            meta =
-              clauses
-              |> Enum.map(fn {_, _, m, _, _} -> m end)
-              |> List.first([])
+  defp find_breakers_in_clauses(clauses, name, arity) do
+    Enum.flat_map(clauses, &breakers_for_clause(&1, name, arity))
+  end
 
-            [build_diagnostic(file, name, arity, meta, first_breaker)]
-        end
-    end
+  defp breakers_for_clause({_, _, _, _, nil}, _name, _arity), do: []
+  defp breakers_for_clause({_, _, _, _, body}, name, arity), do: find_tco_breakers(body, name, arity)
+
+  defp diagnose_breakers([], _file, _name, _arity, _clauses), do: []
+
+  defp diagnose_breakers([first_breaker | _], file, name, arity, clauses) do
+    meta = clauses |> Enum.map(fn {_, _, m, _, _} -> m end) |> List.first([])
+    [build_diagnostic(file, name, arity, meta, first_breaker)]
   end
 
   defp find_tco_breakers(body, name, arity) do

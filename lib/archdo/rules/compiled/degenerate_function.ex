@@ -104,21 +104,7 @@ defmodule Archdo.Rules.Compiled.DegenerateFunction do
       {:call, _, {:remote, _, {:atom, _, :erlang}, {:atom, _, :error}},
        [{:tuple, _, [{:atom, _, exception}, message | _]}]}
       when exception in [RuntimeError, ArgumentError] ->
-        case extract_string(message) do
-          nil ->
-            :always_raises
-
-          msg ->
-            lower = String.downcase(msg)
-
-            cond do
-              String.contains?(lower, "not implemented") -> :not_implemented_raise
-              String.contains?(lower, "todo") -> :not_implemented_raise
-              String.contains?(lower, "not yet") -> :not_implemented_raise
-              String.contains?(lower, "stub") -> :not_implemented_raise
-              true -> :always_raises
-            end
-        end
+        classify_raise_message(extract_string(message))
 
       # Direct erlang:error call (another raise pattern)
       {:call, _, {:remote, _, {:atom, _, :erlang}, {:atom, _, :error}}, _} ->
@@ -132,6 +118,28 @@ defmodule Archdo.Rules.Compiled.DegenerateFunction do
         :other
     end
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the message string (nil means no extractable string), then on
+  # which placeholder substring is present.
+  defp classify_raise_message(nil), do: :always_raises
+
+  defp classify_raise_message(msg) do
+    classify_raise_keyword(String.downcase(msg))
+  end
+
+  @placeholder_keywords ["not implemented", "todo", "not yet", "stub"]
+
+  defp classify_raise_keyword(lower) do
+    Enum.find_value(
+      @placeholder_keywords,
+      :always_raises,
+      &if_contains(String.contains?(lower, &1))
+    )
+  end
+
+  defp if_contains(true), do: :not_implemented_raise
+  defp if_contains(false), do: nil
 
   defp extract_string({:bin, _, [{:bin_element, _, {:string, _, charlist}, _, _}]}) do
     to_string(charlist)

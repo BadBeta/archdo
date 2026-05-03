@@ -37,30 +37,27 @@ defmodule Archdo.Rules.Module.UnboundedRecursion do
         body != nil and AST.has_self_call?(body, name, arity)
       end)
 
-    case is_recursive do
-      false ->
-        []
+    diag_for_recursive(is_recursive, file, name, arity, clauses)
+  end
 
-      true ->
-        is_tail_recursive = all_tail_calls?(clauses, name, arity)
-        has_depth_param = has_depth_guard?(clauses)
-        has_size_base = has_finite_base_case?(clauses)
-        is_tree_walk = looks_like_tree_walk?(clauses)
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp diag_for_recursive(false, _file, _name, _arity, _clauses), do: []
 
-        # Non-tail + no depth guard + not a simple list pattern = risky
-        case is_tail_recursive or has_depth_param or has_size_base or is_tree_walk do
-          true ->
-            []
+  defp diag_for_recursive(true, file, name, arity, clauses) do
+    bounded? =
+      all_tail_calls?(clauses, name, arity) or
+        has_depth_guard?(clauses) or
+        has_finite_base_case?(clauses) or
+        looks_like_tree_walk?(clauses)
 
-          false ->
-            meta =
-              clauses
-              |> Enum.map(fn {_, _, m, _, _} -> m end)
-              |> List.first([])
+    diag_if_unbounded(bounded?, file, name, arity, clauses)
+  end
 
-            [build_diagnostic(file, name, arity, meta)]
-        end
-    end
+  defp diag_if_unbounded(true, _file, _name, _arity, _clauses), do: []
+
+  defp diag_if_unbounded(false, file, name, arity, clauses) do
+    meta = clauses |> Enum.map(fn {_, _, m, _, _} -> m end) |> List.first([])
+    [build_diagnostic(file, name, arity, meta)]
   end
 
   # Check if function has a depth/level/count parameter with a guard

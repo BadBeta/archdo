@@ -50,33 +50,41 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
             interface_module?(mod, config) or
             migration_module?(mod)
         end)
-        |> Enum.flat_map(fn caller_mod ->
-          caller_calls = Map.get(calls_by_module, caller_mod, [])
-
-          repo_calls =
-            Enum.filter(caller_calls, fn call ->
-              callee_mod = elem(call.callee, 0)
-              callee_fn = elem(call.callee, 1)
-
-              MapSet.member?(repo_modules, callee_mod) and
-                callee_fn in @repo_functions
-            end)
-
-          case repo_calls do
-            [] ->
-              []
-
-            _ ->
-              # Check if the caller IS a context boundary module
-              # Context modules are allowed to call Repo
-              case context_module?(caller_mod, config, project_modules) do
-                true -> []
-                false -> [build_diagnostic(caller_mod, repo_calls, config)]
-              end
-          end
-        end)
+        |> Enum.flat_map(&caller_diag(&1, calls_by_module, repo_modules, config, project_modules))
     end
   end
+
+  defp caller_diag(caller_mod, calls_by_module, repo_modules, config, project_modules) do
+    repo_calls =
+      calls_by_module
+      |> Map.get(caller_mod, [])
+      |> Enum.filter(&repo_call?(&1, repo_modules))
+
+    diag_for_repo_calls(repo_calls, caller_mod, config, project_modules)
+  end
+
+  defp repo_call?(call, repo_modules) do
+    MapSet.member?(repo_modules, elem(call.callee, 0)) and
+      elem(call.callee, 1) in @repo_functions
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the empty-list shape of repo_calls and on the context-module
+  # exemption boolean.
+  defp diag_for_repo_calls([], _caller_mod, _config, _project_modules), do: []
+
+  defp diag_for_repo_calls(repo_calls, caller_mod, config, project_modules) do
+    diag_unless_context(
+      context_module?(caller_mod, config, project_modules),
+      caller_mod,
+      repo_calls,
+      config
+    )
+  end
+
+  defp diag_unless_context(true, _caller_mod, _repo_calls, _config), do: []
+  defp diag_unless_context(false, caller_mod, repo_calls, config),
+    do: [build_diagnostic(caller_mod, repo_calls, config)]
 
   defp repo_module?(mod) do
     mod_str = Atom.to_string(mod)
