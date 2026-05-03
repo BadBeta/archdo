@@ -80,7 +80,7 @@ defmodule Archdo.Rules.Boundary.InternalStructAsEncoder do
   end
 
   defp classify_module(meta, body, file, acc) do
-    body_list = unwrap_block(body)
+    body_list = AST.body_statements(body)
 
     case has_bare_jason_encoder?(body_list) and has_defstruct?(body_list) do
       true -> [build_diagnostic(file, meta) | acc]
@@ -88,8 +88,6 @@ defmodule Archdo.Rules.Boundary.InternalStructAsEncoder do
     end
   end
 
-  defp unwrap_block({:__block__, _, items}) when is_list(items), do: items
-  defp unwrap_block(single), do: [single]
 
   # §§ elixir-implementing: §5.2, §10.4 — multi-clause head dispatch on the
   # @derive AST shape. We accept any of these as "explicit shape" (NOT bare):

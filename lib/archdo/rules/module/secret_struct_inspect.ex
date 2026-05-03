@@ -97,7 +97,7 @@ defmodule Archdo.Rules.Module.SecretStructInspect do
   end
 
   defp extract_struct_info(body) do
-    body_list = unwrap_block(body)
+    body_list = AST.body_statements(body)
 
     case Enum.find(body_list, &defstruct?/1) do
       nil ->
@@ -110,9 +110,6 @@ defmodule Archdo.Rules.Module.SecretStructInspect do
         {meta, fields, derives, has_inspect_impl?}
     end
   end
-
-  defp unwrap_block({:__block__, _, items}) when is_list(items), do: items
-  defp unwrap_block(single), do: [single]
 
   defp defstruct?({:defstruct, _, [_]}), do: true
   defp defstruct?(_), do: false

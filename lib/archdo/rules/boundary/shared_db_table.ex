@@ -66,16 +66,12 @@ defmodule Archdo.Rules.Boundary.SharedDbTable do
             _ -> false
           end),
           fn {_, meta, [table_name | _]} ->
-            table = unwrap_table(table_name)
+            table = AST.unwrap_string(table_name)
             {table, ctx, file, AST.line(meta)}
           end
         )
     end
   end
-
-  defp unwrap_table({:__block__, _, [name]}) when is_binary(name), do: name
-  defp unwrap_table(name) when is_binary(name), do: name
-  defp unwrap_table(_), do: nil
 
   defp build_diagnostic(file, line, table, contexts) do
     Diagnostic.warning("1.31",

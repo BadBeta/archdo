@@ -70,12 +70,9 @@ defmodule Archdo.Rules.EventSourcing.EventPayloadUnversioned do
   #   - it has a defstruct with a :version-family field, OR
   #   - it has a @version (or @schema_version) module attribute
   defp versioned?(body) do
-    body_list = unwrap_block(body)
+    body_list = AST.body_statements(body)
     has_version_field?(body_list) or has_version_attribute?(body_list)
   end
-
-  defp unwrap_block({:__block__, _, items}) when is_list(items), do: items
-  defp unwrap_block(single), do: [single]
 
   defp has_version_field?(body_list) do
     Enum.any?(body_list, fn
