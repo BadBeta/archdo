@@ -16,6 +16,12 @@ defmodule Archdo.AST do
   Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
   @archdo_volatility :stable
 
+  # `{:error, _}` returns are the AST helper's contract — callers (rules)
+  # decide what to do with parse failures, missing atoms, etc. Logging
+  # at this layer would be noise on every test/generated file skipped.
+  Module.register_attribute(__MODULE__, :archdo_silent_error, persist: true)
+  @archdo_silent_error true
+
   @doc """
   Check if a path is a test file (under test/ or containing /test/).
   """

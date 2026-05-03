@@ -1,6 +1,10 @@
 defmodule Archdo.Mcp.Tools.ExplainRule do
   @moduledoc false
 
+  # MCP tool returns `{:error, msg}` over JSON-RPC; client logs/displays.
+  Module.register_attribute(__MODULE__, :archdo_silent_error, persist: true)
+  @archdo_silent_error true
+
   alias Archdo.{AST, Runner}
 
   def name, do: "archdo_explain_rule"

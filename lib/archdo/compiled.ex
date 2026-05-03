@@ -23,6 +23,10 @@ defmodule Archdo.Compiled do
   Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
   @archdo_volatility :stable
 
+  # `{:error, _}` returned to caller (archdo.ex prints to stderr).
+  Module.register_attribute(__MODULE__, :archdo_silent_error, persist: true)
+  @archdo_silent_error true
+
   alias Archdo.Compiled.{Graph, Query}
 
   # §§ M-Plan19 Phase 3 — public type alias so external @spec lines

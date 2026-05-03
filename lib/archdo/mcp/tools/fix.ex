@@ -5,6 +5,10 @@ defmodule Archdo.Mcp.Tools.Fix do
   Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
   @archdo_volatility :stable
 
+  # MCP tool returns `{:error, msg}` over JSON-RPC; client logs/displays.
+  Module.register_attribute(__MODULE__, :archdo_silent_error, persist: true)
+  @archdo_silent_error true
+
   alias Archdo.Runner
 
   @fixable_rules ["6.33", "6.41", "4.27", "6.47", "6.50"]

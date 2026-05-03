@@ -5,6 +5,10 @@ defmodule Archdo.RequirementsSource do
   Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
   @archdo_volatility :stable
 
+  # `{:error, _}` returned to caller (rule decides whether file is required).
+  Module.register_attribute(__MODULE__, :archdo_silent_error, persist: true)
+  @archdo_silent_error true
+
   # §§ elixir-planning: §6 — Foundation for CE-33 (dead requirement).
   # Reads a JSON file enumerating the project's requirement IDs.
   # Two accepted shapes:

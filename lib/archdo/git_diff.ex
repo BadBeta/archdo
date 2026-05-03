@@ -9,6 +9,10 @@ defmodule Archdo.GitDiff do
   Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
   @archdo_volatility :stable
 
+  # `{:error, _}` returned to caller — Mix task / MCP tool surfaces it.
+  Module.register_attribute(__MODULE__, :archdo_silent_error, persist: true)
+  @archdo_silent_error true
+
   @doc """
   Return the list of `.ex` files changed (added/copied/modified/renamed)
   between `ref` and the working tree, scoped to `base_paths`. Files that

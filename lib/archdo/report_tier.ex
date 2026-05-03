@@ -19,6 +19,10 @@ defmodule Archdo.ReportTier do
   to see only deserialization errors, omit either to widen.
   """
 
+  # `{:error, msg}` returned to caller (Mix task prints to stderr) on bad CLI flag.
+  Module.register_attribute(__MODULE__, :archdo_silent_error, persist: true)
+  @archdo_silent_error true
+
   @type tier :: :critical | :architectural | :quality | :all
 
   @tier_severities %{

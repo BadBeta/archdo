@@ -4,6 +4,10 @@ defmodule Archdo.Mcp.SchemaValidator do
   # Validates MCP tool arguments against the tool's declared JSON Schema.
   # Makes the input_schema/0 declarations load-bearing rather than decorative.
 
+  # `{:error, msg}` on validation failure → returned to MCP client.
+  Module.register_attribute(__MODULE__, :archdo_silent_error, persist: true)
+  @archdo_silent_error true
+
   @doc """
   Validate tool arguments against the tool's input schema.
   Returns `{:ok, arguments}` on success, `{:error, message}` on validation failure.

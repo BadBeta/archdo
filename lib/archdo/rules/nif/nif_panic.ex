@@ -6,6 +6,11 @@ defmodule Archdo.Rules.NIF.NifPanic do
   Module.register_attribute(__MODULE__, :archdo_volatility, persist: true)
   @archdo_volatility :stable
 
+  # `{:error, _}` on missing/unreadable .rs file → returns `[]` findings.
+  # Logging here would be noise on every Elixir-only project.
+  Module.register_attribute(__MODULE__, :archdo_silent_error, persist: true)
+  @archdo_silent_error true
+
   alias Archdo.{Diagnostic, Fix}
 
   @impl true
