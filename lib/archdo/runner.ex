@@ -1,17 +1,7 @@
 defmodule Archdo.Runner do
   @moduledoc false
 
-  alias Archdo.{AST, Config, Diagnostic, FunctionGraph, Graph, Metrics, PluginCoverage}
-
-  alias Archdo.Rules.Boundary.{
-    ChattyBoundary,
-    FunctionBoundary,
-    ShotgunSurgery,
-    SyncContextCoupling
-  }
-
-  alias Archdo.Rules.Module.{FeatureEnvy, FunctionFanOut, MainSequenceDistance}
-  alias Archdo.Rules.Testing.{CoverageGap, TestMirrorsSource}
+  alias Archdo.{AST, Config, Diagnostic, FunctionGraph, Graph, Metrics, PluginCoverage, Rules}
 
   # §§ M-Plan7 — rules that consume project-level plug-coverage state.
   # The pre-pass only runs when at least one of these is enabled.
@@ -279,7 +269,7 @@ defmodule Archdo.Runner do
     metrics = Metrics.compute(graph, file_asts)
     file_map = build_module_file_map(file_asts)
 
-    MainSequenceDistance.analyze_project(metrics, file_map)
+    Rules.main_sequence_distance(metrics, file_map)
   end
 
   @doc """
@@ -297,23 +287,23 @@ defmodule Archdo.Runner do
 
     boundary_diagnostics =
       case contexts do
-        [_ | _] -> FunctionBoundary.analyze_project(fn_graph, contexts)
+        [_ | _] -> Rules.function_boundary(fn_graph, contexts)
         [] -> []
       end
 
-    fan_out_diagnostics = FunctionFanOut.analyze_project(fn_graph)
-    fan_in_diagnostics = ShotgunSurgery.analyze_project(fn_graph)
-    feature_envy_diagnostics = FeatureEnvy.analyze_project(fn_graph)
+    fan_out_diagnostics = Rules.function_fan_out(fn_graph)
+    fan_in_diagnostics = Rules.shotgun_surgery(fn_graph)
+    feature_envy_diagnostics = Rules.feature_envy(fn_graph)
 
     chatty_diagnostics =
       case contexts do
-        [_ | _] -> ChattyBoundary.analyze_project(fn_graph, contexts)
+        [_ | _] -> Rules.chatty_boundary(fn_graph, contexts)
         [] -> []
       end
 
     sync_coupling_diagnostics =
       case contexts do
-        [_ | _] -> SyncContextCoupling.analyze_project(fn_graph, contexts)
+        [_ | _] -> Rules.sync_context_coupling(fn_graph, contexts)
         [] -> []
       end
 
@@ -333,11 +323,11 @@ defmodule Archdo.Runner do
   @spec run_test_project_rules([String.t()], [String.t()], keyword()) ::
           [Archdo.Diagnostic.t()]
   def run_test_project_rules(source_files, test_files, opts) do
-    mirror_diagnostics = TestMirrorsSource.analyze_project(source_files, test_files)
+    mirror_diagnostics = Rules.test_mirrors_source(source_files, test_files)
 
     source_asts = parse_many(source_files)
     test_asts = parse_many(test_files)
-    coverage_diagnostics = CoverageGap.analyze_project(source_asts ++ test_asts)
+    coverage_diagnostics = Rules.coverage_gap(source_asts ++ test_asts)
 
     apply_filter(mirror_diagnostics ++ coverage_diagnostics, opts)
   end
@@ -349,7 +339,7 @@ defmodule Archdo.Runner do
   @spec coverage_matrix_report([{String.t(), Macro.t()}], [{String.t(), Macro.t()}]) ::
           iodata()
   def coverage_matrix_report(source_asts, test_asts) do
-    CoverageGap.matrix_report(source_asts ++ test_asts)
+    Rules.coverage_matrix_report(source_asts ++ test_asts)
   end
 
   defp build_module_file_map(file_asts) do
