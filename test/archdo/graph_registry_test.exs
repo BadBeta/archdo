@@ -331,4 +331,90 @@ defmodule Archdo.GraphRegistryTest do
       assert "SomeBareThing" in call_targets
     end
   end
+
+  describe "M-CG45 — defdelegate + __MODULE__ resolution" do
+    test "defdelegate to: SomeModule emits a :call edge" do
+      file_asts = [
+        parse("lib/myapp/facade.ex", ~S"""
+        defmodule MyApp.Facade do
+          alias MyApp.Worker
+          defdelegate run(arg), to: Worker
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      call_targets =
+        graph
+        |> Graph.dependencies("MyApp.Facade")
+        |> Enum.filter(&(&1.type == :call))
+        |> Enum.map(& &1.target)
+
+      assert "MyApp.Worker" in call_targets
+    end
+
+    test "defdelegate to: __MODULE__.Sub resolves to <CurrentModule>.Sub" do
+      # The biggest defdelegate blind spot: `to: __MODULE__.Diagram` is
+      # an `__aliases__` node whose first element is `{:__MODULE__, _, _}`,
+      # not an atom. The extractor must resolve __MODULE__ against the
+      # current module in scope.
+      file_asts = [
+        parse("lib/myapp/compiled.ex", ~S"""
+        defmodule MyApp.Compiled do
+          defdelegate render(graph), to: __MODULE__.Diagram
+          defdelegate generate(graph), to: __MODULE__.DiagramOTP
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      call_targets =
+        graph
+        |> Graph.dependencies("MyApp.Compiled")
+        |> Enum.filter(&(&1.type == :call))
+        |> Enum.map(& &1.target)
+        |> Enum.sort()
+
+      assert "MyApp.Compiled.Diagram" in call_targets
+      assert "MyApp.Compiled.DiagramOTP" in call_targets
+    end
+
+    test "defdelegate without to: option emits no edge" do
+      # `defdelegate name, do: body` (no `to:`) is unusual but valid;
+      # we should not crash or emit a phantom edge.
+      file_asts = [
+        parse("lib/myapp/odd.ex", ~S"""
+        defmodule MyApp.Odd do
+          alias MyApp.X
+          defdelegate run(a), to: X
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+      assert is_list(graph.edges)
+    end
+
+    test "remote call __MODULE__.Sub.func() resolves to <Current>.Sub" do
+      file_asts = [
+        parse("lib/myapp/parent.ex", ~S"""
+        defmodule MyApp.Parent do
+          def go, do: __MODULE__.Child.run()
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      call_targets =
+        graph
+        |> Graph.dependencies("MyApp.Parent")
+        |> Enum.filter(&(&1.type == :call))
+        |> Enum.map(& &1.target)
+
+      assert "MyApp.Parent.Child" in call_targets
+    end
+  end
 end
