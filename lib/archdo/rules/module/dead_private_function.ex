@@ -101,14 +101,18 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
         |> find_embed_template_globs()
         |> Enum.flat_map(fn glob -> Path.wildcard(Path.join(module_dir, glob)) end)
         |> Enum.filter(&template_file?/1)
-        |> Enum.reduce(MapSet.new(), fn template_path, acc ->
-          case File.read(template_path) do
-            {:ok, text} -> MapSet.union(acc, extract_function_refs_from_heex(text))
-            {:error, _} -> acc
-          end
-        end)
+        |> Enum.reduce(MapSet.new(), &absorb_template_refs/2)
     end
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the File.read result tag.
+  defp absorb_template_refs(template_path, acc) do
+    union_refs(File.read(template_path), acc)
+  end
+
+  defp union_refs({:ok, text}, acc), do: MapSet.union(acc, extract_function_refs_from_heex(text))
+  defp union_refs({:error, _}, acc), do: acc
 
   defp find_embed_template_globs(ast) do
     {_, globs} =
@@ -192,26 +196,27 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
     capture_calls = Regex.scan(~r/&([a-z_][a-z0-9_]*[!?]?)\/\d+/, text)
 
     (paren_calls ++ tag_calls ++ capture_calls)
-    |> Enum.reduce(MapSet.new(), fn
-      [_, name], acc ->
-        # Only consider references to atoms that already exist — i.e. names
-        # the BEAM has already seen as function names elsewhere. Unknown
-        # names can't refer to a private function we're checking, so dropping
-        # them is correct AND avoids atom-table exhaustion on adversarial
-        # source (skill: §7.7).
-        case safe_to_existing_atom(name) do
-          {:ok, atom} ->
-            Enum.reduce(0..6, acc, fn arity, set ->
-              MapSet.put(set, {atom, arity})
-            end)
+    |> Enum.reduce(MapSet.new(), &absorb_match/2)
+  end
 
-          :error ->
-            acc
-        end
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the regex-match shape ([_, name] vs other) and the
+  # safe_to_existing_atom result tag.
+  defp absorb_match([_, name], acc) do
+    # Only consider references to atoms that already exist — i.e. names
+    # the BEAM has already seen as function names elsewhere. Unknown
+    # names can't refer to a private function we're checking, so dropping
+    # them is correct AND avoids atom-table exhaustion on adversarial
+    # source (skill: §7.7).
+    absorb_atom(safe_to_existing_atom(name), acc)
+  end
 
-      _, acc ->
-        acc
-    end)
+  defp absorb_match(_other, acc), do: acc
+
+  defp absorb_atom(:error, acc), do: acc
+
+  defp absorb_atom({:ok, atom}, acc) do
+    Enum.reduce(0..6, acc, fn arity, set -> MapSet.put(set, {atom, arity}) end)
   end
 
   defp safe_to_existing_atom(name) do
