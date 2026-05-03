@@ -101,7 +101,7 @@ defmodule Archdo.Formatter do
     exit_code(errors, warnings)
   end
 
-  defp severity_sort(severity), do: Archdo.Severity.order(severity)
+  defp severity_sort(severity), do: Archdo.Diagnostic.severity_order(severity)
 
   defp severity_label(:error), do: "error"
   defp severity_label(:warning), do: "warn"

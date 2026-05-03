@@ -11,7 +11,7 @@ defmodule Archdo.Compare do
   # v1 scope: paths are user-supplied (no cohort fetching). Future:
   # cache curated cohort, ship with releases, archetype-aware default.
 
-  alias Archdo.{Diagnostic, Severity}
+  alias Archdo.Diagnostic
 
   @type aggregate :: %{{String.t(), Diagnostic.severity()} => non_neg_integer()}
 
@@ -111,7 +111,7 @@ defmodule Archdo.Compare do
   def format(%{codebases: codebases, rows: rows}) do
     sorted_rows =
       Enum.sort_by(rows, fn {{rule_id, severity}, _} ->
-        {rule_id, Severity.order(severity)}
+        {rule_id, Diagnostic.severity_order(severity)}
       end)
 
     rule_w = max_width(["rule" | Enum.map(sorted_rows, fn {{r, _}, _} -> r end)])

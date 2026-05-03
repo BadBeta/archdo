@@ -70,7 +70,16 @@ defmodule Archdo.Diagnostic do
   def builder_for(:info), do: &info/2
   def builder_for(:nitpick), do: &nitpick/2
 
-  @doc "Numeric sort key for severity: error=0, warning=1, info=2, nitpick=3."
+  @doc """
+  Numeric sort key for severity: error=0, warning=1, info=2, nitpick=3.
+
+  Lives here (with the type) rather than in `Archdo.Severity` so the
+  dependency runs Severity → Diagnostic only. A reverse edge would
+  create a cycle, since Severity already imports the type.
+  """
   @spec severity_order(severity()) :: 0..3
-  defdelegate severity_order(severity), to: Archdo.Severity, as: :order
+  def severity_order(:error), do: 0
+  def severity_order(:warning), do: 1
+  def severity_order(:info), do: 2
+  def severity_order(:nitpick), do: 3
 end

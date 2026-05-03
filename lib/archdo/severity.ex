@@ -72,17 +72,7 @@ defmodule Archdo.Severity do
   @severity_rank %{nitpick: 3, info: 2, warning: 1, error: 0}
 
   @doc """
-  Numeric ordering for severity used in sorts (`:error` is most severe = 0).
-  Used by formatters and comparators to keep severity-ordered output
-  consistent across the codebase.
-  """
-  @spec order(severity()) :: 0..3
-  def order(:error), do: 0
-  def order(:warning), do: 1
-  def order(:info), do: 2
-  def order(:nitpick), do: 3
-
-  @doc """
+  @doc \"""
   Adjust a base severity for the layer the finding lives in.
 
   Policy:
