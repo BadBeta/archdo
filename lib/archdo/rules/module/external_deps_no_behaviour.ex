@@ -39,18 +39,24 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviour do
 
   @impl true
   def analyze(file, ast, opts) do
-    classification =
-      case Keyword.get(opts, :phoenix) do
-        %{layer: _} = c -> c
-        _ -> Phoenix.classify_file(file, ast)
-      end
+    classification = resolve_classification(opts, file, ast)
+    run_analysis(exempt?(file, classification), file, ast)
+  end
 
-    case AST.test_file?(file) or adapter_file?(file) or infrastructure_file?(file) or
-           Phoenix.operational?(classification) do
-      true -> []
-      false -> find_direct_external_calls(file, ast)
+  defp resolve_classification(opts, file, ast) do
+    case Keyword.get(opts, :phoenix) do
+      %{layer: _} = c -> c
+      _ -> Phoenix.classify_file(file, ast)
     end
   end
+
+  defp exempt?(file, classification) do
+    AST.test_file?(file) or adapter_file?(file) or infrastructure_file?(file) or
+      Phoenix.operational?(classification)
+  end
+
+  defp run_analysis(true, _file, _ast), do: []
+  defp run_analysis(false, file, ast), do: find_direct_external_calls(file, ast)
 
   defp find_direct_external_calls(file, ast) do
     caller_module = AST.extract_module_name(ast)
@@ -117,11 +123,10 @@ defmodule Archdo.Rules.Module.ExternalDepsNoBehaviour do
     end)
   end
 
-  defp adapter_file?(file) do
-    String.contains?(file, "/adapters/") or String.contains?(file, "/adapter/") or
-      String.contains?(file, "/impl/") or String.contains?(file, "/clients/") or
-      String.contains?(file, "/infrastructure/")
-  end
+  @adapter_path_markers ["/adapters/", "/adapter/", "/impl/", "/clients/", "/infrastructure/"]
+
+  defp adapter_file?(file),
+    do: Enum.any?(@adapter_path_markers, &String.contains?(file, &1))
 
   defp infrastructure_file?(file) do
     String.contains?(file, "/mailer") or String.ends_with?(file, "_client.ex")
