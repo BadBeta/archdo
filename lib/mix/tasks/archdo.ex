@@ -114,7 +114,7 @@ defmodule Mix.Tasks.Archdo do
         run_init()
 
       Keyword.has_key?(opts, :diagram) ->
-        run_diagram(opts[:diagram], paths)
+        _ = run_diagram(opts[:diagram], paths)
         :ok
 
       Keyword.get(opts, :stats, false) ->
@@ -123,7 +123,7 @@ defmodule Mix.Tasks.Archdo do
         :ok
 
       Keyword.get(opts, :list_packs, false) ->
-        run_list_packs()
+        _ = run_list_packs()
         :ok
 
       Keyword.get(opts, :coverage, false) ->

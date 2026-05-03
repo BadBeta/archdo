@@ -279,7 +279,7 @@ defmodule Archdo do
   # for any function on an unloaded module — without ensure_loaded we'd
   # always fall through to the /1 branch, silently dropping opts.
   defp invoke_project_rule(rule, file_asts, opts) do
-    Code.ensure_loaded(rule)
+    _ = Code.ensure_loaded(rule)
 
     case function_exported?(rule, :analyze_project, 2) do
       true -> rule.analyze_project(file_asts, opts)
@@ -299,7 +299,7 @@ defmodule Archdo do
   # path-only project rules so threshold-aware ones (1.11 min_files)
   # can read opts[:config] without breaking older /1 rules.
   defp invoke_project_path_rule(rule, source_files, opts) do
-    Code.ensure_loaded(rule)
+    _ = Code.ensure_loaded(rule)
 
     case function_exported?(rule, :analyze_project, 2) do
       true -> rule.analyze_project(source_files, opts)

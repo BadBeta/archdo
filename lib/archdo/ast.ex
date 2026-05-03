@@ -626,8 +626,6 @@ defmodule Archdo.AST do
     Enum.reduce(args, acc, &all_module_bodies/2)
   end
 
-  defp recurse_module_children(_, acc), do: acc
-
   defp body_statements({:__block__, _, statements}), do: statements
   defp body_statements(single), do: [single]
 

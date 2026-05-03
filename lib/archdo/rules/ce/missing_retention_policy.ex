@@ -62,8 +62,6 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
       MapSet.member?(refs, last_segment(m))
   end
 
-  defp last_segment(nil), do: nil
-
   defp last_segment(module) when is_binary(module) do
     module |> String.split(".") |> List.last()
   end
@@ -120,10 +118,8 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
   defp body_statements(single), do: [single]
 
   defp user_fk?({:belongs_to, _, [name_arg | _]}) do
-    case unwrap_atom(name_arg) do
-      a when is_atom(a) -> a in @user_fk_names
-      _ -> false
-    end
+    a = unwrap_atom(name_arg)
+    a in @user_fk_names
   end
 
   defp user_fk?(_), do: false
