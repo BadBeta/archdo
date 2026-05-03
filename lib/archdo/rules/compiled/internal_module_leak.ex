@@ -4,7 +4,6 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
 
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
 
   @impl true
   def id, do: "4.25"
@@ -18,8 +17,11 @@ defmodule Archdo.Rules.Compiled.InternalModuleLeak do
   # A module used by more than this many external modules is infrastructure, not internal
   @widely_used_threshold 5
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules, calls: calls} = graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    modules = Compiled.modules(graph)
+    calls = Compiled.calls(graph)
+
     project_modules = MapSet.new(Map.keys(modules))
 
     # Identify internal modules: modules that are children of a parent module

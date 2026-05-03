@@ -13,7 +13,7 @@ defmodule Archdo.Compiled.Diagram do
   boundary modules highlighted, and cross-context dependencies as arrows.
   """
   @spec architecture_overview(CompiledGraph.t()) :: String.t()
-  def architecture_overview(%CompiledGraph{} = graph) do
+  def architecture_overview(graph) do
     contexts = Query.discover_contexts(graph)
 
     # Build context membership lookup
@@ -65,7 +65,7 @@ defmodule Archdo.Compiled.Diagram do
   internal relationships, and external entry/exit points.
   """
   @spec context_detail(CompiledGraph.t(), String.t()) :: String.t()
-  def context_detail(%CompiledGraph{} = graph, context_name) do
+  def context_detail(graph, context_name) do
     contexts = Query.discover_contexts(graph)
 
     case Enum.find(contexts, fn c -> c.context == context_name end) do
@@ -82,9 +82,9 @@ defmodule Archdo.Compiled.Diagram do
   and their call relationships. Edge thickness represents call count.
   """
   @spec module_dependencies(CompiledGraph.t()) :: String.t()
-  def module_dependencies(
-        %CompiledGraph{modules: modules, calls_by_module: calls_by_module} = _graph
-      ) do
+  def module_dependencies(graph) do
+    modules = CompiledGraph.modules(graph)
+    calls_by_module = CompiledGraph.calls_by_module(graph)
     project_modules = MapSet.new(Map.keys(modules))
 
     # Aggregate calls at module level
@@ -132,7 +132,7 @@ defmodule Archdo.Compiled.Diagram do
   which functions are called from outside, grouped by context.
   """
   @spec api_surface(CompiledGraph.t()) :: String.t()
-  def api_surface(%CompiledGraph{} = graph) do
+  def api_surface(graph) do
     contexts = Query.discover_contexts(graph)
 
     lines = ["graph LR", ""]
@@ -152,7 +152,7 @@ defmodule Archdo.Compiled.Diagram do
   transitive dependents layered by depth.
   """
   @spec blast_radius(CompiledGraph.t(), module()) :: String.t()
-  def blast_radius(%CompiledGraph{} = graph, module) do
+  def blast_radius(graph, module) do
     report = Query.blast_radius(graph, module)
     mod_name = AST.module_name(module)
 
@@ -228,10 +228,9 @@ defmodule Archdo.Compiled.Diagram do
 
   # --- Private helpers ---
 
-  defp collect_cross_context_edges(
-         %CompiledGraph{calls_by_module: calls_by_module, modules: modules},
-         context_of
-       ) do
+  defp collect_cross_context_edges(graph, context_of) do
+    calls_by_module = CompiledGraph.calls_by_module(graph)
+    modules = CompiledGraph.modules(graph)
     project_modules = MapSet.new(Map.keys(modules))
 
     calls_by_module
@@ -382,7 +381,7 @@ defmodule Archdo.Compiled.Diagram do
     # Find functions called from outside
     api_functions =
       Enum.flat_map(ctx.members, fn mod ->
-        exports = Map.get(graph.modules, mod, %{exports: []}).exports
+        exports = Map.get(CompiledGraph.modules(graph), mod, %{exports: []}).exports
 
         exports
         |> Enum.filter(fn {func, arity} ->
@@ -440,7 +439,7 @@ defmodule Archdo.Compiled.Diagram do
   - `ast_only` — declared in AST but NOT in compiled (phantom: unused alias/import, dead code path)
   """
   @spec compute_delta(CompiledGraph.t(), [String.t()]) :: delta()
-  def compute_delta(%CompiledGraph{} = compiled_graph, source_paths) do
+  def compute_delta(compiled_graph, source_paths) do
     # Build AST-level edges
     ast_edges = build_ast_edges(source_paths)
 
@@ -468,7 +467,7 @@ defmodule Archdo.Compiled.Diagram do
   - Grey dotted arrows: AST-only (phantom — unused alias/import, dead code path)
   """
   @spec dependency_delta(CompiledGraph.t(), [String.t()]) :: String.t()
-  def dependency_delta(%CompiledGraph{} = compiled_graph, source_paths) do
+  def dependency_delta(compiled_graph, source_paths) do
     delta = compute_delta(compiled_graph, source_paths)
 
     # Collect all modules involved
@@ -572,7 +571,7 @@ defmodule Archdo.Compiled.Diagram do
   source code declares but doesn't use.
   """
   @spec dependency_delta_only(CompiledGraph.t(), [String.t()]) :: String.t()
-  def dependency_delta_only(%CompiledGraph{} = compiled_graph, source_paths) do
+  def dependency_delta_only(compiled_graph, source_paths) do
     delta = compute_delta(compiled_graph, source_paths)
 
     lines = [
@@ -677,7 +676,9 @@ defmodule Archdo.Compiled.Diagram do
   end
 
   # Build set of {source_atom, target_atom} edges from compiled call graph
-  defp build_compiled_edges(%CompiledGraph{calls_by_module: calls_by_module, modules: modules}) do
+  defp build_compiled_edges(graph) do
+    calls_by_module = CompiledGraph.calls_by_module(graph)
+    modules = CompiledGraph.modules(graph)
     project_modules = MapSet.new(Map.keys(modules))
 
     calls_by_module
@@ -708,7 +709,7 @@ defmodule Archdo.Compiled.Diagram do
   Inspired by LabVIEW block diagrams and Grasshopper component graphs.
   """
   @spec dataflow_module(CompiledGraph.t(), module()) :: String.t()
-  def dataflow_module(%CompiledGraph{} = graph, module) do
+  def dataflow_module(graph, module) do
     mod_name = AST.module_name(module)
     mod_id = sanitize_id(mod_name)
 
@@ -808,7 +809,7 @@ defmodule Archdo.Compiled.Diagram do
   Uses LabVIEW-style layout: inputs left, processing center, outputs right.
   """
   @spec dataflow_context(CompiledGraph.t(), String.t()) :: String.t()
-  def dataflow_context(%CompiledGraph{} = graph, context_name) do
+  def dataflow_context(graph, context_name) do
     contexts = Query.discover_contexts(graph)
 
     case Enum.find(contexts, fn c -> c.context == context_name end) do

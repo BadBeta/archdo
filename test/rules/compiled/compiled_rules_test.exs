@@ -3,6 +3,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
 
   @moduletag :self_analysis
 
+  alias Archdo.Compiled
   alias Archdo.Compiled.Graph
 
   alias Archdo.Rules.Compiled.{
@@ -368,9 +369,9 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
 
   # --- Graph blast_radius/2 ---
 
-  describe "Graph.blast_radius/2" do
+  describe "Compiled.blast_radius/2" do
     test "computes blast radius for a module", %{graph: graph} do
-      report = Graph.blast_radius(graph, Archdo.AST)
+      report = Compiled.blast_radius(graph, Archdo.AST)
       assert report.module == Archdo.AST
       assert report.total_affected > 10
       assert report.max_depth > 0
@@ -379,7 +380,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     end
 
     test "transitive dependents are grouped by depth", %{graph: graph} do
-      report = Graph.blast_radius(graph, Archdo.AST)
+      report = Compiled.blast_radius(graph, Archdo.AST)
 
       Enum.each(report.transitive_dependents, fn {depth, mods} ->
         assert is_integer(depth)
@@ -394,7 +395,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
 
   describe "Graph.extract_function_clauses/1" do
     test "extracts clause info from beam files", %{graph: graph} do
-      clauses_map = Graph.extract_function_clauses(graph.beam_dir)
+      clauses_map = Compiled.extract_function_clauses(Compiled.beam_dir(graph))
       assert is_map(clauses_map)
       assert map_size(clauses_map) > 0
 
@@ -408,7 +409,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     end
 
     test "classifies return shapes", %{graph: graph} do
-      clauses_map = Graph.extract_function_clauses(graph.beam_dir)
+      clauses_map = Compiled.extract_function_clauses(Compiled.beam_dir(graph))
       diag_fns = Map.get(clauses_map, Archdo.Diagnostic, [])
       builder = Enum.find(diag_fns, fn f -> f.name == :builder_for and f.arity == 1 end)
 
@@ -582,11 +583,11 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     end
   end
 
-  # --- Graph.discover_contexts/1 ---
+  # --- Compiled.discover_contexts/1 ---
 
-  describe "Graph.discover_contexts/1" do
+  describe "Compiled.discover_contexts/1" do
     test "discovers contexts from Archdo's own beam files", %{graph: graph} do
-      contexts = Graph.discover_contexts(graph)
+      contexts = Compiled.discover_contexts(graph)
       assert is_list(contexts)
       assert contexts != []
 
@@ -600,14 +601,14 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     end
 
     test "finds the Rules context", %{graph: graph} do
-      contexts = Graph.discover_contexts(graph)
+      contexts = Compiled.discover_contexts(graph)
       rules_ctx = Enum.find(contexts, fn c -> c.context == "Archdo.Rules" end)
       assert rules_ctx != nil
       assert length(rules_ctx.members) > 100
     end
 
     test "detects boundary modules when they exist", %{graph: graph} do
-      contexts = Graph.discover_contexts(graph)
+      contexts = Compiled.discover_contexts(graph)
       compiled_ctx = Enum.find(contexts, fn c -> c.context == "Archdo.Compiled" end)
 
       case compiled_ctx do
@@ -617,7 +618,7 @@ defmodule Archdo.Rules.Compiled.CompiledRulesTest do
     end
 
     test "computes cohesion and coupling as ratios between 0 and 1", %{graph: graph} do
-      contexts = Graph.discover_contexts(graph)
+      contexts = Compiled.discover_contexts(graph)
 
       Enum.each(contexts, fn ctx ->
         assert ctx.cohesion >= 0.0 and ctx.cohesion <= 1.0

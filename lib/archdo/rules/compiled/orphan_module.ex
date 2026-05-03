@@ -4,7 +4,6 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
 
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
 
   @impl true
   def id, do: "1.25"
@@ -18,9 +17,10 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
   @doc """
   Compiled-mode analysis: detect modules with no connections to the rest of the project.
   """
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{} = graph) do
-    graph.modules
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    graph
+    |> Compiled.modules()
     |> Map.keys()
     |> Enum.filter(fn mod ->
       orphan?(graph, mod) and
@@ -31,15 +31,15 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
     |> Enum.map(&build_diagnostic/1)
   end
 
-  defp orphan?(%Graph{} = graph, mod) do
+  defp orphan?(graph, mod) do
     Compiled.module_dependencies(graph, mod) == [] and
       Compiled.module_dependents(graph, mod) == []
   end
 
   # Behaviour definitions are implemented by other modules, not called directly.
   # They define callbacks but may have zero function-level calls.
-  defp behaviour_definition?(mod, %Graph{modules: modules}) do
-    case Map.get(modules, mod) do
+  defp behaviour_definition?(mod, graph) do
+    case Map.get(Compiled.modules(graph), mod) do
       %{callback_fns: [_ | _]} -> true
       _ -> false
     end

@@ -21,7 +21,10 @@ defmodule Archdo.Compiled.OTPTopology do
   Returns a list of process descriptors with messaging relationships.
   """
   @spec extract(Graph.t()) :: [process_info()]
-  def extract(%Graph{modules: modules, calls: calls} = _graph) do
+  def extract(graph) do
+    modules = Graph.modules(graph)
+    calls = Graph.calls(graph)
+
     # Identify process modules by behaviour
     process_modules =
       modules

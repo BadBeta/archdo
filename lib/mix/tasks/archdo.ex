@@ -68,14 +68,6 @@ defmodule Mix.Tasks.Archdo do
 
   alias Archdo.{AST, Compare, Compiled, Formatter, Rule, Runner, Stats}
 
-  alias Archdo.Compiled.{
-    Diagram,
-    DiagramInteractive,
-    DiagramOTP,
-    DiagramSVG,
-    DiagramSystem
-  }
-
   @impl Mix.Task
   def run(args) do
     {opts, _, _} =
@@ -292,7 +284,7 @@ defmodule Mix.Tasks.Archdo do
       {:ok, graph} ->
         case diagram_type do
           "interactive" ->
-            html = DiagramInteractive.generate(graph)
+            html = Compiled.interactive_html(graph)
             File.write!("archdo_interactive.html", html)
             IO.puts("Interactive diagram written to archdo_interactive.html")
             System.cmd("xdg-open", ["archdo_interactive.html"], stderr_to_stdout: true)
@@ -308,62 +300,62 @@ defmodule Mix.Tasks.Archdo do
   end
 
   defp generate_diagram(graph, "overview"),
-    do: Diagram.architecture_overview(graph)
+    do: Compiled.architecture_overview(graph)
 
-  defp generate_diagram(graph, "modules"), do: Diagram.module_dependencies(graph)
-  defp generate_diagram(graph, "api"), do: Diagram.api_surface(graph)
+  defp generate_diagram(graph, "modules"), do: Compiled.module_dependencies(graph)
+  defp generate_diagram(graph, "api"), do: Compiled.api_surface(graph)
 
   defp generate_diagram(graph, "delta"),
-    do: Diagram.dependency_delta(graph, ["lib"])
+    do: Compiled.dependency_delta(graph, ["lib"])
 
   defp generate_diagram(graph, "delta-only"),
-    do: Diagram.dependency_delta_only(graph, ["lib"])
+    do: Compiled.dependency_delta_only(graph, ["lib"])
 
   defp generate_diagram(graph, "dataflow:" <> module_name) do
     case existing_module_atom(module_name) do
-      {:ok, mod} -> Diagram.dataflow_module(graph, mod)
+      {:ok, mod} -> Compiled.dataflow_module(graph, mod)
       :error -> "Unknown module: #{module_name}"
     end
   end
 
   defp generate_diagram(graph, "dataflow-context:" <> context_name) do
-    Diagram.dataflow_context(graph, context_name)
+    Compiled.dataflow_context(graph, context_name)
   end
 
   # SVG variants — proper port-based LabVIEW/Grasshopper-style diagrams
   defp generate_diagram(graph, "svg:" <> module_name) do
     case existing_module_atom(module_name) do
-      {:ok, mod} -> DiagramSVG.module_dataflow(graph, mod)
+      {:ok, mod} -> Compiled.module_dataflow_svg(graph, mod)
       :error -> "Unknown module: #{module_name}"
     end
   end
 
   defp generate_diagram(graph, "svg-context:" <> context_name) do
-    DiagramSVG.context_dataflow(graph, context_name)
+    Compiled.context_dataflow_svg(graph, context_name)
   end
 
   # OTP diagrams
   defp generate_diagram(graph, "otp") do
-    DiagramOTP.supervision_diagram(graph)
+    Compiled.supervision_diagram(graph)
   end
 
   defp generate_diagram(graph, "otp-messages") do
-    DiagramOTP.messaging_diagram(graph)
+    Compiled.messaging_diagram(graph)
   end
 
   defp generate_diagram(graph, "system") do
-    DiagramSystem.system_diagram(graph)
+    Compiled.system_diagram(graph)
   end
 
   defp generate_diagram(graph, "blast:" <> module_name) do
     case existing_module_atom(module_name) do
-      {:ok, mod} -> Diagram.blast_radius(graph, mod)
+      {:ok, mod} -> Compiled.blast_radius_diagram(graph, mod)
       :error -> "Unknown module: #{module_name}"
     end
   end
 
   defp generate_diagram(graph, "context:" <> context_name) do
-    Diagram.context_detail(graph, context_name)
+    Compiled.context_detail(graph, context_name)
   end
 
   defp generate_diagram(_graph, other) do

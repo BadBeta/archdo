@@ -1,7 +1,7 @@
 defmodule Archdo.Mcp.Tools.Diagram do
   @moduledoc false
 
-  alias Archdo.Compiled.{Diagram, DiagramSystem}
+  alias Archdo.Compiled
 
   def name, do: "archdo_diagram"
 
@@ -55,22 +55,22 @@ defmodule Archdo.Mcp.Tools.Diagram do
   def call(_), do: {:error, "Missing required arguments: project_path, type"}
 
   defp generate(graph, "overview", _),
-    do: {:ok, Diagram.architecture_overview(graph)}
+    do: {:ok, Compiled.architecture_overview(graph)}
 
   defp generate(graph, "modules", _),
-    do: {:ok, Diagram.module_dependencies(graph)}
+    do: {:ok, Compiled.module_dependencies(graph)}
 
   defp generate(graph, "delta", _),
-    do: {:ok, Diagram.dependency_delta(graph, ["lib"])}
+    do: {:ok, Compiled.dependency_delta(graph, ["lib"])}
 
   defp generate(graph, "system", _),
-    do: {:ok, DiagramSystem.system_diagram(graph)}
+    do: {:ok, Compiled.system_diagram(graph)}
 
   defp generate(_graph, "context", nil),
     do: {:error, "context type requires a 'target' argument (context name)"}
 
   defp generate(graph, "context", name),
-    do: {:ok, Diagram.context_detail(graph, name)}
+    do: {:ok, Compiled.context_detail(graph, name)}
 
   defp generate(_graph, "blast", nil),
     do: {:error, "blast type requires a 'target' argument (module name)"}
@@ -82,7 +82,7 @@ defmodule Archdo.Mcp.Tools.Diagram do
     # `to_existing_atom` raises ArgumentError for unknown modules; we
     # catch and convert to an explicit error.
     case existing_module_atom(name) do
-      {:ok, module} -> {:ok, Diagram.blast_radius(graph, module)}
+      {:ok, module} -> {:ok, Compiled.blast_radius_diagram(graph, module)}
       :error -> {:error, "Unknown module: #{name}"}
     end
   end

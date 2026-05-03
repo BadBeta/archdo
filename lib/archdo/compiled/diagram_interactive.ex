@@ -11,7 +11,7 @@ defmodule Archdo.Compiled.DiagramInteractive do
   Detail level: click a context to zoom in and see individual modules and wires.
   Boundary-crossing connections are highlighted in red.
   """
-  def generate(%Graph{} = graph) do
+  def generate(graph) do
     contexts = Query.discover_contexts(graph)
     graph_json = build_graph_json(graph, contexts)
 
@@ -46,7 +46,7 @@ defmodule Archdo.Compiled.DiagramInteractive do
   end
 
   defp build_nodes(graph, membership) do
-    graph.modules
+    Graph.modules(graph)
     |> Enum.filter(fn {mod, _} -> elixir_module?(mod) end)
     |> Enum.map(fn {mod, info} ->
       mod_name = AST.module_name(mod)
@@ -119,7 +119,8 @@ defmodule Archdo.Compiled.DiagramInteractive do
     node_ids = MapSet.new(Enum.map(nodes, & &1.id))
     node_ctx = Map.new(nodes, fn n -> {n.id, n.context} end)
 
-    graph.calls
+    graph
+    |> Graph.calls()
     |> Enum.map(fn call ->
       caller_mod = AST.module_name(elem(call.caller, 0))
       callee_mod = AST.module_name(elem(call.callee, 0))

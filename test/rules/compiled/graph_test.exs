@@ -3,6 +3,7 @@ defmodule Archdo.Compiled.GraphTest do
 
   @moduletag :self_analysis
 
+  alias Archdo.Compiled
   alias Archdo.Compiled.{Diagram, Graph}
 
   describe "build/1" do
@@ -49,7 +50,7 @@ defmodule Archdo.Compiled.GraphTest do
     @tag :self_analysis
     test "finds callers of a function", %{graph: graph} do
       # Runner.analyze should be called from somewhere
-      callers = Graph.callers_of(graph, {Archdo.Runner, :analyze, 2})
+      callers = Compiled.callers_of(graph, {Archdo.Runner, :analyze, 2})
       # May or may not have callers depending on project structure
       assert is_list(callers)
     end
@@ -63,7 +64,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "finds module dependencies", %{graph: graph} do
-      deps = Graph.module_dependencies(graph, Archdo.Runner)
+      deps = Compiled.module_dependencies(graph, Archdo.Runner)
       assert is_list(deps)
       # Runner depends on AST, Config, Diagnostic, Graph
       assert Archdo.AST in deps
@@ -78,7 +79,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "finds module dependents", %{graph: graph} do
-      dependents = Graph.module_dependents(graph, Archdo.AST)
+      dependents = Compiled.module_dependents(graph, Archdo.AST)
       assert is_list(dependents)
       assert length(dependents) > 5
     end
@@ -92,7 +93,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "finds dead functions", %{graph: graph} do
-      dead = Graph.dead_functions(graph)
+      dead = Compiled.dead_functions(graph)
       assert is_list(dead)
 
       # Each dead function has the expected shape
@@ -106,7 +107,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "does not flag framework callbacks", %{graph: graph} do
-      dead = Graph.dead_functions(graph)
+      dead = Compiled.dead_functions(graph)
       dead_fns = Enum.map(dead, & &1.function)
 
       refute :init in dead_fns
@@ -123,7 +124,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "returns list of SCCs", %{graph: graph} do
-      sccs = Graph.strongly_connected_components(graph)
+      sccs = Compiled.strongly_connected_components(graph)
       assert is_list(sccs)
 
       # Each SCC has 2+ members (singles are filtered)
@@ -141,7 +142,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "counts external callers per export", %{graph: graph} do
-      usage = Graph.external_usage(graph, Archdo.AST)
+      usage = Compiled.external_usage(graph, Archdo.AST)
       assert is_map(usage)
 
       # AST is widely used — some functions should have external callers
@@ -158,7 +159,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "returns modules the given module calls", %{graph: graph} do
-      entries = Graph.knows_about(graph, Archdo.Runner)
+      entries = Compiled.knows_about(graph, Archdo.Runner)
       assert is_list(entries)
       assert entries != []
 
@@ -170,7 +171,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "entries are sorted by call count descending", %{graph: graph} do
-      entries = Graph.knows_about(graph, Archdo.Runner)
+      entries = Compiled.knows_about(graph, Archdo.Runner)
       counts = Enum.map(entries, & &1.call_count)
       assert counts == Enum.sort(counts, :desc)
     end
@@ -184,13 +185,13 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "returns modules that call the given module", %{graph: graph} do
-      entries = Graph.known_by(graph, Archdo.AST)
+      entries = Compiled.known_by(graph, Archdo.AST)
       assert length(entries) > 10
     end
 
     @tag :self_analysis
     test "each entry lists which functions are called", %{graph: graph} do
-      [entry | _] = Graph.known_by(graph, Archdo.AST)
+      [entry | _] = Compiled.known_by(graph, Archdo.AST)
       assert is_atom(entry.module)
       assert is_list(entry.functions_called)
       assert entry.call_count > 0
@@ -205,7 +206,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "returns contexts the given context depends on", %{graph: graph} do
-      entries = Graph.context_knows_about(graph, "Archdo.Rules")
+      entries = Compiled.context_knows_about(graph, "Archdo.Rules")
       assert is_list(entries)
       assert entries != []
 
@@ -225,7 +226,7 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "returns contexts that depend on the given context", %{graph: graph} do
-      entries = Graph.context_known_by(graph, "Archdo.Compiled")
+      entries = Compiled.context_known_by(graph, "Archdo.Compiled")
       assert is_list(entries)
 
       Enum.each(entries, fn e ->
@@ -244,14 +245,14 @@ defmodule Archdo.Compiled.GraphTest do
 
     @tag :self_analysis
     test "discovers contexts automatically", %{graph: graph} do
-      contexts = Graph.discover_contexts(graph)
+      contexts = Compiled.discover_contexts(graph)
       assert is_list(contexts)
       assert length(contexts) >= 2
     end
 
     @tag :self_analysis
     test "each context has required fields", %{graph: graph} do
-      [ctx | _] = Graph.discover_contexts(graph)
+      [ctx | _] = Compiled.discover_contexts(graph)
       assert is_binary(ctx.context)
       assert is_list(ctx.members)
       assert is_float(ctx.cohesion)

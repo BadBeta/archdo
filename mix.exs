@@ -8,7 +8,7 @@ defmodule Archdo.MixProject do
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      dialyzer: [plt_add_apps: [:mix], flags: [:unmatched_returns, :no_opaque]],
+      dialyzer: [plt_add_apps: [:mix], flags: [:unmatched_returns]],
       elixirc_paths: elixirc_paths(Mix.env()),
       description:
         "Architectural quality checker for Elixir — checks OTP patterns, boundaries, and test architecture",

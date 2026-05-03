@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Compiled.TestOnlyPublic do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.Compiled.Graph
+  alias Archdo.Compiled
   alias Archdo.{Diagnostic, Fix}
 
   @impl true
@@ -14,8 +14,11 @@ defmodule Archdo.Rules.Compiled.TestOnlyPublic do
   @impl true
   def analyze(_file, _ast, _opts), do: []
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules, calls_by_callee: callee_index}) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    modules = Compiled.modules(graph)
+    callee_index = Compiled.calls_by_callee(graph)
+
     # Find functions that are public, have callers, but ALL callers are test modules
     modules
     |> Enum.filter(fn {mod, _info} -> not test_module?(mod) end)

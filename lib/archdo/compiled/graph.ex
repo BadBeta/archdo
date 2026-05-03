@@ -32,19 +32,25 @@ defmodule Archdo.Compiled.Graph do
           callback_fns: [{atom(), non_neg_integer()}]
         }
 
-  @type t :: %__MODULE__{
-          modules: %{module() => module_info()},
-          calls: [call()],
-          calls_by_caller: %{mfa_tuple() => [call()]},
-          calls_by_callee: %{mfa_tuple() => [call()]},
-          calls_by_module: %{module() => [call()]},
-          protocol_impls: %{module() => [module()]},
-          struct_expansions: [
-            %{user_module: module(), struct_module: module(), line: non_neg_integer()}
-          ],
-          app_name: String.t() | nil,
-          beam_dir: String.t() | nil
-        }
+  # §§ M-Plan19 Phase 3 — opaque per elixir-planning §4.12. External
+  # callers must use accessor functions on `Archdo.Compiled` (calls/1,
+  # modules/1, calls_by_module/1, calls_by_callee/1, calls_by_caller/1,
+  # beam_dir/1). Dialyzer warns on any external pattern-match on these
+  # fields. The struct shape is private — future swaps (ETS-backed
+  # graph, partial graph, remote graph) won't break callers.
+  @opaque t :: %__MODULE__{
+            modules: %{module() => module_info()},
+            calls: [call()],
+            calls_by_caller: %{mfa_tuple() => [call()]},
+            calls_by_callee: %{mfa_tuple() => [call()]},
+            calls_by_module: %{module() => [call()]},
+            protocol_impls: %{module() => [module()]},
+            struct_expansions: [
+              %{user_module: module(), struct_module: module(), line: non_neg_integer()}
+            ],
+            app_name: String.t() | nil,
+            beam_dir: String.t() | nil
+          }
 
   defstruct modules: %{},
             calls: [],
@@ -55,6 +61,45 @@ defmodule Archdo.Compiled.Graph do
             struct_expansions: [],
             app_name: nil,
             beam_dir: nil
+
+  # §§ M-Plan19 Phase 3 — accessor functions per elixir-planning §4.12.
+  # Live on Graph (the type's defining module) because @opaque opacity
+  # is per-module: only Graph may destructure its own struct. The
+  # `Archdo.Compiled` facade re-exports these via defdelegate.
+
+  @spec calls(t()) :: [call()]
+  def calls(%__MODULE__{calls: calls}), do: calls
+
+  @spec modules(t()) :: %{module() => module_info()}
+  def modules(%__MODULE__{modules: modules}), do: modules
+
+  @spec calls_by_module(t()) :: %{module() => [call()]}
+  def calls_by_module(%__MODULE__{calls_by_module: by_mod}), do: by_mod
+
+  @spec calls_by_callee(t()) :: %{mfa_tuple() => [call()]}
+  def calls_by_callee(%__MODULE__{calls_by_callee: by_callee}), do: by_callee
+
+  @spec calls_by_caller(t()) :: %{mfa_tuple() => [call()]}
+  def calls_by_caller(%__MODULE__{calls_by_caller: by_caller}), do: by_caller
+
+  @spec beam_dir(t()) :: String.t() | nil
+  def beam_dir(%__MODULE__{beam_dir: dir}), do: dir
+
+  @spec protocol_impls(t()) :: %{module() => [module()]}
+  def protocol_impls(%__MODULE__{protocol_impls: impls}), do: impls
+
+  @doc """
+  Stamp the graph with project-level metadata after the build.
+  Lives here so callers don't need to destructure the opaque struct.
+  """
+  @spec with_metadata(t(), keyword()) :: t()
+  def with_metadata(%__MODULE__{} = graph, opts) do
+    %{
+      graph
+      | app_name: Keyword.get(opts, :app_name, graph.app_name),
+        beam_dir: Keyword.get(opts, :beam_dir, graph.beam_dir)
+    }
+  end
 
   @doc """
   Build a complete interaction graph from compiled beam files in the given directory.

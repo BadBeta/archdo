@@ -3,7 +3,7 @@ defmodule Archdo.Rules.Compiled.WeakDependency do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
-  alias Archdo.Compiled.Graph
+  alias Archdo.Compiled
 
   @impl true
   def id, do: "4.23"
@@ -18,8 +18,11 @@ defmodule Archdo.Rules.Compiled.WeakDependency do
   @max_used_functions 2
   @min_target_exports 10
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules, calls_by_module: calls_by_module}) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    modules = Compiled.modules(graph)
+    calls_by_module = Compiled.calls_by_module(graph)
+
     Enum.flat_map(modules, fn {caller_mod, _info} ->
       caller_calls = Map.get(calls_by_module, caller_mod, [])
 

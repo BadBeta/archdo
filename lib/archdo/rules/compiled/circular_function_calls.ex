@@ -4,7 +4,6 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
 
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
 
   @impl true
   def id, do: "1.19"
@@ -15,8 +14,8 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
   @impl true
   def analyze(_file, _ast, _opts), do: []
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{} = graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
     graph
     |> Compiled.strongly_connected_components()
     |> Enum.filter(&cross_module_cycle?/1)

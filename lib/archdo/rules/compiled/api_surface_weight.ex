@@ -4,7 +4,6 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
 
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
   alias Archdo.Rules.Compiled.Helpers
 
   @impl true
@@ -21,8 +20,10 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
   # Minimum exports to consider — don't flag small modules
   @min_exports 8
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules} = graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    modules = Compiled.modules(graph)
+
     Enum.flat_map(modules, fn {module, info} ->
       total_exports = length(info.exports)
 

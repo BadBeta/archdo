@@ -4,7 +4,6 @@ defmodule Archdo.Rules.Compiled.ChangeRisk do
 
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
 
   @impl true
   def id, do: "1.20"
@@ -20,8 +19,10 @@ defmodule Archdo.Rules.Compiled.ChangeRisk do
   # Flag modules where depth exceeds this
   @depth_threshold 3
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules} = graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    modules = Compiled.modules(graph)
+
     modules
     |> Map.keys()
     |> Enum.map(fn mod -> Compiled.blast_radius(graph, mod) end)

@@ -4,7 +4,6 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
 
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
 
   @impl true
   def id, do: "1.23"
@@ -21,8 +20,8 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
   @leak_threshold 0.5
   # Context with cohesion below this is flagged
   @cohesion_threshold 0.3
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{} = graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
     contexts = Compiled.discover_contexts(graph)
 
     context_diagnostics =

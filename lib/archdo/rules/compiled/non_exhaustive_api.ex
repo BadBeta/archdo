@@ -4,7 +4,6 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
 
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
   alias Archdo.Rules.Compiled.Helpers
 
   @impl true
@@ -19,8 +18,15 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
   # Minimum clauses to consider — single-clause functions don't need a catch-all
   @min_clauses 2
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{beam_dir: beam_dir}) when is_binary(beam_dir) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    case Compiled.beam_dir(graph) do
+      beam_dir when is_binary(beam_dir) -> scan_beam_dir(beam_dir)
+      _ -> []
+    end
+  end
+
+  defp scan_beam_dir(beam_dir) do
     beam_dir
     |> Compiled.extract_function_clauses()
     |> Enum.flat_map(fn {module, functions} ->
@@ -37,8 +43,6 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
       end)
     end)
   end
-
-  def analyze_compiled(_graph), do: []
 
   defp build_diagnostic(module, fn_info) do
     mod_name = AST.module_name(module)

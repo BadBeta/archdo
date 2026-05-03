@@ -45,7 +45,7 @@ defmodule Archdo.Compiled.DiagramOTP do
   mailboxes and message-passing relationships.
   """
   @spec supervision_diagram(Graph.t()) :: String.t()
-  def supervision_diagram(%Graph{} = graph) do
+  def supervision_diagram(graph) do
     topology = OTPTopology.extract(graph)
 
     case topology do
@@ -74,7 +74,7 @@ defmodule Archdo.Compiled.DiagramOTP do
   between processes (no supervision tree structure).
   """
   @spec messaging_diagram(Graph.t()) :: String.t()
-  def messaging_diagram(%Graph{} = graph) do
+  def messaging_diagram(graph) do
     topology = OTPTopology.extract(graph)
 
     case topology do

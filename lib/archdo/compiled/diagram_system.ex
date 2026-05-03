@@ -53,7 +53,8 @@ defmodule Archdo.Compiled.DiagramSystem do
   state machines, and external/internal tool connections.
   """
   @spec system_diagram(Graph.t()) :: String.t()
-  def system_diagram(%Graph{modules: modules} = graph) do
+  def system_diagram(graph) do
+    modules = Graph.modules(graph)
     # Classify all modules into architectural layers
     layers = classify_into_layers(modules, graph)
 
@@ -143,8 +144,13 @@ defmodule Archdo.Compiled.DiagramSystem do
 
   # --- State machine extraction ---
 
-  defp extract_state_machines(%Graph{modules: modules, beam_dir: beam_dir})
-       when is_binary(beam_dir) do
+  defp extract_state_machines(graph) do
+    modules = Graph.modules(graph)
+    beam_dir = Graph.beam_dir(graph)
+    do_extract_state_machines(modules, beam_dir)
+  end
+
+  defp do_extract_state_machines(modules, beam_dir) when is_binary(beam_dir) do
     # Find modules that look like state machines:
     # 1. Modules using gen_statem
     # 2. Modules with multiple clauses dispatching on atom state names
@@ -173,7 +179,7 @@ defmodule Archdo.Compiled.DiagramSystem do
     |> Map.new()
   end
 
-  defp extract_state_machines(_graph), do: %{}
+  defp do_extract_state_machines(_modules, _beam_dir), do: %{}
 
   defp extract_states_from_clauses(fns) do
     # Find functions where the first argument is a literal atom in multiple clauses
@@ -230,8 +236,8 @@ defmodule Archdo.Compiled.DiagramSystem do
   @repo_fns [:get, :get!, :all, :insert, :update, :delete, :one, :transaction]
   @file_fns [:read, :read!, :write, :write!, :ls, :mkdir_p]
 
-  defp detect_inside_tools(_modules, %Graph{calls: calls}) do
-    calls
+  defp detect_inside_tools(_modules, graph) do
+    Graph.calls(graph)
     |> Enum.reduce(MapSet.new(), fn call, acc ->
       callee_mod = elem(call.callee, 0)
       callee_fn = elem(call.callee, 1)
@@ -443,7 +449,7 @@ defmodule Archdo.Compiled.DiagramSystem do
 
     # Title
     title = [
-      ~s[<text x="#{@margin}" y="18" fill="#{@text}" font-size="13" font-weight="600" font-family="monospace">System Architecture — #{map_size(graph.modules)} modules</text>]
+      ~s[<text x="#{@margin}" y="18" fill="#{@text}" font-size="13" font-weight="600" font-family="monospace">System Architecture — #{map_size(Graph.modules(graph))} modules</text>]
     ]
 
     # Arrowhead def

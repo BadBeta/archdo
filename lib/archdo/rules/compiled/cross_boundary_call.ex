@@ -3,7 +3,7 @@ defmodule Archdo.Rules.Compiled.CrossBoundaryCall do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Config, Diagnostic, Fix}
-  alias Archdo.Compiled.Graph
+  alias Archdo.Compiled
 
   @impl true
   def id, do: "1.21"
@@ -14,8 +14,10 @@ defmodule Archdo.Rules.Compiled.CrossBoundaryCall do
   @impl true
   def analyze(_file, _ast, _opts), do: []
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{calls: calls, modules: modules} = _graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    calls = Compiled.calls(graph)
+    modules = Compiled.modules(graph)
     config = Config.load()
     contexts = config.contexts
 

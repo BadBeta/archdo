@@ -500,6 +500,41 @@ rule function heads, plus builder helpers (`extract_function_clauses`,
 `collect_exports_from_forms`) called from rules that genuinely need
 the build path. Phase 2 below addresses both.
 
+**Phase 3 (2026-05-03 SHIPPED):** Boundary opacity per the new
+`elixir-planning §4.12` skill guidance. `Compiled.Graph` marked
+`@opaque t :: %__MODULE__{...}`; accessor functions added to Graph
+(`calls/1`, `modules/1`, `calls_by_module/1`, `calls_by_callee/1`,
+`calls_by_caller/1`, `beam_dir/1`, `protocol_impls/1`,
+`with_metadata/2` setter); `Compiled` facade defdelegates them all
+plus 16 diagram-rendering operations from the internal `Diagram*`
+modules (architecture_overview, context_detail, api_surface,
+dependency_delta, dataflow_module, dataflow_context, system_diagram,
+supervision_diagram, messaging_diagram, interactive_html, etc.).
+Public type alias `Compiled.t :: Graph.t()` so external `@spec` lines
+say `Compiled.t()` without referencing the internal module.
+
+Migration: 11 rule heads dropped `%Graph{...}` destructure for
+accessor calls; 5 internal Compiled modules (Query, Diagram,
+DiagramSVG, DiagramOTP, DiagramSystem, DiagramInteractive,
+OTPTopology) refactored to use Graph accessors; Mix task and MCP
+diagram tools converted from internal-module aliases to Compiled
+facade calls. `:no_opaque` removed from mix.exs dialyzer flags so
+opacity is enforced project-wide.
+
+**Field check (mix archdo --stats):**
+- Compiled context leak count: 27 → 0 (Leaks column empty)
+- Total project boundary leaks: 37 → 10
+- Test suite: 1469 / 0 failures / 129 excluded
+- Dialyzer: zero `Compiled.Graph`-related opacity violations
+  (remaining 55 are pre-existing MapSet false-positives)
+
+The Compiled context is now substitutable: future swaps of the
+underlying graph representation (ETS-backed, remote service,
+partial/lazy graph, CRDT) won't break a single rule. Honest
+boundary metric. Mockable via behaviour over `Compiled.t()`.
+
+---
+
 **Phase 2 (2026-05-03 SHIPPED):** The 15 query function bodies physically
 moved from `Compiled.Graph` to `Compiled.Query`, including all
 private helpers (Tarjan SCC, walk_dependents, compute_risk_score,

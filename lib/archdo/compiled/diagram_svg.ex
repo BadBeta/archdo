@@ -50,13 +50,13 @@ defmodule Archdo.Compiled.DiagramSVG do
   LabVIEW-style component with input/output ports and typed wires.
   """
   @spec module_dataflow(Graph.t(), module()) :: String.t()
-  def module_dataflow(%Graph{} = graph, module) do
+  def module_dataflow(graph, module) do
     incoming = Query.known_by(graph, module)
     outgoing = Query.knows_about(graph, module)
 
     # Get export info
     clauses_map =
-      case graph.beam_dir do
+      case Graph.beam_dir(graph) do
         nil -> %{}
         dir -> Graph.extract_function_clauses(dir)
       end
@@ -132,7 +132,7 @@ defmodule Archdo.Compiled.DiagramSVG do
   internal structure with typed connections.
   """
   @spec context_dataflow(Graph.t(), String.t()) :: String.t()
-  def context_dataflow(%Graph{} = graph, context_name) do
+  def context_dataflow(graph, context_name) do
     contexts = Query.discover_contexts(graph)
 
     case Enum.find(contexts, fn c -> c.context == context_name end) do

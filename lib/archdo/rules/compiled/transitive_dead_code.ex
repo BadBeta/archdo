@@ -3,7 +3,6 @@ defmodule Archdo.Rules.Compiled.TransitiveDeadCode do
   @behaviour Archdo.Rule
 
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
   alias Archdo.{Diagnostic, Fix}
 
   @impl true
@@ -15,8 +14,10 @@ defmodule Archdo.Rules.Compiled.TransitiveDeadCode do
   @impl true
   def analyze(_file, _ast, _opts), do: []
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules} = graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    modules = Compiled.modules(graph)
+
     # Only consider project modules (those in the graph's module map)
     project_modules = MapSet.new(Map.keys(modules))
 

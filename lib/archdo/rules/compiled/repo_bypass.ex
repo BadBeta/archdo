@@ -3,7 +3,7 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Config, Diagnostic, Fix}
-  alias Archdo.Compiled.Graph
+  alias Archdo.Compiled
 
   @impl true
   def id, do: "1.22"
@@ -22,8 +22,11 @@ defmodule Archdo.Rules.Compiled.RepoBypass do
     transaction preload aggregate exists?
   )a
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules, calls_by_module: calls_by_module} = _graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    modules = Compiled.modules(graph)
+    calls_by_module = Compiled.calls_by_module(graph)
+
     config = Config.load()
     project_modules = MapSet.new(Map.keys(modules))
 

@@ -3,7 +3,7 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
-  alias Archdo.Compiled.Graph
+  alias Archdo.Compiled
 
   @impl true
   def id, do: "4.26"
@@ -14,13 +14,17 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
   @impl true
   def analyze(_file, _ast, _opts), do: []
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{
-        modules: modules,
-        calls_by_module: calls_by_module,
-        beam_dir: beam_dir
-      })
-      when is_binary(beam_dir) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    case Compiled.beam_dir(graph) do
+      beam_dir when is_binary(beam_dir) -> scan_beam_dir(graph, beam_dir)
+      _ -> []
+    end
+  end
+
+  defp scan_beam_dir(graph, beam_dir) do
+    modules = Compiled.modules(graph)
+    calls_by_module = Compiled.calls_by_module(graph)
     project_modules = MapSet.new(Map.keys(modules))
 
     # For each beam file, extract ALL module atoms referenced in the abstract code
@@ -47,8 +51,6 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
       end
     end)
   end
-
-  def analyze_compiled(_graph), do: []
 
   defp find_phantoms(caller_mod, forms, calls_by_module, project_modules) do
     # Collect all Elixir module atoms referenced anywhere in the abstract code

@@ -4,7 +4,6 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
 
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
 
   @impl true
   def id, do: "4.24"
@@ -15,8 +14,10 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
   @impl true
   def analyze(_file, _ast, _opts), do: []
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules} = graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    modules = Compiled.modules(graph)
+
     # Check behaviour implementations: for each module that declares @behaviour,
     # verify it exports all required callbacks
     Enum.flat_map(modules, fn {module, info} ->

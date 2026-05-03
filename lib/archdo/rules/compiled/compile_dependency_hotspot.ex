@@ -4,7 +4,6 @@ defmodule Archdo.Rules.Compiled.CompileDependencyHotspot do
 
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
 
   @impl true
   def id, do: "1.18"
@@ -18,8 +17,10 @@ defmodule Archdo.Rules.Compiled.CompileDependencyHotspot do
   # Flag modules with more than this many dependents
   @dependent_threshold 10
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules} = graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    modules = Compiled.modules(graph)
+
     modules
     |> Map.keys()
     |> Enum.map(fn mod ->

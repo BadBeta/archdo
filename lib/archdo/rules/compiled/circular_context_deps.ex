@@ -3,7 +3,6 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
   @behaviour Archdo.Rule
 
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
   alias Archdo.{Diagnostic, Fix}
 
   @impl true
@@ -20,8 +19,8 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
   @doc """
   Compiled-mode analysis: detect context-level dependency cycles.
   """
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{} = graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
     contexts = Compiled.discover_contexts(graph)
 
     # Build a context-level adjacency map: context_name => [dependent_context_names]
@@ -34,7 +33,9 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
   end
 
   # Build a map of context_name => MapSet of context names that this context calls into.
-  defp build_context_adjacency(%Graph{calls_by_module: calls_by_module}, contexts) do
+  defp build_context_adjacency(graph, contexts) do
+    calls_by_module = Compiled.calls_by_module(graph)
+
     # Build a lookup: module => context_name
     module_to_context =
       for ctx <- contexts,

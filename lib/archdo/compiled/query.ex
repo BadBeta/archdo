@@ -50,21 +50,23 @@ defmodule Archdo.Compiled.Query do
 
   @doc "All callers of a specific function (who calls this MFA?)."
   @spec callers_of(Graph.t(), mfa_tuple()) :: [call()]
-  def callers_of(%Graph{calls_by_callee: index}, mfa) do
-    Map.get(index, mfa, [])
+  def callers_of(graph, mfa) do
+    graph |> Graph.calls_by_callee() |> Map.get(mfa, [])
   end
 
   @doc "All callees of a specific function (what does this MFA call?)."
   @spec callees_of(Graph.t(), mfa_tuple()) :: [call()]
-  def callees_of(%Graph{calls_by_caller: index}, mfa) do
-    Map.get(index, mfa, [])
+  def callees_of(graph, mfa) do
+    graph |> Graph.calls_by_caller() |> Map.get(mfa, [])
   end
 
   # --- Module-level dependencies ---
 
   @doc "All modules that the given module calls (outgoing module-level dependencies)."
   @spec module_dependencies(Graph.t(), module()) :: [module()]
-  def module_dependencies(%Graph{calls_by_module: index}, module) do
+  def module_dependencies(graph, module) do
+    index = Graph.calls_by_module(graph)
+
     for call <- Map.get(index, module, []),
         callee = elem(call.callee, 0),
         callee != module,
@@ -74,8 +76,8 @@ defmodule Archdo.Compiled.Query do
 
   @doc "All modules that call the given module (incoming module-level dependencies)."
   @spec module_dependents(Graph.t(), module()) :: [module()]
-  def module_dependents(%Graph{calls: calls}, module) do
-    for call <- calls,
+  def module_dependents(graph, module) do
+    for call <- Graph.calls(graph),
         elem(call.callee, 0) == module,
         caller = elem(call.caller, 0),
         caller != module,
@@ -90,7 +92,9 @@ defmodule Archdo.Compiled.Query do
   Excludes framework callbacks and behaviour callbacks.
   """
   @spec dead_functions(Graph.t()) :: [%{module: module(), function: atom(), arity: non_neg_integer()}]
-  def dead_functions(%Graph{modules: modules, calls_by_callee: callee_index}) do
+  def dead_functions(graph) do
+    modules = Graph.modules(graph)
+    callee_index = Graph.calls_by_callee(graph)
     behaviour_fns = build_behaviour_fns(modules)
 
     for {module, info} <- modules,
@@ -147,7 +151,9 @@ defmodule Archdo.Compiled.Query do
   Only returns SCCs with 2+ members (actual cycles).
   """
   @spec strongly_connected_components(Graph.t()) :: [[mfa_tuple()]]
-  def strongly_connected_components(%Graph{calls_by_caller: caller_index}) do
+  def strongly_connected_components(graph) do
+    caller_index = Graph.calls_by_caller(graph)
+
     nodes =
       caller_index
       |> Enum.flat_map(fn {caller, calls} ->
@@ -240,7 +246,9 @@ defmodule Archdo.Compiled.Query do
   Returns a map of {function, arity} => external_caller_count.
   """
   @spec external_usage(Graph.t(), module()) :: %{{atom(), non_neg_integer()} => non_neg_integer()}
-  def external_usage(%Graph{calls_by_callee: callee_index, modules: modules}, module) do
+  def external_usage(graph, module) do
+    callee_index = Graph.calls_by_callee(graph)
+    modules = Graph.modules(graph)
     exports = Map.get(modules, module, %{exports: []}).exports
 
     Map.new(exports, fn {func, arity} ->
@@ -260,8 +268,8 @@ defmodule Archdo.Compiled.Query do
 
   @doc "Get all callback functions defined by a behaviour module."
   @spec callbacks_for(Graph.t(), module()) :: [{atom(), non_neg_integer()}]
-  def callbacks_for(%Graph{modules: modules}, behaviour) do
-    case Map.get(modules, behaviour) do
+  def callbacks_for(graph, behaviour) do
+    case Map.get(Graph.modules(graph), behaviour) do
       %{callback_fns: fns} -> fns
       _ -> []
     end
@@ -274,7 +282,7 @@ defmodule Archdo.Compiled.Query do
   by a change to the given module. Returns modules grouped by depth.
   """
   @spec transitive_dependents(Graph.t(), module()) :: %{non_neg_integer() => [module()]}
-  def transitive_dependents(%Graph{} = graph, module) do
+  def transitive_dependents(graph, module) do
     walk_dependents(graph, [module], MapSet.new([module]), %{}, 1)
   end
 
@@ -311,7 +319,8 @@ defmodule Archdo.Compiled.Query do
           functions_called: non_neg_integer(),
           risk_score: float()
         }
-  def blast_radius(%Graph{modules: modules} = graph, module) do
+  def blast_radius(graph, module) do
+    modules = Graph.modules(graph)
     direct = module_dependents(graph, module)
     transitive = transitive_dependents(graph, module)
 
@@ -382,7 +391,9 @@ defmodule Archdo.Compiled.Query do
   with which functions and how many times.
   """
   @spec knows_about(Graph.t(), module()) :: [awareness_entry()]
-  def knows_about(%Graph{calls_by_module: index, modules: modules}, module) do
+  def knows_about(graph, module) do
+    index = Graph.calls_by_module(graph)
+    modules = Graph.modules(graph)
     project_modules = MapSet.new(Map.keys(modules))
 
     index
@@ -408,7 +419,9 @@ defmodule Archdo.Compiled.Query do
   with which functions they call and how many times.
   """
   @spec known_by(Graph.t(), module()) :: [awareness_entry()]
-  def known_by(%Graph{calls: calls, modules: modules}, module) do
+  def known_by(graph, module) do
+    calls = Graph.calls(graph)
+    modules = Graph.modules(graph)
     project_modules = MapSet.new(Map.keys(modules))
 
     calls
@@ -437,7 +450,7 @@ defmodule Archdo.Compiled.Query do
   @spec context_knows_about(Graph.t(), String.t()) :: [
           %{context: String.t(), modules_called: [module()], call_count: non_neg_integer()}
         ]
-  def context_knows_about(%Graph{} = graph, context_name) do
+  def context_knows_about(graph, context_name) do
     contexts = discover_contexts(graph)
     context_of = build_context_membership(contexts)
 
@@ -475,7 +488,7 @@ defmodule Archdo.Compiled.Query do
   @spec context_known_by(Graph.t(), String.t()) :: [
           %{context: String.t(), calling_modules: [module()], call_count: non_neg_integer()}
         ]
-  def context_known_by(%Graph{} = graph, context_name) do
+  def context_known_by(graph, context_name) do
     contexts = discover_contexts(graph)
     context_of = build_context_membership(contexts)
 
@@ -526,7 +539,9 @@ defmodule Archdo.Compiled.Query do
   for each group.
   """
   @spec discover_contexts(Graph.t()) :: [context_report()]
-  def discover_contexts(%Graph{modules: modules, calls: calls} = graph) do
+  def discover_contexts(graph) do
+    modules = Graph.modules(graph)
+    calls = Graph.calls(graph)
     project_modules = Map.keys(modules)
 
     app_prefix = detect_app_prefix(project_modules)

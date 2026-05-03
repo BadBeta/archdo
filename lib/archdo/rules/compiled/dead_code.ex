@@ -3,7 +3,6 @@ defmodule Archdo.Rules.Compiled.DeadCode do
   @behaviour Archdo.Rule
 
   alias Archdo.Compiled
-  alias Archdo.Compiled.Graph
   alias Archdo.{Diagnostic, Fix}
 
   @impl true
@@ -19,8 +18,8 @@ defmodule Archdo.Rules.Compiled.DeadCode do
   @doc """
   Compiled-mode analysis using the interaction graph.
   """
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{} = graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
     graph
     |> Compiled.dead_functions()
     |> Enum.map(&build_diagnostic/1)

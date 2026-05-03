@@ -3,7 +3,7 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
   @behaviour Archdo.Rule
 
   alias Archdo.{AST, Diagnostic, Fix}
-  alias Archdo.Compiled.Graph
+  alias Archdo.Compiled
   alias Archdo.Rules.Compiled.Helpers
 
   @impl true
@@ -20,8 +20,11 @@ defmodule Archdo.Rules.Compiled.UnusedImports do
   # Minimum exports to consider — don't flag imports of small modules
   @min_exports 5
 
-  @spec analyze_compiled(Graph.t()) :: [Diagnostic.t()]
-  def analyze_compiled(%Graph{modules: modules, calls_by_module: calls_by_module} = _graph) do
+  @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
+  def analyze_compiled(graph) do
+    modules = Compiled.modules(graph)
+    calls_by_module = Compiled.calls_by_module(graph)
+
     # For each module, look at what it calls from each other module.
     # If module A calls only 2 of module B's 20 exports, the dependency is
     # import-like and could benefit from `import Module, only: [...]`.
