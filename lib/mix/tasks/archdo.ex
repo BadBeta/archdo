@@ -80,6 +80,7 @@ defmodule Mix.Tasks.Archdo do
           list_packs: :boolean,
           cleanup_pass: :integer,
           report_tier: :string,
+          pass_coverage: :boolean,
           paths: :string,
           since: :string,
           explain: :string,
@@ -132,6 +133,10 @@ defmodule Mix.Tasks.Archdo do
         Archdo.print_coverage_matrix(paths)
         :ok
 
+      Keyword.get(opts, :pass_coverage, false) ->
+        run_pass_coverage(opts, paths)
+        :ok
+
       Keyword.get(opts, :metrics, false) ->
         Archdo.print_metrics_matrix(paths)
         :ok
@@ -177,6 +182,14 @@ defmodule Mix.Tasks.Archdo do
     |> Compare.merge()
     |> Compare.format()
     |> Mix.shell().info()
+  end
+
+  defp run_pass_coverage(opts, paths) do
+    run_opts = build_run_opts(opts)
+    diagnostics = Archdo.run(paths, run_opts)
+    rules = Runner.phase1_rules() ++ Runner.graph_rules() ++ Archdo.project_rules()
+    matrix = Archdo.CleanupPass.Coverage.compute(rules, diagnostics)
+    Mix.shell().info(Archdo.CleanupPass.Coverage.format(matrix))
   end
 
   defp run_normal(opts, paths) do
