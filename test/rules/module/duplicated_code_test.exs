@@ -273,4 +273,126 @@ defmodule Archdo.Rules.Module.DuplicatedCodeTest do
       assert diag.severity == :warning
     end
   end
+
+  describe "false-positive guards" do
+    test "different module attributes are NOT flagged as duplicates" do
+      file1 =
+        parse(
+          ~S"""
+          defmodule MyApp.PassFinder do
+            @rule_passes %{"1.1" => 1, "2.3" => 2, "4.5" => 3}
+            def pass_for(rule_id) when is_binary(rule_id), do: Map.get(@rule_passes, rule_id)
+          end
+          """,
+          "lib/pass_finder.ex"
+        )
+
+      file2 =
+        parse(
+          ~S"""
+          defmodule MyApp.GuardChecker do
+            @guard_type_map %{is_binary: :string, is_integer: :int, is_atom: :atom}
+            def guard_to_type(guard_fn) when is_atom(guard_fn), do: Map.get(@guard_type_map, guard_fn)
+          end
+          """,
+          "lib/guard_checker.ex"
+        )
+
+      diags = DuplicatedCode.analyze_project([file1, file2])
+
+      refute Enum.any?(diags, &(&1.message =~ "pass_for" or &1.message =~ "guard_to_type")),
+             "different @attr references should not be considered structural clones"
+    end
+
+    test "same @attr in two modules IS still flagged (real clone of attribute lookup)" do
+      file1 =
+        parse(
+          ~S"""
+          defmodule MyApp.UserCache do
+            @cache_table :users
+            def fetch(key) when is_binary(key), do: Map.get(@cache_table, key)
+          end
+          """,
+          "lib/user_cache.ex"
+        )
+
+      file2 =
+        parse(
+          ~S"""
+          defmodule MyApp.OtherUserCache do
+            @cache_table :users
+            def lookup(id) when is_binary(id), do: Map.get(@cache_table, id)
+          end
+          """,
+          "lib/other_user_cache.ex"
+        )
+
+      diags = DuplicatedCode.analyze_project([file1, file2])
+      # Both fetch/1 and lookup/1 reference the same @cache_table — real clone
+      assert Enum.any?(diags, &(&1.message =~ "fetch" or &1.message =~ "lookup")),
+             "same @attr referenced by two functions IS a real cross-module clone"
+    end
+
+    test "functions with different arity are NOT flagged even if body shape coincides" do
+      # Bodies large enough to exceed the @min_node_count threshold.
+      file1 =
+        parse(
+          ~S"""
+          defmodule MyApp.A do
+            def make_pair(from, to) do
+              first = String.upcase(from)
+              second = String.upcase(to)
+              [{first, second, :pair, :tag, :type, :metadata}]
+            end
+          end
+          """,
+          "lib/a.ex"
+        )
+
+      file2 =
+        parse(
+          ~S"""
+          defmodule MyApp.B do
+            def select(true, x, y, _label) do
+              first = String.upcase(x)
+              second = String.upcase(y)
+              [{first, second, :pair, :tag, :type, :metadata}]
+            end
+          end
+          """,
+          "lib/b.ex"
+        )
+
+      diags = DuplicatedCode.analyze_project([file1, file2])
+
+      refute Enum.any?(diags, &(&1.message =~ "make_pair" or &1.message =~ "select")),
+             "different arities should not be considered structural clones"
+    end
+
+    test "multi-clause heads of the same function do NOT self-clone within a file" do
+      file =
+        parse(
+          ~S"""
+          defmodule MyApp.Walker do
+            def walk(nil, acc), do: acc
+            def walk({_form, _meta, args}, acc) when is_list(args), do: Enum.reduce(args, acc, &walk/2)
+            def walk(list, acc) when is_list(list), do: Enum.reduce(list, acc, &walk/2)
+            def walk({a, b}, acc) do
+              acc |> then(&walk(a, &1)) |> then(&walk(b, &1))
+            end
+            def walk(_, acc), do: acc
+          end
+          """,
+          "lib/walker.ex"
+        )
+
+      diags = DuplicatedCode.analyze_project([file])
+
+      # walk/2 has 5 clauses; some bodies match shape. Without aggregation
+      # the rule reports them as N self-clones. With aggregation, the
+      # whole function is one entry — no self-clone within a single file.
+      refute Enum.any?(diags, &(&1.message =~ "walk")),
+             "multi-clause heads should aggregate, not self-clone"
+    end
+  end
 end

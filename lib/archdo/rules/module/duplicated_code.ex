@@ -60,7 +60,7 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   # downgrade to :info. Same-app clones stay :warning.
   defp build_diagnostics(first, rest, all_infos) do
     other_locations =
-      Enum.map_join(rest, ", ", fn info -> "#{Path.basename(info.file)}:#{info.line}" end)
+      Enum.map_join(rest, ", ", fn info -> "#{AST.relative_path(info.file)}:#{info.line}" end)
 
     count = length(rest) + 1
     builder = severity_builder_for(all_infos)
@@ -145,26 +145,41 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   defp apps_segment_after(nil, _parts), do: nil
   defp apps_segment_after(idx, parts), do: Enum.at(parts, idx + 1)
 
+  # Multi-clause heads of the same {name, arity} aggregate to ONE entry per
+  # file. Without aggregation, each clause hashes individually and clauses
+  # of the same function flag each other as self-clones (false positive on
+  # any function whose clauses share body shape — e.g. recursive AST
+  # walkers with their no-op fallback clauses).
+  #
+  # The hash is `{arity, [normalized_body, ...]}` — different arities never
+  # collide even when bodies coincide (false positive on `f/2 ↔ g/3` where
+  # the body literal happens to match).
   defp extract_functions_with_hashes(file, ast) do
-    fns = AST.extract_functions(ast, :all)
-
-    fns
+    AST.extract_functions(ast, :all)
     |> Enum.reject(fn {name, _arity, _meta, _args, _body} -> name in @ignored_callbacks end)
-    |> Enum.map(fn {name, arity, meta, _args, body} ->
-      normalized = normalize(body)
-      size = AST.ast_size(normalized)
-      hash = :erlang.phash2(normalized)
-
-      {hash,
-       %{
-         file: file,
-         name: name,
-         arity: arity,
-         line: AST.line(meta),
-         size: size
-       }}
-    end)
+    |> Enum.group_by(
+      fn {name, arity, _, _, _} -> {name, arity} end,
+      fn {_, _, meta, _, body} -> {meta, body} end
+    )
+    |> Enum.map(&hash_function_group(&1, file))
     |> Enum.filter(fn {_hash, info} -> info.size >= @min_node_count end)
+  end
+
+  defp hash_function_group({{name, arity}, clauses}, file) do
+    clauses_sorted = Enum.sort_by(clauses, fn {meta, _} -> AST.line(meta) end)
+    bodies = Enum.map(clauses_sorted, fn {_meta, body} -> normalize(body) end)
+    size = Enum.sum(Enum.map(bodies, &AST.ast_size/1))
+    hash = :erlang.phash2({arity, bodies})
+    {first_meta, _} = hd(clauses_sorted)
+
+    {hash,
+     %{
+       file: file,
+       name: name,
+       arity: arity,
+       line: AST.line(first_meta),
+       size: size
+     }}
   end
 
   @doc """
@@ -178,6 +193,16 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   def normalize(ast) do
     {normalized, _vars} = normalize_node(ast, %{counter: 0, mapping: %{}})
     normalized
+  end
+
+  # Module attribute READ: {:@, meta, [{attr_name, _, ctx}]} where ctx is
+  # nil or an atom (context). Preserve `attr_name` as a literal — different
+  # `@foo` and `@bar` references are distinct semantic identities, not
+  # interchangeable variable bindings. (Two functions referencing the SAME
+  # `@foo` still hash equal — that's a real cross-module clone.)
+  defp normalize_node({:@, _meta, [{attr_name, _, ctx}]}, state)
+       when is_atom(attr_name) and (is_nil(ctx) or is_atom(ctx)) do
+    {{:@, [], [{attr_name, [], nil}]}, state}
   end
 
   # Variable reference: {name, meta, context} where name and context are atoms
