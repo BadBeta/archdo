@@ -54,25 +54,26 @@ defmodule Archdo.Rules.Module.MainSequenceDistance do
   #   - Naming convention helpers: `*.Helpers`, `*.Util`, `*.Utils`,
   #     `*.AST`, `*.Naming` — community-standard "this is a utility
   #     module" suffixes.
-  defp stable_by_design?(m) do
-    mod_str = m.module
+  @stable_suffixes [".Repo", "Web", ".Config", ".Configuration"]
+  @utility_suffixes [".Helpers", ".Helper", ".Util", ".Utils", ".AST", ".Naming"]
+  @reading_or_event_suffixes [".Reading", ".Event"]
 
-    String.ends_with?(mod_str, ".Repo") or
-      String.ends_with?(mod_str, "Web") or
-      String.ends_with?(mod_str, ".Config") or String.ends_with?(mod_str, ".Configuration") or
-      utility_suffix?(mod_str) or
-      ((String.ends_with?(mod_str, ".Reading") or String.ends_with?(mod_str, ".Event")) and
-         m.abstractness == 0.0 and m.ce <= 1) or
+  defp stable_by_design?(m) do
+    has_stable_suffix?(m.module) or
+      utility_suffix?(m.module) or
+      reading_or_event_leaf?(m) or
       leaf_utility?(m)
   end
 
-  defp utility_suffix?(mod_str) do
-    String.ends_with?(mod_str, ".Helpers") or
-      String.ends_with?(mod_str, ".Helper") or
-      String.ends_with?(mod_str, ".Util") or
-      String.ends_with?(mod_str, ".Utils") or
-      String.ends_with?(mod_str, ".AST") or
-      String.ends_with?(mod_str, ".Naming")
+  defp has_stable_suffix?(mod_str),
+    do: Enum.any?(@stable_suffixes, &String.ends_with?(mod_str, &1))
+
+  defp utility_suffix?(mod_str),
+    do: Enum.any?(@utility_suffixes, &String.ends_with?(mod_str, &1))
+
+  defp reading_or_event_leaf?(m) do
+    Enum.any?(@reading_or_event_suffixes, &String.ends_with?(m.module, &1)) and
+      m.abstractness == 0.0 and m.ce <= 1
   end
 
   # A leaf utility module: no abstractness AND very low fan-out.

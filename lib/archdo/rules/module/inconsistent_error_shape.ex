@@ -57,37 +57,31 @@ defmodule Archdo.Rules.Module.InconsistentErrorShape do
   defp classify_style(nil), do: :unknown
 
   defp classify_style(body) do
-    has_ok_error =
-      AST.contains?(body, fn
-        {:{}, _, [{:__block__, _, [:ok]} | _]} -> true
-        {:{}, _, [{:__block__, _, [:error]} | _]} -> true
-        {:ok, _} -> true
-        {:error, _} -> true
-        _ -> false
-      end)
-
-    has_raise =
-      AST.contains?(body, fn
-        {:raise, _, _} -> true
-        _ -> false
-      end) and
-        not AST.contains?(body, fn
-          {:rescue, _} -> true
-          _ -> false
-        end)
-
-    has_nil_return =
-      AST.contains?(body, fn
-        {:__block__, _, [nil]} -> true
-        _ -> false
-      end)
-
     cond do
-      has_ok_error -> :ok_error
-      has_raise -> :raises
-      has_nil_return -> :returns_nil
+      AST.contains?(body, &ok_error_node?/1) -> :ok_error
+      raises_without_rescue?(body) -> :raises
+      AST.contains?(body, &nil_block?/1) -> :returns_nil
       true -> :unknown
     end
+  end
+
+  defp ok_error_node?({:{}, _, [{:__block__, _, [:ok]} | _]}), do: true
+  defp ok_error_node?({:{}, _, [{:__block__, _, [:error]} | _]}), do: true
+  defp ok_error_node?({:ok, _}), do: true
+  defp ok_error_node?({:error, _}), do: true
+  defp ok_error_node?(_), do: false
+
+  defp raise_node?({:raise, _, _}), do: true
+  defp raise_node?(_), do: false
+
+  defp rescue_node?({:rescue, _}), do: true
+  defp rescue_node?(_), do: false
+
+  defp nil_block?({:__block__, _, [nil]}), do: true
+  defp nil_block?(_), do: false
+
+  defp raises_without_rescue?(body) do
+    AST.contains?(body, &raise_node?/1) and not AST.contains?(body, &rescue_node?/1)
   end
 
   defp build_diagnostic(file, ast, styles, style_groups) do

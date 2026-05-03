@@ -97,82 +97,92 @@ defmodule Archdo.Rules.Module.TypeDispatch do
     # own "Tolerate" entry says: "Keep if the type set is genuinely
     # fixed" — for private dispatch, the set is BY DEFINITION fixed
     # to whatever the owning module emits.
-    {_, clauses_by_fn} =
-      Macro.prewalk(ast, %{}, fn
-        {:def, meta, [{name, _, args} | _]} = node, acc
-        when is_atom(name) and is_list(args) ->
-          key = {name, length(args)}
-          entry = %{atom: first_arg_atom(args), line: AST.line(meta)}
-          {node, Map.update(acc, key, [entry], &[entry | &1])}
-
-        node, acc ->
-          {node, acc}
-      end)
+    {_, clauses_by_fn} = Macro.prewalk(ast, %{}, &collect_def_clauses/2)
 
     Enum.flat_map(clauses_by_fn, fn {{name, arity}, entries} ->
-      entries = Enum.reverse(entries)
-
-      distinct =
-        for %{atom: atom} <- entries,
-            atom != nil,
-            atom not in @ignored_atoms,
-            uniq: true,
-            do: atom
-
-      if match?([_, _, _, _ | _], distinct) and not genserver_callback?(name) do
-        first_line = Enum.min_by(entries, & &1.line).line
-
-        [
-          Diagnostic.info("4.3",
-            title: "Multi-clause type dispatch function",
-            message:
-              "#{name}/#{arity} has #{length(distinct)} clauses dispatching on atom types: " <>
-                "#{Enum.map_join(Enum.take(distinct, 5), ", ", &inspect/1)}" <>
-                case match?([_, _, _, _, _, _ | _], distinct) do
-                  true -> ", ..."
-                  false -> ""
-                end,
-            why:
-              "When a function has many clauses each matching a different atom as the first argument, " <>
-                "adding a new type requires editing this module. This violates Open/Closed — the module " <>
-                "is open to modification when it should be closed. Each atom branch is effectively a " <>
-                "manual vtable that should be a behaviour or protocol dispatch.",
-            alternatives: [
-              Fix.new(
-                summary: "Define a behaviour and one module per type",
-                detail:
-                  "Extract the callback contract, create one module per type atom that implements it, " <>
-                    "and dispatch via a map lookup or `Application.compile_env`. Adding a new type means " <>
-                    "adding a new module, not editing existing clauses.",
-                applies_when: "Each clause has substantial logic and the type set may grow."
-              ),
-              Fix.new(
-                summary: "Use a map of atoms to functions",
-                detail:
-                  "Replace the multi-clause dispatch with `@handlers %{foo: &handle_foo/1, ...}` " <>
-                    "and call `Map.fetch!(@handlers, type).(data)`. New types register in the map " <>
-                    "without touching existing handler code.",
-                applies_when: "The handlers are small and a full behaviour is overkill."
-              ),
-              Fix.new(
-                summary: "Keep if the type set is genuinely fixed",
-                detail:
-                  "If the atoms represent a closed, stable set (e.g., HTTP methods, weekdays), " <>
-                    "multi-clause dispatch is idiomatic and the OCP concern doesn't apply.",
-                applies_when: "The set of types is fixed by an external standard."
-              )
-            ],
-            references: ["ARCHITECTURE_RULES.md#4.3"],
-            context: %{function: "#{name}/#{arity}", branch_count: length(distinct)},
-            file: file,
-            line: first_line
-          )
-        ]
-      else
-        []
-      end
+      check_dispatch(name, arity, Enum.reverse(entries), file)
     end)
   end
+
+  defp collect_def_clauses({:def, meta, [{name, _, args} | _]} = node, acc)
+       when is_atom(name) and is_list(args) do
+    key = {name, length(args)}
+    entry = %{atom: first_arg_atom(args), line: AST.line(meta)}
+    {node, Map.update(acc, key, [entry], &[entry | &1])}
+  end
+
+  defp collect_def_clauses(node, acc), do: {node, acc}
+
+  defp check_dispatch(name, arity, entries, file) do
+    distinct =
+      for %{atom: atom} <- entries,
+          atom != nil,
+          atom not in @ignored_atoms,
+          uniq: true,
+          do: atom
+
+    build_dispatch_diag(dispatch_violation?(name, distinct), name, arity, distinct, entries, file)
+  end
+
+  defp dispatch_violation?(name, distinct),
+    do: match?([_, _, _, _ | _], distinct) and not genserver_callback?(name)
+
+  defp build_dispatch_diag(false, _name, _arity, _distinct, _entries, _file), do: []
+
+  defp build_dispatch_diag(true, name, arity, distinct, entries, file) do
+    first_line = Enum.min_by(entries, & &1.line).line
+
+    [
+      Diagnostic.info("4.3",
+        title: "Multi-clause type dispatch function",
+        message: dispatch_message(name, arity, distinct),
+        why:
+          "When a function has many clauses each matching a different atom as the first argument, " <>
+            "adding a new type requires editing this module. This violates Open/Closed — the module " <>
+            "is open to modification when it should be closed. Each atom branch is effectively a " <>
+            "manual vtable that should be a behaviour or protocol dispatch.",
+        alternatives: [
+          Fix.new(
+            summary: "Define a behaviour and one module per type",
+            detail:
+              "Extract the callback contract, create one module per type atom that implements it, " <>
+                "and dispatch via a map lookup or `Application.compile_env`. Adding a new type means " <>
+                "adding a new module, not editing existing clauses.",
+            applies_when: "Each clause has substantial logic and the type set may grow."
+          ),
+          Fix.new(
+            summary: "Use a map of atoms to functions",
+            detail:
+              "Replace the multi-clause dispatch with `@handlers %{foo: &handle_foo/1, ...}` " <>
+                "and call `Map.fetch!(@handlers, type).(data)`. New types register in the map " <>
+                "without touching existing handler code.",
+            applies_when: "The handlers are small and a full behaviour is overkill."
+          ),
+          Fix.new(
+            summary: "Keep if the type set is genuinely fixed",
+            detail:
+              "If the atoms represent a closed, stable set (e.g., HTTP methods, weekdays), " <>
+                "multi-clause dispatch is idiomatic and the OCP concern doesn't apply.",
+            applies_when: "The set of types is fixed by an external standard."
+          )
+        ],
+        references: ["ARCHITECTURE_RULES.md#4.3"],
+        context: %{function: "#{name}/#{arity}", branch_count: length(distinct)},
+        file: file,
+        line: first_line
+      )
+    ]
+  end
+
+  defp dispatch_message(name, arity, distinct) do
+    head = Enum.map_join(Enum.take(distinct, 5), ", ", &inspect/1)
+
+    "#{name}/#{arity} has #{length(distinct)} clauses dispatching on atom types: #{head}" <>
+      ellipsis_if_more(distinct)
+  end
+
+  defp ellipsis_if_more([_, _, _, _, _, _ | _]), do: ", ..."
+  defp ellipsis_if_more(_), do: ""
 
   # GenServer callbacks naturally dispatch on message atoms — not an OCP violation.
   @genserver_callbacks ~w(handle_call handle_cast handle_info handle_continue)a
