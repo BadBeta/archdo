@@ -143,9 +143,28 @@ defmodule Archdo.Volatility do
       path_override = path_override(file, opts) ->
         force(path_override, :path, density: nil, calls: [], rationale: %{})
 
+      entry_point?(ast) ->
+        force(:stable, :entry_point, density: nil, calls: [], rationale: %{})
+
       true ->
         classify_from_calls(file, ast, opts)
     end
+  end
+
+  # Entry-point modules — Mix tasks, Application bootstraps — are the
+  # canonical "boundary layer" in OTP-flavored Elixir. Their job is to
+  # bridge the outside world: read CLI args, read config, write output,
+  # spawn supervised children. Calling File / System / IO directly is
+  # not a substitutability hole — pushing those calls behind a
+  # behaviour just moves the volatility one module deeper, where the
+  # *new* module would be flagged the same way. Mark these stable by
+  # design so CE-1 / CE-2 / 4.8 don't fire on them.
+  defp entry_point?(ast) do
+    AST.contains?(ast, fn
+      {:use, _, [{:__aliases__, _, [:Mix, :Task]} | _]} -> true
+      {:use, _, [{:__aliases__, _, [:Application]} | _]} -> true
+      _ -> false
+    end)
   end
 
   @doc "True for `:mixed` classifications; false otherwise."

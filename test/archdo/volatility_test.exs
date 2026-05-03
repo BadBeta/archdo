@@ -220,6 +220,91 @@ defmodule Archdo.VolatilityTest do
     end
   end
 
+  describe "entry-point exemption" do
+    test "use Mix.Task module with heavy File / System calls is :stable" do
+      # Mix tasks are entry-point boundaries — calling File / System
+      # IS their job. Pushing those calls behind a behaviour just
+      # moves the volatility one module deeper.
+      {file, ast} =
+        parse(
+          """
+          defmodule Mix.Tasks.Demo do
+            use Mix.Task
+
+            def run(_args) do
+              cwd = File.cwd!()
+              File.read!(Path.join(cwd, "config.toml"))
+              System.cmd("git", ["status"])
+            end
+          end
+          """,
+          "lib/mix/tasks/demo.ex"
+        )
+
+      classification = Volatility.classify_module(file, ast)
+      assert classification.tag == :stable
+      assert classification.evidence.override == :entry_point
+    end
+
+    test "use Application module with File reads is :stable" do
+      {file, ast} =
+        parse(
+          """
+          defmodule MyApp.Application do
+            use Application
+
+            def start(_type, _args) do
+              File.read!("priv/config.json")
+            end
+          end
+          """,
+          "lib/my_app/application.ex"
+        )
+
+      classification = Volatility.classify_module(file, ast)
+      assert classification.tag == :stable
+      assert classification.evidence.override == :entry_point
+    end
+
+    test "regular module with same File / System calls is still :volatile" do
+      # Sanity check: the entry-point exemption is gated on `use`, not
+      # on the call shape. A plain module with the same volatile calls
+      # gets the normal classification.
+      {file, ast} =
+        parse("""
+        defmodule MyApp.Plain do
+          def go do
+            File.read!("config.toml")
+            System.cmd("git", ["status"])
+          end
+        end
+        """)
+
+      classification = Volatility.classify_module(file, ast)
+      assert classification.tag == :volatile
+    end
+
+    test "@archdo_volatility takes precedence over entry-point detection" do
+      # Author override comes first — if a Mix task is explicitly marked
+      # :volatile (e.g. for testing), the author wins.
+      {file, ast} =
+        parse(
+          """
+          defmodule Mix.Tasks.Marked do
+            use Mix.Task
+            @archdo_volatility :volatile
+            def run(_), do: File.read!("x")
+          end
+          """,
+          "lib/mix/tasks/marked.ex"
+        )
+
+      classification = Volatility.classify_module(file, ast)
+      assert classification.tag == :volatile
+      assert classification.evidence.override == :author
+    end
+  end
+
   describe "density computation + thresholds" do
     test "density = (volatile + non_deterministic) / total_classified_calls" do
       {file, ast} =
