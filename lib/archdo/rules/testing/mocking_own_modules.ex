@@ -85,22 +85,15 @@ defmodule Archdo.Rules.Testing.MockingOwnModules do
     AST.module_name(Module.concat(parts))
   end
 
+  @boundary_path_markers ~w[adapter client mailer infrastructure http gateway boundary]
+
   # Heuristic: a module is "own" if its top namespace is the app prefix and
   # it's NOT in an adapter/client/infrastructure/boundary namespace.
   defp own_module?({name, _meta}) do
-    parts = String.split(name, ".")
-
-    case parts do
+    case String.split(name, ".") do
       [_top | rest] when rest != [] ->
         path_lower = Enum.map_join(rest, "/", &String.downcase/1)
-
-        not String.contains?(path_lower, "adapter") and
-          not String.contains?(path_lower, "client") and
-          not String.contains?(path_lower, "mailer") and
-          not String.contains?(path_lower, "infrastructure") and
-          not String.contains?(path_lower, "http") and
-          not String.contains?(path_lower, "gateway") and
-          not String.contains?(path_lower, "boundary")
+        not Enum.any?(@boundary_path_markers, &String.contains?(path_lower, &1))
 
       _ ->
         false
