@@ -44,10 +44,9 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
   defp find_unanchored_diagnostics(graph, anchors, opts) do
     deps = build_deps_map(graph, opts)
 
-    deps
-    |> find_unanchored(anchors)
-    |> Enum.reject(&excluded?(&1, graph))
-    |> Enum.map(&build_diagnostic(&1, graph))
+    for mod <- find_unanchored(deps, anchors),
+        not excluded?(mod, graph),
+        do: build_diagnostic(mod, graph)
   end
 
   # §§ elixir-implementing: §5.5 — pure recursive helpers; the rule's
@@ -121,11 +120,11 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
   defp registry_edges_for(ast_graph, source_atom) do
     source_name = AST.module_name(source_atom)
 
-    ast_graph
-    |> Graph.dependencies(source_name)
-    |> Enum.filter(&Graph.edge_of_type?(&1, :registry))
-    |> Enum.map(fn edge -> AST.safe_existing_atom(edge.target) end)
-    |> Enum.reject(&is_nil/1)
+    for edge <- Graph.dependencies(ast_graph, source_name),
+        Graph.edge_of_type?(edge, :registry),
+        atom = AST.safe_existing_atom(edge.target),
+        not is_nil(atom),
+        do: atom
   end
 
   # §§ elixir-implementing: §5.2 — multi-clause head; mirrors the

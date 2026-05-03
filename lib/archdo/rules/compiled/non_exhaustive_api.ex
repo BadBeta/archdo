@@ -27,17 +27,13 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
     beam_dir
     |> Compiled.extract_function_clauses()
     |> Enum.flat_map(fn {module, functions} ->
-      functions
-      |> Enum.filter(fn fn_info ->
-        fn_info.exported and
-          fn_info.clause_count >= @min_clauses and
-          not fn_info.has_catch_all and
-          not Helpers.framework_function?(fn_info.name) and
-          not Helpers.generated_function?(fn_info.name)
-      end)
-      |> Enum.map(fn fn_info ->
-        build_diagnostic(module, fn_info)
-      end)
+      for fn_info <- functions,
+          fn_info.exported and
+            fn_info.clause_count >= @min_clauses and
+            not fn_info.has_catch_all and
+            not Helpers.framework_function?(fn_info.name) and
+            not Helpers.generated_function?(fn_info.name),
+          do: build_diagnostic(module, fn_info)
     end)
   end
 

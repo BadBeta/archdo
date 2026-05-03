@@ -15,7 +15,7 @@ defmodule Archdo.Compiled.DiagramSVG do
   #   - Style: solid=synchronous call, dashed=async/cast/send
 
   alias Archdo.AST
-  alias Archdo.Compiled.{DiagramHelpers, Graph, Query}
+  alias Archdo.Compiled.{SvgDocument, Graph, Query}
 
   # Layout constants
   @node_width 220
@@ -124,7 +124,7 @@ defmodule Archdo.Compiled.DiagramSVG do
     all_elements =
       elements ++ caller_elements ++ center_elements ++ dep_elements ++ caller_wires ++ dep_wires
 
-    DiagramHelpers.wrap_svg(all_elements, total_width, total_height)
+    SvgDocument.wrap_svg(all_elements, total_width, total_height)
   end
 
   @doc """
@@ -137,7 +137,7 @@ defmodule Archdo.Compiled.DiagramSVG do
 
     case Enum.find(contexts, fn c -> c.context == context_name end) do
       nil ->
-        DiagramHelpers.error_svg("Context '#{context_name}' not found", @wire_error)
+        SvgDocument.error_svg("Context '#{context_name}' not found", @wire_error)
 
       ctx ->
         render_context_svg(graph, ctx)
@@ -404,7 +404,7 @@ defmodule Archdo.Compiled.DiagramSVG do
       end)
 
     all = frame_elements ++ member_elements ++ caller_elements ++ dep_elements
-    DiagramHelpers.wrap_svg(all, total_w, total_h)
+    SvgDocument.wrap_svg(all, total_w, total_h)
   end
 
   defp wire_color_for_fn(fn_info) do

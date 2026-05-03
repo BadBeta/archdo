@@ -47,6 +47,7 @@ defmodule Archdo.Rules.CE.ContractDensityTest do
       ]
 
       diags = ContractDensity.analyze_project(file_asts)
+
       assert Enum.any?(diags, fn d ->
                d.rule_id == "CE-11" and d.message =~ "MyApp.Bare"
              end)

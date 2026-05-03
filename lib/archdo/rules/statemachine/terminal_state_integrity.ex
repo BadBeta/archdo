@@ -35,11 +35,9 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
     terminal_names =
       ~w(completed cancelled failed terminated done closed archived deleted expired)
 
-    all_states
-    |> Enum.filter(fn state ->
-      String.downcase(state) in terminal_names and has_non_self_transitions?(state, transitions)
-    end)
-    |> Enum.map(fn state ->
+    for state <- all_states,
+        String.downcase(state) in terminal_names,
+        has_non_self_transitions?(state, transitions) do
       targets = Map.get(transitions, state, [])
 
       Diagnostic.warning("9.2",
@@ -72,7 +70,7 @@ defmodule Archdo.Rules.StateMachine.TerminalStateIntegrity do
         file: file,
         line: 1
       )
-    end)
+    end
   end
 
   defp has_non_self_transitions?(state, transitions) do

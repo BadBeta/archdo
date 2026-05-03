@@ -41,21 +41,14 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
   end
 
   defp find_broad_imports(file, ast) do
-    AST.find_all(ast, fn
-      {:import, _meta, [{:__aliases__, _, _aliases} | _]} -> true
-      _ -> false
-    end)
-    |> Enum.filter(fn {:import, _meta, [{:__aliases__, _, aliases} | opts]} ->
-      case AST.safe_concat(aliases) do
-        nil ->
-          false
+    imports =
+      AST.find_all(ast, fn
+        {:import, _meta, [{:__aliases__, _, _aliases} | _]} -> true
+        _ -> false
+      end)
 
-        mod ->
-          target = AST.module_name(mod)
-          no_only_clause?(opts) and not tolerated_import?(target)
-      end
-    end)
-    |> Enum.map(fn {:import, meta, [{:__aliases__, _, aliases} | _]} ->
+    for {:import, meta, [{:__aliases__, _, aliases} | opts]} <- imports,
+        broad_import?(aliases, opts) do
       target = Enum.join(aliases, ".")
 
       Diagnostic.warning("4.5",
@@ -89,7 +82,18 @@ defmodule Archdo.Rules.Boundary.ImportBreadth do
         file: file,
         line: AST.line(meta)
       )
-    end)
+    end
+  end
+
+  defp broad_import?(aliases, opts) do
+    case AST.safe_concat(aliases) do
+      nil ->
+        false
+
+      mod ->
+        target = AST.module_name(mod)
+        no_only_clause?(opts) and not tolerated_import?(target)
+    end
   end
 
   defp find_coupling_fanout(file, ast) do

@@ -43,9 +43,7 @@ defmodule Archdo.Integration.RealProjectTest do
           unquote(body)
 
         false ->
-          IO.puts(
-            "\n  → SKIP integration test: /tmp/#{unquote(name)} missing or wrong commit"
-          )
+          IO.puts("\n  → SKIP integration test: /tmp/#{unquote(name)} missing or wrong commit")
       end
     end
   end

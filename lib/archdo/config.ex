@@ -298,13 +298,14 @@ defmodule Archdo.Config do
         Path.join(project_root, "lib")
       end
 
-    if File.dir?(lib_dir) do
-      lib_dir
-      |> File.ls!()
-      |> Enum.filter(&String.ends_with?(&1, ".ex"))
-      |> Enum.map(&file_to_module(&1, app))
-    else
-      []
+    case File.dir?(lib_dir) do
+      true ->
+        for file <- File.ls!(lib_dir),
+            String.ends_with?(file, ".ex"),
+            do: file_to_module(file, app)
+
+      false ->
+        []
     end
   end
 

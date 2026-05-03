@@ -80,13 +80,12 @@ defmodule Archdo.Graph do
   defp adjacency_entry(mod, graph, root_modules) do
     mod_str = AST.module_name(mod)
 
-    targets =
-      graph
-      |> dependencies(mod_str)
-      |> Enum.map(& &1.target)
-      |> Enum.filter(&target_in_root?(&1, mod_str, root_modules))
-      |> Enum.map(&resolve_target_to_root(&1, root_modules))
-      |> Enum.uniq()
+    resolved =
+      for dep <- dependencies(graph, mod_str),
+          target_in_root?(dep.target, mod_str, root_modules),
+          do: resolve_target_to_root(dep.target, root_modules)
+
+    targets = Enum.uniq(resolved)
 
     {mod_str, targets}
   end
@@ -258,13 +257,15 @@ defmodule Archdo.Graph do
     do: alias_list_targets(list, alias_table)
 
   defp alias_list_targets(list, alias_table) when is_list(list) do
-    Enum.reduce_while(list, [], fn elem, acc ->
-      case alias_target(elem, alias_table) do
-        nil -> {:halt, []}
-        target -> {:cont, [target | acc]}
-      end
-    end)
-    |> Enum.reverse()
+    reduced =
+      Enum.reduce_while(list, [], fn elem, acc ->
+        case alias_target(elem, alias_table) do
+          nil -> {:halt, []}
+          target -> {:cont, [target | acc]}
+        end
+      end)
+
+    Enum.reverse(reduced)
   end
 
   defp alias_list_targets(_, _), do: []

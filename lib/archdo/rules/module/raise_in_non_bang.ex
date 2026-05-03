@@ -49,33 +49,22 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
     impl_set = AST.impl_callbacks(ast)
     defimpl_set = AST.defimpl_callbacks(ast)
 
-    fns
-    |> Enum.reject(fn {name, arity, _meta, _args, _body} ->
-      not is_atom(name) or Naming.bang?(name) or name in @raise_ok_contexts or
-        name in @framework_callbacks or
-        # Skip behaviour callbacks: a function annotated with `@impl true` or
-        # `@impl SomeBehaviour` has a fixed name defined by the behaviour and
-        # CANNOT be renamed with `!`. Raising on misconfiguration is the
-        # framework-defined contract for many of these (LiveView's mount/3,
-        # GenServer's init/1, etc.). BUG-8 from phoenix_live_dashboard.
-        MapSet.member?(impl_set, {name, arity}) or
-        # Skip protocol callback implementations: functions inside
-        # `defimpl Protocol, for: Type` have names FIXED by the protocol —
-        # `def write/3, do: raise("not implemented")` is the canonical
-        # signal for partial implementations and can't be renamed `write!`.
-        # BUG-9 from Livebook.
-        MapSet.member?(defimpl_set, {name, arity}) or
-        # Dunder names (`__options__`, `__using__`, `__before_compile__`)
-        # are framework/macro convention — fixed names, raising-on-misconfig
-        # is idiomatic.
-        dunder_name?(name)
-    end)
-    |> Enum.filter(fn {_name, _arity, _meta, _args, body} ->
-      body != nil and contains_raise?(body) and not has_rescue?(body)
-    end)
-    |> Enum.map(fn {name, arity, meta, _args, _body} ->
-      build_diagnostic(file, name, arity, meta)
-    end)
+    for {name, arity, meta, _args, body} <- fns,
+        is_atom(name),
+        not Naming.bang?(name),
+        name not in @raise_ok_contexts,
+        name not in @framework_callbacks,
+        # Skip behaviour callbacks (@impl): name is fixed by the behaviour and
+        # raising on misconfiguration is often the framework contract.
+        not MapSet.member?(impl_set, {name, arity}),
+        # Skip defimpl callbacks: name is fixed by the protocol.
+        not MapSet.member?(defimpl_set, {name, arity}),
+        # Dunder names are framework/macro convention.
+        not dunder_name?(name),
+        body != nil,
+        contains_raise?(body),
+        not has_rescue?(body),
+        do: build_diagnostic(file, name, arity, meta)
   end
 
   defp dunder_name?(name) do

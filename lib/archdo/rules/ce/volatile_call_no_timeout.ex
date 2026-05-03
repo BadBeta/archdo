@@ -54,14 +54,16 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
   # --- HTTP client calls ---
 
   defp find_unbounded_http(file, ast) do
-    AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, mod_parts}, _fun]}, _, _} ->
-        Map.has_key?(@timeout_keys, mod_parts)
+    calls =
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, mod_parts}, _fun]}, _, _} ->
+          Map.has_key?(@timeout_keys, mod_parts)
 
-      _ ->
-        false
-    end)
-    |> Enum.flat_map(fn
+        _ ->
+          false
+      end)
+
+    Enum.flat_map(calls, fn
       {{:., _, [{:__aliases__, _, mod_parts}, fun]}, meta, args} ->
         keys = Map.get(@timeout_keys, mod_parts, [])
 
@@ -111,11 +113,13 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
   # --- GenServer.call ---
 
   defp find_unbounded_genserver_call(file, ast) do
-    AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, [:GenServer]}, :call]}, _, [_, _]} -> true
-      _ -> false
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    calls =
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, [:GenServer]}, :call]}, _, [_, _]} -> true
+        _ -> false
+      end)
+
+    Enum.map(calls, fn {_, meta, _} ->
       build_genserver_diagnostic(file, AST.line(meta))
     end)
   end

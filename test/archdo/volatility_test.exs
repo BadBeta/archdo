@@ -147,9 +147,7 @@ defmodule Archdo.VolatilityTest do
         )
 
       classification =
-        Volatility.classify_module(file, ast,
-          volatile_paths: ["lib/my_app/integrations/**"]
-        )
+        Volatility.classify_module(file, ast, volatile_paths: ["lib/my_app/integrations/**"])
 
       assert classification.tag == :volatile
       assert classification.evidence.override == :path
@@ -167,9 +165,7 @@ defmodule Archdo.VolatilityTest do
         )
 
       classification =
-        Volatility.classify_module(file, ast,
-          stable_paths: ["lib/my_app/domain/**"]
-        )
+        Volatility.classify_module(file, ast, stable_paths: ["lib/my_app/domain/**"])
 
       assert classification.tag == :stable
       assert classification.evidence.override == :path
@@ -187,9 +183,7 @@ defmodule Archdo.VolatilityTest do
         )
 
       classification =
-        Volatility.classify_module(file, ast,
-          volatile_paths: ["lib/my_app/integrations/**"]
-        )
+        Volatility.classify_module(file, ast, volatile_paths: ["lib/my_app/integrations/**"])
 
       assert classification.evidence.override == nil
       assert classification.tag == :volatile

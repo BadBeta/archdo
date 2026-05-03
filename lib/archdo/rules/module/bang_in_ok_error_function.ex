@@ -28,18 +28,15 @@ defmodule Archdo.Rules.Module.BangInOkErrorFunction do
   defp find_bang_in_ok_error(file, ast) do
     fns = AST.extract_functions(ast, :public)
 
-    fns
-    |> Enum.filter(fn {name, _arity, _meta, _args, body} ->
-      body != nil and
-        name not in @bang_ok_contexts and
-        not Naming.bang?(name) and
-        returns_ok_error?(body) and
-        contains_risky_bang?(body)
-    end)
-    |> Enum.map(fn {name, arity, meta, _args, body} ->
+    for {name, arity, meta, _args, body} <- fns,
+        body != nil and
+          name not in @bang_ok_contexts and
+          not Naming.bang?(name) and
+          returns_ok_error?(body) and
+          contains_risky_bang?(body) do
       bangs = collect_bang_calls(body)
       build_diagnostic(file, name, arity, meta, bangs)
-    end)
+    end
   end
 
   # Function returns {:ok, _} or {:error, _} — the ok/error contract

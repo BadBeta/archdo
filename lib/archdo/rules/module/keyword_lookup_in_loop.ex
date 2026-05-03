@@ -31,8 +31,9 @@ defmodule Archdo.Rules.Module.KeywordLookupInLoop do
         false
     end
 
-    LoopDetection.find_in_all_loops(ast, predicate)
-    |> Enum.map(fn {_, meta} -> build_diagnostic(file, AST.line(meta)) end)
+    Enum.map(LoopDetection.find_in_all_loops(ast, predicate), fn {_, meta} ->
+      build_diagnostic(file, AST.line(meta))
+    end)
   end
 
   defp build_diagnostic(file, line) do

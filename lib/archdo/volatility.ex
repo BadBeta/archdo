@@ -48,40 +48,41 @@ defmodule Archdo.Volatility do
   # Defined as a function (not @attribute) so regex literals can be
   # constructed at call time — module attributes can't hold compiled
   # Regex structs because of the embedded reference.
-  defp default_dependency_volatility, do: [
-    # Stdlib & BEAM (intrinsically stable)
-    {:lists, :stable, "OTP stdlib"},
-    {:maps, :stable, "OTP stdlib"},
-    {:erlang, :stable, "BEAM primitives"},
-    {:string, :stable, "OTP stdlib"},
-    {Phoenix.PubSub, :stable, "framework primitive"},
-    # Standards-implementing libraries (mature)
-    {URI, :stable, "RFC 3986"},
-    {Base, :stable, "RFC 4648"},
-    {:base64, :stable, "RFC 4648"},
-    {:crypto, :stable, "NIST FIPS / IETF — standard algorithms"},
-    {:zlib, :stable, "RFC 1950/1951"},
-    {:public_key, :stable, "X.509 / PKCS"},
-    {Jason, :stable, "RFC 8259 (JSON), mature lib"},
-    {Decimal, :stable, "IEEE 754, mature lib"},
-    {Calendar.ISO, :stable, "ISO 8601"},
-    # Stable with framework-provided test seam (Group F territory)
-    {Ecto.Repo, :stable_with_test_seam, "Ecto.Adapters.SQL.Sandbox"},
-    {Oban, :stable_with_test_seam, "Oban.Testing"},
-    # Volatile — vendor or protocol drift
-    {Tesla, :volatile, "HTTP middleware ecosystem churn"},
-    {Finch, :volatile, "HTTP client"},
-    {Req, :volatile, "HTTP client"},
-    {HTTPoison, :volatile, "HTTP client"},
-    {Plug.Conn, :volatile, "Phoenix surface"},
-    {~r/_sdk$/, :volatile, "vendor SDKs"},
-    {~r/^Elixir\.ExAws/, :volatile, "AWS API drift"},
-    # Non-deterministic — testability concerns
-    {File, :non_deterministic, "filesystem"},
-    {System, :non_deterministic, "OS coupling"},
-    {:rand, :non_deterministic, "randomness"},
-    {:os, :non_deterministic, "OS coupling"}
-  ]
+  defp default_dependency_volatility,
+    do: [
+      # Stdlib & BEAM (intrinsically stable)
+      {:lists, :stable, "OTP stdlib"},
+      {:maps, :stable, "OTP stdlib"},
+      {:erlang, :stable, "BEAM primitives"},
+      {:string, :stable, "OTP stdlib"},
+      {Phoenix.PubSub, :stable, "framework primitive"},
+      # Standards-implementing libraries (mature)
+      {URI, :stable, "RFC 3986"},
+      {Base, :stable, "RFC 4648"},
+      {:base64, :stable, "RFC 4648"},
+      {:crypto, :stable, "NIST FIPS / IETF — standard algorithms"},
+      {:zlib, :stable, "RFC 1950/1951"},
+      {:public_key, :stable, "X.509 / PKCS"},
+      {Jason, :stable, "RFC 8259 (JSON), mature lib"},
+      {Decimal, :stable, "IEEE 754, mature lib"},
+      {Calendar.ISO, :stable, "ISO 8601"},
+      # Stable with framework-provided test seam (Group F territory)
+      {Ecto.Repo, :stable_with_test_seam, "Ecto.Adapters.SQL.Sandbox"},
+      {Oban, :stable_with_test_seam, "Oban.Testing"},
+      # Volatile — vendor or protocol drift
+      {Tesla, :volatile, "HTTP middleware ecosystem churn"},
+      {Finch, :volatile, "HTTP client"},
+      {Req, :volatile, "HTTP client"},
+      {HTTPoison, :volatile, "HTTP client"},
+      {Plug.Conn, :volatile, "Phoenix surface"},
+      {~r/_sdk$/, :volatile, "vendor SDKs"},
+      {~r/^Elixir\.ExAws/, :volatile, "AWS API drift"},
+      # Non-deterministic — testability concerns
+      {File, :non_deterministic, "filesystem"},
+      {System, :non_deterministic, "OS coupling"},
+      {:rand, :non_deterministic, "randomness"},
+      {:os, :non_deterministic, "OS coupling"}
+    ]
 
   # Dual-purpose modules. `:stable_funs` are function/arity references that
   # should be classified :stable even when the rest of the module is
@@ -341,9 +342,14 @@ defmodule Archdo.Volatility do
 
       %{stable_funs: stable, non_deterministic_funs: nd} ->
         cond do
-          {fun, arity} in stable -> {:stable, "dual-purpose #{inspect(mod)}.#{fun}/#{arity}"}
-          {fun, arity} in nd -> {:non_deterministic, "dual-purpose #{inspect(mod)}.#{fun}/#{arity}"}
-          true -> lookup_profile(profile, mod)
+          {fun, arity} in stable ->
+            {:stable, "dual-purpose #{inspect(mod)}.#{fun}/#{arity}"}
+
+          {fun, arity} in nd ->
+            {:non_deterministic, "dual-purpose #{inspect(mod)}.#{fun}/#{arity}"}
+
+          true ->
+            lookup_profile(profile, mod)
         end
     end
   end

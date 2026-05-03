@@ -24,11 +24,11 @@ defmodule Archdo.Rules.Boundary.AnemicContext do
   def analyze_project(source_files, opts \\ []) do
     threshold = min_files(opts)
 
-    source_files
-    |> Enum.group_by(&context_dir/1)
-    |> Enum.reject(fn {dir, _} -> is_nil(dir) end)
-    |> Enum.filter(fn {_dir, files} -> length(files) < threshold end)
-    |> Enum.map(fn {dir, files} ->
+    grouped = Enum.group_by(source_files, &context_dir/1)
+
+    for {dir, files} <- grouped,
+        not is_nil(dir),
+        length(files) < threshold do
       Diagnostic.info("1.11",
         title: "Anemic context",
         message: "#{dir} contains only #{length(files)} file(s)",
@@ -66,7 +66,7 @@ defmodule Archdo.Rules.Boundary.AnemicContext do
         file: dir,
         line: 0
       )
-    end)
+    end
   end
 
   # §§ elixir-implementing: §10.5 — central config-accessor pattern.

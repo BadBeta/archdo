@@ -218,11 +218,7 @@ defmodule Archdo.Mcp.ReviewHints do
             category: "Process API Design",
             priority: 3,
             triggered_by: "#{scattered_count} scattered GenServer interface findings",
-            files:
-              diagnostics
-              |> Enum.filter(&(&1.rule_id == "5.17"))
-              |> Enum.map(& &1.file)
-              |> Enum.uniq(),
+            files: Enum.uniq(for d <- diagnostics, d.rule_id == "5.17", do: d.file),
             investigate: [
               %{
                 question:
@@ -652,10 +648,7 @@ defmodule Archdo.Mcp.ReviewHints do
   end
 
   defp find_files_by_rule(diagnostics, rule_ids) do
-    diagnostics
-    |> Enum.filter(&(&1.rule_id in rule_ids))
-    |> Enum.map(& &1.file)
-    |> Enum.uniq()
+    Enum.uniq(for d <- diagnostics, d.rule_id in rule_ids, do: d.file)
   end
 
   defp extract_clone_files(%{duplicates: dups}) when is_binary(dups) do

@@ -45,13 +45,12 @@ defmodule Archdo.Rules.Boundary.ChattyBoundary do
         fn {_, _, call} -> call end
       )
 
-    cross_calls
-    |> Enum.filter(fn {_pair, calls} -> length(calls) >= @warn_chatter end)
-    |> Enum.map(fn {{ctx_a, ctx_b}, calls} ->
+    for {{ctx_a, ctx_b}, calls} <- cross_calls,
+        length(calls) >= @warn_chatter do
       count = length(calls)
       first_call = hd(calls)
       build_chatty_diag(ctx_a, ctx_b, count, first_call)
-    end)
+    end
   end
 
   defp build_chatty_diag(ctx_a, ctx_b, count, first_call) do

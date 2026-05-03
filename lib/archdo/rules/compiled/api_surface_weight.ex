@@ -54,9 +54,7 @@ defmodule Archdo.Rules.Compiled.ApiSurfaceWeight do
     mod_name = AST.module_name(module)
 
     unused_fns =
-      usage
-      |> Enum.filter(fn {_fa, count} -> count == 0 end)
-      |> Enum.map(fn {{f, a}, _} -> "#{f}/#{a}" end)
+      for({{f, a}, count} <- usage, count == 0, do: "#{f}/#{a}")
       |> Enum.sort()
       |> Enum.take(10)
       |> Enum.join(", ")

@@ -20,15 +20,16 @@ defmodule Archdo.Rules.Testing.MockingOwnModules do
 
   defp find_own_module_mocks(file, ast) do
     # Determine the app's root namespace from the mock target module
-    AST.find_all(ast, fn
-      # Mox.defmock(MyApp.Users.Mock, for: MyApp.Users)
-      {{:., _, [{:__aliases__, _, [:Mox]}, :defmock]}, _, _} -> true
-      {:defmock, _, _} -> true
-      _ -> false
-    end)
-    |> Enum.flat_map(&extract_mock_target/1)
-    |> Enum.filter(&own_module?/1)
-    |> Enum.map(fn {target, meta} ->
+    nodes =
+      AST.find_all(ast, fn
+        # Mox.defmock(MyApp.Users.Mock, for: MyApp.Users)
+        {{:., _, [{:__aliases__, _, [:Mox]}, :defmock]}, _, _} -> true
+        {:defmock, _, _} -> true
+        _ -> false
+      end)
+
+    for {target, meta} = pair <- Enum.flat_map(nodes, &extract_mock_target/1),
+        own_module?(pair) do
       Diagnostic.info("7.15",
         title: "Mocking an internal module",
         message:
@@ -60,7 +61,7 @@ defmodule Archdo.Rules.Testing.MockingOwnModules do
         file: file,
         line: AST.line(meta)
       )
-    end)
+    end
   end
 
   defp extract_mock_target({{:., _, [_, :defmock]}, meta, args}),

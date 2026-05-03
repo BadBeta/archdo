@@ -16,16 +16,12 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
   """
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
   def analyze_compiled(graph) do
-    graph
-    |> Compiled.modules()
-    |> Map.keys()
-    |> Enum.filter(fn mod ->
-      orphan?(graph, mod) and
-        not behaviour_definition?(mod, graph) and
-        not application_entry_point?(mod) and
-        not test_support_module?(mod)
-    end)
-    |> Enum.map(&build_diagnostic/1)
+    for mod <- Map.keys(Compiled.modules(graph)),
+        orphan?(graph, mod) and
+          not behaviour_definition?(mod, graph) and
+          not application_entry_point?(mod) and
+          not test_support_module?(mod),
+        do: build_diagnostic(mod)
   end
 
   defp orphan?(graph, mod) do

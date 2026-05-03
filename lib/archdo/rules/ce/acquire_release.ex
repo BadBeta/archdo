@@ -50,14 +50,12 @@ defmodule Archdo.Rules.CE.AcquireRelease do
 
     line = first_line(ast)
 
-    @pairs
-    |> Enum.filter(fn {open, close} ->
-      MapSet.member?(public_fns, open) and
-        MapSet.member?(public_fns, close) and
-        not has_bracket_helper?(public_fns, open) and
-        not lifecycle_pair?({open, close})
-    end)
-    |> Enum.map(fn {open, close} -> build_diagnostic(file, line, open, close) end)
+    for {open, close} <- @pairs,
+        MapSet.member?(public_fns, open) and
+          MapSet.member?(public_fns, close) and
+          not has_bracket_helper?(public_fns, open) and
+          not lifecycle_pair?({open, close}),
+        do: build_diagnostic(file, line, open, close)
   end
 
   defp lifecycle_pair?(pair), do: pair in @process_lifecycle_pairs

@@ -126,13 +126,14 @@ defmodule Archdo.Rules.CE.VolatilitySubstitutability do
   end
 
   defp count_abstractions(ast) do
-    AST.find_all(ast, fn
-      {:@, _, [{:behaviour, _, _}]} -> true
-      {:@, _, [{:callback, _, _}]} -> true
-      {:defprotocol, _, _} -> true
-      _ -> false
-    end)
-    |> length()
+    length(
+      AST.find_all(ast, fn
+        {:@, _, [{:behaviour, _, _}]} -> true
+        {:@, _, [{:callback, _, _}]} -> true
+        {:defprotocol, _, _} -> true
+        _ -> false
+      end)
+    )
   end
 
   defp median(list) do

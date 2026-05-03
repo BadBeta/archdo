@@ -182,8 +182,8 @@ defmodule Archdo.Rules.Module.ShadowedClause do
          later_args,
          later_guards
        ) do
-    classify_guards(earlier_guards, later_guards)
-    |> emit_shadow_diag(file, earlier_line, later_line, earlier_args, later_args)
+    kind = classify_guards(earlier_guards, later_guards)
+    emit_shadow_diag(kind, file, earlier_line, later_line, earlier_args, later_args)
   end
 
   defp classify_guards(earlier_guards, later_guards) do
@@ -300,8 +300,7 @@ defmodule Archdo.Rules.Module.ShadowedClause do
       true ->
         # Pick the most informative reason
         reason =
-          results
-          |> Enum.find_value(fn
+          Enum.find_value(results, fn
             {:shadowed, r} -> r
             :ok -> nil
           end)
@@ -438,8 +437,9 @@ defmodule Archdo.Rules.Module.ShadowedClause do
 
   defp check_tuple_shadowing(earlier_elems, later_elems) do
     results =
-      Enum.zip(earlier_elems, later_elems)
-      |> Enum.map(fn {e, l} -> single_pattern_shadows?(e, l) end)
+      Enum.map(Enum.zip(earlier_elems, later_elems), fn {e, l} ->
+        single_pattern_shadows?(e, l)
+      end)
 
     case Enum.all?(results, &match?({:shadowed, _}, &1)) do
       true -> {:shadowed, :broad_tuple_before_specific}
@@ -540,13 +540,11 @@ defmodule Archdo.Rules.Module.ShadowedClause do
   # This is NOT a catch-all — it constrains both params to be equal.
   defp has_repeated_variable?(args) do
     var_names =
-      args
-      |> Enum.filter(fn
-        {name, _, ctx} when is_atom(name) and is_atom(ctx) -> true
-        _ -> false
-      end)
-      |> Enum.map(fn {name, _, _} -> name end)
-      |> Enum.reject(&(&1 == :_))
+      for {name, _, ctx} <- args,
+          is_atom(name),
+          is_atom(ctx),
+          name != :_,
+          do: name
 
     length(var_names) != length(Enum.uniq(var_names))
   end

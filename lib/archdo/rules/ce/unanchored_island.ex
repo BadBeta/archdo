@@ -70,13 +70,15 @@ defmodule Archdo.Rules.CE.UnanchoredIsland do
       sccs: []
     }
 
-    Enum.reduce(nodes, state, fn node, acc ->
-      case Map.has_key?(acc.indices, node) do
-        true -> acc
-        false -> strongconnect(node, adjacency, acc)
-      end
-    end)
-    |> Map.fetch!(:sccs)
+    final =
+      Enum.reduce(nodes, state, fn node, acc ->
+        case Map.has_key?(acc.indices, node) do
+          true -> acc
+          false -> strongconnect(node, adjacency, acc)
+        end
+      end)
+
+    Map.fetch!(final, :sccs)
   end
 
   defp strongconnect(v, adjacency, state) do

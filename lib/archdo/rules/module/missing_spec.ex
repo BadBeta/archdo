@@ -43,14 +43,11 @@ defmodule Archdo.Rules.Module.MissingSpec do
     specs = collect_specs(body)
     public_fns = collect_public_functions(body)
 
-    public_fns
-    |> Enum.reject(fn {name, arity, _meta} ->
-      # Skip if it has a spec, is a callback impl, or is a defdelegate
-      MapSet.member?(specs, {name, arity}) or
-        impl?(body, name) or
-        defdelegate?(body, name)
-    end)
-    |> Enum.map(fn {name, arity, meta} ->
+    for {name, arity, meta} <- public_fns,
+        # Skip if it has a spec, is a callback impl, or is a defdelegate
+        not MapSet.member?(specs, {name, arity}),
+        not impl?(body, name),
+        not defdelegate?(body, name) do
       module_str = AST.module_name(module_name)
 
       Diagnostic.warning("2.2",
@@ -90,7 +87,7 @@ defmodule Archdo.Rules.Module.MissingSpec do
         file: file,
         line: AST.line(meta)
       )
-    end)
+    end
   end
 
   defp collect_specs(body) do

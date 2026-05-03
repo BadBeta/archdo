@@ -17,8 +17,7 @@ defmodule Archdo.Quadrant do
   @type evidence :: map()
 
   @type fire_action ::
-          {:fire, severity :: Diagnostic.severity(), rule_id :: String.t(),
-           title :: String.t()}
+          {:fire, severity :: Diagnostic.severity(), rule_id :: String.t(), title :: String.t()}
   @type action :: :no_finding | fire_action()
 
   @callback axes(file :: String.t(), ast :: Macro.t(), opts :: keyword()) ::
@@ -111,7 +110,6 @@ defmodule Archdo.Quadrant do
   @spec distribution_for(module(), String.t(), Macro.t(), keyword()) ::
           %{cell() => non_neg_integer()}
   def distribution_for(rule, file, ast, opts) do
-    rule.axes(file, ast, opts)
-    |> axes_summary(rule.policy())
+    axes_summary(rule.axes(file, ast, opts), rule.policy())
   end
 end

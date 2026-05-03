@@ -90,9 +90,12 @@ defmodule Archdo.Metrics do
   """
   @spec afferent_coupling(Archdo.Graph.t(), String.t()) :: non_neg_integer()
   def afferent_coupling(%Graph{edges: edges}, module) do
-    edges
-    |> Enum.filter(fn edge -> edge.target == module end)
-    |> Enum.map(& &1.source)
+    sources =
+      for edge <- edges,
+          edge.target == module,
+          do: edge.source
+
+    sources
     |> Enum.uniq()
     |> Enum.reject(fn source -> source == module or stdlib?(source) end)
     |> length()

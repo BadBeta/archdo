@@ -51,11 +51,9 @@ defmodule Archdo.Rules.Compiled.ContextQuality do
 
     # Also report a summary diagnostic if no contexts have boundary modules
     no_boundary =
-      contexts
-      |> Enum.filter(fn ctx ->
-        length(ctx.members) >= @min_members and ctx.boundary_module == nil
-      end)
-      |> Enum.map(&build_no_boundary_diagnostic/1)
+      for ctx <- contexts,
+          length(ctx.members) >= @min_members and ctx.boundary_module == nil,
+          do: build_no_boundary_diagnostic(ctx)
 
     context_diagnostics ++ no_boundary
   end

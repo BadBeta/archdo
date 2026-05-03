@@ -42,25 +42,20 @@ defmodule Archdo.Rules.CE.MissingDeletionPath do
   end
 
   defp maybe_diagnostic({file, ast}, deletion_targets) do
-    case AST.has_marker?(ast, :archdo_gdpr_exempt) do
-      true ->
-        []
+    with false <- AST.has_marker?(ast, :archdo_gdpr_exempt),
+         %{} = info <- PiiSchema.schema_info(ast) do
+      diagnose_schema(file, info, deletion_targets)
+    else
+      _ -> []
+    end
+  end
 
-      false ->
-        case PiiSchema.schema_info(ast) do
-          nil ->
-            []
-
-          info ->
-            module = info.module
-
-            cond do
-              MapSet.member?(deletion_targets, module) -> []
-              MapSet.member?(deletion_targets, AST.short_name(module)) -> []
-              MapSet.member?(deletion_targets, info.table) -> []
-              true -> [build_diagnostic(file, info)]
-            end
-        end
+  defp diagnose_schema(file, info, deletion_targets) do
+    cond do
+      MapSet.member?(deletion_targets, info.module) -> []
+      MapSet.member?(deletion_targets, AST.short_name(info.module)) -> []
+      MapSet.member?(deletion_targets, info.table) -> []
+      true -> [build_diagnostic(file, info)]
     end
   end
 

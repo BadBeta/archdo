@@ -16,11 +16,9 @@ defmodule Archdo.Rules.Testing.TestMirrorsSource do
   def analyze_project(source_files, test_files) do
     test_set = MapSet.new(test_files, &normalize_test_path/1)
 
-    source_files
-    |> Enum.reject(fn file ->
-      skip?(file) or MapSet.member?(test_set, expected_test_path(file))
-    end)
-    |> Enum.map(fn file ->
+    for file <- source_files,
+        not skip?(file),
+        not MapSet.member?(test_set, expected_test_path(file)) do
       expected = "test/#{expected_test_path(file)}_test.exs"
 
       Diagnostic.info("7.1",
@@ -53,7 +51,7 @@ defmodule Archdo.Rules.Testing.TestMirrorsSource do
         file: file,
         line: 0
       )
-    end)
+    end
   end
 
   defp expected_test_path(source_file) do

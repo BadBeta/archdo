@@ -76,16 +76,11 @@ defmodule Archdo.Rules.Compiled.PhantomDependency do
     # Phantom = referenced but never called
     phantoms = MapSet.difference(referenced_modules, actually_called)
 
-    phantoms
-    |> Enum.map(fn target_mod ->
-      ref_type = classify_reference(caller_mod, target_mod, forms)
-      {target_mod, ref_type}
-    end)
     # @behaviour declarations are inherently compile-time contracts — not phantom
-    |> Enum.reject(fn {_mod, ref_type} -> ref_type == :behaviour end)
-    |> Enum.map(fn {target_mod, ref_type} ->
-      build_diagnostic(caller_mod, target_mod, ref_type)
-    end)
+    for target_mod <- phantoms,
+        ref_type = classify_reference(caller_mod, target_mod, forms),
+        ref_type != :behaviour,
+        do: build_diagnostic(caller_mod, target_mod, ref_type)
   end
 
   # Walk all forms collecting Elixir module atoms

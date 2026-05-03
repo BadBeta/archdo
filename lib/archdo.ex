@@ -285,11 +285,13 @@ defmodule Archdo do
     # cross-file) classify with `nil` so per-rule overrides still fire while
     # layer-based downgrades don't apply (no single file to classify).
     all =
-      (file_ast_diagnostics ++
-         file_path_diagnostics ++
-         metrics_diagnostics ++
-         function_graph_diagnostics)
-      |> Enum.map(&calibrate_project_diagnostic(&1, file_asts))
+      Enum.map(
+        file_ast_diagnostics ++
+          file_path_diagnostics ++
+          metrics_diagnostics ++
+          function_graph_diagnostics,
+        &calibrate_project_diagnostic(&1, file_asts)
+      )
 
     Runner.filter_diagnostics(all, opts)
   end
@@ -672,7 +674,7 @@ defmodule Archdo do
         end)
 
         # Class distribution
-        dist = per_module |> Enum.frequencies_by(fn {_, _, _, c} -> c end)
+        dist = Enum.frequencies_by(per_module, fn {_, _, _, c} -> c end)
         IO.puts("\nClass distribution: #{inspect(dist)}\n")
     end
   end
@@ -683,9 +685,7 @@ defmodule Archdo do
   # files. Empty section when no quadrant rules exist (current state until
   # CE-2/3 lands), so the column shape is in place from M14 onward.
   defp print_quadrant_distributions(file_asts) do
-    rules =
-      (Runner.phase1_rules() ++ Runner.graph_rules())
-      |> Quadrant.list_rules()
+    rules = Quadrant.list_rules(Runner.phase1_rules() ++ Runner.graph_rules())
 
     print_quadrants(rules, file_asts)
   end

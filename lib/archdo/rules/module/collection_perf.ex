@@ -195,8 +195,7 @@ defmodule Archdo.Rules.Module.CollectionPerf do
       _ -> false
     end
 
-    LoopDetection.find_in_all_loops(ast, member_predicate)
-    |> Enum.map(fn {_, meta} ->
+    Enum.map(LoopDetection.find_in_all_loops(ast, member_predicate), fn {_, meta} ->
       build_diagnostic(file, AST.line(meta), :member_in_loop, nil)
     end)
   end

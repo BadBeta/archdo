@@ -63,5 +63,5 @@ defmodule Archdo.ReportTier do
   @spec all_tiers() :: [tier()]
   def all_tiers, do: [:critical, :architectural, :quality, :all]
 
-  defp labels_text, do: all_tiers() |> Enum.map_join(", ", &Atom.to_string/1)
+  defp labels_text, do: Enum.map_join(all_tiers(), ", ", &Atom.to_string/1)
 end

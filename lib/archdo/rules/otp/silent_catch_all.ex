@@ -19,10 +19,9 @@ defmodule Archdo.Rules.OTP.SilentCatchAll do
       true ->
         callbacks = AST.extract_callbacks(ast)
 
-        (callbacks[:handle_info] || [])
-        |> Enum.filter(&catch_all_clause?/1)
-        |> Enum.reject(&has_logging?/1)
-        |> Enum.map(fn {meta, _args, _body} ->
+        for {meta, _args, _body} = clause <- callbacks[:handle_info] || [],
+            catch_all_clause?(clause),
+            not has_logging?(clause) do
           Diagnostic.info("5.14",
             title: "Silent handle_info catch-all",
             message: "A catch-all handle_info clause discards messages without logging",
@@ -56,7 +55,7 @@ defmodule Archdo.Rules.OTP.SilentCatchAll do
             file: file,
             line: AST.line(meta)
           )
-        end)
+        end
     end
   end
 

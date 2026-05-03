@@ -25,10 +25,15 @@ defmodule Archdo.Rules.Compiled.TransitiveDeadCode do
 
     # Walk outward from dead roots: if ALL callers of a function are dead,
     # the function is transitively dead. Only check project functions.
-    find_transitive_dead(graph, dead_roots, MapSet.new(), project_modules)
-    |> MapSet.difference(dead_roots)
-    |> Enum.filter(fn {mod, _f, _a} -> MapSet.member?(project_modules, mod) end)
-    |> Enum.map(&build_diagnostic/1)
+    transitive =
+      MapSet.difference(
+        find_transitive_dead(graph, dead_roots, MapSet.new(), project_modules),
+        dead_roots
+      )
+
+    for {mod, _f, _a} = mfa <- transitive,
+        MapSet.member?(project_modules, mod),
+        do: build_diagnostic(mfa)
   end
 
   defp find_transitive_dead(graph, dead_set, visited, project_modules) do

@@ -54,11 +54,14 @@ defmodule Archdo.Rules.Testing.WeakAssertion do
       _ ->
         false
     end)
-    |> Enum.reject(fn {:assert, _, [call]} ->
+    |> then(fn nodes ->
       # Allow assert Enum.any?(...) — predicate functions are fine
-      predicate_call?(call)
+      for {:assert, meta, [call]} <- nodes,
+          not predicate_call?(call) do
+        {meta, call}
+      end
     end)
-    |> Enum.map(fn {:assert, meta, [call]} ->
+    |> Enum.map(fn {meta, call} ->
       call_str = extract_call_name(call)
 
       Diagnostic.info("7.18",

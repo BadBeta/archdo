@@ -25,19 +25,8 @@ defmodule Archdo.Rules.Boundary.UnusedDependency do
     # Get the full source as string to check usage
     source = File.read!(file)
 
-    aliases
-    |> Enum.filter(fn {short_name, _full, _line} ->
-      # Count how many times the short name appears (excluding the alias line itself)
-      # A simple heuristic: if it appears only once, it's just the alias declaration
-      occurrences =
-        source
-        |> String.split(short_name)
-        |> length()
-        |> Kernel.-(1)
-
-      occurrences <= 1
-    end)
-    |> Enum.map(fn {short_name, full, line} ->
+    for {short_name, full, line} <- aliases,
+        unused_alias?(source, short_name) do
       Diagnostic.info("4.6",
         title: "Unused alias",
         message: "alias #{full} is declared but #{short_name} is never referenced",
@@ -66,7 +55,14 @@ defmodule Archdo.Rules.Boundary.UnusedDependency do
         file: file,
         line: line
       )
-    end)
+    end
+  end
+
+  # Count how many times the short name appears (excluding the alias line itself).
+  # A simple heuristic: if it appears only once, it's just the alias declaration.
+  defp unused_alias?(source, short_name) do
+    occurrences = length(String.split(source, short_name)) - 1
+    occurrences <= 1
   end
 
   defp collect_aliases(ast) do

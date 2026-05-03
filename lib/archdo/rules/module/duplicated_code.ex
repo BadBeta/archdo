@@ -134,7 +134,7 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   defp umbrella_app(%{file: file}) do
     case String.split(file, "/") do
       ["apps", app | _] -> app
-      [_ | _] = parts -> Enum.find_index(parts, &(&1 == "apps")) |> apps_segment_after(parts)
+      [_ | _] = parts -> apps_segment_after(Enum.find_index(parts, &(&1 == "apps")), parts)
       _ -> nil
     end
   end

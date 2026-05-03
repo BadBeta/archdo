@@ -39,12 +39,13 @@ defmodule Archdo.Rules.CE.ContractDensity do
     test_index = build_test_index(file_asts)
 
     candidates =
-      file_asts
-      |> Enum.reject(fn {file, _} -> AST.test_file?(file) end)
-      |> Enum.filter(fn {file, ast} -> IrreversibleDecision.candidate?(file, ast, opts) end)
-      |> Enum.reject(fn {_, ast} -> AST.has_marker?(ast, :archdo_skip_contract_check) end)
-      |> Enum.map(fn {file, ast} -> {file, ast, sub_scores(ast, file, test_index)} end)
-      |> Enum.reject(fn {_, _, scores} -> scores == nil end)
+      for {file, ast} <- file_asts,
+          not AST.test_file?(file),
+          IrreversibleDecision.candidate?(file, ast, opts),
+          not AST.has_marker?(ast, :archdo_skip_contract_check),
+          scores = sub_scores(ast, file, test_index),
+          scores != nil,
+          do: {file, ast, scores}
 
     case length(candidates) < @min_cohort_size do
       true ->

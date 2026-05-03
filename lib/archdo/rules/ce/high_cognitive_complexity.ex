@@ -33,10 +33,17 @@ defmodule Archdo.Rules.CE.HighCognitiveComplexity do
     |> AST.extract_functions(:public)
     |> Enum.flat_map(fn {name, arity, meta, _args, body} ->
       case body && CognitiveComplexity.score(body) do
-        nil -> []
-        score when score >= @error_threshold -> [build_diagnostic(file, name, arity, meta, score, :error)]
-        score when score >= @warning_threshold -> [build_diagnostic(file, name, arity, meta, score, :warning)]
-        _ -> []
+        nil ->
+          []
+
+        score when score >= @error_threshold ->
+          [build_diagnostic(file, name, arity, meta, score, :error)]
+
+        score when score >= @warning_threshold ->
+          [build_diagnostic(file, name, arity, meta, score, :warning)]
+
+        _ ->
+          []
       end
     end)
   end

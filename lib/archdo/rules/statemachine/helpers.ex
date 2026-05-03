@@ -50,11 +50,13 @@ defmodule Archdo.Rules.StateMachine.Helpers do
   """
   @spec declared_states(Macro.t()) :: MapSet.t(atom()) | nil
   def declared_states(ast) do
-    Archdo.AST.find_all(ast, fn
-      {:@, _, [{:states, _, [_]}]} -> true
-      _ -> false
-    end)
-    |> Enum.find_value(fn
+    nodes =
+      Archdo.AST.find_all(ast, fn
+        {:@, _, [{:states, _, [_]}]} -> true
+        _ -> false
+      end)
+
+    Enum.find_value(nodes, fn
       {:@, _, [{:states, _, [list]}]} -> extract_atom_list(list)
       _ -> nil
     end)

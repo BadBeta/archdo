@@ -279,8 +279,10 @@ defmodule Archdo.Compiled.DiagramSystem do
       |> Map.keys()
       |> Enum.map(&Atom.to_string/1)
 
-    [:http, :websocket, :liveview, :cli, :api]
-    |> Enum.filter(&Enum.any?(mod_strings, fn s -> outside_signal?(&1, s) end))
+    Enum.filter(
+      [:http, :websocket, :liveview, :cli, :api],
+      &Enum.any?(mod_strings, fn s -> outside_signal?(&1, s) end)
+    )
   end
 
   defp outside_signal?(:http, mod_str), do: String.contains?(mod_str, "Endpoint")
@@ -584,10 +586,9 @@ defmodule Archdo.Compiled.DiagramSystem do
   end
 
   defp directed_edges(source_mod, graph, target_set) do
-    graph
-    |> Query.module_dependencies(source_mod)
-    |> Enum.filter(&MapSet.member?(target_set, &1))
-    |> Enum.map(fn target_mod -> {source_mod, target_mod} end)
+    for target_mod <- Query.module_dependencies(graph, source_mod),
+        MapSet.member?(target_set, target_mod),
+        do: {source_mod, target_mod}
   end
 
   # §§ elixir-implementing: §2.1 — guard-dispatched on hidden_count.

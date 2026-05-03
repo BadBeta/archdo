@@ -30,10 +30,8 @@ defmodule Archdo.QuadrantTestRule do
   @impl Archdo.Quadrant
   def policy do
     %{
-      {:high, :volatile} =>
-        {:fire, :warning, "QTEST.fire-hv", "high-volatile actionable"},
-      {:low, :volatile} =>
-        {:fire, :info, "QTEST.fire-lv", "low-volatile suggest"},
+      {:high, :volatile} => {:fire, :warning, "QTEST.fire-hv", "high-volatile actionable"},
+      {:low, :volatile} => {:fire, :info, "QTEST.fire-lv", "low-volatile suggest"},
       {:high, :stable} => :no_finding,
       {:low, :stable} => :no_finding
     }

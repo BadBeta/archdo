@@ -23,22 +23,18 @@ defmodule Archdo.Rules.Testing.LongSetup do
   end
 
   defp find_long_setups(file, ast) do
-    AST.find_all(ast, fn
-      {:setup, _, _} -> true
-      {:setup_all, _, _} -> true
-      _ -> false
-    end)
-    |> Enum.map(fn {kind, meta, args} ->
-      size = AST.ast_size(args)
+    setups =
+      AST.find_all(ast, fn
+        {:setup, _, _} -> true
+        {:setup_all, _, _} -> true
+        _ -> false
+      end)
 
-      if size > @max_setup_nodes do
-        {kind, AST.line(meta), size}
-      else
-        nil
-      end
-    end)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.map(fn {kind, line, size} ->
+    for {kind, meta, args} <- setups,
+        size = AST.ast_size(args),
+        size > @max_setup_nodes do
+      line = AST.line(meta)
+
       Diagnostic.info("7.11",
         title: "Long #{kind} block",
         message: "#{kind} block has #{size} AST nodes (~#{div(size, 3)} lines)",
@@ -69,6 +65,6 @@ defmodule Archdo.Rules.Testing.LongSetup do
         file: file,
         line: line
       )
-    end)
+    end
   end
 end

@@ -15,9 +15,9 @@ defmodule Archdo.Rules.Module.SingleImplProtocol do
   Built by scanning all files for defprotocol and defimpl.
   """
   def analyze_project(protocol_impls, file_map) do
-    protocol_impls
-    |> Enum.filter(fn {_protocol, impls} -> length(impls) == 1 end)
-    |> Enum.map(fn {protocol, [impl]} ->
+    # Pattern-match generator: only protocols with exactly one implementation
+    # match the [impl] pattern; multi-impl entries are silently skipped.
+    for {protocol, [impl]} <- protocol_impls do
       file = Map.get(file_map, protocol, "unknown")
 
       Diagnostic.info("4.2",
@@ -50,6 +50,6 @@ defmodule Archdo.Rules.Module.SingleImplProtocol do
         file: file,
         line: 1
       )
-    end)
+    end
   end
 end

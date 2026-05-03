@@ -25,9 +25,8 @@ defmodule Archdo.Rules.OTP.TimeoutAsPolling do
 
         # Only flag if the timeout handler itself returns a timeout
         # (indicating it's being used as a recurring timer)
-        timeout_handlers
-        |> Enum.filter(&returns_timeout?/1)
-        |> Enum.map(fn {meta, _args, _body} ->
+        for {meta, _args, _body} = handler <- timeout_handlers,
+            returns_timeout?(handler) do
           Diagnostic.warning("5.15",
             title: "GenServer timeout used as periodic timer",
             message:
@@ -72,7 +71,7 @@ defmodule Archdo.Rules.OTP.TimeoutAsPolling do
             file: file,
             line: AST.line(meta)
           )
-        end)
+        end
     end
   end
 

@@ -23,22 +23,19 @@ defmodule Archdo.Rules.Module.RegexInLoop do
   defp find_regex_in_hot_paths(ast, file) do
     # Check all loop constructs (Enum, Stream, :lists, for, receive, recursion)
     loop_hits =
-      LoopDetection.find_in_loops(ast, &regex_sigil?/1)
-      |> Enum.map(fn {_, meta} ->
+      Enum.map(LoopDetection.find_in_loops(ast, &regex_sigil?/1), fn {_, meta} ->
         build_diagnostic(file, AST.line(meta), :loop)
       end)
 
     # Check GenServer callbacks (hot paths)
     genserver_hits =
-      LoopDetection.find_in_genserver_callbacks(ast, &regex_sigil?/1)
-      |> Enum.map(fn {_, meta} ->
+      Enum.map(LoopDetection.find_in_genserver_callbacks(ast, &regex_sigil?/1), fn {_, meta} ->
         build_diagnostic(file, AST.line(meta), :genserver_callback)
       end)
 
     # Check recursive functions
     recursion_hits =
-      LoopDetection.find_in_recursive_fns(ast, &regex_sigil?/1)
-      |> Enum.map(fn {_, meta} ->
+      Enum.map(LoopDetection.find_in_recursive_fns(ast, &regex_sigil?/1), fn {_, meta} ->
         build_diagnostic(file, AST.line(meta), :recursion)
       end)
 

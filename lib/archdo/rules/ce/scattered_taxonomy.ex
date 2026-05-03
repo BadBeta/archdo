@@ -195,7 +195,7 @@ defmodule Archdo.Rules.CE.ScatteredTaxonomy do
         canonical: canon,
         surface_count: length(surfaces),
         call_sites: length(occs),
-        examples: Enum.take(Enum.map(surfaces, &format_surface/1), 5)
+        examples: surfaces |> Stream.map(&format_surface/1) |> Enum.take(5)
       },
       file: file,
       line: line

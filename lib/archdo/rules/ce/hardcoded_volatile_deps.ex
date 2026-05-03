@@ -40,8 +40,12 @@ defmodule Archdo.Rules.CE.HardcodedVolatileDeps do
   #   - `Application.compile_env`-bound module slot
   defp has_seam?(ast) do
     AST.contains?(ast, fn
-      {:@, _, [{:behaviour, _, _}]} -> true
-      {:@, _, [{:callback, _, _}]} -> true
+      {:@, _, [{:behaviour, _, _}]} ->
+        true
+
+      {:@, _, [{:callback, _, _}]} ->
+        true
+
       {{:., _, [{:__aliases__, _, [:Application]}, fun]}, _, _}
       when fun in [:compile_env, :compile_env!, :get_env, :fetch_env, :fetch_env!] ->
         true

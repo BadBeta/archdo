@@ -88,7 +88,6 @@ defmodule Archdo.Rules.Boundary.InternalStructAsEncoder do
     end
   end
 
-
   # §§ elixir-implementing: §5.2, §10.4 — multi-clause head dispatch on the
   # @derive AST shape. We accept any of these as "explicit shape" (NOT bare):
   #   - {:{}, _, [Jason.Encoder, [only: ...]]}     - 3-arg tuple form

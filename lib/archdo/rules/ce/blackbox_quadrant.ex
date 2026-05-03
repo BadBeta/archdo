@@ -83,8 +83,7 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
   end
 
   defp structural_failures(components) do
-    @structural_components
-    |> Enum.flat_map(fn key ->
+    Enum.flat_map(@structural_components, fn key ->
       case Map.get(components, key, 1.0) < 1.0 do
         true -> [Atom.to_string(key)]
         false -> []
@@ -143,7 +142,7 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
   end
 
   defp alternatives_for(failed) do
-    Enum.flat_map(failed, &fix_for_component/1) |> Enum.take(3)
+    Enum.take(Enum.flat_map(failed, &fix_for_component/1), 3)
   end
 
   defp fix_for_component("input_closure") do

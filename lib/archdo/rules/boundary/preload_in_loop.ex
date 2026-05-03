@@ -32,15 +32,13 @@ defmodule Archdo.Rules.Boundary.PreloadInLoop do
 
     # Check all loop constructs: Enum, Stream, :lists, for, receive, Task.async_stream
     loop_hits =
-      LoopDetection.find_in_loops(ast, predicate)
-      |> Enum.map(fn {_, meta} ->
+      Enum.map(LoopDetection.find_in_loops(ast, predicate), fn {_, meta} ->
         build_diagnostic(file, AST.line(meta), "loop")
       end)
 
     # Check recursive functions (recursive Repo calls = N+1)
     recursion_hits =
-      LoopDetection.find_in_recursive_fns(ast, predicate)
-      |> Enum.map(fn {_, meta} ->
+      Enum.map(LoopDetection.find_in_recursive_fns(ast, predicate), fn {_, meta} ->
         build_diagnostic(file, AST.line(meta), "recursive function")
       end)
 

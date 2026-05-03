@@ -67,11 +67,15 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
 
   defp diagnose_function_clauses({{name, arity}, clauses}, file, layer) do
     {_, _, meta, _, _} = hd(clauses)
-    any_telemetry? = Enum.any?(clauses, fn {_, _, _, _, body} -> body && contains_telemetry?(body) end)
+
+    any_telemetry? =
+      Enum.any?(clauses, fn {_, _, _, _, body} -> body && contains_telemetry?(body) end)
+
     diag_if_no_telemetry(any_telemetry?, file, name, arity, meta, layer)
   end
 
   defp diag_if_no_telemetry(true, _file, _name, _arity, _meta, _layer), do: []
+
   defp diag_if_no_telemetry(false, file, name, arity, meta, layer),
     do: [build_diagnostic(file, name, arity, meta, layer)]
 

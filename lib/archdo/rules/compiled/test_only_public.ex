@@ -23,10 +23,10 @@ defmodule Archdo.Rules.Compiled.TestOnlyPublic do
   end
 
   defp test_only_diags({module, info}, callee_index) do
-    info.exports
-    |> Enum.filter(&export_called_only_from_tests?(&1, module, callee_index))
-    |> Enum.reject(fn {func, _arity} -> framework_function?(func) end)
-    |> Enum.map(fn {func, arity} -> build_diagnostic(module, func, arity) end)
+    for {func, arity} <- info.exports,
+        export_called_only_from_tests?({func, arity}, module, callee_index),
+        not framework_function?(func),
+        do: build_diagnostic(module, func, arity)
   end
 
   defp export_called_only_from_tests?({func, arity}, module, callee_index) do

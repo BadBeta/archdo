@@ -112,9 +112,7 @@ defmodule Archdo.Compiled.Diagram do
 
     # Render edges (only show edges with >= 2 calls to reduce noise)
     edge_lines =
-      edges
-      |> Enum.filter(fn {_from, _to, count} -> count >= 2 end)
-      |> Enum.map(fn {from, to, count} ->
+      for {from, to, count} <- edges, count >= 2 do
         from_id = sanitize_id(AST.module_name(from))
         to_id = sanitize_id(AST.module_name(to))
 
@@ -122,7 +120,7 @@ defmodule Archdo.Compiled.Diagram do
           n when n >= 10 -> "  #{from_id} ==>|#{count}| #{to_id}"
           _ -> "  #{from_id} -->|#{count}| #{to_id}"
         end
-      end)
+      end
 
     Enum.join(lines ++ node_lines ++ [""] ++ edge_lines, "\n")
   end
@@ -237,14 +235,12 @@ defmodule Archdo.Compiled.Diagram do
     |> Enum.flat_map(fn {caller_mod, calls} ->
       caller_ctx = Map.get(context_of, caller_mod)
 
-      calls
-      |> Enum.map(fn call -> elem(call.callee, 0) end)
-      |> Enum.filter(&MapSet.member?(project_modules, &1))
-      |> Enum.map(fn callee_mod -> Map.get(context_of, callee_mod) end)
-      |> Enum.reject(fn callee_ctx ->
-        callee_ctx == nil or caller_ctx == nil or callee_ctx == caller_ctx
-      end)
-      |> Enum.map(fn callee_ctx -> {caller_ctx, callee_ctx} end)
+      for call <- calls,
+          callee_mod = elem(call.callee, 0),
+          MapSet.member?(project_modules, callee_mod),
+          callee_ctx = Map.get(context_of, callee_mod),
+          callee_ctx != nil and caller_ctx != nil and callee_ctx != caller_ctx,
+          do: {caller_ctx, callee_ctx}
     end)
     |> Enum.frequencies()
     |> Enum.map(fn {{from, to}, count} -> {from, to, count} end)
@@ -316,9 +312,9 @@ defmodule Archdo.Compiled.Diagram do
     internal_edges =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        Query.module_dependencies(graph, mod)
-        |> Enum.filter(&MapSet.member?(member_set, &1))
-        |> Enum.map(fn dep -> {mod, dep} end)
+        for dep <- Query.module_dependencies(graph, mod),
+            MapSet.member?(member_set, dep),
+            do: {mod, dep}
       end)
       |> Enum.uniq()
       |> Enum.map(fn {from, to} ->
@@ -383,9 +379,9 @@ defmodule Archdo.Compiled.Diagram do
       Enum.flat_map(ctx.members, fn mod ->
         exports = Map.get(CompiledGraph.modules(graph), mod, %{exports: []}).exports
 
-        exports
-        |> Enum.filter(&called_from_outside?(&1, mod, graph, member_set))
-        |> Enum.map(fn {func, arity} -> {mod, func, arity} end)
+        for {func, arity} <- exports,
+            called_from_outside?({func, arity}, mod, graph, member_set),
+            do: {mod, func, arity}
       end)
 
     fn_lines =
@@ -666,17 +662,13 @@ defmodule Archdo.Compiled.Diagram do
     # The AST graph uses string module names. Convert to atoms for comparison
     # with the compiled graph. Only keep fully-qualified names (contain ".")
     # to avoid short alias names like "AST" which don't match compiled atoms.
-    ast_graph.edges
-    |> Enum.filter(fn edge ->
-      String.contains?(edge.source, ".") and String.contains?(edge.target, ".")
-    end)
-    |> Enum.map(fn edge ->
-      source = string_to_module(edge.source)
-      target = string_to_module(edge.target)
-      {source, target}
-    end)
-    |> Enum.reject(fn {source, target} -> source == nil or target == nil end)
-    |> MapSet.new()
+    for edge <- ast_graph.edges,
+        String.contains?(edge.source, ".") and String.contains?(edge.target, "."),
+        source = string_to_module(edge.source),
+        target = string_to_module(edge.target),
+        source != nil and target != nil,
+        into: MapSet.new(),
+        do: {source, target}
   end
 
   # Build set of {source_atom, target_atom} edges from compiled call graph
@@ -838,9 +830,9 @@ defmodule Archdo.Compiled.Diagram do
     external_callers =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        Query.known_by(graph, mod)
-        |> Enum.reject(fn e -> MapSet.member?(member_set, e.module) end)
-        |> Enum.map(fn e -> {e.module, mod, e.functions_called, e.call_count} end)
+        for e <- Query.known_by(graph, mod),
+            not MapSet.member?(member_set, e.module),
+            do: {e.module, mod, e.functions_called, e.call_count}
       end)
       |> Enum.group_by(fn {caller, _callee, _fns, _count} -> caller end)
       |> Enum.take(8)
@@ -849,9 +841,9 @@ defmodule Archdo.Compiled.Diagram do
     external_deps =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        Query.knows_about(graph, mod)
-        |> Enum.reject(fn e -> MapSet.member?(member_set, e.module) end)
-        |> Enum.map(fn e -> {mod, e.module, e.functions_called, e.call_count} end)
+        for e <- Query.knows_about(graph, mod),
+            not MapSet.member?(member_set, e.module),
+            do: {mod, e.module, e.functions_called, e.call_count}
       end)
       |> Enum.group_by(fn {_caller, dep, _fns, _count} -> dep end)
       |> Enum.sort_by(fn {_dep, calls} -> -length(calls) end)
@@ -896,13 +888,12 @@ defmodule Archdo.Compiled.Diagram do
     internal_wiring =
       ctx.members
       |> Enum.flat_map(fn mod ->
-        Query.knows_about(graph, mod)
-        |> Enum.filter(fn e -> MapSet.member?(member_set, e.module) end)
-        |> Enum.map(fn e ->
+        for e <- Query.knows_about(graph, mod),
+            MapSet.member?(member_set, e.module) do
           from_id = sanitize_id(AST.module_name(mod))
           to_id = sanitize_id(AST.module_name(e.module))
           "  #{from_id} --> #{to_id}"
-        end)
+        end
       end)
       |> Enum.uniq()
 
@@ -1032,7 +1023,7 @@ defmodule Archdo.Compiled.Diagram do
 
     sources =
       calls
-      |> Enum.map(&caller_id_and_fns/1)
+      |> Stream.map(&caller_id_and_fns/1)
       |> Enum.take(3)
 
     edge_lines =

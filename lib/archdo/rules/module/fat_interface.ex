@@ -99,13 +99,9 @@ defmodule Archdo.Rules.Module.FatInterface do
     # Track which functions have @impl true
     impl_fns = find_impl_functions(ast)
 
-    fns
-    |> Enum.filter(fn {name, arity, _meta, _args, body} ->
-      MapSet.member?(impl_fns, {name, arity}) and noop_body?(body)
-    end)
-    |> Enum.map(fn {name, arity, meta, _args, _body} ->
-      %{name: name, arity: arity, line: AST.line(meta), likely_from: nil}
-    end)
+    for {name, arity, meta, _args, body} <- fns,
+        MapSet.member?(impl_fns, {name, arity}) and noop_body?(body),
+        do: %{name: name, arity: arity, line: AST.line(meta), likely_from: nil}
   end
 
   defp find_impl_functions(ast) do

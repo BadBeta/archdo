@@ -46,9 +46,7 @@ defmodule Archdo.Compiled.DiagramInteractive do
   end
 
   defp build_nodes(graph, membership) do
-    Graph.modules(graph)
-    |> Enum.filter(fn {mod, _} -> elixir_module?(mod) end)
-    |> Enum.map(fn {mod, info} ->
+    for {mod, info} <- Graph.modules(graph), elixir_module?(mod) do
       mod_name = AST.module_name(mod)
       short = safe_short_name(mod)
       ctx = Map.get(membership, mod, "Uncategorized")
@@ -96,7 +94,7 @@ defmodule Archdo.Compiled.DiagramInteractive do
         struct_fields: info.struct_fields,
         is_boundary: is_boundary
       }
-    end)
+    end
   end
 
   @framework_exports MapSet.new([

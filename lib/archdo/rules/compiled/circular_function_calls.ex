@@ -13,10 +13,9 @@ defmodule Archdo.Rules.Compiled.CircularFunctionCalls do
 
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
   def analyze_compiled(graph) do
-    graph
-    |> Compiled.strongly_connected_components()
-    |> Enum.filter(&cross_module_cycle?/1)
-    |> Enum.map(&build_diagnostic/1)
+    for scc <- Compiled.strongly_connected_components(graph),
+        cross_module_cycle?(scc),
+        do: build_diagnostic(scc)
   end
 
   # Only report cycles that span multiple modules — intra-module recursion is normal

@@ -241,10 +241,10 @@ defmodule Archdo.Compiled.OTPTopology do
     # Find Supervisor modules and their children
     # Look for calls to child modules' start_link or child_spec from supervisor modules
     supervisor_mods =
-      process_modules
-      |> Enum.filter(fn {_mod, type} -> type == @kind_supervisor end)
-      |> Enum.map(fn {mod, _} -> mod end)
-      |> MapSet.new()
+      for {mod, type} <- process_modules,
+          type == @kind_supervisor,
+          into: MapSet.new(),
+          do: mod
 
     process_set = MapSet.new(Map.keys(process_modules))
 

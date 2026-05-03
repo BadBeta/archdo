@@ -21,11 +21,9 @@ defmodule Archdo.Rules.Module.FunctionFanOut do
   def analyze_project(%FunctionGraph{} = graph) do
     fan_out = FunctionGraph.function_fan_out(graph)
 
-    fan_out
-    |> Enum.filter(fn {{module, name, arity}, count} ->
-      count > @warn_threshold and Map.has_key?(graph.definitions, {module, name, arity})
-    end)
-    |> Enum.map(fn {{module, name, arity}, count} ->
+    for {{module, name, arity}, count} <- fan_out,
+        count > @warn_threshold,
+        Map.has_key?(graph.definitions, {module, name, arity}) do
       def_meta = Map.get(graph.definitions, {module, name, arity})
       file = def_meta.file
       line = def_meta.line
@@ -67,6 +65,6 @@ defmodule Archdo.Rules.Module.FunctionFanOut do
         file: file,
         line: line
       )
-    end)
+    end
   end
 end

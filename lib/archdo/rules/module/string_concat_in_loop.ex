@@ -92,14 +92,12 @@ defmodule Archdo.Rules.Module.StringConcatInLoop do
     # Exclude what the specific checks already cover (Enum.reduce with string init)
     # by checking GenServer callbacks, recursive fns, and receive blocks
     genserver_hits =
-      LoopDetection.find_in_genserver_callbacks(ast, concat_predicate)
-      |> Enum.map(fn {_, meta} ->
+      Enum.map(LoopDetection.find_in_genserver_callbacks(ast, concat_predicate), fn {_, meta} ->
         build_diagnostic(file, AST.line(meta), :genserver_callback)
       end)
 
     recursion_hits =
-      LoopDetection.find_in_recursive_fns(ast, concat_predicate)
-      |> Enum.map(fn {_, meta} ->
+      Enum.map(LoopDetection.find_in_recursive_fns(ast, concat_predicate), fn {_, meta} ->
         build_diagnostic(file, AST.line(meta), :recursive_fn)
       end)
 
@@ -135,20 +133,18 @@ defmodule Archdo.Rules.Module.StringConcatInLoop do
   end
 
   defp find_reduce_init(args) do
-    Enum.find_value(args, :not_found, fn
-      keyword when is_list(keyword) ->
-        case Keyword.fetch(keyword, :reduce) do
-          {:ok, init} -> {:found, init}
-          :error -> nil
-        end
-
-      {:reduce, init} ->
-        {:found, init}
-
-      _ ->
-        nil
-    end)
+    Enum.find_value(args, :not_found, &reduce_init_in/1)
   end
+
+  defp reduce_init_in(keyword) when is_list(keyword) do
+    case keyword[:reduce] do
+      nil -> nil
+      init -> {:found, init}
+    end
+  end
+
+  defp reduce_init_in({:reduce, init}), do: {:found, init}
+  defp reduce_init_in(_), do: nil
 
   defp for_body_has_concat?(args) do
     Enum.any?(args, fn

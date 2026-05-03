@@ -27,11 +27,8 @@ defmodule Archdo.Rules.Boundary.LogicInController do
   defp check_controller_actions(file, ast) do
     fns = AST.extract_functions(ast, :public)
 
-    fns
-    |> Enum.filter(fn {_name, arity, _, _, body} ->
-      arity == 2 and body != nil and AST.ast_size(body) > @max_controller_action_nodes
-    end)
-    |> Enum.map(fn {name, arity, meta, _, body} ->
+    for {name, arity, meta, _, body} <- fns,
+        arity == 2 and body != nil and AST.ast_size(body) > @max_controller_action_nodes do
       size = AST.ast_size(body)
 
       Diagnostic.info("1.15",
@@ -63,6 +60,6 @@ defmodule Archdo.Rules.Boundary.LogicInController do
         file: file,
         line: AST.line(meta)
       )
-    end)
+    end
   end
 end

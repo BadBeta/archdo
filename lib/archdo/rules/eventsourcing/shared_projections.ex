@@ -34,19 +34,22 @@ defmodule Archdo.Rules.EventSourcing.SharedProjections do
       |> MapSet.to_list()
       |> Enum.filter(&projector_module?/1)
 
-    schema_usage =
-      projectors
-      |> Enum.flat_map(fn projector ->
-        Graph.dependencies(graph, projector)
-        |> Enum.filter(fn edge -> schema_reference?(edge.target) end)
-        |> Enum.map(fn edge -> {edge.target, projector} end)
+    schema_pairs =
+      Enum.flat_map(projectors, fn projector ->
+        for edge <- Graph.dependencies(graph, projector),
+            schema_reference?(edge.target),
+            do: {edge.target, projector}
       end)
-      |> Enum.group_by(fn {schema, _} -> schema end, fn {_, projector} -> projector end)
-      |> Enum.map(fn {schema, projs} -> {schema, Enum.uniq(projs)} end)
 
-    schema_usage
-    |> Enum.filter(fn {_, projectors_list} -> length(projectors_list) > 1 end)
-    |> Enum.map(fn {schema, projectors_list} ->
+    schema_usage =
+      for {schema, projs} <-
+            Enum.group_by(schema_pairs, fn {schema, _} -> schema end, fn {_, projector} ->
+              projector
+            end),
+          do: {schema, Enum.uniq(projs)}
+
+    for {schema, projectors_list} <- schema_usage,
+        length(projectors_list) > 1 do
       projector_names = Enum.join(projectors_list, ", ")
 
       Diagnostic.warning("8.4",
@@ -85,7 +88,7 @@ defmodule Archdo.Rules.EventSourcing.SharedProjections do
         file: "multiple",
         line: 0
       )
-    end)
+    end
   end
 
   defp projector_module?(name) do

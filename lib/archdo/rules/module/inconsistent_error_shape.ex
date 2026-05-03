@@ -27,12 +27,11 @@ defmodule Archdo.Rules.Module.InconsistentErrorShape do
 
     # Classify each public function's error handling style
     styles =
-      fns
-      |> Enum.reject(fn {name, _, _, _, _} -> not is_atom(name) end)
-      |> Enum.map(fn {name, arity, _meta, _args, body} ->
-        {name, arity, classify_style(body)}
-      end)
-      |> Enum.reject(fn {_, _, style} -> style == @unknown_style end)
+      for {name, arity, _meta, _args, body} <- fns,
+          is_atom(name),
+          style = classify_style(body),
+          style != @unknown_style,
+          do: {name, arity, style}
 
     style_groups =
       styles

@@ -30,11 +30,12 @@ defmodule Archdo.Rules.Module.ExceptionLaundering do
         false
     end)
     |> Enum.map(fn {:rescue, clauses} ->
-      line =
-        clauses
-        |> Enum.filter(&launders_exception?/1)
-        |> Enum.map(fn {:->, meta, _} -> AST.line(meta) end)
-        |> List.first(1)
+      offending_lines =
+        for {:->, meta, _} = clause <- clauses,
+            launders_exception?(clause),
+            do: AST.line(meta)
+
+      line = List.first(offending_lines, 1)
 
       Diagnostic.info("6.18",
         title: "Exception laundering",

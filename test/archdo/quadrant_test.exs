@@ -54,6 +54,7 @@ defmodule Archdo.QuadrantTest do
       assert length(diags) == 2
       assert Enum.find(diags, &(&1.rule_id == "QTEST.fire-hv"))
       assert Enum.find(diags, &(&1.rule_id == "QTEST.fire-lv"))
+
       refute Enum.find(diags, &(&1.line == 3)),
              "the high/stable cell is :no_finding and must not emit a diagnostic"
     end

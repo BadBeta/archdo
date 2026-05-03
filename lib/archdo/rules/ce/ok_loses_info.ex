@@ -136,6 +136,7 @@ defmodule Archdo.Rules.CE.OkLosesInfo do
   # (`{:ok, _user} = Repo.insert(...)` — value captured AND then thrown
   # away when the function returns :ok).
   defp richer_result_call?({:=, _, [{:{}, _, [{:__block__, _, [:ok]}, _]}, _rhs]}), do: true
+
   defp richer_result_call?({:=, _, [{:__block__, _, [{tuple_pattern, _}]}, _rhs]}) do
     case tuple_pattern do
       {:__block__, _, [:ok]} -> true
@@ -152,9 +153,7 @@ defmodule Archdo.Rules.CE.OkLosesInfo do
     end
   end
 
-  defp richer_result_call?(
-         {{:., _, [{:__aliases__, _, parts}, _fun]}, _, _}
-       )
+  defp richer_result_call?({{:., _, [{:__aliases__, _, parts}, _fun]}, _, _})
        when is_list(parts) do
     parts in @richer_modules
   end

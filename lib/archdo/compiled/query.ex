@@ -91,7 +91,9 @@ defmodule Archdo.Compiled.Query do
   Find exported functions that are never called from outside their module.
   Excludes framework callbacks and behaviour callbacks.
   """
-  @spec dead_functions(Graph.t()) :: [%{module: module(), function: atom(), arity: non_neg_integer()}]
+  @spec dead_functions(Graph.t()) :: [
+          %{module: module(), function: atom(), arity: non_neg_integer()}
+        ]
   def dead_functions(graph) do
     modules = Graph.modules(graph)
     callee_index = Graph.calls_by_callee(graph)
@@ -401,22 +403,24 @@ defmodule Archdo.Compiled.Query do
     modules = Graph.modules(graph)
     project_modules = MapSet.new(Map.keys(modules))
 
-    index
-    |> Map.get(module, [])
-    |> Enum.group_by(fn call -> elem(call.callee, 0) end)
-    |> Enum.filter(fn {target, _calls} ->
-      target != module and MapSet.member?(project_modules, target)
-    end)
-    |> Enum.map(fn {target, calls} ->
-      fns =
-        calls
-        |> Enum.map(fn call -> {elem(call.callee, 1), elem(call.callee, 2)} end)
-        |> Enum.uniq()
-        |> Enum.sort()
+    grouped =
+      index
+      |> Map.get(module, [])
+      |> Enum.group_by(fn call -> elem(call.callee, 0) end)
 
-      %{module: target, functions_called: fns, call_count: length(calls)}
-    end)
-    |> Enum.sort_by(& &1.call_count, :desc)
+    rows =
+      for {target, calls} <- grouped,
+          target != module and MapSet.member?(project_modules, target) do
+        fns =
+          calls
+          |> Enum.map(fn call -> {elem(call.callee, 1), elem(call.callee, 2)} end)
+          |> Enum.uniq()
+          |> Enum.sort()
+
+        %{module: target, functions_called: fns, call_count: length(calls)}
+      end
+
+    Enum.sort_by(rows, & &1.call_count, :desc)
   end
 
   @doc """
@@ -662,7 +666,14 @@ defmodule Archdo.Compiled.Query do
     callee_project = MapSet.member?(project_set, callee_mod)
 
     classify_call_kind(
-      call_kind(caller_in, callee_in, caller_project, callee_project, callee_mod, boundary_module),
+      call_kind(
+        caller_in,
+        callee_in,
+        caller_project,
+        callee_project,
+        callee_mod,
+        boundary_module
+      ),
       call,
       acc
     )
@@ -684,11 +695,19 @@ defmodule Archdo.Compiled.Query do
   defp classify_call_kind(:internal, call, {internal, incoming, outgoing, boundary_in, leak_in}),
     do: {[call | internal], incoming, outgoing, boundary_in, leak_in}
 
-  defp classify_call_kind(:boundary_incoming, call, {internal, incoming, outgoing, boundary_in, leak_in}),
-    do: {internal, [call | incoming], outgoing, [call | boundary_in], leak_in}
+  defp classify_call_kind(
+         :boundary_incoming,
+         call,
+         {internal, incoming, outgoing, boundary_in, leak_in}
+       ),
+       do: {internal, [call | incoming], outgoing, [call | boundary_in], leak_in}
 
-  defp classify_call_kind(:leak_incoming, call, {internal, incoming, outgoing, boundary_in, leak_in}),
-    do: {internal, [call | incoming], outgoing, boundary_in, [call | leak_in]}
+  defp classify_call_kind(
+         :leak_incoming,
+         call,
+         {internal, incoming, outgoing, boundary_in, leak_in}
+       ),
+       do: {internal, [call | incoming], outgoing, boundary_in, [call | leak_in]}
 
   defp classify_call_kind(:outgoing, call, {internal, incoming, outgoing, boundary_in, leak_in}),
     do: {internal, incoming, [call | outgoing], boundary_in, leak_in}
@@ -696,23 +715,26 @@ defmodule Archdo.Compiled.Query do
   defp classify_call_kind(:ignore, _call, acc), do: acc
 
   defp find_leaking_modules(leak_calls, boundary_module) do
-    leak_calls
-    |> Enum.group_by(fn call -> elem(call.callee, 0) end)
-    |> Enum.reject(fn {mod, _calls} -> mod == boundary_module end)
-    |> Enum.map(fn {mod, calls} ->
-      external_callers =
-        calls
-        |> Enum.map(fn call -> elem(call.caller, 0) end)
-        |> Enum.uniq()
-        |> length()
+    rows =
+      for {mod, calls} <- Enum.group_by(leak_calls, fn call -> elem(call.callee, 0) end),
+          mod != boundary_module do
+        external_callers =
+          calls
+          |> Enum.map(fn call -> elem(call.caller, 0) end)
+          |> Enum.uniq()
+          |> length()
 
-      %{module: mod, external_callers: external_callers}
-    end)
-    |> Enum.sort_by(& &1.external_callers, :desc)
+        %{module: mod, external_callers: external_callers}
+      end
+
+    Enum.sort_by(rows, & &1.external_callers, :desc)
   end
 
   defp find_misplaced_modules(graph, members, member_set, project_set, context_name) do
-    Enum.flat_map(members, &misplaced_for_member(&1, graph, member_set, project_set, context_name))
+    Enum.flat_map(
+      members,
+      &misplaced_for_member(&1, graph, member_set, project_set, context_name)
+    )
   end
 
   defp misplaced_for_member(mod, graph, member_set, project_set, context_name) do

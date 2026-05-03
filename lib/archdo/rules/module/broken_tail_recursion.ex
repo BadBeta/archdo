@@ -53,7 +53,9 @@ defmodule Archdo.Rules.Module.BrokenTailRecursion do
   end
 
   defp breakers_for_clause({_, _, _, _, nil}, _name, _arity), do: []
-  defp breakers_for_clause({_, _, _, _, body}, name, arity), do: find_tco_breakers(body, name, arity)
+
+  defp breakers_for_clause({_, _, _, _, body}, name, arity),
+    do: find_tco_breakers(body, name, arity)
 
   defp diagnose_breakers([], _file, _name, _arity, _clauses), do: []
 

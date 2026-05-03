@@ -16,7 +16,9 @@ defmodule Archdo.Rules.CE.BoundaryTelemetryTest do
       end
       """
 
-      diags = analyze(BoundaryTelemetry, code, file: "lib/my_app_web/controllers/user_controller.ex")
+      diags =
+        analyze(BoundaryTelemetry, code, file: "lib/my_app_web/controllers/user_controller.ex")
+
       assert [diag] = diags
       assert diag.rule_id == "CE-27"
       assert diag.message =~ "show/2"
@@ -36,7 +38,9 @@ defmodule Archdo.Rules.CE.BoundaryTelemetryTest do
       end
       """
 
-      assert analyze(BoundaryTelemetry, code, file: "lib/my_app_web/controllers/user_controller.ex") == []
+      assert analyze(BoundaryTelemetry, code,
+               file: "lib/my_app_web/controllers/user_controller.ex"
+             ) == []
     end
 
     test "does NOT fire when telemetry.execute is called in the body" do
@@ -51,7 +55,9 @@ defmodule Archdo.Rules.CE.BoundaryTelemetryTest do
       end
       """
 
-      assert analyze(BoundaryTelemetry, code, file: "lib/my_app_web/controllers/user_controller.ex") == []
+      assert analyze(BoundaryTelemetry, code,
+               file: "lib/my_app_web/controllers/user_controller.ex"
+             ) == []
     end
 
     test "fires on Oban.Worker perform/1 with no telemetry" do
@@ -111,7 +117,9 @@ defmodule Archdo.Rules.CE.BoundaryTelemetryTest do
       end
       """
 
-      assert analyze(BoundaryTelemetry, code, file: "lib/my_app_web/controllers/health_controller.ex") == []
+      assert analyze(BoundaryTelemetry, code,
+               file: "lib/my_app_web/controllers/health_controller.ex"
+             ) == []
     end
 
     test "does NOT fire when project has a covering telemetry plug (M-Plan7)" do

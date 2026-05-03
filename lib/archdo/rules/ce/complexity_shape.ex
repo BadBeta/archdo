@@ -116,7 +116,8 @@ defmodule Archdo.Rules.CE.ComplexityShape do
           "at this site.",
       alternatives: [
         Fix.new(
-          summary: "Suppress 6.2 here with `# archdo:allow 6.2 reason: idiomatic dispatch — see CE-24`",
+          summary:
+            "Suppress 6.2 here with `# archdo:allow 6.2 reason: idiomatic dispatch — see CE-24`",
           detail:
             "Cyclomatic complexity rules over-count flat dispatch. CE-24-flat " <>
               "marks the site as known-fine; suppress 6.2 there to reduce noise.",

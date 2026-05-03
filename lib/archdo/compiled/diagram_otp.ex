@@ -12,7 +12,7 @@ defmodule Archdo.Compiled.DiagramOTP do
   #   - Supervision links: solid lines from supervisor frame to child
 
   alias Archdo.AST
-  alias Archdo.Compiled.{DiagramHelpers, Graph, OTPTopology}
+  alias Archdo.Compiled.{SvgDocument, Graph, OTPTopology}
 
   # Process / message kinds shared with `OTPTopology` (single source of truth).
   @kind_supervisor :supervisor
@@ -115,7 +115,7 @@ defmodule Archdo.Compiled.DiagramOTP do
     legend = render_legend(total_w - 260, 8)
 
     all = title ++ legend ++ tree_elements ++ orphan_elements ++ msg_elements
-    DiagramHelpers.wrap_svg(all, total_w, total_h)
+    SvgDocument.wrap_svg(all, total_w, total_h)
   end
 
   defp layout_tree([], _x, _y), do: {[], 0, 0}
@@ -202,9 +202,9 @@ defmodule Archdo.Compiled.DiagramOTP do
     inter_process =
       topology
       |> Enum.flat_map(fn p ->
-        p.outgoing_messages
-        |> Enum.filter(fn m -> m.to != @kind_unknown end)
-        |> Enum.map(fn m -> {p.module, m.to, m.type, m.function} end)
+        for m <- p.outgoing_messages, m.to != @kind_unknown do
+          {p.module, m.to, m.type, m.function}
+        end
       end)
       |> Enum.uniq()
 
@@ -351,11 +351,11 @@ defmodule Archdo.Compiled.DiagramOTP do
     ]
 
     all = title ++ render_legend(total_w - 260, 8) ++ process_elements ++ wire_elements
-    DiagramHelpers.wrap_svg(all, total_w, total_h)
+    SvgDocument.wrap_svg(all, total_w, total_h)
   end
 
   defp no_otp_svg do
-    DiagramHelpers.wrap_svg(
+    SvgDocument.wrap_svg(
       [
         ~s(<text x="40" y="40" fill="#{@dim_text}" font-size="14" font-family="monospace">No OTP processes detected in compiled beams.</text>)
       ],

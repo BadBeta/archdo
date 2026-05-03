@@ -85,8 +85,10 @@ defmodule Archdo.Rules.Compiled.CircularContextDeps do
   end
 
   defp cycles_for_neighbor(neighbor, adjacency, path, visited) do
-    classify_neighbor_for_cycle(neighbor, List.last(path), MapSet.member?(visited, neighbor))
-    |> handle_neighbor_kind(neighbor, adjacency, path, visited)
+    kind =
+      classify_neighbor_for_cycle(neighbor, List.last(path), MapSet.member?(visited, neighbor))
+
+    handle_neighbor_kind(kind, neighbor, adjacency, path, visited)
   end
 
   # §§ elixir-implementing: §2.1 — multi-clause head dispatching on

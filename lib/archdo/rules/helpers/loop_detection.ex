@@ -253,8 +253,9 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
   defp non_literal_arg?(arg) when is_atom(arg) or is_number(arg) or is_binary(arg), do: false
 
   # Production parse_file/1 wraps literals as {:__block__, _, [literal]}.
-  defp non_literal_arg?({:__block__, _, [inner]}) when is_atom(inner) or is_number(inner) or is_binary(inner),
-    do: false
+  defp non_literal_arg?({:__block__, _, [inner]})
+       when is_atom(inner) or is_number(inner) or is_binary(inner),
+       do: false
 
   defp non_literal_arg?(_), do: true
 
@@ -287,8 +288,7 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
   end
 
   defp find_matches(node, predicate) do
-    AST.find_all(node, predicate)
-    |> Enum.flat_map(fn
+    Enum.flat_map(AST.find_all(node, predicate), fn
       {_, meta, _} = match -> [{match, meta}]
       _non_triple -> []
     end)

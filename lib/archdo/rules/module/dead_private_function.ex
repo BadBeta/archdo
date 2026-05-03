@@ -23,18 +23,15 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
     private_defs = unique_private_defs(private_fns)
     call_set = collect_calls(file, ast)
 
-    private_defs
-    |> Enum.reject(fn {name, arity} = fn_def ->
-      # Direct call matches arity exactly.
-      # Pipe call has arity - 1 (the pipe provides the first argument).
-      skip_function?(fn_def) or
-        MapSet.member?(call_set, {name, arity}) or
-        (arity > 0 and MapSet.member?(call_set, {name, arity - 1}))
-    end)
-    |> Enum.map(fn {name, arity} ->
+    for {name, arity} = fn_def <- private_defs,
+        # Direct call matches arity exactly.
+        # Pipe call has arity - 1 (the pipe provides the first argument).
+        not skip_function?(fn_def),
+        not MapSet.member?(call_set, {name, arity}),
+        arity == 0 or not MapSet.member?(call_set, {name, arity - 1}) do
       meta = find_meta(private_fns, name, arity)
       build_diagnostic(file, AST.line(meta), name, arity)
-    end)
+    end
   end
 
   defp unique_private_defs(private_fns) do
@@ -195,8 +192,7 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
     tag_calls = Regex.scan(~r/<\.([a-z_][a-z0-9_]*[!?]?)\b/, text)
     capture_calls = Regex.scan(~r/&([a-z_][a-z0-9_]*[!?]?)\/\d+/, text)
 
-    (paren_calls ++ tag_calls ++ capture_calls)
-    |> Enum.reduce(MapSet.new(), &absorb_match/2)
+    Enum.reduce(paren_calls ++ tag_calls ++ capture_calls, MapSet.new(), &absorb_match/2)
   end
 
   # §§ elixir-implementing: §2.1 — multi-clause head dispatching on

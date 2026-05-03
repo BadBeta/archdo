@@ -108,7 +108,7 @@ defmodule Archdo.Rules.Module.TimeInjection do
       Macro.prewalk(ast, [], fn
         {def_kind, _meta, [{_name, _, args} | _]} = node, acc
         when def_kind in [:def, :defp] and is_list(args) ->
-          new_lines = args |> Enum.flat_map(&time_lines_in_default/1)
+          new_lines = Enum.flat_map(args, &time_lines_in_default/1)
           {node, new_lines ++ acc}
 
         node, acc ->
@@ -119,14 +119,16 @@ defmodule Archdo.Rules.Module.TimeInjection do
   end
 
   defp time_lines_in_default({:\\, _, [_pattern, default_expr]}) do
-    AST.find_all(default_expr, fn
-      {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
-        Enum.any?(@time_calls, fn {mod, fname} -> mod_parts == mod and func == fname end)
+    matches =
+      AST.find_all(default_expr, fn
+        {{:., _, [{:__aliases__, _, mod_parts}, func]}, _meta, _args} ->
+          Enum.any?(@time_calls, fn {mod, fname} -> mod_parts == mod and func == fname end)
 
-      _ ->
-        false
-    end)
-    |> Enum.map(fn {_, meta, _} -> AST.line(meta) end)
+        _ ->
+          false
+      end)
+
+    Enum.map(matches, fn {_, meta, _} -> AST.line(meta) end)
   end
 
   defp time_lines_in_default(_), do: []

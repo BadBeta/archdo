@@ -116,7 +116,8 @@ defmodule Archdo.Rules.Module.SecretStructInspect do
 
   defp read_defstruct({:defstruct, meta, [fields]}) when is_list(fields) do
     names =
-      Enum.map(fields, fn
+      fields
+      |> Enum.map(fn
         {name, _default} -> name
         name when is_atom(name) -> name
         _ -> nil

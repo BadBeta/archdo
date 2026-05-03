@@ -102,13 +102,15 @@ defmodule Archdo.Rules.Testing.UntestedModule do
     basename_test = Path.basename(file, ".ex") <> "_test.exs"
     rel_test = String.replace_suffix(rel_under_lib, ".ex", "_test.exs")
 
-    Enum.flat_map(test_paths, fn tp ->
-      [
-        join_under_root(project_root, Path.join(tp, rel_test)),
-        join_under_root(project_root, Path.join(tp, basename_test))
-      ]
-    end)
-    |> Enum.uniq()
+    candidates =
+      Enum.flat_map(test_paths, fn tp ->
+        [
+          join_under_root(project_root, Path.join(tp, rel_test)),
+          join_under_root(project_root, Path.join(tp, basename_test))
+        ]
+      end)
+
+    Enum.uniq(candidates)
   end
 
   defp rel_to_root(file, nil), do: file

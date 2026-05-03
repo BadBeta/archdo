@@ -100,12 +100,10 @@ defmodule Archdo.Blackbox do
 
   # Set of {name, arity} for which a catch-all clause exists.
   defp collect_catch_alls(fns) do
-    fns
-    |> Enum.filter(fn {_name, _arity, _meta, args, _body} ->
-      args == nil or args_are_catch_all?(args)
-    end)
-    |> Enum.map(fn {name, arity, _, _, _} -> {name, arity} end)
-    |> MapSet.new()
+    for {name, arity, _meta, args, _body} <- fns,
+        args == nil or args_are_catch_all?(args),
+        into: MapSet.new(),
+        do: {name, arity}
   end
 
   # All args are bare variables / underscores (no atom / tuple / map
@@ -168,9 +166,9 @@ defmodule Archdo.Blackbox do
 
       scores ->
         structural_leaks =
-          scores
-          |> Enum.filter(fn {_n, _a, score, _c} -> score < @building_block_threshold end)
-          |> Enum.map(fn {n, a, score, _c} -> {n, a, score} end)
+          for {n, a, score, _c} <- scores,
+              score < @building_block_threshold,
+              do: {n, a, score}
 
         # §§ elixir-implementing: §2.1 — multi-step shape resolution.
         # Combine structural leaks with input-safety leaks. The input
@@ -506,11 +504,13 @@ defmodule Archdo.Blackbox do
   def value(nil, _name, _layer), do: 0.0
 
   def value(body, name, phoenix_layer) do
-    case orchestrator_name?(name) do
-      true -> 0.0
-      false -> substance_score(body) + layer_boost(phoenix_layer)
-    end
-    |> min(1.0)
+    raw =
+      case orchestrator_name?(name) do
+        true -> 0.0
+        false -> substance_score(body) + layer_boost(phoenix_layer)
+      end
+
+    min(raw, 1.0)
   end
 
   defp orchestrator_name?(name), do: name in @orchestrator_names

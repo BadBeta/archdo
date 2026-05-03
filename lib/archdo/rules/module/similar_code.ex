@@ -46,16 +46,12 @@ defmodule Archdo.Rules.Module.SimilarCode do
     functions
     |> Enum.with_index()
     |> Enum.flat_map(fn {fn_a, i} ->
-      functions
-      |> Enum.drop(i + 1)
-      |> Enum.filter(fn fn_b ->
-        size_compatible?(fn_a.size, fn_b.size) and not_same_pair?(fn_a, fn_b)
-      end)
-      |> Enum.map(fn fn_b ->
-        sim = jaccard(fn_a.fingerprint, fn_b.fingerprint)
-        {fn_a, fn_b, sim}
-      end)
-      |> Enum.filter(fn {_, _, sim} -> sim >= @similarity_threshold end)
+      for fn_b <- Enum.drop(functions, i + 1),
+          size_compatible?(fn_a.size, fn_b.size),
+          not_same_pair?(fn_a, fn_b),
+          sim = jaccard(fn_a.fingerprint, fn_b.fingerprint),
+          sim >= @similarity_threshold,
+          do: {fn_a, fn_b, sim}
     end)
     |> Enum.sort_by(fn {_, _, sim} -> -sim end)
     |> Enum.take(@max_pairs_to_report)
@@ -65,9 +61,8 @@ defmodule Archdo.Rules.Module.SimilarCode do
   defp extract_with_fingerprints(file, ast) do
     fns = AST.extract_functions(ast, :all)
 
-    fns
-    |> Enum.reject(fn {name, _arity, _meta, _args, _body} -> name in @ignored_callbacks end)
-    |> Enum.map(fn {name, arity, meta, _args, body} ->
+    for {name, arity, meta, _args, body} <- fns,
+        name not in @ignored_callbacks do
       normalized = DuplicatedCode.normalize(body)
       shingles = compute_shingles(normalized)
       size = AST.ast_size(normalized)
@@ -82,7 +77,7 @@ defmodule Archdo.Rules.Module.SimilarCode do
         size: size,
         normalized_hash: :erlang.phash2(normalized)
       }
-    end)
+    end
   end
 
   # Generate shingles: walk the AST in pre-order, collect node "tokens",

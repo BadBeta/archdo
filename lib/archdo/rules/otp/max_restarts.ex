@@ -19,19 +19,20 @@ defmodule Archdo.Rules.OTP.MaxRestarts do
     # Check if the module has an init/1 that sets max_restarts via Supervisor.init
     init_has_config = delegates_to_init_with_config?(ast)
 
-    AST.find_all(ast, fn
-      # Supervisor.start_link(children, opts)
-      {{:., _, [{:__aliases__, _, [:Supervisor]}, :start_link]}, _meta, _args} -> true
-      # Supervisor.init(children, opts)
-      {{:., _, [{:__aliases__, _, [:Supervisor]}, :init]}, _meta, _args} -> true
-      # DynamicSupervisor.start_link(opts)
-      {{:., _, [{:__aliases__, _, [:DynamicSupervisor]}, :start_link]}, _meta, _args} -> true
-      _ -> false
-    end)
-    |> Enum.filter(fn {_, _, args} ->
-      missing_restart_config?(args) and not delegates_to_module?(args, init_has_config)
-    end)
-    |> Enum.map(fn {{:., _, [{:__aliases__, _, mod}, func]}, meta, _} ->
+    calls =
+      AST.find_all(ast, fn
+        # Supervisor.start_link(children, opts)
+        {{:., _, [{:__aliases__, _, [:Supervisor]}, :start_link]}, _meta, _args} -> true
+        # Supervisor.init(children, opts)
+        {{:., _, [{:__aliases__, _, [:Supervisor]}, :init]}, _meta, _args} -> true
+        # DynamicSupervisor.start_link(opts)
+        {{:., _, [{:__aliases__, _, [:DynamicSupervisor]}, :start_link]}, _meta, _args} -> true
+        _ -> false
+      end)
+
+    for {{:., _, [{:__aliases__, _, mod}, func]}, meta, args} <- calls,
+        missing_restart_config?(args),
+        not delegates_to_module?(args, init_has_config) do
       call = "#{Enum.join(mod, ".")}.#{func}"
 
       Diagnostic.info("5.6",
@@ -69,7 +70,7 @@ defmodule Archdo.Rules.OTP.MaxRestarts do
         file: file,
         line: AST.line(meta)
       )
-    end)
+    end
   end
 
   # If start_link passes __MODULE__ as first arg, config is in init/1

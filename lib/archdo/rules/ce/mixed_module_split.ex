@@ -51,8 +51,7 @@ defmodule Archdo.Rules.CE.MixedModuleSplit do
               "I/O retains the original module name (or vice versa) and calls into " <>
               "the pure module. The canonical refactor that converts a mixed " <>
               "module into one stable + one volatile.",
-          applies_when:
-            "The module's pure logic and I/O are independently meaningful."
+          applies_when: "The module's pure logic and I/O are independently meaningful."
         )
       ],
       references: ["ARCHITECTURE_RULES_CHANGE_ECONOMY.md#CE-4"],

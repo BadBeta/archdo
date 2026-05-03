@@ -92,11 +92,13 @@ defmodule Archdo.Rules.CE.WrapperOverFramework do
   end
 
   defp behaviour_refs(ast) do
-    AST.find_all(ast, fn
-      {:@, _, [{:behaviour, _, [{:__aliases__, _, _}]}]} -> true
-      _ -> false
-    end)
-    |> Enum.flat_map(fn
+    refs =
+      AST.find_all(ast, fn
+        {:@, _, [{:behaviour, _, [{:__aliases__, _, _}]}]} -> true
+        _ -> false
+      end)
+
+    Enum.flat_map(refs, fn
       {:@, _, [{:behaviour, _, [{:__aliases__, _, parts}]}]} ->
         case Enum.all?(parts, &is_atom/1) do
           true -> [AST.join_alias_parts(parts)]
@@ -114,7 +116,7 @@ defmodule Archdo.Rules.CE.WrapperOverFramework do
     # No implementor — treat as zero-impl wrapper. Fire with target
     # inferred as :any framework primitive when the behaviour name hints
     # at one. Conservative: only fire with a generic message.
-    {:no_impl, MapSet.to_list(seam_targets) |> List.first() || nil}
+    {:no_impl, List.first(MapSet.to_list(seam_targets)) || nil}
   end
 
   defp wrapped_seam_target(impls, seam_targets) do
@@ -133,14 +135,16 @@ defmodule Archdo.Rules.CE.WrapperOverFramework do
   defp external_calls(ast) do
     own_module = AST.extract_module_name(ast)
 
-    AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, parts}, _fun]}, _, _} when is_list(parts) ->
-        Enum.all?(parts, &is_atom/1)
+    calls =
+      AST.find_all(ast, fn
+        {{:., _, [{:__aliases__, _, parts}, _fun]}, _, _} when is_list(parts) ->
+          Enum.all?(parts, &is_atom/1)
 
-      _ ->
-        false
-    end)
-    |> Enum.flat_map(fn
+        _ ->
+          false
+      end)
+
+    Enum.flat_map(calls, fn
       {{:., _, [{:__aliases__, _, parts}, _fun]}, _, _} ->
         target = AST.join_alias_parts(parts)
 

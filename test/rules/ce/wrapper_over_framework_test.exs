@@ -102,7 +102,6 @@ defmodule Archdo.Rules.CE.WrapperOverFrameworkTest do
       assert [diag] = analyze([behaviour, impl])
       assert diag.message =~ "Oban"
     end
-
   end
 
   describe "does NOT fire" do

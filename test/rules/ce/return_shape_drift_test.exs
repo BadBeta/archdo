@@ -28,6 +28,7 @@ defmodule Archdo.Rules.CE.ReturnShapeDriftTest do
       ]
 
       diags = ReturnShapeDrift.analyze_project(file_asts)
+
       assert Enum.any?(diags, fn d ->
                d.rule_id == "CE-47" and d.message =~ "create_user!"
              end)

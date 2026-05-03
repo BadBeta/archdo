@@ -19,10 +19,9 @@ defmodule Archdo.Rules.Testing.ProcessLeak do
   end
 
   defp find_leaked_processes(file, ast) do
-    ast
-    |> find_start_link_calls()
-    |> Enum.reject(&inside_start_supervised?(ast, &1))
-    |> Enum.map(&build_diagnostic(file, &1))
+    for node <- find_start_link_calls(ast),
+        not inside_start_supervised?(ast, node),
+        do: build_diagnostic(file, node)
   end
 
   defp find_start_link_calls(ast) do

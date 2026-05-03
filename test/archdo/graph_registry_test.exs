@@ -106,6 +106,7 @@ defmodule Archdo.GraphRegistryTest do
       ]
 
       graph = Graph.build(file_asts)
+
       registry_edges =
         graph |> Graph.dependencies("MyApp.Nums") |> Enum.filter(&(&1.type == :registry))
 

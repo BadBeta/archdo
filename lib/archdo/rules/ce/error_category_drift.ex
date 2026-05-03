@@ -93,14 +93,18 @@ defmodule Archdo.Rules.CE.ErrorCategoryDrift do
   # Returns nil for atoms that don't have a meaningful distinctive stem
   # (single short token: `:ok`, `:nil`, `:invalid`).
   defp canonical(atom) do
-    stems =
+    parts =
       atom
       |> Atom.to_string()
       |> String.downcase()
       |> String.split(~r/[\s._\-:\/]+/, trim: true)
-      |> Enum.reject(&(&1 in @stop_words))
-      |> Enum.map(&Naming.stem/1)
-      |> Enum.reject(&(String.length(&1) < 3))
+
+    stems =
+      for part <- parts,
+          part not in @stop_words,
+          stem = Naming.stem(part),
+          String.length(stem) >= 3,
+          do: stem
 
     case stems do
       [] -> nil

@@ -16,6 +16,7 @@ defmodule Archdo.Rules.RegressionTest do
     MissingTelemetry,
     RedundantGuardRecheck
   }
+
   use ExUnit.Case, async: true
 
   defp parse(code) do

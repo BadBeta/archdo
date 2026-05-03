@@ -269,8 +269,9 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
   # Covers Enum, Stream, :lists, for, receive, Task.async_stream.
 
   defp find_in_loops(ast, file, kind, predicate) do
-    LoopDetection.find_in_loops(ast, predicate)
-    |> Enum.map(fn {_, meta} -> build_diagnostic(file, AST.line(meta), kind) end)
+    Enum.map(LoopDetection.find_in_loops(ast, predicate), fn {_, meta} ->
+      build_diagnostic(file, AST.line(meta), kind)
+    end)
   end
 
   # --- Diagnostics ---

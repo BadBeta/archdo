@@ -16,24 +16,18 @@ defmodule Archdo.Rules.Testing.MocksNeedBehaviours do
   end
 
   defp find_defmock_calls(file, ast) do
-    AST.find_all(ast, fn
-      # Mox.defmock(MockName, for: Module)
-      {{:., _, [{:__aliases__, _, [:Mox]}, :defmock]}, _meta, _args} -> true
-      _ -> false
-    end)
-    |> Enum.filter(fn {{:., _, _}, _, args} ->
-      # Check that the `for:` option references a module
-      # We can't check at AST time whether that module has @callback,
-      # but we flag if `for:` is missing entirely
-      case args do
-        [_mock_name, opts] when is_list(opts) ->
-          not Keyword.has_key?(opts, :for)
+    calls =
+      AST.find_all(ast, fn
+        # Mox.defmock(MockName, for: Module)
+        {{:., _, [{:__aliases__, _, [:Mox]}, :defmock]}, _meta, _args} -> true
+        _ -> false
+      end)
 
-        _ ->
-          true
-      end
-    end)
-    |> Enum.map(fn {_, meta, _} ->
+    # Check that the `for:` option references a module
+    # We can't check at AST time whether that module has @callback,
+    # but we flag if `for:` is missing entirely
+    for {_, meta, args} <- calls,
+        missing_for_option?(args) do
       Diagnostic.error("7.3",
         title: "Mox.defmock without `for:` option",
         message: "Mox.defmock is called without specifying a behaviour via `for:`",
@@ -69,6 +63,13 @@ defmodule Archdo.Rules.Testing.MocksNeedBehaviours do
         file: file,
         line: AST.line(meta)
       )
-    end)
+    end
+  end
+
+  defp missing_for_option?(args) do
+    case args do
+      [_mock_name, opts] when is_list(opts) -> not Keyword.has_key?(opts, :for)
+      _ -> true
+    end
   end
 end

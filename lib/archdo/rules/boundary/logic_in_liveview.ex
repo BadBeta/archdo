@@ -41,13 +41,11 @@ defmodule Archdo.Rules.Boundary.LogicInLiveview do
   end
 
   defp check_handle_events(file, ast) do
-    ast
-    |> AST.extract_functions(:public)
-    |> Enum.filter(fn {name, arity, _, _, body} ->
-      name == @handle_event_callback and arity == @handle_event_arity and
-        body != nil and count_non_assign_nodes(body) > @max_handle_event_nodes
-    end)
-    |> Enum.map(fn {name, arity, meta, _, body} ->
+    fns = AST.extract_functions(ast, :public)
+
+    for {name, arity, meta, _, body} <- fns,
+        name == @handle_event_callback and arity == @handle_event_arity and
+          body != nil and count_non_assign_nodes(body) > @max_handle_event_nodes do
       node_count = count_non_assign_nodes(body)
 
       Diagnostic.info("1.27",
@@ -83,7 +81,7 @@ defmodule Archdo.Rules.Boundary.LogicInLiveview do
         file: file,
         line: AST.line(meta)
       )
-    end)
+    end
   end
 
   # Count AST nodes excluding assign/assign_new calls and their arguments

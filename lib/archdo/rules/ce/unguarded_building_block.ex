@@ -110,7 +110,8 @@ defmodule Archdo.Rules.CE.UnguardedBuildingBlock do
               "an Ecto changeset has already enforced types), declare it: " <>
               "`@archdo_no_input_check \"all callers pre-validate via context\"` " <>
               "at module level.",
-          applies_when: "The function is internal-only and the caller's contract enforces the domain."
+          applies_when:
+            "The function is internal-only and the caller's contract enforces the domain."
         )
       ],
       references: ["ARCHITECTURE_RULES_CHANGE_ECONOMY.md#CE-57"],

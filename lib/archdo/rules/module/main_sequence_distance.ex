@@ -28,16 +28,13 @@ defmodule Archdo.Rules.Module.MainSequenceDistance do
                          A behaviour nobody implements, or a protocol nobody derives.
   """
   def analyze_project(metrics, file_map) do
-    metrics
-    |> Enum.filter(fn m ->
-      m.distance >= @warn_distance and m.ca + m.ce >= @min_total_coupling
-    end)
-    |> Enum.reject(&stable_by_design?/1)
-    |> Enum.map(fn m ->
+    for m <- metrics,
+        m.distance >= @warn_distance and m.ca + m.ce >= @min_total_coupling,
+        not stable_by_design?(m) do
       {severity, zone} = classify(m)
       file = Map.get(file_map, m.module, "unknown")
       build_distance_diag(m, zone, severity, file)
-    end)
+    end
   end
 
   # Modules that are stable + concrete by design — not a smell

@@ -395,6 +395,7 @@ defmodule Archdo.Rules.Module.DuplicatedCodeTest do
         )
 
       diags = DuplicatedCode.analyze_project([file1, file2])
+
       refute Enum.any?(diags, &(&1.message =~ "unwrap_atom" or &1.message =~ "unwrap_string")),
              "guards (is_atom vs is_binary) discriminate semantically — must not collide"
     end

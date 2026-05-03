@@ -1,7 +1,7 @@
-defmodule Archdo.Compiled.DiagramHelpers do
+defmodule Archdo.Compiled.SvgDocument do
   @moduledoc false
 
-  # Shared SVG helpers used by diagram generators.
+  # SVG document scaffolding (wrap, error frame) shared by diagram generators.
 
   @bg "#1E1E2E"
 

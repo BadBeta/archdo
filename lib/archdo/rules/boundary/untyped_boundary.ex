@@ -30,7 +30,10 @@ defmodule Archdo.Rules.Boundary.UntypedBoundary do
     |> Enum.flat_map(&untyped_diag_for_spec(&1, file))
   end
 
-  defp untyped_diag_for_spec({:@, meta, [{:spec, _, [{:"::", _, [_lhs, return_type]}] = spec_args}]}, file) do
+  defp untyped_diag_for_spec(
+         {:@, meta, [{:spec, _, [{:"::", _, [_lhs, return_type]}] = spec_args}]},
+         file
+       ) do
     diag_if_untyped(untyped_return?(return_type), spec_args, file, meta)
   end
 

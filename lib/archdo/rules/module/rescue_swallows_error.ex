@@ -31,12 +31,12 @@ defmodule Archdo.Rules.Module.RescueSwallowsError do
     end)
     |> Enum.map(fn {:rescue, clauses} ->
       # Get line from the first swallowing clause
-      line =
-        clauses
-        |> Enum.filter(&swallows_error?/1)
-        |> Enum.map(fn {:->, meta, _} -> AST.line(meta) end)
-        |> List.first(1)
+      offending_lines =
+        for {:->, meta, _} = clause <- clauses,
+            swallows_error?(clause),
+            do: AST.line(meta)
 
+      line = List.first(offending_lines, 1)
       build_diagnostic(file, line, classify_rescue(clauses))
     end)
   end

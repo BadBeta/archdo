@@ -31,8 +31,11 @@ defmodule Archdo.Rules.StateMachine.IncompleteStateMatch do
     {_, found} =
       Macro.prewalk(ast, [], fn node, acc ->
         case extract_state_case(node) do
-          nil -> {node, acc}
-          {meta, matched_atoms, has_catch_all} -> {node, [{meta, matched_atoms, has_catch_all} | acc]}
+          nil ->
+            {node, acc}
+
+          {meta, matched_atoms, has_catch_all} ->
+            {node, [{meta, matched_atoms, has_catch_all} | acc]}
         end
       end)
 
@@ -53,13 +56,12 @@ defmodule Archdo.Rules.StateMachine.IncompleteStateMatch do
   # variable `state`. With literal_encoder the clause-list parses
   # as `[do: [{:->, _, [[pattern], body]}, ...]]`. The discriminator
   # appears as `{:state, _, _}` (variable reference).
-  defp extract_state_case({:case, meta, [{:state, _, _}, [{:do, clauses}]]}) when is_list(clauses) do
+  defp extract_state_case({:case, meta, [{:state, _, _}, [{:do, clauses}]]})
+       when is_list(clauses) do
     extract_clause_summary(meta, clauses)
   end
 
-  defp extract_state_case(
-         {:case, meta, [{:state, _, _}, [{{:__block__, _, [:do]}, clauses}]]}
-       )
+  defp extract_state_case({:case, meta, [{:state, _, _}, [{{:__block__, _, [:do]}, clauses}]]})
        when is_list(clauses) do
     extract_clause_summary(meta, clauses)
   end
@@ -69,8 +71,12 @@ defmodule Archdo.Rules.StateMachine.IncompleteStateMatch do
   defp extract_clause_summary(meta, clauses) do
     {atoms, has_catch_all} =
       Enum.reduce(clauses, {MapSet.new(), false}, fn
-        {:->, _, [[{:_, _, _}], _]}, {set, _} -> {set, true}
-        {:->, _, [[{:__block__, _, [:_]}], _]}, {set, _} -> {set, true}
+        {:->, _, [[{:_, _, _}], _]}, {set, _} ->
+          {set, true}
+
+        {:->, _, [[{:__block__, _, [:_]}], _]}, {set, _} ->
+          {set, true}
+
         {:->, _, [[{var, _, ctx}], _]}, {set, _} when is_atom(var) and is_atom(ctx) ->
           # Bare variable pattern (`state -> ...`) — also a catch-all.
           {set, true}

@@ -46,7 +46,15 @@ defmodule Archdo.Rules.StateMachine.ImplicitBooleanState do
 
   defp schema_dispatch(true, acc, file, mod_meta, aliases, body) do
     boolean_fields = find_state_booleans(body)
-    threshold_dispatch(length(boolean_fields) >= @threshold, acc, file, mod_meta, aliases, boolean_fields)
+
+    threshold_dispatch(
+      length(boolean_fields) >= @threshold,
+      acc,
+      file,
+      mod_meta,
+      aliases,
+      boolean_fields
+    )
   end
 
   defp threshold_dispatch(false, acc, _file, _mod_meta, _aliases, _boolean_fields), do: acc

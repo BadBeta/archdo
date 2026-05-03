@@ -171,7 +171,8 @@ defmodule Archdo.Rules.CE.EffectLeak do
               "now scores 1.0). Outer wrapper: `def #{name}(args) do " <>
               "result = do_#{name}(args); Logger.info(..., result: result); result end`. " <>
               "Inner is property-testable; outer composes the effect.",
-          applies_when: "The effect is observability and the function has substance to property-test."
+          applies_when:
+            "The effect is observability and the function has substance to property-test."
         ),
         Fix.new(
           summary: "Mark @archdo_no_property if the effect IS the function's job",

@@ -35,27 +35,19 @@ defmodule Archdo.Rules.Boundary.UnvalidatedParams do
   defp check_controller(file, ast) do
     fns = AST.extract_functions(ast, :public)
 
-    fns
-    |> Enum.filter(fn {_name, arity, _, args, body} ->
-      arity == 2 and has_params_arg?(args) and not has_validation?(body)
-    end)
-    |> Enum.map(fn {name, _, meta, _, _} ->
-      build_diagnostic(file, name, 2, meta, :controller)
-    end)
+    for {name, arity, meta, args, body} <- fns,
+        arity == 2 and has_params_arg?(args) and not has_validation?(body),
+        do: build_diagnostic(file, name, 2, meta, :controller)
   end
 
   defp check_live_view(file, ast) do
     fns = AST.extract_functions(ast, :public)
 
-    fns
-    |> Enum.filter(fn {name, arity, _, _, _} ->
-      (name == @handle_event_callback and arity == @handler_arity) or
-        (name == @handle_params_callback and arity == @handler_arity)
-    end)
-    |> Enum.reject(fn {_name, _, _, _, body} -> has_validation?(body) end)
-    |> Enum.map(fn {name, arity, meta, _, _} ->
-      build_diagnostic(file, name, arity, meta, :live_view)
-    end)
+    for {name, arity, meta, _, body} <- fns,
+        (name == @handle_event_callback and arity == @handler_arity) or
+          (name == @handle_params_callback and arity == @handler_arity),
+        not has_validation?(body),
+        do: build_diagnostic(file, name, arity, meta, :live_view)
   end
 
   defp build_diagnostic(file, name, arity, meta, kind) do

@@ -23,15 +23,17 @@ defmodule Archdo.Rules.Testing.NoAssertion do
   end
 
   defp find_tests_without_assertions(file, ast) do
-    AST.find_all(ast, fn
-      # test "name" do ... end
-      {:test, _meta, [_name, _body]} -> true
-      # test "name", %{...} do ... end (with context)
-      {:test, _meta, [_name, _ctx, _body]} -> true
-      _ -> false
-    end)
-    |> Enum.reject(&has_assertion?/1)
-    |> Enum.map(fn {_, meta, args} ->
+    tests =
+      AST.find_all(ast, fn
+        # test "name" do ... end
+        {:test, _meta, [_name, _body]} -> true
+        # test "name", %{...} do ... end (with context)
+        {:test, _meta, [_name, _ctx, _body]} -> true
+        _ -> false
+      end)
+
+    for {_, meta, args} = node <- tests,
+        not has_assertion?(node) do
       test_name = extract_test_name(args)
 
       Diagnostic.warning("7.9",
@@ -62,7 +64,7 @@ defmodule Archdo.Rules.Testing.NoAssertion do
         file: file,
         line: AST.line(meta)
       )
-    end)
+    end
   end
 
   defp has_assertion?({:test, _, args}) do

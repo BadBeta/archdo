@@ -27,18 +27,21 @@ defmodule Archdo.Rules.OTP.AtomInHotPath do
 
     # Check all loops (Enum, Stream, :lists, for, receive, Task.async_stream)
     loop_hits =
-      LoopDetection.find_in_loops(ast, predicate)
-      |> Enum.map(fn {_, meta} -> build_diagnostic(file, meta, "loop body") end)
+      Enum.map(LoopDetection.find_in_loops(ast, predicate), fn {_, meta} ->
+        build_diagnostic(file, meta, "loop body")
+      end)
 
     # Check GenServer callbacks
     genserver_hits =
-      LoopDetection.find_in_genserver_callbacks(ast, predicate)
-      |> Enum.map(fn {_, meta} -> build_diagnostic(file, meta, "GenServer callback") end)
+      Enum.map(LoopDetection.find_in_genserver_callbacks(ast, predicate), fn {_, meta} ->
+        build_diagnostic(file, meta, "GenServer callback")
+      end)
 
     # Check recursive functions
     recursion_hits =
-      LoopDetection.find_in_recursive_fns(ast, predicate)
-      |> Enum.map(fn {_, meta} -> build_diagnostic(file, meta, "recursive function") end)
+      Enum.map(LoopDetection.find_in_recursive_fns(ast, predicate), fn {_, meta} ->
+        build_diagnostic(file, meta, "recursive function")
+      end)
 
     loop_hits ++ genserver_hits ++ recursion_hits
   end

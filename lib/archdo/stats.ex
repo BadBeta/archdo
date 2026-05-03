@@ -269,7 +269,10 @@ defmodule Archdo.Stats do
         {:@, _, [{:spec, _, _}]} = node, acc ->
           {node, %{acc | specs: acc.specs + 1}}
 
-        {:@, _, [{:moduledoc, _, [val]}]} = node, acc when val != false ->
+        {:@, _, [{:moduledoc, _, [false]}]} = node, acc ->
+          {node, acc}
+
+        {:@, _, [{:moduledoc, _, [_]}]} = node, acc ->
           {node, %{acc | moduledocs: acc.moduledocs + 1}}
 
         node, acc ->
@@ -495,7 +498,7 @@ defmodule Archdo.Stats do
 
     rows =
       Enum.map(contexts, fn ctx ->
-        short = ctx.name |> String.split(".") |> List.last()
+        short = ctx.name |> String.split(".") |> Enum.at(-1)
         name = String.pad_trailing(short, 28)
         mods = String.pad_trailing("#{ctx.modules}", 6)
         coh = String.pad_trailing("#{(ctx.cohesion * 100) |> Float.round(0) |> trunc()}%", 7)

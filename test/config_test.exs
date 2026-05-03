@@ -31,10 +31,11 @@ defmodule Archdo.ConfigTest do
     end
 
     test "threshold/4 returns configured value when present" do
-      config = Config.from_keyword(
-        [thresholds: [{"1.6", max_logger_calls: 5}]],
-        "/tmp/nonexistent_root"
-      )
+      config =
+        Config.from_keyword(
+          [thresholds: [{"1.6", max_logger_calls: 5}]],
+          "/tmp/nonexistent_root"
+        )
 
       assert Config.threshold(config, "1.6", :max_logger_calls, 3) == 5
     end
@@ -45,10 +46,11 @@ defmodule Archdo.ConfigTest do
     end
 
     test "threshold/4 returns default when key absent within rule" do
-      config = Config.from_keyword(
-        [thresholds: [{"1.6", other_key: 99}]],
-        "/tmp/nonexistent_root"
-      )
+      config =
+        Config.from_keyword(
+          [thresholds: [{"1.6", other_key: 99}]],
+          "/tmp/nonexistent_root"
+        )
 
       assert Config.threshold(config, "1.6", :max_logger_calls, 3) == 3
     end
