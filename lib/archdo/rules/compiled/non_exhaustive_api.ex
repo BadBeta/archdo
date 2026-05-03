@@ -16,12 +16,7 @@ defmodule Archdo.Rules.Compiled.NonExhaustiveApi do
   @min_clauses 2
 
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
-  def analyze_compiled(graph) do
-    case Compiled.beam_dir(graph) do
-      beam_dir when is_binary(beam_dir) -> scan_beam_dir(beam_dir)
-      _ -> []
-    end
-  end
+  def analyze_compiled(graph), do: Helpers.with_beam_dir(graph, &scan_beam_dir/1)
 
   defp scan_beam_dir(beam_dir) do
     beam_dir

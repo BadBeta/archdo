@@ -12,6 +12,7 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
   # macro expansion — strong signal it's genuinely dead.
 
   alias Archdo.{AST, Compiled, Diagnostic, Fix, Graph}
+  alias Archdo.Rules.Compiled.Helpers
 
   @impl true
   def id, do: "1.26"
@@ -131,21 +132,9 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
   # exclusion shape used by 1.25 (orphan_module) so the two rules
   # agree on what counts as an "intentional" zero-edge module.
   defp excluded?(mod, graph) do
-    behaviour_definition?(mod, graph) or
-      application_entry_point?(mod) or
+    Helpers.behaviour_definition?(mod, graph) or
+      Helpers.application_entry_point?(mod) or
       test_support_module?(mod)
-  end
-
-  defp behaviour_definition?(mod, graph) do
-    case Map.get(Compiled.modules(graph), mod) do
-      %{callback_fns: [_ | _]} -> true
-      _ -> false
-    end
-  end
-
-  defp application_entry_point?(mod) do
-    name = Atom.to_string(mod)
-    String.ends_with?(name, ".Application") or String.ends_with?(name, ".MixProject")
   end
 
   defp test_support_module?(mod) do

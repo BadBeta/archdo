@@ -687,7 +687,7 @@ Module references another module (in struct patterns, type specs, attributes) bu
 - **Tolerate:** `@behaviour` declarations (compile-time contracts by design), compile-time macro providers.
 - **Severity:** `info`
 
-**4.27 Unused Alias**
+### 4.27 Unused Alias
 
 Alias is declared but the short name is never referenced.
 
@@ -696,7 +696,7 @@ Alias is declared but the short name is never referenced.
 - **Tolerate:** `alias Foo.{Bar, Baz}` multi-alias syntax (harder to track). `alias Foo, as: Bar` where `Bar` is used.
 - **Severity:** `info`
 
-**4.28 N+1 Preload in Loop**
+### 4.28 N+1 Preload in Loop
 
 `Repo.preload/get/one/all` inside Enum callbacks or `for` comprehensions.
 
@@ -705,7 +705,7 @@ Alias is declared but the short name is never referenced.
 - **Tolerate:** `Repo.preload` outside loops. Streams that batch internally.
 - **Severity:** `warning`
 
-**4.29 Dev Dependency Without `only:` Option**
+### 4.29 Dev Dependency Without `only:` Option
 
 Well-known dev/test package missing `only: [:dev, :test]` — will be included in production releases.
 
@@ -714,7 +714,7 @@ Well-known dev/test package missing `only: [:dev, :test]` — will be included i
 - **Tolerate:** `:esbuild` and `:tailwind` (Phoenix 1.8+ deliberately omits `only:` for asset build).
 - **Severity:** `warning`
 
-**4.30 Umbrella Dependency Inconsistency**
+### 4.30 Umbrella Dependency Inconsistency
 
 Umbrella child dep with `in_umbrella: true, runtime: false` but no `only:` restriction.
 
@@ -729,7 +729,7 @@ Umbrella child dep with `in_umbrella: true, runtime: false` but no `only:` restr
 
 ### 5A. Process Lifecycle
 
-#### 5.1 All Long-Running Processes Must Be Supervised
+### 5.1 All Long-Running Processes Must Be Supervised
 
 No bare `spawn`, `spawn_link`, or unlinked `GenServer.start` for processes that should persist.
 
@@ -738,7 +738,7 @@ No bare `spawn`, `spawn_link`, or unlinked `GenServer.start` for processes that 
 - **Tolerate:** Test helpers, `Task.async`/`Task.await` pairs within a single function scope, `spawn_monitor` with explicit `:DOWN` handler.
 - **Severity:** `warning`
 
-#### 5.2 No Unnecessary Processes
+### 5.2 No Unnecessary Processes
 
 Modules that wrap pure functions in a GenServer without needing state, concurrency, or fault isolation.
 
@@ -747,7 +747,7 @@ Modules that wrap pure functions in a GenServer without needing state, concurren
 - **Tolerate:** Rate limiters, connection pools, registered processes, framework-required processes (Membrane Bin/Source/Sink/Filter, Broadway, GenStage, Phoenix Channel).
 - **Severity:** `info`
 
-#### 5.3 Agent Misuse
+### 5.3 Agent Misuse
 
 Agent used as read-heavy cache where ETS with `read_concurrency: true` would be faster and non-blocking.
 
@@ -756,7 +756,7 @@ Agent used as read-heavy cache where ETS with `read_concurrency: true` would be 
 - **Tolerate:** Small-scale Agent in low-concurrency applications, Agent as simple config holder.
 - **Severity:** `info`
 
-#### 5.4 No Flat Supervision Trees
+### 5.4 No Flat Supervision Trees
 
 Supervisor with too many direct children — group related processes under sub-supervisors with appropriate strategies.
 
@@ -765,7 +765,7 @@ Supervisor with too many direct children — group related processes under sub-s
 - **Tolerate:** Small applications with genuinely independent processes.
 - **Severity:** `info`
 
-#### 5.6 Default Supervisor Restart Budget
+### 5.6 Default Supervisor Restart Budget
 
 Supervisors relying on default `max_restarts: 3, max_seconds: 5`.
 
@@ -774,7 +774,7 @@ Supervisors relying on default `max_restarts: 3, max_seconds: 5`.
 - **Tolerate:** Test supervision trees.
 - **Severity:** `info`
 
-#### 5.7 Restart Type Mismatch
+### 5.7 Restart Type Mismatch
 
 Restart type must match process lifecycle: `:permanent` for long-running GenServers, `:transient` for tasks.
 
@@ -785,7 +785,7 @@ Restart type must match process lifecycle: `:permanent` for long-running GenServ
 
 ### 5B. GenServer Hygiene
 
-#### 5.8 No Blocking Work in init/1
+### 5.8 No Blocking Work in init/1
 
 GenServer `init/1` must not block on I/O, HTTP, or database queries.
 
@@ -794,7 +794,7 @@ GenServer `init/1` must not block on I/O, HTTP, or database queries.
 - **Tolerate:** Reading config files, ETS table creation, fast local operations.
 - **Severity:** `warning`
 
-#### 5.9 No Blocking Operations in GenServer Callbacks
+### 5.9 No Blocking Operations in GenServer Callbacks
 
 `handle_call`, `handle_cast`, `handle_info` must not block on I/O.
 
@@ -803,7 +803,7 @@ GenServer `init/1` must not block on I/O, HTTP, or database queries.
 - **Tolerate:** Quick reads, ETS operations, in-memory computations, `handle_continue` (intentional async).
 - **Severity:** `warning`
 
-#### 5.11 No receive Inside GenServer Callbacks
+### 5.11 No receive Inside GenServer Callbacks
 
 `receive` inside a GenServer callback blocks the GenServer from processing its mailbox.
 
@@ -812,7 +812,7 @@ GenServer `init/1` must not block on I/O, HTTP, or database queries.
 - **Tolerate:** None — this is always a design error.
 - **Severity:** `warning`
 
-#### 5.12 Use handle_continue Instead of send(self()) in init
+### 5.12 Use handle_continue Instead of send(self()) in init
 
 `send(self(), :init_work)` in `init/1` should be `{:ok, state, {:continue, :init_work}}`.
 
@@ -821,7 +821,7 @@ GenServer `init/1` must not block on I/O, HTTP, or database queries.
 - **Tolerate:** Pool/cache patterns where interleaving is intentional (NimblePool does this so the pool stays responsive during worker creation).
 - **Severity:** `info`
 
-#### 5.13 Cast Where Call is Needed
+### 5.13 Cast Where Call is Needed
 
 `GenServer.cast` used where `GenServer.call` is more appropriate — operations that need confirmation.
 
@@ -830,7 +830,7 @@ GenServer `init/1` must not block on I/O, HTTP, or database queries.
 - **Tolerate:** Logging, metrics, notifications, broadcast, fire-and-forget cache invalidation.
 - **Severity:** `info`
 
-#### 5.14 Silent handle_info Catch-All
+### 5.14 Silent handle_info Catch-All
 
 `handle_info` catch-all must not swallow messages silently.
 
@@ -839,7 +839,7 @@ GenServer `init/1` must not block on I/O, HTTP, or database queries.
 - **Tolerate:** Explicitly documented catch-alls with a comment explaining the intent.
 - **Severity:** `warning`
 
-#### 5.15 Timeout as Polling
+### 5.15 Timeout as Polling
 
 GenServer `{:noreply, state, timeout}` return used as a polling mechanism.
 
@@ -848,7 +848,7 @@ GenServer `{:noreply, state, timeout}` return used as a polling mechanism.
 - **Tolerate:** Idle timeouts (intentional inactivity detection is the correct use of GenServer timeout).
 - **Severity:** `info`
 
-#### 5.16 Missing terminate/2
+### 5.16 Missing terminate/2
 
 GenServers holding resources (connections, file handles, external sessions) should implement `terminate/2`.
 
@@ -857,7 +857,7 @@ GenServers holding resources (connections, file handles, external sessions) shou
 - **Tolerate:** Stateless GenServers, processes whose resources auto-cleanup on process death.
 - **Severity:** `info`
 
-#### 5.17 Scattered GenServer.call/cast
+### 5.17 Scattered GenServer.call/cast
 
 GenServer.call/cast should only be used in the defining module's client API, not scattered across the codebase.
 
@@ -866,7 +866,7 @@ GenServer.call/cast should only be used in the defining module's client API, not
 - **Tolerate:** Test files, supervisor modules.
 - **Severity:** `info`
 
-#### 5.18 Synchronous Call Chains
+### 5.18 Synchronous Call Chains
 
 No synchronous `GenServer.call` chains from within callbacks — risk of deadlock.
 
@@ -875,7 +875,7 @@ No synchronous `GenServer.call` chains from within callbacks — risk of deadloc
 - **Tolerate:** Calls to processes known to be fast and non-circular (ETS-backed caches).
 - **Severity:** `warning`
 
-#### 5.19 Large Messages
+### 5.19 Large Messages
 
 Don't send entire `Plug.Conn` or large structs to other processes.
 
@@ -884,7 +884,7 @@ Don't send entire `Plug.Conn` or large structs to other processes.
 - **Tolerate:** Small messages, binary references (not copied).
 - **Severity:** `warning`
 
-#### 5.37 Missing handle_info
+### 5.37 Missing handle_info
 
 GenServer without any `handle_info/2` clause — unexpected messages pile up in mailbox.
 
@@ -893,7 +893,7 @@ GenServer without any `handle_info/2` clause — unexpected messages pile up in 
 - **Tolerate:** gen_statem modules, simple GenServers that genuinely receive no messages (rare — monitors and timers are common).
 - **Severity:** `info`
 
-#### 5.38 GenServer.call to Self — Deadlock
+### 5.38 GenServer.call to Self — Deadlock
 
 `GenServer.call(__MODULE__)` or `GenServer.call(self())` from within a callback causes instant deadlock.
 
@@ -902,7 +902,7 @@ GenServer without any `handle_info/2` clause — unexpected messages pile up in 
 - **Tolerate:** None — this is always a bug. Extract the logic into a private function.
 - **Severity:** `warning`
 
-#### 5.39 Brutal Kill
+### 5.39 Brutal Kill
 
 `Process.exit(pid, :kill)` bypasses `terminate/2` — data may be lost.
 
@@ -911,7 +911,7 @@ GenServer without any `handle_info/2` clause — unexpected messages pile up in 
 - **Tolerate:** Test cleanup, emergency kill for stuck processes.
 - **Severity:** `warning`
 
-#### 5.41 Hardcoded Call Timeout
+### 5.41 Hardcoded Call Timeout
 
 `GenServer.call` with hardcoded integer timeout instead of a named constant.
 
@@ -922,7 +922,7 @@ GenServer without any `handle_info/2` clause — unexpected messages pile up in 
 
 ### 5C. Task Discipline
 
-#### 5.20 Monitor Without Handler
+### 5.20 Monitor Without Handler
 
 `Process.monitor/1` called without corresponding `:DOWN` handler in the same module.
 
@@ -931,7 +931,7 @@ GenServer without any `handle_info/2` clause — unexpected messages pile up in 
 - **Tolerate:** Modules where :DOWN is handled via a catch-all or in a different module.
 - **Severity:** `warning`
 
-#### 5.21 Spawn Without Link or Monitor
+### 5.21 Spawn Without Link or Monitor
 
 `spawn/1` without link or monitor — failures go unnoticed.
 
@@ -940,7 +940,7 @@ GenServer without any `handle_info/2` clause — unexpected messages pile up in 
 - **Tolerate:** Test helpers, diagnostic/debugging code.
 - **Severity:** `warning`
 
-#### 5.22 Task.async Without Task.await
+### 5.22 Task.async Without Task.await
 
 `Task.async` creates a linked task that MUST be awaited — the result is otherwise lost.
 
@@ -949,7 +949,7 @@ GenServer without any `handle_info/2` clause — unexpected messages pile up in 
 - **Tolerate:** Results handled via `handle_info` in GenServers (the task sends a message on completion).
 - **Severity:** `warning`
 
-#### 5.23 Unsupervised Task
+### 5.23 Unsupervised Task
 
 `Task.start/1` or `Task.start_link/1` in production code instead of `Task.Supervisor`.
 
@@ -960,7 +960,7 @@ GenServer without any `handle_info/2` clause — unexpected messages pile up in 
 
 ### 5D. ETS Patterns
 
-#### 5.27 ETS as Message Bus
+### 5.27 ETS as Message Bus
 
 ETS used as a communication channel between processes instead of message passing.
 
@@ -969,7 +969,7 @@ ETS used as a communication channel between processes instead of message passing
 - **Tolerate:** ETS as shared read cache (write-once-read-many), ETS for metrics counters.
 - **Severity:** `info`
 
-#### 5.28 ETS Without Heir
+### 5.28 ETS Without Heir
 
 Critical ETS tables should configure `:heir` for survival across process restarts.
 
@@ -978,7 +978,7 @@ Critical ETS tables should configure `:heir` for survival across process restart
 - **Tolerate:** Disposable caches that are cheap to rebuild, test tables.
 - **Severity:** `info`
 
-#### 5.40 ETS Ownership Leak
+### 5.40 ETS Ownership Leak
 
 ETS table created in GenServer's `init/1` without cleanup in `terminate/2`.
 
@@ -989,7 +989,7 @@ ETS table created in GenServer's `init/1` without cleanup in `terminate/2`.
 
 ### 5E. Process Naming & Registry
 
-#### 5.24 Dynamic Atom Names
+### 5.24 Dynamic Atom Names
 
 `String.to_atom/1` called — atoms are never garbage collected.
 
@@ -998,7 +998,7 @@ ETS table created in GenServer's `init/1` without cleanup in `terminate/2`.
 - **Tolerate:** Compile-time atom creation, `String.to_existing_atom`, `Module.concat` (different mechanism).
 - **Severity:** `info`
 
-#### 5.25 Custom Registry Reinvention
+### 5.25 Custom Registry Reinvention
 
 Custom process lookup maps reinventing what Elixir's `Registry` module already provides.
 
@@ -1007,7 +1007,7 @@ Custom process lookup maps reinventing what Elixir's `Registry` module already p
 - **Tolerate:** Specialized lookup structures with semantics different from Registry.
 - **Severity:** `info`
 
-#### 5.26 Global Registration
+### 5.26 Global Registration
 
 `:global` registration for local-only processes.
 
@@ -1016,7 +1016,7 @@ Custom process lookup maps reinventing what Elixir's `Registry` module already p
 - **Tolerate:** Applications explicitly using distributed Elixir (`Node.connect`, `Horde`).
 - **Severity:** `info`
 
-#### 5.29 Singleton Bottleneck
+### 5.29 Singleton Bottleneck
 
 Named GenServer handling entity-keyed requests — all requests serialized through one process.
 
@@ -1025,7 +1025,7 @@ Named GenServer handling entity-keyed requests — all requests serialized throu
 - **Tolerate:** Low-throughput coordination processes, rate limiters (serialization is the point).
 - **Severity:** `info`
 
-#### 5.33 Unnamed Singleton
+### 5.33 Unnamed Singleton
 
 GenServer whose public API uses `__MODULE__` as the server target but `start_link` doesn't register the name.
 
@@ -1034,7 +1034,7 @@ GenServer whose public API uses `__MODULE__` as the server target but `start_lin
 - **Tolerate:** Modules where the name is passed dynamically via options.
 - **Severity:** `info`
 
-#### 5.36 Stale PID Reference
+### 5.36 Stale PID Reference
 
 PIDs stored in process state or ETS without `Process.monitor` — become stale after process restart.
 
@@ -1045,7 +1045,7 @@ PIDs stored in process state or ETS without `Process.monitor` — become stale a
 
 ### 5F. Process State & Safety
 
-#### 5.30 Process.sleep in Production
+### 5.30 Process.sleep in Production
 
 `Process.sleep/1` blocks the calling process for the specified duration.
 
@@ -1054,7 +1054,7 @@ PIDs stored in process state or ETS without `Process.monitor` — become stale a
 - **Tolerate:** Test files, seed scripts, deliberate rate limiting with documented reason.
 - **Severity:** `info`
 
-#### 5.31 Unbounded State
+### 5.31 Unbounded State
 
 GenServer accumulating unbounded data in process state.
 
@@ -1063,7 +1063,7 @@ GenServer accumulating unbounded data in process state.
 - **Tolerate:** Bounded collections with explicit size limits, ETS-backed state.
 - **Severity:** `info`
 
-#### 5.32 Process Dictionary
+### 5.32 Process Dictionary
 
 `Process.put/get` — hidden mutable state that doesn't appear in function signatures.
 
@@ -1072,7 +1072,7 @@ GenServer accumulating unbounded data in process state.
 - **Tolerate:** Logger metadata, OpenTelemetry context, connection pool ownership tracking.
 - **Severity:** `info`
 
-#### 5.34 Unsafe Production Tracing
+### 5.34 Unsafe Production Tracing
 
 `:dbg` and `:erlang.trace` used without safety limits in production code.
 
@@ -1081,7 +1081,7 @@ GenServer accumulating unbounded data in process state.
 - **Tolerate:** Test code, developer tooling modules, modules explicitly named "debug" or "trace".
 - **Severity:** `info`
 
-#### 5.35 GenStage No Demand
+### 5.35 GenStage No Demand
 
 GenStage consumer subscription without explicit `max_demand`/`min_demand`.
 
@@ -1090,7 +1090,7 @@ GenStage consumer subscription without explicit `max_demand`/`min_demand`.
 - **Tolerate:** Simple producer-consumer pairs in low-throughput scenarios.
 - **Severity:** `info`
 
-#### 5.42 Sequential Where Parallel
+### 5.42 Sequential Where Parallel
 
 Sequential collection processing with I/O in the callback — candidate for `Task.async_stream`.
 
@@ -1099,7 +1099,7 @@ Sequential collection processing with I/O in the callback — candidate for `Tas
 - **Tolerate:** Test files, callbacks that must run in order, rate-limited external services, already-parallel code (Task.async_stream).
 - **Severity:** `info`
 
-**5.43 GenServer Callback Sprawl**
+### 5.43 GenServer Callback Sprawl
 
 GenServer with too many distinct `handle_call`/`handle_cast`/`handle_info` message patterns.
 
@@ -1108,7 +1108,7 @@ GenServer with too many distinct `handle_call`/`handle_cast`/`handle_info` messa
 - **Tolerate:** Node/connection managers that legitimately proxy many operations to a single resource (e.g., a NIF handle).
 - **Severity:** `warning`
 
-**5.44 String.to_atom in Hot Path**
+### 5.44 String.to_atom in Hot Path
 
 `String.to_atom/1` called inside GenServer callbacks or Enum callbacks.
 
@@ -1117,7 +1117,7 @@ GenServer with too many distinct `handle_call`/`handle_cast`/`handle_info` messa
 - **Tolerate:** `String.to_existing_atom` (safe). Compile-time atom creation (module attributes).
 - **Severity:** `warning`
 
-**5.45 Named ETS Table Without Cleanup**
+### 5.45 Named ETS Table Without Cleanup
 
 `:ets.new` with `:named_table` in a module that has no `terminate/2` callback or `:ets.delete` call.
 
@@ -1132,7 +1132,7 @@ GenServer with too many distinct `handle_call`/`handle_cast`/`handle_info` messa
 
 ### 6A. Size & Complexity
 
-#### 6.1 Module Cohesion
+### 6.1 Module Cohesion
 
 Module with too many public functions — suggests mixed responsibilities.
 
@@ -1141,7 +1141,7 @@ Module with too many public functions — suggests mixed responsibilities.
 - **Tolerate:** Context facade modules (designed to have many public functions as the domain's API surface), macro-generated functions.
 - **Severity:** `info` / `warning`
 
-#### 6.2 Function Complexity
+### 6.2 Function Complexity
 
 High cyclomatic complexity or excessive arity.
 
@@ -1150,7 +1150,7 @@ High cyclomatic complexity or excessive arity.
 - **Tolerate:** Pattern-matching dispatch across multiple clauses (each clause is simple, the complexity is in the dispatch).
 - **Severity:** `info`
 
-#### 6.3 Struct Field Count
+### 6.3 Struct Field Count
 
 Structs with too many fields suggest the data model should be decomposed.
 
@@ -1159,7 +1159,7 @@ Structs with too many fields suggest the data model should be decomposed.
 - **Tolerate:** Ecto schemas (may legitimately map wide database tables).
 - **Severity:** `info` / `warning`
 
-#### 6.4 Module Length
+### 6.4 Module Length
 
 File length as an architecture signal — long files do too much.
 
@@ -1168,7 +1168,7 @@ File length as an architecture signal — long files do too much.
 - **Tolerate:** Generated files, comprehensive test files with many test cases.
 - **Severity:** `warning` / `error`
 
-#### 6.5 Function Fan-Out
+### 6.5 Function Fan-Out
 
 Individual functions depending on too many distinct modules.
 
@@ -1177,7 +1177,7 @@ Individual functions depending on too many distinct modules.
 - **Tolerate:** Facade functions that intentionally coordinate across modules.
 - **Severity:** `info`
 
-#### 6.12 Responsibility Clustering
+### 6.12 Responsibility Clustering
 
 Module has independent function clusters suggesting multiple responsibilities.
 
@@ -1188,7 +1188,7 @@ Module has independent function clusters suggesting multiple responsibilities.
 
 ### 6B. Naming & Design
 
-#### 6.6 Boolean Flag Arguments
+### 6.6 Boolean Flag Arguments
 
 Functions with boolean parameters — `do_thing(true)` is opaque at the call site.
 
@@ -1197,7 +1197,7 @@ Functions with boolean parameters — `do_thing(true)` is opaque at the call sit
 - **Tolerate:** Simple predicate wrappers, internal helpers not exposed as public API.
 - **Severity:** `info`
 
-#### 6.7 Pretentious Names
+### 6.7 Pretentious Names
 
 Module names containing Manager, Helper, Util, Service, Handler hide what the module actually does.
 
@@ -1206,7 +1206,7 @@ Module names containing Manager, Helper, Util, Service, Handler hide what the mo
 - **Tolerate:** Framework-conventional names where the suffix has a specific meaning (EventHandler in Broadway, ChannelHandler in Phoenix).
 - **Severity:** `info`
 
-#### 6.8 Distance from Main Sequence
+### 6.8 Distance from Main Sequence
 
 Robert C. Martin's package metrics (Ca/Ce/I/A/D) — modules far from the main sequence are problematic.
 
@@ -1215,7 +1215,7 @@ Robert C. Martin's package metrics (Ca/Ce/I/A/D) — modules far from the main s
 - **Tolerate:** Small utility modules, configuration modules.
 - **Severity:** `info`
 
-#### 6.17 Nesting Depth
+### 6.17 Nesting Depth
 
 Deeply nested control flow (>4 levels of case/with/if/cond) — extract functions to flatten.
 
@@ -1224,7 +1224,7 @@ Deeply nested control flow (>4 levels of case/with/if/cond) — extract function
 - **Tolerate:** Pattern matching in function heads (not counted as nesting).
 - **Severity:** `info`
 
-#### 6.19 If/Else for Structural Dispatch
+### 6.19 If/Else for Structural Dispatch
 
 `if/else` used to dispatch on data shape or type instead of multi-clause functions or case.
 
@@ -1235,7 +1235,7 @@ Deeply nested control flow (>4 levels of case/with/if/cond) — extract function
 
 ### 6C. Error Handling
 
-#### 6.9 Rescue Swallows Error
+### 6.9 Rescue Swallows Error
 
 Bare rescue clauses that swallow errors silently — catch everything, do nothing useful with it.
 
@@ -1244,7 +1244,7 @@ Bare rescue clauses that swallow errors silently — catch everything, do nothin
 - **Tolerate:** Rescue clauses that log the error, return `{:error, reason}`, or reraise.
 - **Severity:** `warning`
 
-#### 6.10 Raise in Non-Bang Function
+### 6.10 Raise in Non-Bang Function
 
 Non-bang functions should return ok/error tuples, not raise exceptions.
 
@@ -1253,7 +1253,7 @@ Non-bang functions should return ok/error tuples, not raise exceptions.
 - **Tolerate:** Framework callbacks where raising is the "let it crash" convention (handle_init, handle_pad_added, handle_info, handle_call, terminate — whitelisted), setup/validation functions (`init`, `validate!`).
 - **Severity:** `warning`
 
-#### 6.11 Inconsistent Error Shape
+### 6.11 Inconsistent Error Shape
 
 Module mixes ok/error tuples with raises, nils, and bare returns across its public API.
 
@@ -1262,7 +1262,7 @@ Module mixes ok/error tuples with raises, nils, and bare returns across its publ
 - **Tolerate:** Bang/non-bang pairs (intentional — the module provides both), modules with only 1-2 public functions.
 - **Severity:** `info`
 
-#### 6.14 Try/Rescue for Expected Failures
+### 6.14 Try/Rescue for Expected Failures
 
 `try/rescue` wrapping a bang function where the non-bang variant already returns ok/error tuples.
 
@@ -1271,7 +1271,7 @@ Module mixes ok/error tuples with raises, nils, and bare returns across its publ
 - **Tolerate:** Test code, cases where no non-bang alternative exists.
 - **Severity:** `warning`
 
-#### 6.15 Bang in Ok/Error Function
+### 6.15 Bang in Ok/Error Function
 
 Functions returning ok/error tuples should not call bang functions that can raise.
 
@@ -1280,7 +1280,7 @@ Functions returning ok/error tuples should not call bang functions that can rais
 - **Tolerate:** `init`, `start_link` (setup contexts), `struct!` (programmer error, not runtime failure), seed/migration files.
 - **Severity:** `info`
 
-#### 6.16 Missing Rescue at System Boundary
+### 6.16 Missing Rescue at System Boundary
 
 System boundary calls need rescue/catch, not just ok/error — the boundary IS where exceptions are expected.
 
@@ -1291,7 +1291,7 @@ System boundary calls need rescue/catch, not just ok/error — the boundary IS w
 - **Tolerate:** Calls to atom-named servers (known to be registered), calls inside supervised processes where crash-and-restart is acceptable.
 - **Severity:** `info` / `warning`
 
-#### 6.18 Exception Laundering
+### 6.18 Exception Laundering
 
 Rescue catches one exception type but raises a different one — original stacktrace is lost.
 
@@ -1302,7 +1302,7 @@ Rescue catches one exception type but raises a different one — original stackt
 
 ### 6D. Recursion
 
-#### 6.20 Non-Tail Recursion
+### 6.20 Non-Tail Recursion
 
 Recursive function where the call is not in tail position — risks stack overflow on large input.
 
@@ -1311,7 +1311,7 @@ Recursive function where the call is not in tail position — risks stack overfl
 - **Tolerate:** Tree traversal (inherently non-tail but bounded by tree depth, not list length). Tail-recursive process loops, state machines, and iterative algorithms (e.g., `poll_loop/2`, `retry_loop/3`, GenServer-style receive loops) — these are correct and fundamental BEAM patterns.
 - **Severity:** `info`
 
-#### 6.21 Unnecessary Manual List Recursion
+### 6.21 Unnecessary Manual List Recursion
 
 `[head | tail]` + `[]` base case pattern where Enum functions would suffice.
 
@@ -1320,7 +1320,7 @@ Recursive function where the call is not in tail position — risks stack overfl
 - **Tolerate:** Tree/graph traversal (recursion IS the right tool), multi-accumulator patterns, functions that need early termination with complex conditions, **tail-recursive loops** (process loops, state machines, retry/poll/receive patterns — these are correct BEAM patterns, not unnecessary recursion).
 - **Severity:** `info`
 
-#### 6.22 Broken Tail-Call Optimization
+### 6.22 Broken Tail-Call Optimization
 
 Recursive function appears tail-recursive but TCO is silently defeated by surrounding code.
 
@@ -1334,7 +1334,7 @@ Recursive function appears tail-recursive but TCO is silently defeated by surrou
 - **Tolerate:** Non-recursive functions (no self-call to break).
 - **Severity:** `warning`
 
-#### 6.23 Unbounded Recursion
+### 6.23 Unbounded Recursion
 
 Recursive function without depth guard or finite base case — stack overflow risk on large/malicious input.
 
@@ -1345,7 +1345,7 @@ Recursive function without depth guard or finite base case — stack overflow ri
 
 ### 6E. Compiled Analysis
 
-#### 6.24 Dead Public Function *(compiled)*
+### 6.24 Dead Public Function *(compiled)*
 
 Public function exported but never called from outside the module.
 
@@ -1354,7 +1354,7 @@ Public function exported but never called from outside the module.
 - **Tolerate:** Library API functions called by external consumers, dynamically called functions (apply/3, protocol dispatch).
 - **Severity:** `info`
 
-#### 6.25 Transitively Dead Function *(compiled)*
+### 6.25 Transitively Dead Function *(compiled)*
 
 Function only called from dead functions — removing the dead callers would make this unreachable.
 
@@ -1363,7 +1363,7 @@ Function only called from dead functions — removing the dead callers would mak
 - **Tolerate:** Same as 6.24.
 - **Severity:** `info`
 
-#### 6.26 Oversized API Surface *(compiled)*
+### 6.26 Oversized API Surface *(compiled)*
 
 Module exports many functions but less than 25% are called by external modules.
 
@@ -1372,7 +1372,7 @@ Module exports many functions but less than 25% are called by external modules.
 - **Tolerate:** Library modules designed for external consumption, utility modules with intentionally broad APIs.
 - **Severity:** `info`
 
-#### 6.27 Non-Exhaustive Public API *(compiled)*
+### 6.27 Non-Exhaustive Public API *(compiled)*
 
 Public function has multiple clause patterns but no catch-all — crashes with FunctionClauseError on unexpected input.
 
@@ -1381,7 +1381,7 @@ Public function has multiple clause patterns but no catch-all — crashes with F
 - **Tolerate:** Functions where the restricted input set is by design (dispatch tables, type-specific handlers), internal functions that are public for technical reasons.
 - **Severity:** `info`
 
-#### 6.28 Inconsistent API Return Shapes *(compiled)*
+### 6.28 Inconsistent API Return Shapes *(compiled)*
 
 Public function returns different shapes from different clauses.
 
@@ -1390,7 +1390,7 @@ Public function returns different shapes from different clauses.
 - **Tolerate:** Functions where varying return shapes are intentional and documented with `@spec`.
 - **Severity:** `warning`
 
-#### 6.29 Stub Function
+### 6.29 Stub Function
 
 Function body is a placeholder that will fail at runtime — `raise "not implemented"`, TODO, or similar.
 
@@ -1399,7 +1399,7 @@ Function body is a placeholder that will fail at runtime — `raise "not impleme
 - **Tolerate:** Test helpers, intentionally unsupported behaviour callbacks with `@doc` explaining why.
 - **Severity:** `warning`
 
-#### 6.30 Degenerate Function *(compiled)*
+### 6.30 Degenerate Function *(compiled)*
 
 Public function always raises or returns a fixed value regardless of input — likely a stub surviving macro expansion.
 
@@ -1408,7 +1408,7 @@ Public function always raises or returns a fixed value regardless of input — l
 - **Tolerate:** OTP callbacks, side-effect functions that legitimately return `:ok`.
 - **Severity:** `info` (warning for "not implemented" raises)
 
-#### 6.31 Lookup Table Candidate *(compiled)*
+### 6.31 Lookup Table Candidate *(compiled)*
 
 Function is a pure literal-to-literal mapping — equivalent to a Map lookup.
 
@@ -1417,7 +1417,7 @@ Function is a pure literal-to-literal mapping — equivalent to a Map lookup.
 - **Tolerate:** Small dispatch tables (2 clauses), functions expected to gain guards or logic later.
 - **Severity:** `info`
 
-#### 6.32 Buried try/rescue
+### 6.32 Buried try/rescue
 
 try/rescue block buried inside an anonymous function, Enum callback, or Task callback — should be extracted to a named function.
 
@@ -1428,7 +1428,7 @@ try/rescue block buried inside an anonymous function, Enum callback, or Task cal
 
 ### 6F. Code Slop & Simplification
 
-**6.33 LLM-Generated Code Slop**
+### 6.33 LLM-Generated Code Slop
 
 Detects five patterns of unnecessarily verbose code typically generated by LLMs: `@doc` on private functions, trivial delegation wrappers, redundant boolean comparisons (`== true`), empty doc strings, and single-step pipelines.
 
@@ -1437,7 +1437,7 @@ Detects five patterns of unnecessarily verbose code typically generated by LLMs:
 - **Tolerate:** `defdelegate` (intentional public delegation). Multi-step pipelines (2+ pipes are idiomatic).
 - **Severity:** `info`
 
-**6.34 Dead Private Function**
+### 6.34 Dead Private Function
 
 Private function is never called within its module.
 
@@ -1446,7 +1446,7 @@ Private function is never called within its module.
 - **Tolerate:** Functions named `__*__` (compiler-generated). `sigil_*` functions. Metaprogrammed function names (`unquote`).
 - **Severity:** `warning`
 
-**6.35 Unreachable Clause**
+### 6.35 Unreachable Clause
 
 Catch-all clause (`_` or bare variable) appears before more specific clauses in a `case` expression.
 
@@ -1455,7 +1455,7 @@ Catch-all clause (`_` or bare variable) appears before more specific clauses in 
 - **Tolerate:** Pattern matching with guards (the catch-all may have a guard that makes it non-exhaustive).
 - **Severity:** `warning`
 
-**6.36 Redundant Guard Recheck**
+### 6.36 Redundant Guard Recheck
 
 Function body re-checks a type that's already guaranteed by the pattern match or guard.
 
@@ -1464,7 +1464,7 @@ Function body re-checks a type that's already guaranteed by the pattern match or
 - **Tolerate:** Guards on struct fields that add narrower constraints.
 - **Severity:** `info`
 
-**6.38 Identity Transformation**
+### 6.38 Identity Transformation
 
 No-op function call that returns its input unchanged.
 
@@ -1473,7 +1473,7 @@ No-op function call that returns its input unchanged.
 - **Tolerate:** None — these are always removable.
 - **Severity:** `info`
 
-**6.39 Defensive Nil Return**
+### 6.39 Defensive Nil Return
 
 `case` expression with 3+ clauses where the last is `_ -> nil`.
 
@@ -1482,7 +1482,7 @@ No-op function call that returns its input unchanged.
 - **Tolerate:** 2-clause case (the catch-all IS the logic). `_ -> :error` or `_ -> {:error, _}` (meaningful error handling).
 - **Severity:** `info`
 
-**6.40 Verbose Ok/Error Unwrap**
+### 6.40 Verbose Ok/Error Unwrap
 
 `case` that matches `{:ok, val} -> val; {:error, _} -> nil` — swallows the error and returns nil.
 
@@ -1491,7 +1491,7 @@ No-op function call that returns its input unchanged.
 - **Tolerate:** Functions documented as returning `nil` on failure (e.g., cache lookups).
 - **Severity:** `info`
 
-**6.41 Single-Clause With**
+### 6.41 Single-Clause With
 
 `with` expression with only one `<-` clause.
 
@@ -1500,7 +1500,7 @@ No-op function call that returns its input unchanged.
 - **Tolerate:** None — single-clause `with` is always replaceable by `case`.
 - **Severity:** `info`
 
-**6.42 Constant Expression**
+### 6.42 Constant Expression
 
 Conditional with a constant/literal condition (`if true`, `if false`, `cond` with `true` as first clause).
 
@@ -1509,7 +1509,7 @@ Conditional with a constant/literal condition (`if true`, `if false`, `cond` wit
 - **Tolerate:** `cond do ... true -> default end` as the LAST clause (idiomatic default).
 - **Severity:** `info`
 
-**6.43 Long Parameter List**
+### 6.43 Long Parameter List
 
 Public function with 5+ parameters.
 
@@ -1518,7 +1518,7 @@ Public function with 5+ parameters.
 - **Tolerate:** NIF interfaces (arity dictated by the native function). Framework callbacks.
 - **Severity:** `info` (5+), `warning` (7+)
 
-**6.44 Nested Control Flow**
+### 6.44 Nested Control Flow
 
 `with` inside `with`, or 3+ levels of nested `case`/`cond`/`if`/`with`.
 
@@ -1527,7 +1527,7 @@ Public function with 5+ parameters.
 - **Tolerate:** Pattern matching in function heads (nesting there is fine).
 - **Severity:** `info`
 
-**6.45 Boolean Blindness**
+### 6.45 Boolean Blindness
 
 Public non-predicate function returns bare `true`/`false` for a failable operation.
 
@@ -1538,7 +1538,7 @@ Public non-predicate function returns bare `true`/`false` for a failable operati
 
 ### 6G. Performance Traps
 
-**6.46 String Concatenation in Loop**
+### 6.46 String Concatenation in Loop
 
 `<>` string concatenation inside `Enum.reduce` or `for` comprehension with string accumulator — O(n²).
 
@@ -1547,7 +1547,7 @@ Public non-predicate function returns bare `true`/`false` for a failable operati
 - **Tolerate:** Small known-size inputs (< 10 items). String interpolation (`#{}`) which is optimized by the compiler.
 - **Severity:** `warning`
 
-**6.47 Collection Empty Check via length/1**
+### 6.47 Collection Empty Check via length/1
 
 `length(list) == 0`, `length(list) > 0`, `Enum.count(list) == 0` — traverses the entire collection to check emptiness.
 
@@ -1556,7 +1556,7 @@ Public non-predicate function returns bare `true`/`false` for a failable operati
 - **Tolerate:** `length(x) > N` where N > 0 (genuinely need the count). `Enum.count(x, fun)` without comparison.
 - **Severity:** `info`
 
-**6.48 Map.keys/values |> length()**
+### 6.48 Map.keys/values |> length()
 
 `Map.keys(m) |> length()` or `length(Map.keys(m))` — O(n) when `map_size/1` is O(1).
 
@@ -1565,7 +1565,7 @@ Public non-predicate function returns bare `true`/`false` for a failable operati
 - **Tolerate:** When the actual keys/values list is needed (not just the count).
 - **Severity:** `info`
 
-**6.49 Regex Literal in Hot Path**
+### 6.49 Regex Literal in Hot Path
 
 `~r/pattern/` inside Enum callbacks or GenServer callbacks.
 
@@ -1574,7 +1574,7 @@ Public non-predicate function returns bare `true`/`false` for a failable operati
 - **Tolerate:** Module-level `@attr ~r/.../` (already compiled once). Infrequently-called functions.
 - **Severity:** `info`
 
-**6.50 Inefficient List Operation**
+### 6.50 Inefficient List Operation
 
 Operations that ignore Elixir's linked-list O(n) characteristics.
 
@@ -1583,7 +1583,7 @@ Operations that ignore Elixir's linked-list O(n) characteristics.
 - **Tolerate:** Small known-size lists. AST traversal on fixed-structure nodes.
 - **Severity:** `warning` (append/accumulator), `info` (others)
 
-**6.51 Collection Traversal Waste**
+### 6.51 Collection Traversal Waste
 
 Collection operations with more efficient alternatives.
 
@@ -1592,7 +1592,7 @@ Collection operations with more efficient alternatives.
 - **Tolerate:** `Enum.count` without comparison (genuinely need the count). `Enum.sort` followed by `Enum.take(n)` where n > 1.
 - **Severity:** `warning` (Enum.member? in loop), `info` (others)
 
-**6.52 String.length for Empty/Size Check**
+### 6.52 String.length for Empty/Size Check
 
 `String.length(s) == 0` or `String.length(s) > 0` — O(n) grapheme traversal for an O(1) check.
 
@@ -1601,7 +1601,7 @@ Collection operations with more efficient alternatives.
 - **Tolerate:** `String.length(s) > N` where N > 0 (genuinely need grapheme count).
 - **Severity:** `info`
 
-**6.53 Keyword Lookup in Loop**
+### 6.53 Keyword Lookup in Loop
 
 `Keyword.get/fetch` inside Enum callbacks — O(n) per lookup.
 
@@ -1612,7 +1612,7 @@ Collection operations with more efficient alternatives.
 
 ### 6H. Pattern Matching Quality
 
-**6.54 Shadowed Clause**
+### 6.54 Shadowed Clause
 
 A broader pattern appears before a more specific pattern in function heads or case clauses, making the specific clause unreachable.
 
@@ -1623,7 +1623,7 @@ A broader pattern appears before a more specific pattern in function heads or ca
 
 ### 6I. Eager Evaluation
 
-**6.55 Over-Eager Evaluation**
+### 6.55 Over-Eager Evaluation
 
 Computing more than needed — transforming entire collections when only a subset is used.
 
@@ -1634,7 +1634,7 @@ Computing more than needed — transforming entire collections when only a subse
 
 ### 6J. Information Exposure
 
-**6.56 Sensitive Data Exposure**
+### 6.56 Sensitive Data Exposure
 
 Sensitive data (passwords, tokens, API keys) may be exposed through logs, encoders, error messages, or crash reports.
 
@@ -1647,7 +1647,7 @@ Sensitive data (passwords, tokens, API keys) may be exposed through logs, encode
 
 ## 7. Test Architecture
 
-#### 7.1 Test Mirrors Source
+### 7.1 Test Mirrors Source
 
 Test file structure should mirror source structure (`lib/foo/bar.ex` → `test/foo/bar_test.exs`).
 
@@ -1656,7 +1656,7 @@ Test file structure should mirror source structure (`lib/foo/bar.ex` → `test/f
 - **Tolerate:** `application.ex`, `*_web.ex`, `endpoint.ex`, `router.ex`, `telemetry.ex`, `repo.ex`, `mailer.ex`, mix tasks.
 - **Severity:** `info`
 
-#### 7.2 Repo in Tests
+### 7.2 Repo in Tests
 
 Tests should use context APIs, not direct Repo calls for setting up or asserting data.
 
@@ -1665,7 +1665,7 @@ Tests should use context APIs, not direct Repo calls for setting up or asserting
 - **Tolerate:** DataCase setup, test support/factory modules, seed data, cleanup operations.
 - **Severity:** `info`
 
-#### 7.3 Mocks Need Behaviours
+### 7.3 Mocks Need Behaviours
 
 Every `Mox.defmock` must reference a behaviour module with `@callback` declarations.
 
@@ -1674,7 +1674,7 @@ Every `Mox.defmock` must reference a behaviour module with `@callback` declarati
 - **Tolerate:** None — this is always a correctness issue.
 - **Severity:** `warning`
 
-#### 7.4 Async Eligibility
+### 7.4 Async Eligibility
 
 Test files should declare `async: true` when eligible.
 
@@ -1683,7 +1683,7 @@ Test files should declare `async: true` when eligible.
 - **Tolerate:** Tests using `set_mox_global`, named ETS tables, `Application.put_env`.
 - **Severity:** `info`
 
-#### 7.5 Sleep in Tests
+### 7.5 Sleep in Tests
 
 `Process.sleep` in tests leads to flaky and slow tests.
 
@@ -1692,7 +1692,7 @@ Test files should declare `async: true` when eligible.
 - **Tolerate:** None — `assert_receive`, polling with `eventually`, or explicit synchronization is always better.
 - **Severity:** `warning`
 
-#### 7.8 Test Naming
+### 7.8 Test Naming
 
 Test modules should be named `*Test` in `*_test.exs` files.
 
@@ -1701,7 +1701,7 @@ Test modules should be named `*Test` in `*_test.exs` files.
 - **Tolerate:** Test support modules, shared test helpers.
 - **Severity:** `warning`
 
-#### 7.9 No Assertion
+### 7.9 No Assertion
 
 Tests must contain at least one assertion.
 
@@ -1710,7 +1710,7 @@ Tests must contain at least one assertion.
 - **Tolerate:** Tests that verify side effects exclusively via Mox expectations (with `verify_on_exit!`).
 - **Severity:** `warning`
 
-#### 7.10 Trivial Assertion
+### 7.10 Trivial Assertion
 
 Tests with trivial assertions like `assert true`, `assert 1 == 1`, `assert :ok`.
 
@@ -1719,7 +1719,7 @@ Tests with trivial assertions like `assert true`, `assert 1 == 1`, `assert :ok`.
 - **Tolerate:** None — replace with meaningful assertions or delete the test.
 - **Severity:** `warning`
 
-#### 7.11 Long Setup
+### 7.11 Long Setup
 
 Setup blocks with >400 AST nodes suggest over-coupled test infrastructure.
 
@@ -1728,7 +1728,7 @@ Setup blocks with >400 AST nodes suggest over-coupled test infrastructure.
 - **Tolerate:** Integration test setups with complex multi-system initialization.
 - **Severity:** `info`
 
-#### 7.12 Long Test
+### 7.12 Long Test
 
 Test bodies with >1200 AST nodes likely test too many things at once.
 
@@ -1737,7 +1737,7 @@ Test bodies with >1200 AST nodes likely test too many things at once.
 - **Tolerate:** Integration tests, end-to-end scenario tests.
 - **Severity:** `info`
 
-#### 7.13 Mocks Not Verified
+### 7.13 Mocks Not Verified
 
 Mox setups must call `setup :verify_on_exit!` to enforce that expectations were met.
 
@@ -1746,7 +1746,7 @@ Mox setups must call `setup :verify_on_exit!` to enforce that expectations were 
 - **Tolerate:** None — always verify expectations.
 - **Severity:** `warning`
 
-#### 7.14 Coverage Gap
+### 7.14 Coverage Gap
 
 Public API functions not referenced in the corresponding test file.
 
@@ -1755,7 +1755,7 @@ Public API functions not referenced in the corresponding test file.
 - **Tolerate:** Framework callbacks (init, handle_call, handle_info), `@moduledoc false` modules, `application.ex`.
 - **Severity:** `info`
 
-#### 7.15 Mocking Own Modules
+### 7.15 Mocking Own Modules
 
 Mock at system boundaries only — don't mock modules you own.
 
@@ -1764,7 +1764,7 @@ Mock at system boundaries only — don't mock modules you own.
 - **Tolerate:** Modules explicitly designed as boundary abstractions (adapters, clients, gateways).
 - **Severity:** `info`
 
-#### 7.16 Runtime Config for DI
+### 7.16 Runtime Config for DI
 
 `Application.get_env` at runtime for dependency injection. Use `Application.compile_env` with module attributes.
 
@@ -1773,7 +1773,7 @@ Mock at system boundaries only — don't mock modules you own.
 - **Tolerate:** Config files, Application modules, values that genuinely vary at runtime.
 - **Severity:** `info`
 
-#### 7.17 Generic Test Names
+### 7.17 Generic Test Names
 
 Test names should be descriptive — not "it works", "test 1", "happy path".
 
@@ -1782,7 +1782,7 @@ Test names should be descriptive — not "it works", "test 1", "happy path".
 - **Tolerate:** None — rename to describe the specific behaviour being tested.
 - **Severity:** `info`
 
-#### 7.18 Weak Assertion
+### 7.18 Weak Assertion
 
 `assert function()` without pattern match — only checks truthiness, not return shape.
 
@@ -1791,7 +1791,7 @@ Test names should be descriptive — not "it works", "test 1", "happy path".
 - **Tolerate:** Predicate function calls (`assert Enum.any?(...)`, `assert Map.has_key?(...)`) — already return boolean by convention.
 - **Severity:** `info`
 
-#### 7.19 Missing Test Cleanup
+### 7.19 Missing Test Cleanup
 
 Test starts processes directly without `start_supervised!/1` or `on_exit/1` — causes test pollution.
 
@@ -1800,7 +1800,7 @@ Test starts processes directly without `start_supervised!/1` or `on_exit/1` — 
 - **Tolerate:** Tests using `start_supervised!`, tests with explicit `on_exit` cleanup.
 - **Severity:** `info`
 
-#### 7.20 Hardcoded Test Data
+### 7.20 Hardcoded Test Data
 
 Test files containing real-looking email addresses (gmail.com, yahoo.com), Stripe API keys (sk_test_..., pk_test_...), or Bearer tokens.
 
@@ -1809,7 +1809,7 @@ Test files containing real-looking email addresses (gmail.com, yahoo.com), Strip
 - **Tolerate:** `@example.com` addresses (RFC 2606), `localhost` URLs, obviously fake data.
 - **Severity:** `info`
 
-#### 7.21 Test-Only Public Function *(compiled)*
+### 7.21 Test-Only Public Function *(compiled)*
 
 Public function only called from test modules — never from production code.
 

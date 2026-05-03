@@ -126,6 +126,68 @@ defmodule Archdo.AST do
   def catch_all_arg?(_), do: false
 
   @doc """
+  Predicate: do these args (a clause's argument list) include at least
+  one shape-destructuring pattern (tuple, list-cons, list literal, map,
+  struct)?
+
+  Used to classify recursive functions as "shape walkers" — multi-clause
+  functions that pattern-match input shapes and recurse on the parts.
+  Body recursion on bounded shape grammars (AST trees, expression
+  grammars) is idiomatic and bounded by input depth.
+  """
+  @spec destructures?([Macro.t()] | term()) :: boolean()
+  def destructures?(args) when is_list(args) do
+    Enum.any?(args, fn
+      {a, b} when not (is_atom(a) and is_atom(b)) -> true
+      {:{}, _, _} -> true
+      [{:|, _, _}] -> true
+      [_ | _] -> true
+      [] -> true
+      {:%{}, _, _} -> true
+      {:%, _, _} -> true
+      _ -> false
+    end)
+  end
+
+  def destructures?(_), do: false
+
+  @doc """
+  Predicate: is this clause a "catch-all terminator"?
+
+  Takes a clause tuple from `extract_functions/2` (`{name, arity, meta,
+  args, body}`). Returns true when every arg is a wildcard or bare
+  variable (no nested patterns) — the canonical Elixir tree-walker
+  base case (`def f(_), do: 1`, `def collect(_, acc), do: acc`).
+  """
+  @spec catch_all_terminator?(term()) :: boolean()
+  def catch_all_terminator?({_name, _arity, _meta, args, _body}) when is_list(args) do
+    Enum.all?(args, &catch_all_arg?/1)
+  end
+
+  def catch_all_terminator?(_), do: false
+
+  @doc """
+  Predicate: is this multi-clause function a "shape walker"?
+
+  Takes a list of clauses (from `extract_functions/2`). Returns true
+  when at least one clause destructures a shape AND at least one
+  clause is a catch-all terminator. Together those signals identify
+  the canonical AST-walker idiom — bounded body recursion that
+  exhausts input shapes via pattern matching.
+
+  Used by the 6.20 (NonTailRecursion) and 6.23 (UnboundedRecursion)
+  rules to exempt tree walkers from firing.
+  """
+  @spec shape_walker?([term()]) :: boolean()
+  def shape_walker?(clauses) when is_list(clauses) do
+    has_destructure = Enum.any?(clauses, fn {_, _, _, args, _} -> destructures?(args) end)
+    has_terminator = Enum.any?(clauses, &catch_all_terminator?/1)
+    has_destructure and has_terminator
+  end
+
+  def shape_walker?(_), do: false
+
+  @doc """
   Unwrap a string literal possibly wrapped by `Code.string_to_quoted/2`'s
   `literal_encoder` option (which produces `{:__block__, _, [s]}`). Returns
   `nil` for non-strings — use a different helper if you need a fallback to

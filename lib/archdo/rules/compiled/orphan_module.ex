@@ -4,6 +4,7 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
 
   alias Archdo.{AST, Diagnostic, Fix}
   alias Archdo.Compiled
+  alias Archdo.Rules.Compiled.Helpers
 
   @impl true
   def id, do: "1.25"
@@ -18,8 +19,8 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
   def analyze_compiled(graph) do
     for mod <- Map.keys(Compiled.modules(graph)),
         orphan?(graph, mod) and
-          not behaviour_definition?(mod, graph) and
-          not application_entry_point?(mod) and
+          not Helpers.behaviour_definition?(mod, graph) and
+          not Helpers.application_entry_point?(mod) and
           not test_support_module?(mod),
         do: build_diagnostic(mod)
   end
@@ -27,23 +28,6 @@ defmodule Archdo.Rules.Compiled.OrphanModule do
   defp orphan?(graph, mod) do
     Compiled.module_dependencies(graph, mod) == [] and
       Compiled.module_dependents(graph, mod) == []
-  end
-
-  # Behaviour definitions are implemented by other modules, not called directly.
-  # They define callbacks but may have zero function-level calls.
-  defp behaviour_definition?(mod, graph) do
-    case Map.get(Compiled.modules(graph), mod) do
-      %{callback_fns: [_ | _]} -> true
-      _ -> false
-    end
-  end
-
-  # Application modules are entry points started by the runtime.
-  defp application_entry_point?(mod) do
-    mod_name = Atom.to_string(mod)
-
-    String.ends_with?(mod_name, ".Application") or
-      String.ends_with?(mod_name, ".MixProject")
   end
 
   # Test support modules (helpers, factories, fixtures) are called from test code
