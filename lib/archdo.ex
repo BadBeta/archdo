@@ -302,6 +302,7 @@ defmodule Archdo do
     Archdo.Rules.Boundary.SharedDbTable,
     Archdo.Rules.Boundary.SharedEtsTable,
     Archdo.Rules.Boundary.PrivateModuleCalls,
+    Archdo.Rules.Boundary.WidelyUsedInternalModule,
     Archdo.Rules.CE.WrapperOverFramework,
     Archdo.Rules.CE.UnanchoredModule,
     Archdo.Rules.CE.UnanchoredIsland,
