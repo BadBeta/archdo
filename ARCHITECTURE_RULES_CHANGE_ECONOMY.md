@@ -192,7 +192,7 @@ The core question: is **Substitutability** (Flexibility-2) concentrated at volat
 
 **Fix:** introduce a behaviour for the external dependency, define a `Mox.defmock` in `test/`, route the call through the behaviour. Or pass the dependency module as a parameter / option.
 
-**Exemptions:** module marked `@archdo_volatility :stable` (override the classification); call site marked `# archdo:allow CE-1 reason: integration test exercises this real`.
+**Exemptions:** module marked `@archdo_volatility :stable` (override the classification); call site marked `# archdo:allow CE-1 reason: integration test exercises this real`. **Entry-point modules** are auto-exempt — `Archdo.Volatility` short-circuits to `:stable` for any module that uses `Mix.Task` or `Application` (override = `:entry_point`), since their job IS to bridge CLI / config / supervised processes to the outside world. Pushing their `File`/`System` calls behind a behaviour just moves the volatility one module deeper, where the new module would be flagged identically. Author override (`@archdo_volatility :volatile`) still wins for explicit cases.
 
 **Auto-fix:** No (refactor, not mechanical).
 
@@ -230,7 +230,7 @@ The core question: is **Substitutability** (Flexibility-2) concentrated at volat
 
 **Fix:** review each abstraction in the module against IE-1 / IE-2 / IE-7. Most will fail and should be inlined.
 
-**Exemptions:** module marked `@archdo_volatility :volatile` or `:mixed` (classification override); module is a documented public extension surface (`@archdo_extension_point true`).
+**Exemptions:** module marked `@archdo_volatility :volatile` or `:mixed` (classification override); module is a documented public extension surface (`@archdo_extension_point true`); **the module DEFINES a behaviour or protocol** — high abstraction density there is the API itself, not overhead. Detection: presence of `@callback ...` declarations or `defprotocol ...`. A behaviour-defining module IS the abstraction layer; flagging it for "abstraction overhead" is a category error. Modules that USE behaviours (`@behaviour Foo`) are still subject to CE-3 — only definitions exempt. Entry-point modules (`use Mix.Task` / `use Application`) are also auto-exempt via the same path-independent classifier rule that covers CE-1 — see CE-1 exemption note above.
 
 **Auto-fix:** No (each abstraction needs case-by-case review).
 

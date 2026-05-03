@@ -31,6 +31,7 @@
      - [3.4.6 `Archdo.IrreversibleDecision`](#346-archdoirreversibledecision--schemasupervisorpublic-api-classifier)
      - [3.4.7 `Archdo.PiiSchema`](#347-archdopiischema--pii-field-detection)
      - [3.4.8 `Archdo.Graph` and `Archdo.Compiled.Graph`](#348-archdograph-and-archdocompiledgraph--dependency-graphs)
+     - [3.4.9 `Archdo.Quadrant`](#349-archdoquadrant--2-axis-policy-primitive-two-dimensional-architectural-tests)
 4. [The diagnostic shape](#4-the-diagnostic-shape)
 5. [Output formats](#5-output-formats)
 6. [CLI reference](#6-cli-reference)
@@ -1917,6 +1918,8 @@ Archdo.Phoenix.operational?(classification) :: boolean()
 
 **Per-module override via marker:** `@archdo_volatility :stable | :volatile | :mixed`. See §3.2.18.
 
+**Entry-point exemption.** Modules that use `Mix.Task` or `Application` are recognized as canonical entry-point boundaries — their job IS to bridge CLI / config / supervised processes to the outside world. The classifier short-circuits to `:stable` for these (override = `:entry_point`) before any call-density analysis runs. Pushing their `File.read!/1`, `System.cmd/3`, `File.cwd!/0` calls behind a behaviour just moves the volatility one module deeper, where the new module would be flagged identically. The exemption sits **below** author override and path override — `@archdo_volatility :volatile` on a Mix task still wins.
+
 **Used by:** CE-1, CE-2, CE-3, CE-4, CE-34, CE-35.
 
 #### 3.4.3 `Archdo.Blackbox` — composability scorer
@@ -2084,20 +2087,38 @@ Archdo.PiiSchema.pii_field_names(ast) :: [atom()]
 |--------|-------------------------|-----------------------------------|
 | Source | `lib/**/*.ex` AST parse | BEAM files + compilation tracer |
 | When built | Every `mix archdo` run | Only with `--compiled` flag |
-| Captures | `alias`, `import`, `use`, qualified remote calls, `apply/3` with literal target, registry attribute lists | Every resolved remote call (even via macro expansion), import resolution, protocol dispatch targets, `@optional_callbacks` |
-| Misses | Dynamic dispatch (`apply(var, :fn, args)`), macro-expanded calls, runtime configuration dispatch | Nothing — captures the resolved truth |
+| Captures | `alias`, `import`, `use`, qualified remote calls (with short-form alias-table resolution), multi-alias `Foo.{Bar, Baz}`, `apply/3` with literal target, registry attribute lists, `defdelegate ..., to: SomeModule`, `__MODULE__.Sub` references, `%Foo.Bar{...}` struct construction, nested-defmodule scope-restored | Every resolved remote call (even via macro expansion), import resolution, protocol dispatch targets, `@optional_callbacks` |
+| Misses | Dynamic dispatch (`apply(var, :fn, args)`), macro-expanded calls invented at compile time, runtime configuration dispatch (`Code.put_compiler_option(:tracers, [...])`), named processes located via `Process.whereis/1` — escape via `@archdo_anchor` | Nothing — captures the resolved truth |
 | Performance | Fast (~1s for 100K LOC) | Slower (requires recompile + tracer collection) |
 
 **Edge types in `Archdo.Graph`:**
 
 ```
-:alias              # `alias MyApp.Foo`
+:alias              # `alias MyApp.Foo` / `alias MyApp.{A, B}` / `alias MyApp.Foo, as: Bar`
 :import             # `import MyApp.Foo`
 :use                # `use MyApp.Foo`
-:call               # `MyApp.Foo.bar(...)` qualified remote call
+:call               # `MyApp.Foo.bar(...)` qualified remote call (incl. short-form
+                    #   resolved through the alias table), `defdelegate ..., to: Mod`,
+                    #   `%Foo.Bar{...}` struct construction, `__MODULE__.Sub` references
 :registry           # @attr [Foo, Bar] consumed via Enum.* / for / Stream.*
-:dynamic_dispatch   # apply(LiteralMod, :fn, args)  ← M-Plan8a
+:dynamic_dispatch   # apply(LiteralMod, :fn, args)
 ```
+
+**Alias-table resolution (M-CG44).** Every `defmodule` opens a fresh
+alias-table scope; `alias Foo.Bar` records `:Bar => "Foo.Bar"`,
+`alias MyApp.{Runner, Rules}` records both. Subsequent short-form
+references like `Runner.start()` resolve through the table to
+`MyApp.Runner` instead of producing a dangling edge to bare `"Runner"`.
+Without this, every `alias`-then-call pattern in the codebase produced
+edges that the closure walk couldn't traverse — the dominant cause of
+CE-30 false positives before M-CG44.
+
+**Nested-defmodule scope (M-CG46).** The extractor uses `Macro.traverse/4`
+with a module-scope **stack** instead of `Macro.prewalk/2`. Pre-visitor
+pushes `{module, alias_table}` on `defmodule` enter; post-visitor pops
+on exit, restoring outer state. Without this, code following a nested
+`defmodule Inner do` in the parent's body was misattributed to `Inner`,
+breaking outgoing-edge tracking.
 
 **API:**
 
@@ -2122,6 +2143,62 @@ Archdo.Compiled.Graph.find_recursive_calls(graph, mfa)  # self-loops
 - `Archdo.Compiled.Graph` → all 21 compiled-analysis rules in `Archdo.Rules.Compiled.*`
 
 **Future split (M-Plan19):** `Archdo.Compiled.Graph` is currently 927 lines mixing build (struct + ingest) and read (query API) responsibilities. M-Plan19 (deferred) splits it into `Compiled.Graph` (build) + `Compiled.Query` (read), with `Archdo.Compiled` as the public facade. See PLAN_NEXT.md.
+
+#### 3.4.9 `Archdo.Quadrant` — 2-axis policy primitive (two-dimensional architectural tests)
+
+**Module:** `lib/archdo/quadrant.ex`. **Tests:** `test/archdo/quadrant_test.exs`.
+
+**Purpose:** the rule infrastructure for tests whose finding semantics depend on the **cross-product of two architectural axes**, not on a single threshold. A traditional rule answers "does this module exceed a threshold?" — yes/no, one axis. A quadrant rule answers "given THIS structural property combined with THAT classification, is the combination problematic?" — a 2D cell lookup against a policy table.
+
+The canonical example is the volatility-substitutability quadrant (CE-2/CE-3): abstraction density × volatility tag. A `:volatile` module without abstraction is a missing seam at the boundary (CE-2 fires); a `:stable` module heavily abstracted is over-engineered stable code (CE-3 fires); the other two cells (`:volatile + :high_abstraction` and `:stable + :low_abstraction`) are correct shapes and don't fire.
+
+**The behaviour contract:**
+
+```elixir
+defmodule Archdo.Rules.CE.MyQuadrantRule do
+  @behaviour Archdo.Rule
+  @behaviour Archdo.Quadrant
+
+  # axes/3: per-file analysis returning [{cell, evidence}, ...]
+  # The cell is a 2-tuple; one entry per analyzed unit (module / function / call).
+  @impl Archdo.Quadrant
+  def axes(file, ast, opts), do: ...
+
+  # policy/0: %{cell => action} where action is :no_finding | {:fire, severity, rule_id, title}.
+  # Cells absent from the map default to :no_finding.
+  @impl Archdo.Quadrant
+  def policy, do: %{
+    {:high, :volatile} -> :no_finding,           # earned abstraction
+    {:low, :volatile}  -> {:fire, :info, "CE-2", "Volatile boundary lacks abstraction"},
+    {:high, :stable}   -> {:fire, :info, "CE-3", "Stable core with abstraction overhead"},
+    {:low, :stable}    -> :no_finding            # simplicity is correct
+  }
+
+  # finding_for/4: build a Diagnostic for an actionable cell.
+  @impl Archdo.Quadrant
+  def finding_for(cell, fire_action, evidence, file), do: %Archdo.Diagnostic{...}
+end
+```
+
+**Mechanics:** `Archdo.Quadrant.evaluate/4` walks the rule's axes output, looks up each cell in the policy, and invokes `finding_for/4` for `:fire` cells. Cells absent from the policy are silently `:no_finding` — the policy table is the single source of truth for which combinations are actionable.
+
+**Why a separate primitive instead of nested `case` inside `analyze/3`:**
+
+1. **Policy is data, not control flow.** A `Map`-based policy is easier to read, easier to extend (add a cell, no rewrite), and easier to test (assert the policy directly, no need to construct ASTs that hit each branch).
+2. **Distribution reporting.** `Archdo.Quadrant.distribution_for/4` returns a `%{cell => count}` map without invoking `finding_for/4` — used by `--metrics` to show the quadrant occupancy table without firing diagnostics.
+3. **List-rules accessor.** `Archdo.Quadrant.list_rules(rules)` filters a rule list down to those implementing the Quadrant behaviour. `--metrics` and the report formatter use it to discover which rules contribute to the cross-product table.
+
+**Quadrant rules in the registry (Nov 2026):**
+
+| Rule | Axes | Policy |
+|------|------|--------|
+| **CE-2/CE-3** Volatility-substitutability | `{abstraction_class, volatility_tag}` ∈ `{:high, :low} × {:volatile, :stable, :mixed}` | `:low × :volatile` → CE-2 fire (missing seam at boundary). `:high × :stable` → CE-3 fire (over-engineered stable core). `:high × :volatile` and `:low × :stable` → `:no_finding` |
+| **CE-24** Complexity shape | `{cyclomatic_band, cognitive_band}` ∈ `{:low, :high} × {:low, :high}` | `:high × :high` → fire `CE-24-twisty` (nested + many branches). `:high × :low` → fire `CE-24-flat-dispatch` (many clauses, each shallow — 6.2 over-counting). `:low × :high` → fire `CE-24-deeply-nested-simple-dispatch`. `:low × :low` → `:no_finding` |
+| **CE-54** Blackbox quadrant | `{possibility, value}` ∈ `{:high, :low} × {:high, :low}` | `:low × :high` → fire (low-possibility / high-value: hardest to test, most consequential when changed). Other cells emit either `:no_finding` or paired CE-55/CE-56/CE-57 findings |
+
+**Why this is more than three independent rules:** the quadrant pattern explicitly encodes that the diagnostic depends on a *combination* of classifications, not on each axis separately. Treating CE-2 as "fire when low abstraction" would over-fire on simple stable modules where low abstraction is correct. Treating CE-24 as "fire when cyclomatic high" over-fires on flat-dispatch tables where the shape is benign. The policy table makes the combinatorial truth explicit and reviewable.
+
+**Used by:** CE-2/CE-3 (volatility-substitutability), CE-24 (complexity shape), CE-54 (blackbox quadrant).
 
 ---
 
