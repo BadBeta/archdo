@@ -89,18 +89,17 @@ defmodule Archdo.Config do
   end
 
   def classify_module(%__MODULE__{layers: layers}, module_name) when is_binary(module_name) do
-    Enum.find_value([:interface, :domain, :infrastructure], :unknown, fn layer ->
-      case Map.get(layers, layer) do
-        nil ->
-          false
+    Enum.find_value([:interface, :domain, :infrastructure], :unknown, &layer_for(&1, layers, module_name))
+  end
 
-        regex ->
-          case Regex.match?(regex, module_name) do
-            true -> layer
-            false -> false
-          end
-      end
-    end)
+  # Returns `layer` when the module matches its regex, `false` otherwise
+  # (Enum.find_value treats false/nil as "skip"). Not a predicate — name
+  # avoids the `?` suffix per §8.4 naming conventions.
+  defp layer_for(layer, layers, module_name) do
+    case Map.get(layers, layer) do
+      nil -> false
+      regex -> Regex.match?(regex, module_name) && layer
+    end
   end
 
   @doc """
@@ -285,19 +284,17 @@ defmodule Archdo.Config do
       lib_dir
       |> File.ls!()
       |> Enum.filter(&String.ends_with?(&1, ".ex"))
-      |> Enum.map(fn file ->
-        file
-        |> String.trim_trailing(".ex")
-        |> Macro.camelize()
-        |> then(fn name ->
-          case app do
-            "" -> Module.concat([name])
-            _ -> Module.concat([app, name])
-          end
-        end)
-      end)
+      |> Enum.map(&file_to_module(&1, app))
     else
       []
     end
   end
+
+  defp file_to_module(file, app) do
+    name = file |> String.trim_trailing(".ex") |> Macro.camelize()
+    concat_with_app(app, name)
+  end
+
+  defp concat_with_app("", name), do: Module.concat([name])
+  defp concat_with_app(app, name), do: Module.concat([app, name])
 end

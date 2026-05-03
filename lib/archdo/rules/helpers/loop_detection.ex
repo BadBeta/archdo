@@ -181,19 +181,14 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
 
     Enum.flat_map(@genserver_callbacks, fn callback_name ->
       case Map.get(callbacks, callback_name) do
-        nil ->
-          []
-
-        clauses when is_list(clauses) ->
-          Enum.flat_map(clauses, fn {_meta, _args, body} ->
-            case body do
-              nil -> []
-              _ -> find_matches(body, predicate)
-            end
-          end)
+        nil -> []
+        clauses when is_list(clauses) -> Enum.flat_map(clauses, &clause_matches(&1, predicate))
       end
     end)
   end
+
+  defp clause_matches({_meta, _args, nil}, _predicate), do: []
+  defp clause_matches({_meta, _args, body}, predicate), do: find_matches(body, predicate)
 
   @doc """
   Find occurrences of `predicate` inside recursive function bodies.
@@ -218,20 +213,20 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
     # still fires because the self-call passes the non-literal `t`.
     fns = AST.extract_functions(ast)
 
-    Enum.flat_map(fns, fn {name, arity, _meta, _args, body} ->
-      case extract_body_ast(body) do
-        nil ->
-          []
-
-        body_ast ->
-          if looping_self_call?(body_ast, name, arity) do
-            find_matches(body_ast, predicate)
-          else
-            []
-          end
-      end
-    end)
+    Enum.flat_map(fns, &recursive_clause_matches(&1, predicate))
   end
+
+  defp recursive_clause_matches({name, arity, _meta, _args, body}, predicate) do
+    case extract_body_ast(body) do
+      nil -> []
+      body_ast -> dispatch_loop(looping_self_call?(body_ast, name, arity), body_ast, predicate)
+    end
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatches on the
+  # boolean result of looping_self_call?/3 instead of if/else inside a body.
+  defp dispatch_loop(false, _body_ast, _predicate), do: []
+  defp dispatch_loop(true, body_ast, predicate), do: find_matches(body_ast, predicate)
 
   # True if the body contains a self-call whose argument list includes at
   # least one non-literal value. Plain dispatch (`f(_), do: f("default")`)

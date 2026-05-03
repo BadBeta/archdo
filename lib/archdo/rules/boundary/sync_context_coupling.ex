@@ -31,21 +31,7 @@ defmodule Archdo.Rules.Boundary.SyncContextCoupling do
           do: AST.module_name(ctx)
 
     graph.calls
-    |> Enum.flat_map(fn call ->
-      caller_ctx = Archdo.Config.owning_context(call.caller_module, context_strs)
-      target_ctx = Archdo.Config.owning_context(call.target_module, context_strs)
-
-      case {caller_ctx, target_ctx} do
-        {c, t} when c != nil and t != nil and c != t ->
-          case {interface_module?(call.caller_module), write_function?(call.target_fn)} do
-            {false, true} -> [{call, c, t}]
-            _ -> []
-          end
-
-        _ ->
-          []
-      end
-    end)
+    |> Enum.flat_map(&candidate_for_call(&1, context_strs))
     |> Enum.uniq_by(fn {call, _, _} ->
       {call.caller_module, call.target_module, call.target_fn}
     end)
@@ -53,6 +39,30 @@ defmodule Archdo.Rules.Boundary.SyncContextCoupling do
       build_diagnostic(call, caller_ctx, target_ctx)
     end)
   end
+
+  defp candidate_for_call(call, context_strs) do
+    caller_ctx = Archdo.Config.owning_context(call.caller_module, context_strs)
+    target_ctx = Archdo.Config.owning_context(call.target_module, context_strs)
+    cross_context_candidate(call, caller_ctx, target_ctx)
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatches on the
+  # context-pair shape; the cross-context guard fires only when both
+  # contexts are known and distinct.
+  defp cross_context_candidate(call, c, t) when not is_nil(c) and not is_nil(t) and c != t do
+    domain_to_domain_write(
+      interface_module?(call.caller_module),
+      write_function?(call.target_fn),
+      call,
+      c,
+      t
+    )
+  end
+
+  defp cross_context_candidate(_call, _c, _t), do: []
+
+  defp domain_to_domain_write(false, true, call, c, t), do: [{call, c, t}]
+  defp domain_to_domain_write(_, _, _, _, _), do: []
 
   defp build_diagnostic(call, caller_ctx, target_ctx) do
     target_fn_str = "#{call.target_module}.#{call.target_fn}"

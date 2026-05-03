@@ -50,13 +50,15 @@ defmodule Archdo.Rules.CE.ErrorCategoryDrift do
 
       ast
       |> find_error_atoms()
-      |> Enum.flat_map(fn {atom, line} ->
-        case canonical(atom) do
-          nil -> []
-          canon -> [{atom, canon, module, file, line}]
-        end
-      end)
+      |> Enum.flat_map(&canonical_atom_entry(&1, module, file))
     end)
+  end
+
+  defp canonical_atom_entry({atom, line}, module, file) do
+    case canonical(atom) do
+      nil -> []
+      canon -> [{atom, canon, module, file, line}]
+    end
   end
 
   # Walk the AST looking for `{:error, atom}` literal tuples. Handles

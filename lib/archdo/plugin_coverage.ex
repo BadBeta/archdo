@@ -26,16 +26,8 @@ defmodule Archdo.PluginCoverage do
   @spec scan([{String.t(), Macro.t()}]) :: t()
   def scan(file_asts) do
     {telemetry, log} =
-      Enum.reduce(file_asts, {[], []}, fn {_file, ast}, {tele_acc, log_acc} ->
-        case classify_module(ast) do
-          {:plug, module, kinds} ->
-            tele_acc = if :telemetry in kinds, do: [module | tele_acc], else: tele_acc
-            log_acc = if :log in kinds, do: [module | log_acc], else: log_acc
-            {tele_acc, log_acc}
-
-          :not_plug ->
-            {tele_acc, log_acc}
-        end
+      Enum.reduce(file_asts, {[], []}, fn {_file, ast}, acc ->
+        absorb_classification(acc, classify_module(ast))
       end)
 
     %{
@@ -43,6 +35,16 @@ defmodule Archdo.PluginCoverage do
       log_plugs: Enum.uniq(log)
     }
   end
+
+  defp absorb_classification(acc, :not_plug), do: acc
+
+  defp absorb_classification({tele_acc, log_acc}, {:plug, module, kinds}) do
+    {prepend_if(tele_acc, module, :telemetry in kinds),
+     prepend_if(log_acc, module, :log in kinds)}
+  end
+
+  defp prepend_if(list, _module, false), do: list
+  defp prepend_if(list, module, true), do: [module | list]
 
   # §§ elixir-implementing: §2.1 — multi-clause dispatch via case on a
   # tagged tuple keeps the reduce above flat. {:plug, name, kinds} when
