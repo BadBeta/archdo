@@ -44,15 +44,11 @@ defmodule Archdo.Rules.CE.MissingTraceability do
   defp module_diagnostics({file, ast}, paths) do
     cond do
       AST.test_file?(file) -> []
-      not under_traceability_path?(file, paths) -> []
+      not AST.path_starts_with_any?(file, paths) -> []
       AST.has_marker?(ast, :archdo_no_trace) -> []
       module_level_trace?(ast) -> []
       true -> find_untraced_publics(file, ast)
     end
-  end
-
-  defp under_traceability_path?(file, paths) do
-    Enum.any?(paths, &String.starts_with?(file, &1))
   end
 
   # True when @requirement / @spec_ref / @trace appears BEFORE any def
@@ -113,8 +109,14 @@ defmodule Archdo.Rules.CE.MissingTraceability do
   defp trace_attr?({:@, _, [{name, _, _}]}) when name in @trace_attrs, do: true
   defp trace_attr?(_), do: false
 
-  defp public_def?({:def, _, [{name, _, args} | _]}) when is_atom(name) and (is_list(args) or args == nil), do: true
-  defp public_def?({:def, _, [{:when, _, [{name, _, args} | _]} | _]}) when is_atom(name) and (is_list(args) or args == nil), do: true
+  defp public_def?({:def, _, [{name, _, args} | _]})
+       when is_atom(name) and (is_list(args) or args == nil),
+       do: true
+
+  defp public_def?({:def, _, [{:when, _, [{name, _, args} | _]} | _]})
+       when is_atom(name) and (is_list(args) or args == nil),
+       do: true
+
   defp public_def?(_), do: false
 
   defp name_arity_meta({:def, meta, [{name, _, args} | _]}) when is_atom(name),

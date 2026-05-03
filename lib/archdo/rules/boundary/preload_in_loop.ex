@@ -24,7 +24,7 @@ defmodule Archdo.Rules.Boundary.PreloadInLoop do
   defp find_repo_in_loops(file, ast) do
     predicate = fn
       {{:., _, [{:__aliases__, _, aliases}, func]}, _, _} ->
-        repo_module?(aliases) and func in @repo_calls
+        AST.repo_module?(aliases) and func in @repo_calls
 
       _ ->
         false
@@ -45,13 +45,6 @@ defmodule Archdo.Rules.Boundary.PreloadInLoop do
       end)
 
     loop_hits ++ recursion_hits
-  end
-
-  defp repo_module?(aliases) do
-    case List.last(aliases) do
-      :Repo -> true
-      _ -> Enum.any?(aliases, &(&1 == :Repo))
-    end
   end
 
   defp build_diagnostic(file, line, loop_construct) do

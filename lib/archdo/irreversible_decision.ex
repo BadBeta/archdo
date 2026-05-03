@@ -29,7 +29,7 @@ defmodule Archdo.IrreversibleDecision do
   def candidate?(file, ast, opts \\ []) do
     paths = Keyword.get(opts, :public_api_paths, [])
 
-    schema?(ast) or supervisor?(ast) or under_public_api_path?(file, paths)
+    schema?(ast) or supervisor?(ast) or AST.path_starts_with_any?(file, paths)
   end
 
   defp schema?(ast) do
@@ -38,10 +38,6 @@ defmodule Archdo.IrreversibleDecision do
 
   defp supervisor?(ast) do
     has_use?(ast, @supervisor_uses) or defines_child_spec?(ast)
-  end
-
-  defp under_public_api_path?(file, paths) do
-    Enum.any?(paths, &String.starts_with?(file, &1))
   end
 
   defp has_use?(ast, targets) do

@@ -59,15 +59,13 @@ defmodule Archdo.Rules.CE.MissingDeletionPath do
 
             cond do
               MapSet.member?(deletion_targets, module) -> []
-              MapSet.member?(deletion_targets, last_segment(module)) -> []
+              MapSet.member?(deletion_targets, AST.short_name(module)) -> []
               MapSet.member?(deletion_targets, info.table) -> []
               true -> [build_diagnostic(file, info)]
             end
         end
     end
   end
-
-  defp last_segment(name), do: name |> String.split(".") |> List.last()
 
   # Set of module / schema / table names referenced by any deletion-pattern
   # function across the project.

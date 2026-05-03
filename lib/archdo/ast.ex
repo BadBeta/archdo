@@ -411,9 +411,41 @@ defmodule Archdo.AST do
 
   @doc """
   Return the last segment of a module name (e.g. `MyApp.Accounts.User` → `"User"`).
+  Accepts an atom or a dotted string.
   """
-  @spec short_name(atom()) :: String.t()
+  @spec short_name(atom() | String.t()) :: String.t()
   def short_name(mod) when is_atom(mod), do: List.last(Module.split(mod))
+  def short_name(mod) when is_binary(mod), do: mod |> String.split(".") |> List.last()
+
+  @doc """
+  Check if a module-alias parts list points at an `Ecto.Repo`-shaped module.
+  Matches both bare `Repo` (final segment) and any namespace ending in `Repo`.
+  """
+  @spec repo_module?([atom()]) :: boolean()
+  def repo_module?(aliases) when is_list(aliases) do
+    case List.last(aliases) do
+      :Repo -> true
+      _ -> Enum.any?(aliases, &(&1 == :Repo))
+    end
+  end
+
+  @doc """
+  Check if a file path starts with any of the given path roots. Used by rules
+  that scope analysis to a project-configured set of directories.
+  """
+  @spec path_starts_with_any?(String.t(), [String.t()]) :: boolean()
+  def path_starts_with_any?(file, paths) when is_binary(file) and is_list(paths) do
+    Enum.any?(paths, &String.starts_with?(file, &1))
+  end
+
+  @doc """
+  Check if a module name is the namespace itself or lives under it (i.e.
+  `name == namespace` or starts with `namespace.`). Operates on string forms.
+  """
+  @spec module_under_namespace?(String.t(), String.t()) :: boolean()
+  def module_under_namespace?(name, namespace) when is_binary(name) and is_binary(namespace) do
+    name == namespace or String.starts_with?(name, namespace <> ".")
+  end
 
   @doc """
   Resolve a module-name string to its existing atom. Returns `nil` when no

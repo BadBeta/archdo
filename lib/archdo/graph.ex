@@ -81,20 +81,16 @@ defmodule Archdo.Graph do
   defp target_in_root?(target, mod_str, root_modules) do
     Enum.any?(root_modules, fn rm ->
       rm_str = AST.module_name(rm)
-      rm_str != mod_str and target_matches_root?(target, rm_str)
+      rm_str != mod_str and AST.module_under_namespace?(target, rm_str)
     end)
   end
 
   defp resolve_target_to_root(target, root_modules) do
     AST.module_name(
       Enum.find(root_modules, fn rm ->
-        target_matches_root?(target, AST.module_name(rm))
+        AST.module_under_namespace?(target, AST.module_name(rm))
       end)
     )
-  end
-
-  defp target_matches_root?(target, rm_str) do
-    target == rm_str or String.starts_with?(target, rm_str <> ".")
   end
 
   @doc """
@@ -203,8 +199,8 @@ defmodule Archdo.Graph do
           {node, add_alias(acc, parts)}
 
         # alias Foo.Bar.Baz, as: Quux
-        {:alias, _, [{:__aliases__, _, parts}, [{:as, {:__aliases__, _, [as_name]}}]]} = node,
-        acc when is_list(parts) and is_atom(as_name) ->
+        {:alias, _, [{:__aliases__, _, parts}, [{:as, {:__aliases__, _, [as_name]}}]]} = node, acc
+        when is_list(parts) and is_atom(as_name) ->
           full = safe_concat(parts)
 
           case full do
@@ -213,8 +209,8 @@ defmodule Archdo.Graph do
           end
 
         # alias Foo.{Bar, Baz} — expand each
-        {:alias, _, [{{:., _, [{:__aliases__, _, prefix_parts}, :{}]}, _, suffixes}]} = node,
-        acc when is_list(prefix_parts) and is_list(suffixes) ->
+        {:alias, _, [{{:., _, [{:__aliases__, _, prefix_parts}, :{}]}, _, suffixes}]} = node, acc
+        when is_list(prefix_parts) and is_list(suffixes) ->
           new_acc =
             Enum.reduce(suffixes, acc, fn
               {:__aliases__, _, suffix_parts}, inner_acc when is_list(suffix_parts) ->
@@ -375,8 +371,7 @@ defmodule Archdo.Graph do
         # (apply(var, :run, args)) silently skipped — no static
         # resolution possible. M-Plan8 broadens CE-30 graph coverage
         # for dynamic dispatch shapes.
-        {:apply, meta, [{:__aliases__, _, aliases}, _fn_atom, _args]} = node,
-        {mod, edges}
+        {:apply, meta, [{:__aliases__, _, aliases}, _fn_atom, _args]} = node, {mod, edges}
         when mod != nil ->
           case safe_concat(aliases) do
             nil ->
@@ -461,7 +456,12 @@ defmodule Archdo.Graph do
   end
 
   defp handle_neighbor(:cycle_back_edge, neighbor, _adjacency, acc, path) do
-    record_cycle(Enum.find_index(Enum.reverse(path), &(&1 == neighbor)), Enum.reverse(path), neighbor, acc)
+    record_cycle(
+      Enum.find_index(Enum.reverse(path), &(&1 == neighbor)),
+      Enum.reverse(path),
+      neighbor,
+      acc
+    )
   end
 
   defp handle_neighbor(:unvisited, neighbor, adjacency, acc, path) do

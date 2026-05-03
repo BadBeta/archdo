@@ -40,7 +40,7 @@ defmodule Archdo.Freeze do
   @spec fingerprint(Diagnostic.t()) :: fingerprint()
   def fingerprint(%Diagnostic{} = d) do
     identifier = extract_identifier(d.message) || stable_hash(d.message)
-    normalized_file = normalize_file(d.file)
+    normalized_file = Archdo.AST.relative_path(d.file)
 
     "#{d.rule_id}|#{normalized_file}|#{identifier}"
   end
@@ -156,8 +156,6 @@ defmodule Archdo.Freeze do
     |> Integer.to_string(16)
     |> String.downcase()
   end
-
-  defp normalize_file(file), do: Archdo.AST.relative_path(file)
 
   defp format_timestamp do
     {{y, mo, d}, {h, mi, _s}} = :calendar.local_time()

@@ -59,11 +59,7 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
 
   defp referenced_by_cleaner?(%SchemaInfo{table: t, module: m}, refs) do
     MapSet.member?(refs, t) or MapSet.member?(refs, m) or
-      MapSet.member?(refs, last_segment(m))
-  end
-
-  defp last_segment(module) when is_binary(module) do
-    module |> String.split(".") |> List.last()
+      MapSet.member?(refs, AST.short_name(m))
   end
 
   # Walk the AST looking for `schema "table_name" do ... end` blocks.

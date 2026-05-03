@@ -220,7 +220,7 @@ defmodule Archdo.Blackbox do
     members =
       file_asts
       |> Enum.map(fn {_file, ast} -> {AST.extract_module_name(ast), ast} end)
-      |> Enum.filter(fn {name, _ast} -> in_context?(name, context_module) end)
+      |> Enum.filter(fn {name, _ast} -> AST.module_under_namespace?(name, context_module) end)
 
     leaks =
       Enum.flat_map(members, fn {name, ast} ->
@@ -234,10 +234,6 @@ defmodule Archdo.Blackbox do
       [] -> :building_block
       list -> {:leaks_at, Enum.sort(list)}
     end
-  end
-
-  defp in_context?(name, context) do
-    name == context or String.starts_with?(name, context <> ".")
   end
 
   # --- M-Aux5 boundary suggestion + refactor distance ---

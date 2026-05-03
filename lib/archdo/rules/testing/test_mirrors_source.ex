@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Testing.TestMirrorsSource do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
 
   @impl true
   def id, do: "7.1"
@@ -28,7 +28,7 @@ defmodule Archdo.Rules.Testing.TestMirrorsSource do
 
       Diagnostic.info("7.1",
         title: "Source file with no matching test file",
-        message: "#{relative(file)} has no corresponding test file at #{expected}",
+        message: "#{AST.relative_path(file)} has no corresponding test file at #{expected}",
         why:
           "The convention `lib/foo/bar.ex` ↔ `test/foo/bar_test.exs` makes the test layout predictable: any " <>
             "developer can guess where to find the tests for a module without searching. When source files " <>
@@ -52,7 +52,7 @@ defmodule Archdo.Rules.Testing.TestMirrorsSource do
           )
         ],
         references: ["ARCHITECTURE_RULES.md#7.1"],
-        context: %{source: relative(file), expected_test: expected},
+        context: %{source: AST.relative_path(file), expected_test: expected},
         file: file,
         line: 0
       )
@@ -82,6 +82,4 @@ defmodule Archdo.Rules.Testing.TestMirrorsSource do
       String.ends_with?(file, "/repo.ex") or
       String.ends_with?(file, "/mailer.ex")
   end
-
-  defp relative(path), do: Archdo.AST.relative_path(path)
 end

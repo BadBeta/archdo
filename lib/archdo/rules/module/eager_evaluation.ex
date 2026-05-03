@@ -165,7 +165,7 @@ defmodule Archdo.Rules.Module.EagerEvaluation do
            {{:., _, [{:__aliases__, _, aliases}, :all]}, _, _},
            {:length, _, _}
          ]} ->
-          repo_module?(aliases)
+          AST.repo_module?(aliases)
 
         # Repo.all(query) |> Enum.count()
         {:|>, _,
@@ -173,11 +173,11 @@ defmodule Archdo.Rules.Module.EagerEvaluation do
            {{:., _, [{:__aliases__, _, aliases}, :all]}, _, _},
            {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, count_args}
          ]} ->
-          repo_module?(aliases) and count_args in [nil, []]
+          AST.repo_module?(aliases) and count_args in [nil, []]
 
         # length(Repo.all(query))
         {:length, _, [{{:., _, [{:__aliases__, _, aliases}, :all]}, _, _}]} ->
-          repo_module?(aliases)
+          AST.repo_module?(aliases)
 
         _ ->
           false
@@ -215,13 +215,6 @@ defmodule Archdo.Rules.Module.EagerEvaluation do
         build_diagnostic(file, AST.line(meta), :map_then_find)
       end
     )
-  end
-
-  defp repo_module?(aliases) do
-    case List.last(aliases) do
-      :Repo -> true
-      _ -> Enum.any?(aliases, &(&1 == :Repo))
-    end
   end
 
   # --- Diagnostics ---
