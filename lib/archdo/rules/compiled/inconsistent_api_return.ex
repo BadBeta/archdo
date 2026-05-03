@@ -29,22 +29,31 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
   defp scan_beam_dir(beam_dir) do
     beam_dir
     |> Compiled.extract_function_clauses()
-    |> Enum.flat_map(fn {module, functions} ->
-      functions
-      |> Enum.filter(fn fn_info ->
-        fn_info.exported and
-          fn_info.clause_count >= @min_clauses and
-          not Helpers.framework_function?(fn_info.name) and
-          not Helpers.generated_function?(fn_info.name)
-      end)
-      |> Enum.flat_map(fn fn_info ->
-        case check_return_consistency(fn_info) do
-          :consistent -> []
-          {:inconsistent, shapes} -> [build_diagnostic(module, fn_info, shapes)]
-        end
-      end)
-    end)
+    |> Enum.flat_map(&module_fn_diags/1)
   end
+
+  defp module_fn_diags({module, functions}) do
+    functions
+    |> Enum.filter(&candidate?/1)
+    |> Enum.flat_map(&fn_diag(&1, module))
+  end
+
+  defp candidate?(fn_info) do
+    fn_info.exported and
+      fn_info.clause_count >= @min_clauses and
+      not Helpers.framework_function?(fn_info.name) and
+      not Helpers.generated_function?(fn_info.name)
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the result of check_return_consistency.
+  defp fn_diag(fn_info, module) do
+    diag_for_consistency(check_return_consistency(fn_info), fn_info, module)
+  end
+
+  defp diag_for_consistency(:consistent, _fn_info, _module), do: []
+  defp diag_for_consistency({:inconsistent, shapes}, fn_info, module),
+    do: [build_diagnostic(module, fn_info, shapes)]
 
   defp check_return_consistency(fn_info) do
     shapes =
@@ -52,27 +61,23 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
       |> Enum.map(& &1.return_shape)
       |> Enum.reject(fn shape -> shape in [:unknown, :call, :variable] end)
 
-    case shapes do
-      [] ->
-        :consistent
-
-      _ ->
-        normalized = Enum.map(shapes, &normalize_shape/1)
-        unique = Enum.uniq(normalized)
-
-        case length(unique) > 1 do
-          true ->
-            # Check if it's a valid ok/error pattern
-            case valid_ok_error_pattern?(shapes) do
-              true -> :consistent
-              false -> {:inconsistent, shapes}
-            end
-
-          false ->
-            :consistent
-        end
-    end
+    consistency_for_shapes(shapes)
   end
+
+  defp consistency_for_shapes([]), do: :consistent
+
+  defp consistency_for_shapes(shapes) do
+    unique = shapes |> Enum.map(&normalize_shape/1) |> Enum.uniq()
+    consistency_if_unique(length(unique) > 1, shapes)
+  end
+
+  defp consistency_if_unique(false, _shapes), do: :consistent
+  defp consistency_if_unique(true, shapes) do
+    inconsistent_unless_ok_error(valid_ok_error_pattern?(shapes), shapes)
+  end
+
+  defp inconsistent_unless_ok_error(true, _shapes), do: :consistent
+  defp inconsistent_unless_ok_error(false, shapes), do: {:inconsistent, shapes}
 
   # Normalize shapes for comparison — tagged tuples with same tag are the same shape
   defp normalize_shape({:tagged_tuple, tag}), do: {:tagged_tuple, tag}
@@ -93,24 +98,21 @@ defmodule Archdo.Rules.Compiled.InconsistentApiReturn do
   defp valid_ok_error_pattern?(shapes) do
     tags =
       shapes
-      |> Enum.flat_map(fn
-        {:tagged_tuple, tag} ->
-          [tag]
-
-        {:mixed, inner} ->
-          Enum.flat_map(inner, fn
-            {:tagged_tuple, tag} -> [tag]
-            _ -> []
-          end)
-
-        _ ->
-          []
-      end)
+      |> Enum.flat_map(&extract_tags/1)
       |> MapSet.new()
 
     # Valid ok/error combinations
     MapSet.subset?(tags, MapSet.new([:ok, :error])) and MapSet.size(tags) > 0
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the shape tuple ({:tagged_tuple, _} / {:mixed, inner} / other).
+  defp extract_tags({:tagged_tuple, tag}), do: [tag]
+  defp extract_tags({:mixed, inner}), do: Enum.flat_map(inner, &inner_tag/1)
+  defp extract_tags(_), do: []
+
+  defp inner_tag({:tagged_tuple, tag}), do: [tag]
+  defp inner_tag(_), do: []
 
   defp build_diagnostic(module, fn_info, shapes) do
     mod_name = AST.module_name(module)

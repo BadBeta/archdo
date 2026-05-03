@@ -131,47 +131,61 @@ defmodule Archdo.Rules.Module.ShadowedClause do
 
     patterns
     |> Enum.with_index()
-    |> Enum.flat_map(fn {{earlier_meta, earlier_args, earlier_guards}, i} ->
-      earlier_line = AST.line(earlier_meta)
-
-      patterns
-      |> Enum.drop(i + 1)
-      |> Enum.flat_map(fn {later_meta, later_args, later_guards} ->
-        later_line = AST.line(later_meta)
-
-        # Skip clauses far apart — likely in different compile-time branches
-        case abs(later_line - earlier_line) <= @max_clause_distance do
-          true ->
-            # Guards narrow a clause's match. If both have guards, check if they
-            # are disjoint (different type checks). If so, no shadowing.
-            cond do
-              # Both have guards → check if disjoint types. If not provably
-              # overlapping, assume the guards differentiate.
-              guards_are_disjoint?(earlier_guards, later_guards) ->
-                []
-
-              # Earlier has a guard → it doesn't match everything, even if
-              # its pattern is a bare variable. Not a shadow.
-              earlier_guards != nil ->
-                []
-
-              # Earlier has no guard → pattern determines if it shadows
-              true ->
-                case pattern_shadows?(earlier_args, later_args) do
-                  {:shadowed, reason} ->
-                    [build_fn_diagnostic(file, earlier_line, later_line, reason)]
-
-                  :ok ->
-                    []
-                end
-            end
-
-          false ->
-            []
-        end
-      end)
-    end)
+    |> Enum.flat_map(&compare_to_later_patterns(&1, patterns, file))
   end
+
+  defp compare_to_later_patterns({{earlier_meta, earlier_args, earlier_guards}, i}, patterns, file) do
+    earlier_line = AST.line(earlier_meta)
+
+    patterns
+    |> Enum.drop(i + 1)
+    |> Enum.flat_map(&shadowing_for_pair(&1, earlier_line, earlier_args, earlier_guards, file))
+  end
+
+  defp shadowing_for_pair({later_meta, later_args, later_guards}, earlier_line, earlier_args, earlier_guards, file) do
+    later_line = AST.line(later_meta)
+    distance_close? = abs(later_line - earlier_line) <= @max_clause_distance
+
+    diag_for_close_clauses(
+      distance_close?,
+      file,
+      earlier_line,
+      later_line,
+      earlier_args,
+      earlier_guards,
+      later_args,
+      later_guards
+    )
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the proximity boolean, then on guard relationship.
+  defp diag_for_close_clauses(false, _file, _el, _ll, _ea, _eg, _la, _lg), do: []
+
+  defp diag_for_close_clauses(true, file, earlier_line, later_line, earlier_args, earlier_guards, later_args, later_guards) do
+    classify_guards(earlier_guards, later_guards)
+    |> emit_shadow_diag(file, earlier_line, later_line, earlier_args, later_args)
+  end
+
+  defp classify_guards(earlier_guards, later_guards) do
+    cond do
+      guards_are_disjoint?(earlier_guards, later_guards) -> :disjoint
+      earlier_guards != nil -> :earlier_has_guard
+      true -> :pattern_only
+    end
+  end
+
+  defp emit_shadow_diag(:disjoint, _file, _el, _ll, _ea, _la), do: []
+  defp emit_shadow_diag(:earlier_has_guard, _file, _el, _ll, _ea, _la), do: []
+
+  defp emit_shadow_diag(:pattern_only, file, earlier_line, later_line, earlier_args, later_args) do
+    diag_for_pattern_shadow(pattern_shadows?(earlier_args, later_args), file, earlier_line, later_line)
+  end
+
+  defp diag_for_pattern_shadow({:shadowed, reason}, file, earlier_line, later_line),
+    do: [build_fn_diagnostic(file, earlier_line, later_line, reason)]
+
+  defp diag_for_pattern_shadow(:ok, _file, _el, _ll), do: []
 
   # ================================================================
   # case clauses: case x do broad -> ... ; specific -> ... end
@@ -202,20 +216,25 @@ defmodule Archdo.Rules.Module.ShadowedClause do
   defp check_case_pattern_ordering(file, patterns) do
     patterns
     |> Enum.with_index()
-    |> Enum.flat_map(fn {{earlier_meta, earlier_pat}, i} ->
-      patterns
-      |> Enum.drop(i + 1)
-      |> Enum.flat_map(fn {later_meta, later_pat} ->
-        case single_pattern_shadows?(earlier_pat, later_pat) do
-          {:shadowed, reason} ->
-            [build_case_diagnostic(file, AST.line(earlier_meta), AST.line(later_meta), reason)]
-
-          :ok ->
-            []
-        end
-      end)
-    end)
+    |> Enum.flat_map(&compare_case_pair(&1, patterns, file))
   end
+
+  defp compare_case_pair({{earlier_meta, earlier_pat}, i}, patterns, file) do
+    patterns
+    |> Enum.drop(i + 1)
+    |> Enum.flat_map(&case_pair_diag(&1, earlier_meta, earlier_pat, file))
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the result of single_pattern_shadows?
+  defp case_pair_diag({later_meta, later_pat}, earlier_meta, earlier_pat, file) do
+    diag_for_case_shadow(single_pattern_shadows?(earlier_pat, later_pat), file, earlier_meta, later_meta)
+  end
+
+  defp diag_for_case_shadow({:shadowed, reason}, file, earlier_meta, later_meta),
+    do: [build_case_diagnostic(file, AST.line(earlier_meta), AST.line(later_meta), reason)]
+
+  defp diag_for_case_shadow(:ok, _file, _em, _lm), do: []
 
   # ================================================================
   # Pattern subsumption checks
@@ -344,33 +363,38 @@ defmodule Archdo.Rules.Module.ShadowedClause do
     later_keys = MapSet.new(Enum.map(later_fields, &field_key/1))
 
     # Every key in earlier must be in later (earlier is a subset of required keys)
-    case MapSet.subset?(earlier_keys, later_keys) do
-      false ->
-        :ok
-
-      true ->
-        # Check that each shared field value in earlier is at least as broad
-        earlier_map = Map.new(earlier_fields, fn {k, v} -> {field_key(k), v} end)
-        later_map = Map.new(later_fields, fn {k, v} -> {field_key(k), v} end)
-
-        all_shadow? =
-          Enum.all?(earlier_keys, fn key ->
-            case {Map.fetch(earlier_map, key), Map.fetch(later_map, key)} do
-              {{:ok, ev}, {:ok, lv}} ->
-                # Earlier value shadows later if earlier is a catch-all or same value
-                catch_all_check?(ev) or match?({:shadowed, _}, single_pattern_shadows?(ev, lv))
-
-              _ ->
-                false
-            end
-          end)
-
-        case all_shadow? and MapSet.size(earlier_keys) <= MapSet.size(later_keys) do
-          true -> {:shadowed, :broad_map_before_specific}
-          false -> :ok
-        end
-    end
+    map_shadow_for_subset(MapSet.subset?(earlier_keys, later_keys), earlier_fields, later_fields, earlier_keys, later_keys)
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the subset boolean and the all_shadow? boolean.
+  defp map_shadow_for_subset(false, _ef, _lf, _ek, _lk), do: :ok
+
+  defp map_shadow_for_subset(true, earlier_fields, later_fields, earlier_keys, later_keys) do
+    # Check that each shared field value in earlier is at least as broad
+    earlier_map = Map.new(earlier_fields, fn {k, v} -> {field_key(k), v} end)
+    later_map = Map.new(later_fields, fn {k, v} -> {field_key(k), v} end)
+
+    all_shadow? = Enum.all?(earlier_keys, &field_value_shadows?(&1, earlier_map, later_map))
+
+    map_shadow_verdict(
+      all_shadow? and MapSet.size(earlier_keys) <= MapSet.size(later_keys)
+    )
+  end
+
+  defp field_value_shadows?(key, earlier_map, later_map) do
+    shared_field_dispatch(Map.fetch(earlier_map, key), Map.fetch(later_map, key))
+  end
+
+  defp shared_field_dispatch({:ok, ev}, {:ok, lv}) do
+    # Earlier value shadows later if earlier is a catch-all or same value
+    catch_all_check?(ev) or match?({:shadowed, _}, single_pattern_shadows?(ev, lv))
+  end
+
+  defp shared_field_dispatch(_ef, _lf), do: false
+
+  defp map_shadow_verdict(true), do: {:shadowed, :broad_map_before_specific}
+  defp map_shadow_verdict(false), do: :ok
 
   defp field_key({key, _value}), do: key
   defp field_key(key), do: key

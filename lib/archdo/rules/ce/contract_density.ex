@@ -59,16 +59,19 @@ defmodule Archdo.Rules.CE.ContractDensity do
         test_median = median(Enum.map(candidates, fn {_, _, s} -> s.test_density end))
         medians = %{spec: spec_median, doc: doc_median, test: test_median}
 
-        Enum.flat_map(candidates, fn {file, ast, scores} ->
-          fails = which_failed(scores, medians)
-
-          case fails do
-            [] -> []
-            list -> [build_diagnostic(file, ast, scores, list, medians)]
-          end
-        end)
+        Enum.flat_map(candidates, &diag_for_candidate(&1, medians))
     end
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the empty-list shape of `fails`.
+  defp diag_for_candidate({file, ast, scores}, medians) do
+    diag_if_failed(which_failed(scores, medians), file, ast, scores, medians)
+  end
+
+  defp diag_if_failed([], _file, _ast, _scores, _medians), do: []
+  defp diag_if_failed(list, file, ast, scores, medians),
+    do: [build_diagnostic(file, ast, scores, list, medians)]
 
   # §§ elixir-implementing: §2.6 — Map.new once for O(1) lookup.
   # Only test files (path ends with _test.exs) are indexed.
@@ -156,27 +159,38 @@ defmodule Archdo.Rules.CE.ContractDensity do
 
     {_set, _last_doc} =
       result =
-        Enum.reduce(body, {MapSet.new(), false}, fn node, {acc, pending_doc?} ->
-          cond do
-            doc_attr?(node) ->
-              {acc, true}
-
-            def_node?(node) ->
-              {n, a} = name_and_arity(node)
-
-              case pending_doc? do
-                true -> {MapSet.put(acc, {n, a}), false}
-                false -> {acc, false}
-              end
-
-            true ->
-              {acc, pending_doc?}
-          end
-        end)
+        Enum.reduce(body, {MapSet.new(), false}, &accumulate_documented_def/2)
 
     {set, _} = result
     set
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # node kind (doc attribute / def / other) via classifier helpers
+  # plus the pending_doc? boolean.
+  defp accumulate_documented_def(node, {acc, pending_doc?}) do
+    classify_doc_walk_node(node_kind(node), node, acc, pending_doc?)
+  end
+
+  defp node_kind(node) do
+    cond do
+      doc_attr?(node) -> :doc_attr
+      def_node?(node) -> :def_node
+      true -> :other
+    end
+  end
+
+  defp classify_doc_walk_node(:doc_attr, _node, acc, _pending), do: {acc, true}
+
+  defp classify_doc_walk_node(:def_node, node, acc, pending_doc?) do
+    {n, a} = name_and_arity(node)
+    record_def(pending_doc?, acc, n, a)
+  end
+
+  defp classify_doc_walk_node(:other, _node, acc, pending_doc?), do: {acc, pending_doc?}
+
+  defp record_def(true, acc, n, a), do: {MapSet.put(acc, {n, a}), false}
+  defp record_def(false, acc, _n, _a), do: {acc, false}
 
   defp doc_attr?({:@, _, [{:doc, _, [_]}]}), do: true
   defp doc_attr?({:@, _, [{:doc, _, _}]}), do: true
