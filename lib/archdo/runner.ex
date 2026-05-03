@@ -114,6 +114,7 @@ defmodule Archdo.Runner do
     Archdo.Rules.Module.DynamicApplyFromInput,
     Archdo.Rules.Module.StacktraceInResponse,
     Archdo.Rules.Module.IoInspectInLib,
+    Archdo.Rules.Module.SecretStructInspect,
     Archdo.Rules.Module.StringLengthCheck,
     Archdo.Rules.Module.KeywordLookupInLoop,
     Archdo.Rules.Boundary.DevDepInProd,
