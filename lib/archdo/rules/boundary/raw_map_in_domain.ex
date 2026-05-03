@@ -11,6 +11,9 @@ defmodule Archdo.Rules.Boundary.RawMapInDomain do
   def description,
     do: "Domain function accepts a raw map and threads it to another module without parsing"
 
+  @impl true
+  def cleanup_pass, do: 2
+
   # §§ elixir-planning: §6.5 — boundary/parsing concern. Web-boundary files
   # have their own validation rule (1.14 unvalidated_params); this rule
   # targets DOMAIN modules (lib/my_app/*.ex) where the raw map is being

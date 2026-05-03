@@ -12,6 +12,9 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
     do: "Dynamic apply/2,3 with non-literal module or function — RCE if input flows from outside"
 
   @impl true
+  def cleanup_pass, do: 6
+
+  @impl true
   def analyze(file, ast, _opts) do
     case AST.test_file?(file) do
       true -> []

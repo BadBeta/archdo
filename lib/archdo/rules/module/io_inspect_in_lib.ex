@@ -12,6 +12,9 @@ defmodule Archdo.Rules.Module.IoInspectInLib do
     do: "IO.inspect or dbg in lib/ — debug-print left in production code"
 
   @impl true
+  def cleanup_pass, do: 5
+
+  @impl true
   def analyze(file, ast, _opts) do
     case in_scope?(file) do
       true -> find_debug_prints(ast, file)

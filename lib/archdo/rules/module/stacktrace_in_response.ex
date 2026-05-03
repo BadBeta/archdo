@@ -12,6 +12,9 @@ defmodule Archdo.Rules.Module.StacktraceInResponse do
     do: "__STACKTRACE__ leaked across response boundary — exposes internal topology"
 
   @impl true
+  def cleanup_pass, do: 5
+
+  @impl true
   def analyze(file, ast, _opts) do
     case AST.test_file?(file) do
       true -> []

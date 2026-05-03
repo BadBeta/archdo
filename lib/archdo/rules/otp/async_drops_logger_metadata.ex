@@ -13,6 +13,9 @@ defmodule Archdo.Rules.OTP.AsyncDropsLoggerMetadata do
       "Async work logs / emits telemetry without propagating Logger.metadata — trace context lost"
 
   @impl true
+  def cleanup_pass, do: 13
+
+  @impl true
   def analyze(file, ast, _opts) do
     case AST.test_file?(file) do
       true -> []

@@ -11,6 +11,9 @@ defmodule Archdo.Rules.EventSourcing.EventPayloadUnversioned do
   def description,
     do: "Event/command struct missing :version / :schema_version / @version — breaks replay"
 
+  @impl true
+  def cleanup_pass, do: 10
+
   @version_field_names [:version, :schema_version, :event_version]
 
   @impl true

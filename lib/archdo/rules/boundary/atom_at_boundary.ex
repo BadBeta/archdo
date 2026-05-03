@@ -12,6 +12,9 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundary do
     do: "Atom creation at a boundary module — untrusted input flows here, RCE/DoS class"
 
   @impl true
+  def cleanup_pass, do: 3
+
+  @impl true
   def analyze(file, ast, _opts) do
     case in_scope?(file) do
       true -> find_atom_creation(file, ast)

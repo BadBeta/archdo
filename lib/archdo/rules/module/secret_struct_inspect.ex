@@ -11,6 +11,9 @@ defmodule Archdo.Rules.Module.SecretStructInspect do
   def description,
     do: "Struct with secret-bearing field but no Inspect protection — leaks via crash dumps"
 
+  @impl true
+  def cleanup_pass, do: 5
+
   # §§ elixir-implementing: §1 #23 SSOT — closed allowlist instead of substring
   # match. Substring `String.contains?(name, "token")` false-positives on
   # `token_count`, `password_policy`, etc. Each entry here is a deliberately-

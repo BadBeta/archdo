@@ -12,6 +12,9 @@ defmodule Archdo.Rules.Boundary.InternalStructAsEncoder do
     do: "Internal struct uses bare @derive Jason.Encoder — fields silently become public API"
 
   @impl true
+  def cleanup_pass, do: 10
+
+  @impl true
   def analyze(file, ast, _opts) do
     case in_scope?(file) do
       true -> find_overbroad_encoder(file, ast)

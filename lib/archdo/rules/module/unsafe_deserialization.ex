@@ -12,6 +12,9 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
     do: "Unsafe deserialization or runtime eval — RCE vector against untrusted input"
 
   @impl true
+  def cleanup_pass, do: 6
+
+  @impl true
   def analyze(file, ast, _opts) do
     case AST.test_file?(file) do
       true -> []
