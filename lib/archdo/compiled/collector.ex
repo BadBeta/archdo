@@ -20,6 +20,14 @@ defmodule Archdo.Compiled.Collector do
   Module.register_attribute(__MODULE__, :archdo_opaque_state, persist: true)
   @archdo_opaque_state "transient compilation buffer; no external observers"
 
+  # Started by `Archdo.Compiled` in --compiled mode and located via
+  # `Process.whereis/1` from `Archdo.Compiled.Tracer`. Neither path is
+  # a static call edge, so the AST graph misses the wiring. The marker
+  # makes this module reachable for the closure walk.
+  Module.register_attribute(__MODULE__, :archdo_anchor, persist: true)
+
+  @archdo_anchor "Named GenServer started in --compiled mode and located by Process.whereis/1 from the compiler tracer"
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end

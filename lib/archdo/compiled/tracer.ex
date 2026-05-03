@@ -13,6 +13,10 @@ defmodule Archdo.Compiled.Tracer do
   # The tracer MUST be fast — it runs synchronously during compilation.
   # We send a message to the collector and return immediately.
 
+  Module.register_attribute(__MODULE__, :archdo_anchor, persist: true)
+
+  @archdo_anchor "Compiler tracer registered at runtime via Code.put_compiler_option(:tracers, [...]) in --compiled mode; no static call edge"
+
   @doc """
   Trace callback invoked by the Elixir compiler for each event.
   Dispatches relevant events to the collector process.

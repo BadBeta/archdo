@@ -417,4 +417,76 @@ defmodule Archdo.GraphRegistryTest do
       assert "MyApp.Parent.Child" in call_targets
     end
   end
+
+  describe "M-CG46 — struct construction + nested-defmodule scope" do
+    test "%Foo.Bar{...} struct construction emits an edge" do
+      # Modules used only as struct shape (e.g. value objects) would
+      # otherwise look orphan when callers only construct/match them.
+      file_asts = [
+        parse("lib/myapp/caller.ex", ~S"""
+        defmodule MyApp.Caller do
+          def make(t), do: %MyApp.Record{table: t}
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+      targets = graph |> Graph.dependencies("MyApp.Caller") |> Enum.map(& &1.target)
+
+      assert "MyApp.Record" in targets
+    end
+
+    test "%Foo{...} via short-form alias resolves through alias table" do
+      file_asts = [
+        parse("lib/myapp/caller.ex", ~S"""
+        defmodule MyApp.Caller do
+          alias MyApp.Record
+          def make(t), do: %Record{table: t}
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      targets =
+        graph
+        |> Graph.dependencies("MyApp.Caller")
+        |> Enum.filter(&(&1.type == :call))
+        |> Enum.map(& &1.target)
+
+      assert "MyApp.Record" in targets
+      refute "Record" in targets
+    end
+
+    test "nested defmodule restores outer module scope on exit" do
+      # Without a stack-based scope, the inner `defmodule Inner do`
+      # would clobber state.module to "Inner", and any code following
+      # the inner defmodule in the outer body would be misattributed.
+      file_asts = [
+        parse("lib/myapp/outer.ex", ~S"""
+        defmodule MyApp.Outer do
+          defmodule Inner do
+            defstruct [:x]
+          end
+
+          def make, do: %Inner{x: 1}
+          def go, do: SomeOther.run()
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      outer_targets =
+        graph
+        |> Graph.dependencies("MyApp.Outer")
+        |> Enum.map(& &1.target)
+
+      # The struct edge from the outer's body must be sourced from
+      # MyApp.Outer, not "Inner". Targets resolve via alias-table
+      # fallback to bare names since neither was alias'd.
+      assert "Inner" in outer_targets
+      assert "SomeOther" in outer_targets
+    end
+  end
 end

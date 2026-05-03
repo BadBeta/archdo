@@ -313,98 +313,181 @@ defmodule Archdo.Graph do
     Enum.reverse(names)
   end
 
-  # State threaded through the prewalk:
-  #   :module       — fully-qualified name of the current `defmodule`, or nil
-  #   :alias_table  — %{single_segment_atom => fully_qualified_module_name}
-  #                   built up as we encounter `alias` declarations. Used to
-  #                   resolve short-form references in call sites, `use`,
-  #                   `import`, and `apply/3`. Without this, a call
-  #                   `Runner.foo()` after `alias Archdo.Runner` resolves
-  #                   to bare `"Runner"` — no module by that name —
-  #                   creating a dangling edge that breaks reachability
-  #                   from anchors.
+  # State threaded through the traversal:
+  #   :stack        — module-scope stack. Head is the current `defmodule`'s
+  #                   {fully_qualified_name, alias_table}. Pre-visitor
+  #                   pushes on `defmodule` enter; post-visitor pops on
+  #                   exit. This restores the OUTER module's scope after
+  #                   walking a nested defmodule. Without the stack, code
+  #                   following a nested defmodule in the parent's body
+  #                   was misattributed to the inner module.
+  #   :alias_table  — built up from `alias` declarations within the
+  #                   current scope. Used to resolve short-form references
+  #                   (`Runner.foo()` after `alias Archdo.Runner`) into
+  #                   fully-qualified module names. Without this, every
+  #                   short-form call produced a dangling edge to a
+  #                   bare-name target that didn't match any module.
   defp extract_edges(ast, file) do
-    initial = %{module: nil, alias_table: %{}}
+    initial = %{stack: [], alias_table: %{}}
 
     {_, {_state, edges}} =
-      Macro.prewalk(ast, {initial, []}, fn
-        # Enter defmodule — reset state to the new module's scope.
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, {_state, edges}
-        when is_atom(hd(aliases)) ->
-          {node, {%{module: safe_concat(aliases), alias_table: %{}}, edges}}
+      Macro.traverse(
+        ast,
+        {initial, []},
+        # PRE: enter defmodule — push the new module + its current alias
+        # table onto the stack and start a fresh alias table for the new
+        # scope. Other nodes pass through untouched on the way in.
+        fn
+          {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, {state, edges}
+          when is_atom(hd(aliases)) ->
+            mod = safe_concat(aliases)
+            new_stack = [{mod, state.alias_table} | state.stack]
+            {node, {%{stack: new_stack, alias_table: %{}}, edges}}
 
-        # alias Foo.Bar — single multi-segment alias.
-        # Adds edge AND populates alias_table[:Bar => "Foo.Bar"].
-        {:alias, meta, [{:__aliases__, _, parts}]} = node, {state, edges} ->
-          handle_simple_alias(parts, nil, state, edges, node, file, meta)
+          node, acc ->
+            {node, acc}
+        end,
+        # POST: every node we care about lives here so the alias table
+        # is observed AFTER the alias declarations on the same level
+        # have been processed by their own pre-visit. (Aliases in a
+        # module body appear as siblings of subsequent calls, and post
+        # order ensures sibling order is respected.)
+        fn
+          # Leave defmodule — pop the stack, restoring the outer scope.
+          {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, {state, edges}
+          when is_atom(hd(aliases)) ->
+            new_state = pop_module_scope(state)
+            {node, {new_state, edges}}
 
-        # alias Foo.Bar, as: Quux — alias with renamed binding (bare-atom
-        # keyword key, e.g. when AST was parsed without literal_encoder).
-        {:alias, meta, [{:__aliases__, _, parts}, [{:as, {:__aliases__, _, [as_name]}}]]} = node,
-        {state, edges}
-        when is_atom(as_name) ->
-          handle_simple_alias(parts, as_name, state, edges, node, file, meta)
-
-        # alias Foo.Bar, as: Quux — same form, but the keyword key is
-        # wrapped as {:__block__, _, [:as]} because the AST was parsed
-        # with literal_encoder (Archdo's default). Both shapes occur in
-        # the wild — keep both clauses for robustness.
-        {:alias, meta,
-         [
-           {:__aliases__, _, parts},
-           [{{:__block__, _, [:as]}, {:__aliases__, _, [as_name]}}]
-         ]} = node,
-        {state, edges}
-        when is_atom(as_name) ->
-          handle_simple_alias(parts, as_name, state, edges, node, file, meta)
-
-        # alias Foo.{Bar, Baz} — multi-alias form. Each suffix gets an
-        # edge and an alias_table entry. Without this clause, callers
-        # like `alias Archdo.{Runner, Rules}` produce zero edges — a
-        # massive blind spot in the previous extractor.
-        {:alias, meta, [{{:., _, [{:__aliases__, _, prefix_parts}, :{}]}, _, suffixes}]} = node,
-        {state, edges} ->
-          handle_multi_alias(prefix_parts, suffixes, state, edges, node, file, meta)
-
-        # import Foo.Bar — emits an edge. Imports don't bind a short
-        # form, so no alias_table update.
-        {:import, meta, [{:__aliases__, _, parts} | _]} = node, {state, edges} ->
-          handle_resolved_edge(parts, :import, state, edges, node, file, meta)
-
-        # use Foo.Bar
-        {:use, meta, [{:__aliases__, _, parts} | _]} = node, {state, edges} ->
-          handle_resolved_edge(parts, :use, state, edges, node, file, meta)
-
-        # Remote call: Foo.bar() / Foo.Bar.baz(). Single-segment aliases
-        # are resolved via the alias table. Multi-segment go through
-        # safe_concat/1. Without alias-table resolution, a call to
-        # `Runner.foo()` after `alias Archdo.Runner` would create a
-        # dangling edge to bare "Runner".
-        {{:., meta, [{:__aliases__, _, parts}, _func]}, _, _args} = node, {state, edges} ->
-          handle_resolved_edge(parts, @call_type, state, edges, node, file, meta)
-
-        # apply(Foo, :func, args) with literal module alias.
-        {:apply, meta, [{:__aliases__, _, parts}, _fn_atom, _args]} = node, {state, edges} ->
-          handle_resolved_edge(parts, :dynamic_dispatch, state, edges, node, file, meta)
-
-        # defdelegate name(args), to: SomeModule, as: ...
-        # The `to:` keyword option holds the target. Without this clause,
-        # delegate-only modules look orphan: the calls they receive are
-        # generated by the `defdelegate` macro at compile time and never
-        # appear as remote calls in the source AST.
-        {:defdelegate, meta, [_head, opts]} = node, {state, edges}
-        when state.module != nil and is_list(opts) ->
-          case extract_delegate_target(opts) do
-            nil -> {node, {state, edges}}
-            parts -> handle_resolved_edge(parts, @call_type, state, edges, node, file, meta)
-          end
-
-        node, acc ->
-          {node, acc}
-      end)
+          node, acc ->
+            visit_post(node, acc, file)
+        end
+      )
 
     Enum.reverse(edges)
   end
+
+  defp pop_module_scope(%{stack: [_top]}) do
+    %{stack: [], alias_table: %{}}
+  end
+
+  defp pop_module_scope(%{stack: [_top, {_outer_mod, outer_table} | _] = stack}) do
+    [_popped | rest] = stack
+    %{stack: rest, alias_table: outer_table}
+  end
+
+  defp pop_module_scope(%{stack: []} = state), do: state
+
+  # current_module/1 reads the head of the scope stack.
+  defp current_module(%{stack: [{mod, _} | _]}), do: mod
+  defp current_module(_), do: nil
+
+  # Single post-visitor used by Macro.traverse. Dispatches on the node
+  # shape via multi-clause helpers below — keeps the case-explosion
+  # out of the hot path. Skips early when no module is in scope.
+  defp visit_post(node, {%{stack: []} = state, edges}, _file), do: {node, {state, edges}}
+
+  # alias Foo.Bar
+  defp visit_post(
+         {:alias, meta, [{:__aliases__, _, parts}]} = node,
+         {state, edges},
+         file
+       ) do
+    handle_simple_alias(parts, nil, state, edges, node, file, meta)
+  end
+
+  # alias Foo.Bar, as: Quux (bare-atom keyword key)
+  defp visit_post(
+         {:alias, meta, [{:__aliases__, _, parts}, [{:as, {:__aliases__, _, [as_name]}}]]} = node,
+         {state, edges},
+         file
+       )
+       when is_atom(as_name) do
+    handle_simple_alias(parts, as_name, state, edges, node, file, meta)
+  end
+
+  # alias Foo.Bar, as: Quux (literal-encoder-wrapped keyword key)
+  defp visit_post(
+         {:alias, meta,
+          [
+            {:__aliases__, _, parts},
+            [{{:__block__, _, [:as]}, {:__aliases__, _, [as_name]}}]
+          ]} = node,
+         {state, edges},
+         file
+       )
+       when is_atom(as_name) do
+    handle_simple_alias(parts, as_name, state, edges, node, file, meta)
+  end
+
+  # alias Foo.{Bar, Baz}
+  defp visit_post(
+         {:alias, meta, [{{:., _, [{:__aliases__, _, prefix_parts}, :{}]}, _, suffixes}]} = node,
+         {state, edges},
+         file
+       ) do
+    handle_multi_alias(prefix_parts, suffixes, state, edges, node, file, meta)
+  end
+
+  # import Foo.Bar
+  defp visit_post(
+         {:import, meta, [{:__aliases__, _, parts} | _]} = node,
+         {state, edges},
+         file
+       ) do
+    handle_resolved_edge(parts, :import, state, edges, node, file, meta)
+  end
+
+  # use Foo.Bar
+  defp visit_post(
+         {:use, meta, [{:__aliases__, _, parts} | _]} = node,
+         {state, edges},
+         file
+       ) do
+    handle_resolved_edge(parts, :use, state, edges, node, file, meta)
+  end
+
+  # Remote call: Foo.bar() / Foo.Bar.baz()
+  defp visit_post(
+         {{:., meta, [{:__aliases__, _, parts}, _func]}, _, _args} = node,
+         {state, edges},
+         file
+       ) do
+    handle_resolved_edge(parts, @call_type, state, edges, node, file, meta)
+  end
+
+  # apply(Foo, :func, args)
+  defp visit_post(
+         {:apply, meta, [{:__aliases__, _, parts}, _fn_atom, _args]} = node,
+         {state, edges},
+         file
+       ) do
+    handle_resolved_edge(parts, :dynamic_dispatch, state, edges, node, file, meta)
+  end
+
+  # %Foo.Bar{...} struct construction or pattern match
+  defp visit_post(
+         {:%, meta, [{:__aliases__, _, parts}, {:%{}, _, _}]} = node,
+         {state, edges},
+         file
+       ) do
+    handle_resolved_edge(parts, @call_type, state, edges, node, file, meta)
+  end
+
+  # defdelegate name(args), to: SomeModule, as: ...
+  defp visit_post(
+         {:defdelegate, meta, [_head, opts]} = node,
+         {state, edges},
+         file
+       )
+       when is_list(opts) do
+    case extract_delegate_target(opts) do
+      nil -> {node, {state, edges}}
+      parts -> handle_resolved_edge(parts, @call_type, state, edges, node, file, meta)
+    end
+  end
+
+  defp visit_post(node, acc, _file), do: {node, acc}
 
   defp handle_simple_alias(parts, as_name, state, edges, node, file, meta) do
     case safe_concat(parts) do
@@ -413,7 +496,7 @@ defmodule Archdo.Graph do
 
       target ->
         edge = %{
-          source: state.module,
+          source: current_module(state),
           target: target,
           type: @alias_type,
           file: file,
@@ -429,7 +512,7 @@ defmodule Archdo.Graph do
   defp handle_multi_alias(prefix_parts, suffixes, state, edges, node, file, meta) do
     {new_edges, new_table} =
       Enum.reduce(suffixes, {edges, state.alias_table}, fn suffix, acc ->
-        accumulate_multi_alias(suffix, acc, prefix_parts, state.module, file, meta)
+        accumulate_multi_alias(suffix, acc, prefix_parts, current_module(state), file, meta)
       end)
 
     {node, {%{state | alias_table: new_table}, new_edges}}
@@ -486,7 +569,7 @@ defmodule Archdo.Graph do
 
       target ->
         edge = %{
-          source: state.module,
+          source: current_module(state),
           target: target,
           type: type,
           file: file,
@@ -506,15 +589,20 @@ defmodule Archdo.Graph do
   #                                   with bare-name fallback.
   #   [atom, atom, ...]             — multi-segment fully-qualified;
   #                                   safe_concat/1.
-  defp resolve_alias([{:__MODULE__, _, _} | rest], state)
-       when state.module != nil and is_list(rest) do
-    case Enum.all?(rest, &is_atom/1) do
-      true ->
-        suffix = Enum.map_join(rest, ".", &Atom.to_string/1)
-        state.module <> "." <> suffix
-
-      false ->
+  defp resolve_alias([{:__MODULE__, _, _} | rest], state) when is_list(rest) do
+    case current_module(state) do
+      nil ->
         nil
+
+      mod ->
+        case Enum.all?(rest, &is_atom/1) do
+          true ->
+            suffix = Enum.map_join(rest, ".", &Atom.to_string/1)
+            mod <> "." <> suffix
+
+          false ->
+            nil
+        end
     end
   end
 
