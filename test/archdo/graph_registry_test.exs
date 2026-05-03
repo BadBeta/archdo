@@ -185,4 +185,150 @@ defmodule Archdo.GraphRegistryTest do
       assert targets == [], "expected no targets, got #{inspect(targets)}"
     end
   end
+
+  describe "M-CG44 — alias-table resolution" do
+    test "alias Foo.{Bar, Baz} multi-alias form emits one edge per branch" do
+      file_asts = [
+        parse("lib/myapp/caller.ex", ~S"""
+        defmodule MyApp.Caller do
+          alias MyApp.{Runner, Rules}
+
+          def run, do: Runner.start()
+          def list, do: Rules.all()
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+      edges = Graph.dependencies(graph, "MyApp.Caller")
+
+      alias_targets =
+        edges
+        |> Enum.filter(&(&1.type == :alias))
+        |> Enum.map(& &1.target)
+        |> Enum.sort()
+
+      assert alias_targets == ["MyApp.Rules", "MyApp.Runner"]
+    end
+
+    test "short-form call resolves through alias table" do
+      # Without alias-table threading, `Runner.start()` after
+      # `alias MyApp.Runner` would create a dangling edge to bare
+      # "Runner" — no module by that name. The closure walk needs
+      # the fully-qualified target to traverse from Caller to Runner.
+      file_asts = [
+        parse("lib/myapp/caller.ex", ~S"""
+        defmodule MyApp.Caller do
+          alias MyApp.Runner
+
+          def run, do: Runner.start()
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      call_targets =
+        graph
+        |> Graph.dependencies("MyApp.Caller")
+        |> Enum.filter(&(&1.type == :call))
+        |> Enum.map(& &1.target)
+
+      assert "MyApp.Runner" in call_targets
+      refute "Runner" in call_targets
+    end
+
+    test "short-form call resolves through multi-alias table" do
+      file_asts = [
+        parse("lib/myapp/caller.ex", ~S"""
+        defmodule MyApp.Caller do
+          alias MyApp.{Runner, Rules}
+
+          def run do
+            Runner.start()
+            Rules.all()
+          end
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      call_targets =
+        graph
+        |> Graph.dependencies("MyApp.Caller")
+        |> Enum.filter(&(&1.type == :call))
+        |> Enum.map(& &1.target)
+        |> Enum.sort()
+
+      assert "MyApp.Rules" in call_targets
+      assert "MyApp.Runner" in call_targets
+    end
+
+    test "alias Foo.Bar, as: Quux binds Quux to Foo.Bar" do
+      file_asts = [
+        parse("lib/myapp/caller.ex", ~S"""
+        defmodule MyApp.Caller do
+          alias MyApp.LongName.Module, as: Short
+
+          def run, do: Short.go()
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      call_targets =
+        graph
+        |> Graph.dependencies("MyApp.Caller")
+        |> Enum.filter(&(&1.type == :call))
+        |> Enum.map(& &1.target)
+
+      assert "MyApp.LongName.Module" in call_targets
+    end
+
+    test "fully-qualified call still works without alias" do
+      file_asts = [
+        parse("lib/myapp/caller.ex", ~S"""
+        defmodule MyApp.Caller do
+          def run, do: MyApp.Runner.start()
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      call_targets =
+        graph
+        |> Graph.dependencies("MyApp.Caller")
+        |> Enum.filter(&(&1.type == :call))
+        |> Enum.map(& &1.target)
+
+      assert "MyApp.Runner" in call_targets
+    end
+
+    test "unrecognized short form falls back to bare name" do
+      # When a single-segment alias has no binding (no preceding
+      # `alias`), keep prior behaviour: emit edge with the bare name.
+      # Closure won't follow it (no matching module), but the edge
+      # is preserved for any consumer that wants the raw signal.
+      file_asts = [
+        parse("lib/myapp/caller.ex", ~S"""
+        defmodule MyApp.Caller do
+          def run, do: SomeBareThing.go()
+        end
+        """)
+      ]
+
+      graph = Graph.build(file_asts)
+
+      call_targets =
+        graph
+        |> Graph.dependencies("MyApp.Caller")
+        |> Enum.filter(&(&1.type == :call))
+        |> Enum.map(& &1.target)
+
+      assert "SomeBareThing" in call_targets
+    end
+  end
 end

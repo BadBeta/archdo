@@ -313,108 +313,178 @@ defmodule Archdo.Graph do
     Enum.reverse(names)
   end
 
+  # State threaded through the prewalk:
+  #   :module       — fully-qualified name of the current `defmodule`, or nil
+  #   :alias_table  — %{single_segment_atom => fully_qualified_module_name}
+  #                   built up as we encounter `alias` declarations. Used to
+  #                   resolve short-form references in call sites, `use`,
+  #                   `import`, and `apply/3`. Without this, a call
+  #                   `Runner.foo()` after `alias Archdo.Runner` resolves
+  #                   to bare `"Runner"` — no module by that name —
+  #                   creating a dangling edge that breaks reachability
+  #                   from anchors.
   defp extract_edges(ast, file) do
-    {_, {_current_module, edges}} =
-      Macro.prewalk(ast, {nil, []}, fn
-        # Track current module
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, {_mod, edges}
+    initial = %{module: nil, alias_table: %{}}
+
+    {_, {_state, edges}} =
+      Macro.prewalk(ast, {initial, []}, fn
+        # Enter defmodule — reset state to the new module's scope.
+        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, {_state, edges}
         when is_atom(hd(aliases)) ->
-          {node, {safe_concat(aliases), edges}}
+          {node, {%{module: safe_concat(aliases), alias_table: %{}}, edges}}
 
-        # alias MyApp.Foo
-        {:alias, meta, [{:__aliases__, _, aliases} | _]} = node, {mod, edges} when mod != nil ->
-          case safe_concat(aliases) do
-            nil ->
-              {node, {mod, edges}}
+        # alias Foo.Bar — single multi-segment alias.
+        # Adds edge AND populates alias_table[:Bar => "Foo.Bar"].
+        {:alias, meta, [{:__aliases__, _, parts}]} = node, {state, edges} ->
+          handle_simple_alias(parts, nil, state, edges, node, file, meta)
 
-            target ->
-              edge = %{
-                source: mod,
-                target: target,
-                type: @alias_type,
-                file: file,
-                line: AST.line(meta)
-              }
+        # alias Foo.Bar, as: Quux — alias with renamed binding (bare-atom
+        # keyword key, e.g. when AST was parsed without literal_encoder).
+        {:alias, meta, [{:__aliases__, _, parts}, [{:as, {:__aliases__, _, [as_name]}}]]} = node,
+        {state, edges}
+        when is_atom(as_name) ->
+          handle_simple_alias(parts, as_name, state, edges, node, file, meta)
 
-              {node, {mod, [edge | edges]}}
-          end
+        # alias Foo.Bar, as: Quux — same form, but the keyword key is
+        # wrapped as {:__block__, _, [:as]} because the AST was parsed
+        # with literal_encoder (Archdo's default). Both shapes occur in
+        # the wild — keep both clauses for robustness.
+        {:alias, meta,
+         [
+           {:__aliases__, _, parts},
+           [{{:__block__, _, [:as]}, {:__aliases__, _, [as_name]}}]
+         ]} = node,
+        {state, edges}
+        when is_atom(as_name) ->
+          handle_simple_alias(parts, as_name, state, edges, node, file, meta)
 
-        # import MyApp.Foo
-        {:import, meta, [{:__aliases__, _, aliases} | _]} = node, {mod, edges} when mod != nil ->
-          case safe_concat(aliases) do
-            nil ->
-              {node, {mod, edges}}
+        # alias Foo.{Bar, Baz} — multi-alias form. Each suffix gets an
+        # edge and an alias_table entry. Without this clause, callers
+        # like `alias Archdo.{Runner, Rules}` produce zero edges — a
+        # massive blind spot in the previous extractor.
+        {:alias, meta, [{{:., _, [{:__aliases__, _, prefix_parts}, :{}]}, _, suffixes}]} = node,
+        {state, edges} ->
+          handle_multi_alias(prefix_parts, suffixes, state, edges, node, file, meta)
 
-            target ->
-              edge = %{
-                source: mod,
-                target: target,
-                type: :import,
-                file: file,
-                line: AST.line(meta)
-              }
+        # import Foo.Bar — emits an edge. Imports don't bind a short
+        # form, so no alias_table update.
+        {:import, meta, [{:__aliases__, _, parts} | _]} = node, {state, edges} ->
+          handle_resolved_edge(parts, :import, state, edges, node, file, meta)
 
-              {node, {mod, [edge | edges]}}
-          end
+        # use Foo.Bar
+        {:use, meta, [{:__aliases__, _, parts} | _]} = node, {state, edges} ->
+          handle_resolved_edge(parts, :use, state, edges, node, file, meta)
 
-        # use MyApp.Foo
-        {:use, meta, [{:__aliases__, _, aliases} | _]} = node, {mod, edges} when mod != nil ->
-          case safe_concat(aliases) do
-            nil ->
-              {node, {mod, edges}}
+        # Remote call: Foo.bar() / Foo.Bar.baz(). Single-segment aliases
+        # are resolved via the alias table. Multi-segment go through
+        # safe_concat/1. Without alias-table resolution, a call to
+        # `Runner.foo()` after `alias Archdo.Runner` would create a
+        # dangling edge to bare "Runner".
+        {{:., meta, [{:__aliases__, _, parts}, _func]}, _, _args} = node, {state, edges} ->
+          handle_resolved_edge(parts, @call_type, state, edges, node, file, meta)
 
-            target ->
-              edge = %{source: mod, target: target, type: :use, file: file, line: AST.line(meta)}
-              {node, {mod, [edge | edges]}}
-          end
-
-        # Remote call: MyApp.Foo.bar(...)
-        {{:., meta, [{:__aliases__, _, aliases}, _func]}, _, _args} = node, {mod, edges}
-        when mod != nil ->
-          case safe_concat(aliases) do
-            nil ->
-              {node, {mod, edges}}
-
-            target ->
-              edge = %{
-                source: mod,
-                target: target,
-                type: @call_type,
-                file: file,
-                line: AST.line(meta)
-              }
-
-              {node, {mod, [edge | edges]}}
-          end
-
-        # §§ elixir-implementing: §2.1 — apply/3 with literal module
-        # alias: apply(MyApp.Target, :run, [args]). Variable targets
-        # (apply(var, :run, args)) silently skipped — no static
-        # resolution possible. M-Plan8 broadens CE-30 graph coverage
-        # for dynamic dispatch shapes.
-        {:apply, meta, [{:__aliases__, _, aliases}, _fn_atom, _args]} = node, {mod, edges}
-        when mod != nil ->
-          case safe_concat(aliases) do
-            nil ->
-              {node, {mod, edges}}
-
-            target ->
-              edge = %{
-                source: mod,
-                target: target,
-                type: :dynamic_dispatch,
-                file: file,
-                line: AST.line(meta)
-              }
-
-              {node, {mod, [edge | edges]}}
-          end
+        # apply(Foo, :func, args) with literal module alias.
+        {:apply, meta, [{:__aliases__, _, parts}, _fn_atom, _args]} = node, {state, edges} ->
+          handle_resolved_edge(parts, :dynamic_dispatch, state, edges, node, file, meta)
 
         node, acc ->
           {node, acc}
       end)
 
     Enum.reverse(edges)
+  end
+
+  defp handle_simple_alias(parts, as_name, state, edges, node, file, meta) do
+    case safe_concat(parts) do
+      nil ->
+        {node, {state, edges}}
+
+      target ->
+        edge = %{
+          source: state.module,
+          target: target,
+          type: @alias_type,
+          file: file,
+          line: AST.line(meta)
+        }
+
+        binding = as_name || List.last(parts)
+        new_state = put_in(state.alias_table[binding], target)
+        {node, {new_state, [edge | edges]}}
+    end
+  end
+
+  defp handle_multi_alias(prefix_parts, suffixes, state, edges, node, file, meta) do
+    {new_edges, new_table} =
+      Enum.reduce(suffixes, {edges, state.alias_table}, fn suffix, acc ->
+        accumulate_multi_alias(suffix, acc, prefix_parts, state.module, file, meta)
+      end)
+
+    {node, {%{state | alias_table: new_table}, new_edges}}
+  end
+
+  defp accumulate_multi_alias(
+         {:__aliases__, _, suffix_parts},
+         {acc_edges, acc_table},
+         prefix_parts,
+         source,
+         file,
+         meta
+       ) do
+    case safe_concat(prefix_parts ++ suffix_parts) do
+      nil ->
+        {acc_edges, acc_table}
+
+      target ->
+        edge = %{
+          source: source,
+          target: target,
+          type: @alias_type,
+          file: file,
+          line: AST.line(meta)
+        }
+
+        {[edge | acc_edges], Map.put(acc_table, List.last(suffix_parts), target)}
+    end
+  end
+
+  defp accumulate_multi_alias(_, acc, _prefix, _source, _file, _meta), do: acc
+
+  # Resolve `parts` via the alias table and emit an edge of the given
+  # `type`. Used for `import`, `use`, remote calls, and `apply/3` —
+  # all four resolve short-form aliases the same way and emit the
+  # same edge shape, only the `type` differs.
+  defp handle_resolved_edge(parts, type, state, edges, node, file, meta) do
+    case resolve_alias(parts, state.alias_table) do
+      nil ->
+        {node, {state, edges}}
+
+      target ->
+        edge = %{
+          source: state.module,
+          target: target,
+          type: type,
+          file: file,
+          line: AST.line(meta)
+        }
+
+        {node, {state, [edge | edges]}}
+    end
+  end
+
+  # Resolve an alias-parts list to a fully-qualified module name. For
+  # single-segment short forms (e.g. [:Runner]), look up in the alias
+  # table; fall back to the bare segment name when no binding exists.
+  # Multi-segment forms go through safe_concat/1.
+  defp resolve_alias([single], alias_table) when is_atom(single) do
+    case Map.fetch(alias_table, single) do
+      {:ok, full} -> full
+      :error -> Atom.to_string(single)
+    end
+  end
+
+  defp resolve_alias(parts, _alias_table) when is_list(parts) do
+    safe_concat(parts)
   end
 
   # Safely concat module aliases, returning nil for dynamic references
