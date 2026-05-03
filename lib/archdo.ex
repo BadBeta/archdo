@@ -360,7 +360,7 @@ defmodule Archdo do
          function_graph_diagnostics)
       |> Enum.map(&calibrate_project_diagnostic(&1, file_asts))
 
-    filter_diagnostics(all, opts)
+    Runner.filter_diagnostics(all, opts)
   end
 
   # Project rules may take 1 or 2 args. Newer rules accept opts; older
@@ -508,8 +508,8 @@ defmodule Archdo do
     source_files = collect_files(paths)
     test_files = collect_tests_for(paths)
 
-    source_asts = parse_many(source_files)
-    test_asts = parse_many(test_files)
+    source_asts = AST.parse_files(source_files)
+    test_asts = AST.parse_files(test_files)
 
     IO.write(Runner.coverage_matrix_report(source_asts, test_asts))
 
@@ -523,7 +523,7 @@ defmodule Archdo do
   @spec print_building_blocks([String.t()]) :: non_neg_integer()
   def print_building_blocks(paths \\ ["lib"]) do
     source_files = collect_files(paths)
-    file_asts = parse_many(source_files)
+    file_asts = AST.parse_files(source_files)
 
     module_results =
       file_asts
@@ -672,7 +672,7 @@ defmodule Archdo do
   @spec print_metrics_matrix([String.t()]) :: non_neg_integer()
   def print_metrics_matrix(paths \\ ["lib"]) do
     source_files = collect_files(paths)
-    file_asts = parse_many(source_files)
+    file_asts = AST.parse_files(source_files)
 
     graph = Graph.build(file_asts)
     metrics = Metrics.compute(graph, file_asts)
@@ -850,23 +850,6 @@ defmodule Archdo do
       Path.wildcard(Path.join(project_root, "test/**/*_test.exs"))
     end)
     |> Enum.uniq()
-  end
-
-  defp parse_many(files) do
-    for file <- files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
-  end
-
-  defp filter_diagnostics(diagnostics, opts) do
-    ignore = Keyword.get(opts, :ignore, [])
-    only = Keyword.get(opts, :only)
-
-    Enum.filter(diagnostics, fn d ->
-      cond do
-        only && d.rule_id not in only -> false
-        d.rule_id in ignore -> false
-        true -> true
-      end
-    end)
   end
 
   @doc """

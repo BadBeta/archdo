@@ -287,7 +287,7 @@ defmodule Archdo.Runner do
   def run_metrics_rules(file_asts) do
     graph = Graph.build(file_asts)
     metrics = Metrics.compute(graph, file_asts)
-    file_map = build_module_file_map(file_asts)
+    file_map = AST.module_file_map(file_asts)
 
     Rules.main_sequence_distance(metrics, file_map)
   end
@@ -345,11 +345,11 @@ defmodule Archdo.Runner do
   def run_test_project_rules(source_files, test_files, opts) do
     mirror_diagnostics = Rules.test_mirrors_source(source_files, test_files)
 
-    source_asts = parse_many(source_files)
-    test_asts = parse_many(test_files)
+    source_asts = AST.parse_files(source_files)
+    test_asts = AST.parse_files(test_files)
     coverage_diagnostics = Rules.coverage_gap(source_asts ++ test_asts)
 
-    apply_filter(mirror_diagnostics ++ coverage_diagnostics, opts)
+    filter_diagnostics(mirror_diagnostics ++ coverage_diagnostics, opts)
   end
 
   @doc """
@@ -362,15 +362,13 @@ defmodule Archdo.Runner do
     Rules.coverage_matrix_report(source_asts ++ test_asts)
   end
 
-  defp build_module_file_map(file_asts) do
-    Map.new(file_asts, fn {file, ast} -> {AST.extract_module_name(ast), file} end)
-  end
-
-  defp parse_many(files) do
-    for file <- files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
-  end
-
-  defp apply_filter(diagnostics, opts) do
+  @doc """
+  Filter a diagnostic list by `:ignore` (rule_id list) and `:only` (rule_id
+  list) options. Public so the top-level `Archdo` facade can reuse the
+  exact same filter without redefining it.
+  """
+  @spec filter_diagnostics([Archdo.Diagnostic.t()], keyword()) :: [Archdo.Diagnostic.t()]
+  def filter_diagnostics(diagnostics, opts) do
     ignore = Keyword.get(opts, :ignore, [])
     only = Keyword.get(opts, :only)
 
@@ -434,17 +432,13 @@ defmodule Archdo.Runner do
         opts
 
       true ->
-        file_asts = parse_for_pre_pass(files)
+        file_asts = AST.parse_files(files)
         Keyword.put(opts, :plug_coverage, PluginCoverage.scan(file_asts))
     end
   end
 
   defp plug_coverage_needed?(rules) do
     Enum.any?(rules, fn rule -> rule.id() in @plug_coverage_consumers end)
-  end
-
-  defp parse_for_pre_pass(files) do
-    for file <- files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
   end
 
   defp analyze_file(file, rules, opts) do

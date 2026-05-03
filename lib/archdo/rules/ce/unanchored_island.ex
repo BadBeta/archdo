@@ -36,7 +36,7 @@ defmodule Archdo.Rules.CE.UnanchoredIsland do
     graph = Graph.build(production_asts)
     closure = AnchorSet.closure(anchors, graph)
 
-    file_by_module = build_file_index(production_asts)
+    file_by_module = AST.module_file_map(production_asts)
     sccs = compute_sccs(graph)
 
     for scc <- sccs,
@@ -44,10 +44,6 @@ defmodule Archdo.Rules.CE.UnanchoredIsland do
         Enum.all?(scc, &(not MapSet.member?(closure, &1))) do
       build_diagnostic(scc, file_by_module)
     end
-  end
-
-  defp build_file_index(file_asts) do
-    Map.new(file_asts, fn {file, ast} -> {AST.extract_module_name(ast), file} end)
   end
 
   # --- module-level Tarjan SCC ---

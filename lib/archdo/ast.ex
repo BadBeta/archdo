@@ -75,6 +75,26 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  Parse a list of files into `{file, ast}` tuples. Files that fail to parse
+  are dropped silently (consumers that need errors should use `parse_file/1`
+  per file). Project-rules consume the result; failures upstream are
+  reported as their own diagnostic class.
+  """
+  @spec parse_files([String.t()]) :: [{String.t(), Macro.t()}]
+  def parse_files(files) when is_list(files) do
+    for file <- files, {:ok, ast} <- [parse_file(file)], do: {file, ast}
+  end
+
+  @doc """
+  Build a `%{module_name => file}` index from a list of `{file, ast}` tuples.
+  Pure; same shape used by every project-rule that needs reverse lookup.
+  """
+  @spec module_file_map([{String.t(), Macro.t()}]) :: %{String.t() => String.t()}
+  def module_file_map(file_asts) when is_list(file_asts) do
+    Map.new(file_asts, fn {file, ast} -> {extract_module_name(ast), file} end)
+  end
+
+  @doc """
   Parse a file into its quoted AST. Returns `{:ok, ast}` or `{:error, reason}`.
   """
   @spec parse_file(String.t()) :: {:ok, Macro.t()} | {:error, String.t()}
