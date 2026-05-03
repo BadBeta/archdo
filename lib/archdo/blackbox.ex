@@ -189,19 +189,22 @@ defmodule Archdo.Blackbox do
             score >= @building_block_threshold and a > 0 and
               not MapSet.member?(structural_leak_keys, {n, a})
           end)
-          |> Enum.flat_map(fn {n, a, _score, _c} ->
-            case InputGuard.any_unconstrained?(Map.get(clauses_by_key, {n, a}, [])) do
-              true -> [{n, a, :unguarded_input}]
-              false -> []
-            end
-          end)
+          |> Enum.flat_map(&unguarded_input_leak(&1, clauses_by_key))
 
-        case structural_leaks ++ input_leaks do
-          [] -> :building_block
-          list -> {:leaks_at, list}
-        end
+        verdict_for_leaks(structural_leaks ++ input_leaks)
     end
   end
+
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp unguarded_input_leak({n, a, _score, _c}, clauses_by_key) do
+    classify_input_leak(InputGuard.any_unconstrained?(Map.get(clauses_by_key, {n, a}, [])), n, a)
+  end
+
+  defp classify_input_leak(false, _n, _a), do: []
+  defp classify_input_leak(true, n, a), do: [{n, a, :unguarded_input}]
+
+  defp verdict_for_leaks([]), do: :building_block
+  defp verdict_for_leaks(list), do: {:leaks_at, list}
 
   @doc """
   Context-level verdict: aggregate `module_verdict/1` across every
@@ -342,14 +345,16 @@ defmodule Archdo.Blackbox do
 
   defp leaks_breakdown(leaky) do
     Enum.reduce(leaky, %{}, fn {_n, _a, _s, components}, acc ->
-      Enum.reduce(components, acc, fn {key, value}, acc2 ->
-        case value < 1.0 do
-          true -> Map.update(acc2, key, 1, &(&1 + 1))
-          false -> acc2
-        end
-      end)
+      Enum.reduce(components, acc, &accumulate_leaky_component/2)
     end)
   end
+
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head on
+  # whether the component value is < 1.0 (a leak) or saturated.
+  defp accumulate_leaky_component({key, value}, acc) when value < 1.0,
+    do: Map.update(acc, key, 1, &(&1 + 1))
+
+  defp accumulate_leaky_component(_kv, acc), do: acc
 
   @doc """
   Distance from a building block, expressed as the total count of

@@ -21,29 +21,32 @@ defmodule Archdo.Rules.Compiled.ProtocolCompleteness do
     # Check behaviour implementations: for each module that declares @behaviour,
     # verify it exports all required callbacks
     Enum.flat_map(modules, fn {module, info} ->
-      Enum.flat_map(info.behaviours, fn behaviour ->
-        required_callbacks = Compiled.callbacks_for(graph, behaviour)
-
-        case required_callbacks do
-          [] ->
-            []
-
-          _ ->
-            module_exports = MapSet.new(info.exports)
-
-            missing =
-              Enum.reject(required_callbacks, fn {func, arity} ->
-                MapSet.member?(module_exports, {func, arity})
-              end)
-
-            case missing do
-              [] -> []
-              _ -> [build_diagnostic(module, behaviour, missing)]
-            end
-        end
-      end)
+      Enum.flat_map(info.behaviours, &missing_callbacks_diag(&1, module, info, graph))
     end)
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatches on
+  # the empty-list shape of required_callbacks (no behaviour info →
+  # nothing to check) and on the missing list shape (none missing →
+  # no diagnostic). Each clause is depth 1.
+  defp missing_callbacks_diag(behaviour, module, info, graph) do
+    behaviour
+    |> then(&Compiled.callbacks_for(graph, &1))
+    |> diagnose_missing(behaviour, module, info)
+  end
+
+  defp diagnose_missing([], _behaviour, _module, _info), do: []
+
+  defp diagnose_missing(required_callbacks, behaviour, module, info) do
+    module_exports = MapSet.new(info.exports)
+
+    required_callbacks
+    |> Enum.reject(fn {func, arity} -> MapSet.member?(module_exports, {func, arity}) end)
+    |> emit_diag_if_missing(module, behaviour)
+  end
+
+  defp emit_diag_if_missing([], _module, _behaviour), do: []
+  defp emit_diag_if_missing(missing, module, behaviour), do: [build_diagnostic(module, behaviour, missing)]
 
   defp build_diagnostic(module, behaviour, missing) do
     mod_name = AST.module_name(module)
