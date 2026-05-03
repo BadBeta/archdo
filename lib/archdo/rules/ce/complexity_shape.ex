@@ -102,7 +102,7 @@ defmodule Archdo.Rules.CE.ComplexityShape do
   end
 
   defp build_flat(file, name, arity, meta, cyclo, cogn) do
-    Diagnostic.info("CE-24-flat-dispatch",
+    Diagnostic.nitpick("CE-24-flat-dispatch",
       title: "Flat-dispatch complexity (cyclomatic >> cognitive)",
       message:
         "#{name}/#{arity} has cyclomatic #{cyclo} but cognitive #{cogn} — " <>
@@ -111,21 +111,14 @@ defmodule Archdo.Rules.CE.ComplexityShape do
       why:
         "Cyclomatic ≥ #{@ratio_threshold}× cognitive at threshold #{@cyclo_high}+ " <>
           "identifies idiomatic Elixir dispatch the McCabe metric over-counts. " <>
-          "The function reads cleanly despite the high cyclomatic number — " <>
-          "consider suppressing complementary 6.2 (FunctionComplexity) noise " <>
-          "at this site.",
-      alternatives: [
-        Fix.new(
-          summary:
-            "Suppress 6.2 here with `# archdo:allow 6.2 reason: idiomatic dispatch — see CE-24`",
-          detail:
-            "Cyclomatic complexity rules over-count flat dispatch. CE-24-flat " <>
-              "marks the site as known-fine; suppress 6.2 there to reduce noise.",
-          applies_when: "The high cyclomatic is from idiomatic dispatch, not nesting."
-        )
-      ],
+          "The function reads cleanly despite the high cyclomatic number. " <>
+          "Rule 6.2 (FunctionComplexity) already auto-defers to this " <>
+          "classification, so no action is needed — the finding is " <>
+          "informational only and lives at :nitpick severity.",
+      alternatives: [],
       references: ["ARCHITECTURE_RULES_CHANGE_ECONOMY.md#CE-24"],
       context: %{cyclomatic: cyclo, cognitive: cogn, shape: :flat_dispatch},
+      tags: [:passed],
       file: file,
       line: AST.line(meta)
     )

@@ -29,7 +29,12 @@ defmodule Archdo.Rules.CE.ComplexityShapeTest do
 
       diags = assert_flagged(ComplexityShape, code, file: "lib/my_app/big.ex")
       assert hd(diags).rule_id == "CE-24-flat-dispatch"
-      assert hd(diags).severity == :info
+      # M-CG55: flat-dispatch demoted to :nitpick after rule 6.2 was
+      # taught to defer to flat-dispatch detection automatically — the
+      # finding is informational only (no action needed) and tagged
+      # :passed for positive-signal reporting.
+      assert hd(diags).severity == :nitpick
+      assert :passed in hd(diags).tags
     end
 
     test "{:low_cyclo, :high_cogn} twisty-nested fires CE-24-twisty (warning)" do
