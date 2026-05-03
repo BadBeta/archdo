@@ -384,15 +384,7 @@ defmodule Archdo.Compiled.Diagram do
         exports = Map.get(CompiledGraph.modules(graph), mod, %{exports: []}).exports
 
         exports
-        |> Enum.filter(fn {func, arity} ->
-          mfa = {mod, func, arity}
-          callers = Query.callers_of(graph, mfa)
-
-          Enum.any?(callers, fn call ->
-            caller_mod = elem(call.caller, 0)
-            not MapSet.member?(member_set, caller_mod)
-          end)
-        end)
+        |> Enum.filter(&called_from_outside?(&1, mod, graph, member_set))
         |> Enum.map(fn {func, arity} -> {mod, func, arity} end)
       end)
 
@@ -650,6 +642,18 @@ defmodule Archdo.Compiled.Diagram do
     Enum.join(lines ++ hidden_section ++ phantom_section ++ style_lines, "\n")
   end
 
+  # §§ elixir-implementing: §2.1 — extracted predicate replaces a
+  # nested any-inside-filter-inside-flat_map.
+  defp called_from_outside?({func, arity}, mod, graph, member_set) do
+    graph
+    |> Query.callers_of({mod, func, arity})
+    |> Enum.any?(&caller_outside_member_set?(&1, member_set))
+  end
+
+  defp caller_outside_member_set?(call, member_set) do
+    not MapSet.member?(member_set, elem(call.caller, 0))
+  end
+
   # Build set of {source_atom, target_atom} edges from AST analysis
   defp build_ast_edges(source_paths) do
     files = Archdo.collect_files(source_paths)
@@ -856,26 +860,7 @@ defmodule Archdo.Compiled.Diagram do
 
     # Left side: external callers
     caller_lines =
-      Enum.flat_map(external_callers, fn {caller, calls} ->
-        caller_id = sanitize_id(AST.module_name(caller))
-        caller_short = AST.short_name(caller)
-
-        targets =
-          Enum.map(calls, fn {_, callee, fns, _} ->
-            callee_id = sanitize_id(AST.module_name(callee))
-            fn_str = Enum.map_join(fns, ", ", fn {f, a} -> "#{f}/#{a}" end)
-            {callee_id, fn_str}
-          end)
-
-        node_line = "  #{caller_id}([\"#{caller_short}\"])"
-
-        edge_lines =
-          Enum.map(targets, fn {callee_id, fn_str} ->
-            "  #{caller_id} -->|\"#{fn_str}\"| #{callee_id}"
-          end)
-
-        [node_line | edge_lines]
-      end)
+      Enum.flat_map(external_callers, &external_caller_lines/1)
 
     # Center: context subgraph
     context_lines = ["", "  subgraph #{ctx_id}[\"#{ctx.context}\"]"]
@@ -921,29 +906,7 @@ defmodule Archdo.Compiled.Diagram do
       |> Enum.uniq()
 
     # Right side: external dependencies
-    dep_lines =
-      Enum.flat_map(external_deps, fn {dep, calls} ->
-        dep_id = sanitize_id(AST.module_name(dep))
-        dep_short = AST.short_name(dep)
-
-        sources =
-          calls
-          |> Enum.map(fn {caller, _, fns, _} ->
-            caller_id = sanitize_id(AST.module_name(caller))
-            fn_str = Enum.map_join(fns, ", ", fn {f, a} -> "#{f}/#{a}" end)
-            {caller_id, fn_str}
-          end)
-          |> Enum.take(3)
-
-        node_line = "  #{dep_id}([\"#{dep_short}\"])"
-
-        edge_lines =
-          Enum.map(sources, fn {caller_id, fn_str} ->
-            "  #{caller_id} -.->|\"#{fn_str}\"| #{dep_id}"
-          end)
-
-        [node_line | edge_lines]
-      end)
+    dep_lines = Enum.flat_map(external_deps, &external_dep_lines/1)
 
     # Styling
     style_lines = [""]
@@ -1023,19 +986,64 @@ defmodule Archdo.Compiled.Diagram do
 
       _ ->
         tags = for {:tagged_tuple, t} <- shapes, do: t
-
-        case tags do
-          [] -> "?"
-          _ -> Enum.map_join(tags, "|", fn t -> ":#{t}" end)
-        end
+        format_tag_list(tags)
     end
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the empty-list shape.
+  defp format_tag_list([]), do: "?"
+  defp format_tag_list(tags), do: Enum.map_join(tags, "|", fn t -> ":#{t}" end)
 
   defp wire_style_for(entry) do
     case entry.call_count do
       n when n >= 10 -> "==>"
       _ -> "-->"
     end
+  end
+
+  # §§ elixir-implementing: §2.1 — extracted helper flattens the
+  # depth-3 Enum.flat_map(fn -> Enum.map(fn ...) end). Mirrors the
+  # external_dep_lines shape but for the inverse direction (callers
+  # rather than dependencies).
+  defp external_caller_lines({caller, calls}) do
+    caller_id = sanitize_id(AST.module_name(caller))
+    caller_short = AST.short_name(caller)
+    targets = Enum.map(calls, &callee_id_and_fns/1)
+
+    edge_lines = Enum.map(targets, fn {callee_id, fn_str} ->
+      "  #{caller_id} -->|\"#{fn_str}\"| #{callee_id}"
+    end)
+
+    ["  #{caller_id}([\"#{caller_short}\"])" | edge_lines]
+  end
+
+  defp callee_id_and_fns({_, callee, fns, _}) do
+    callee_id = sanitize_id(AST.module_name(callee))
+    fn_str = Enum.map_join(fns, ", ", fn {f, a} -> "#{f}/#{a}" end)
+    {callee_id, fn_str}
+  end
+
+  defp external_dep_lines({dep, calls}) do
+    dep_id = sanitize_id(AST.module_name(dep))
+    dep_short = AST.short_name(dep)
+
+    sources =
+      calls
+      |> Enum.map(&caller_id_and_fns/1)
+      |> Enum.take(3)
+
+    edge_lines = Enum.map(sources, fn {caller_id, fn_str} ->
+      "  #{caller_id} -.->|\"#{fn_str}\"| #{dep_id}"
+    end)
+
+    ["  #{dep_id}([\"#{dep_short}\"])" | edge_lines]
+  end
+
+  defp caller_id_and_fns({caller, _, fns, _}) do
+    caller_id = sanitize_id(AST.module_name(caller))
+    fn_str = Enum.map_join(fns, ", ", fn {f, a} -> "#{f}/#{a}" end)
+    {caller_id, fn_str}
   end
 
   defp sanitize_id(str) do
