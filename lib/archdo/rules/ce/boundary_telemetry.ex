@@ -46,32 +46,34 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
 
   defp find_unwrapped_boundary_entries(file, ast) do
     layer = Phoenix.classify_file(file, ast).layer
-    boundary_fns = boundary_function_names(ast, layer)
-
-    case boundary_fns do
-      [] ->
-        []
-
-      _ ->
-        # Multi-clause functions show up once per clause in
-        # extract_functions/2. Dedupe by {name, arity}, keeping the
-        # first meta seen, and check telemetry across ALL clause bodies
-        # — telemetry in any clause counts as covering the function.
-        ast
-        |> AST.extract_functions(:public)
-        |> Enum.filter(fn {n, a, _, _, _} -> {n, a} in boundary_fns end)
-        |> Enum.group_by(fn {n, a, _, _, _} -> {n, a} end)
-        |> Enum.flat_map(fn {{name, arity}, clauses} ->
-          {_, _, meta, _, _} = hd(clauses)
-          any_telemetry? = Enum.any?(clauses, fn {_, _, _, _, body} -> body && contains_telemetry?(body) end)
-
-          case any_telemetry? do
-            true -> []
-            false -> [build_diagnostic(file, name, arity, meta, layer)]
-          end
-        end)
-    end
+    diagnose_boundary_fns(boundary_function_names(ast, layer), file, ast, layer)
   end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the empty-list shape of boundary_fns.
+  defp diagnose_boundary_fns([], _file, _ast, _layer), do: []
+
+  defp diagnose_boundary_fns(boundary_fns, file, ast, layer) do
+    # Multi-clause functions show up once per clause in
+    # extract_functions/2. Dedupe by {name, arity}, keeping the
+    # first meta seen, and check telemetry across ALL clause bodies
+    # — telemetry in any clause counts as covering the function.
+    ast
+    |> AST.extract_functions(:public)
+    |> Enum.filter(fn {n, a, _, _, _} -> {n, a} in boundary_fns end)
+    |> Enum.group_by(fn {n, a, _, _, _} -> {n, a} end)
+    |> Enum.flat_map(&diagnose_function_clauses(&1, file, layer))
+  end
+
+  defp diagnose_function_clauses({{name, arity}, clauses}, file, layer) do
+    {_, _, meta, _, _} = hd(clauses)
+    any_telemetry? = Enum.any?(clauses, fn {_, _, _, _, body} -> body && contains_telemetry?(body) end)
+    diag_if_no_telemetry(any_telemetry?, file, name, arity, meta, layer)
+  end
+
+  defp diag_if_no_telemetry(true, _file, _name, _arity, _meta, _layer), do: []
+  defp diag_if_no_telemetry(false, file, name, arity, meta, layer),
+    do: [build_diagnostic(file, name, arity, meta, layer)]
 
   # Per layer, return the set of {name, arity} that count as boundary
   # entry points worth wrapping in telemetry.
@@ -80,12 +82,7 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
     # params. Skip framework callbacks (action_fallback, etc.).
     ast
     |> AST.extract_functions(:public)
-    |> Enum.flat_map(fn {name, arity, _, _, _} ->
-      case controller_action?(name, arity) do
-        true -> [{name, arity}]
-        false -> []
-      end
-    end)
+    |> Enum.flat_map(&controller_action_entry/1)
   end
 
   defp boundary_function_names(_ast, :live_view) do
@@ -96,30 +93,36 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
 
   defp boundary_function_names(ast, :operational) do
     # Mix.Task — fires on run/1 and run/2 (variadic).
-    case mix_task?(ast) do
-      true ->
-        ast
-        |> AST.extract_functions(:public)
-        |> Enum.flat_map(fn {name, arity, _, _, _} ->
-          case name == :run do
-            true -> [{name, arity}]
-            false -> []
-          end
-        end)
-
-      false ->
-        []
-    end
+    mix_task_run_fns(mix_task?(ast), ast)
   end
 
   defp boundary_function_names(ast, _other) do
     # Oban.Worker.perform/1 — independent of layer classification
     # because workers can live anywhere under lib/.
-    case IrreversibleDecision.oban_worker?(ast) do
-      true -> [{:perform, 1}]
-      false -> []
-    end
+    perform_fn_for_oban(IrreversibleDecision.oban_worker?(ast))
   end
+
+  # §§ elixir-implementing: §2.1 — boolean → multi-clause head
+  defp controller_action_entry({name, arity, _, _, _}) do
+    select_action(controller_action?(name, arity), name, arity)
+  end
+
+  defp select_action(false, _name, _arity), do: []
+  defp select_action(true, name, arity), do: [{name, arity}]
+
+  defp mix_task_run_fns(false, _ast), do: []
+
+  defp mix_task_run_fns(true, ast) do
+    ast
+    |> AST.extract_functions(:public)
+    |> Enum.flat_map(&run_fn_entry/1)
+  end
+
+  defp run_fn_entry({:run, arity, _, _, _}), do: [{:run, arity}]
+  defp run_fn_entry(_), do: []
+
+  defp perform_fn_for_oban(false), do: []
+  defp perform_fn_for_oban(true), do: [{:perform, 1}]
 
   defp controller_action?(name, 2) do
     # Heuristic: typical Phoenix actions are 2-arity; skip framework
