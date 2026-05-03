@@ -41,15 +41,11 @@ defmodule Archdo.Rules.Module.StubFunction do
 
   defp stub_body?({def_type, _meta, [_head | body_parts]})
        when def_type in [:def, :defp] do
-    body = extract_body(body_parts)
+    body = AST.function_body(body_parts)
     classify_stub(body)
   end
 
   defp stub_body?(_), do: false
-
-  defp extract_body([[do: body]]), do: body
-  defp extract_body([_, [do: body]]), do: body
-  defp extract_body(_), do: nil
 
   # raise "not implemented" / raise "TODO" / raise "not yet implemented"
   defp classify_stub({:raise, _, [message]}) when is_binary(message) do

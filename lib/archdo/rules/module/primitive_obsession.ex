@@ -90,7 +90,7 @@ defmodule Archdo.Rules.Module.PrimitiveObsession do
 
   defp collect_typed_arg_names(args) when is_list(args) do
     args
-    |> Enum.map(&arg_name/1)
+    |> Enum.map(&AST.arg_name/1)
     |> Enum.reject(&is_nil/1)
     |> Enum.filter(fn name ->
       Enum.any?(@typed_concepts, fn concept -> name =~ concept end)
@@ -99,12 +99,4 @@ defmodule Archdo.Rules.Module.PrimitiveObsession do
   end
 
   defp collect_typed_arg_names(_), do: []
-
-  defp arg_name({name, _, ctx}) when is_atom(name) and is_atom(ctx) do
-    Atom.to_string(name)
-  end
-
-  defp arg_name({:\\, _, [{name, _, _} | _]}) when is_atom(name), do: Atom.to_string(name)
-
-  defp arg_name(_), do: nil
 end

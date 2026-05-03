@@ -82,7 +82,7 @@ defmodule Archdo.Rules.CE.MissingTraceability do
   defp trace_walk_kind(node) do
     cond do
       trace_attr?(node) -> :trace_attr
-      public_def?(node) -> :public_def
+      AST.def_node?(node) -> :public_def
       true -> :other
     end
   end
@@ -105,16 +105,6 @@ defmodule Archdo.Rules.CE.MissingTraceability do
 
   defp trace_attr?({:@, _, [{name, _, _}]}) when name in @trace_attrs, do: true
   defp trace_attr?(_), do: false
-
-  defp public_def?({:def, _, [{name, _, args} | _]})
-       when is_atom(name) and (is_list(args) or args == nil),
-       do: true
-
-  defp public_def?({:def, _, [{:when, _, [{name, _, args} | _]} | _]})
-       when is_atom(name) and (is_list(args) or args == nil),
-       do: true
-
-  defp public_def?(_), do: false
 
   defp name_arity_meta({:def, meta, [{name, _, args} | _]}) when is_atom(name),
     do: {name, length(args || []), meta}

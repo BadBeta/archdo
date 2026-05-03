@@ -40,7 +40,7 @@ defmodule Archdo.Rules.Module.CollectionPerf do
            {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, [_, _]},
            val
          ]} ->
-          zero_literal?(val)
+          AST.zero_literal?(val)
 
         # Enum.count(x, fun) != 0
         {:!=, _,
@@ -48,7 +48,7 @@ defmodule Archdo.Rules.Module.CollectionPerf do
            {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, [_, _]},
            val
          ]} ->
-          zero_literal?(val)
+          AST.zero_literal?(val)
 
         # Enum.count(x, fun) == 0  (inverse — should be !Enum.any?)
         {:==, _,
@@ -56,7 +56,7 @@ defmodule Archdo.Rules.Module.CollectionPerf do
            {{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, [_, _]},
            val
          ]} ->
-          zero_literal?(val)
+          AST.zero_literal?(val)
 
         _ ->
           false
@@ -72,10 +72,6 @@ defmodule Archdo.Rules.Module.CollectionPerf do
       end
     )
   end
-
-  defp zero_literal?(0), do: true
-  defp zero_literal?({:__block__, _, [0]}), do: true
-  defp zero_literal?(_), do: false
 
   # --- Enum.filter |> Enum.map → for comprehension ---
 

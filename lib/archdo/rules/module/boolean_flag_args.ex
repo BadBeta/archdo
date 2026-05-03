@@ -77,16 +77,12 @@ defmodule Archdo.Rules.Module.BooleanFlagArgs do
 
   defp collect_flag_args(args) when is_list(args) do
     args
-    |> Enum.map(&arg_name/1)
+    |> Enum.map(&AST.arg_name/1)
     |> Enum.reject(&is_nil/1)
     |> Enum.filter(&flag_name?/1)
   end
 
   defp collect_flag_args(_), do: []
-
-  defp arg_name({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: Atom.to_string(name)
-  defp arg_name({:\\, _, [{name, _, _} | _]}) when is_atom(name), do: Atom.to_string(name)
-  defp arg_name(_), do: nil
 
   defp flag_name?(name) do
     Enum.any?(@flag_prefixes, &String.starts_with?(name, &1)) or

@@ -25,7 +25,7 @@ defmodule Archdo.Rules.Testing.EmptyDescribe do
       _ -> false
     end)
     |> Enum.flat_map(fn {:describe, meta, [name | rest]} ->
-      body = extract_body(rest)
+      body = AST.function_body(rest)
 
       case has_tests?(body) do
         true -> []
@@ -33,10 +33,6 @@ defmodule Archdo.Rules.Testing.EmptyDescribe do
       end
     end)
   end
-
-  defp extract_body([[do: body]]), do: body
-  defp extract_body([_, [do: body]]), do: body
-  defp extract_body(_), do: nil
 
   defp has_tests?(nil), do: false
 

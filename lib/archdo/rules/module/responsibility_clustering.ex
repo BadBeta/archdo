@@ -60,12 +60,12 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
     {_, fns} =
       Macro.prewalk(ast, [], fn
         {:def, _meta, [{name, _, args} | rest]} = node, acc when is_atom(name) ->
-          body = extract_body(rest)
+          body = AST.function_body(rest)
           arity = length(args || [])
           {node, [%{key: {name, arity}, visibility: :public, body: body} | acc]}
 
         {:defp, _meta, [{name, _, args} | rest]} = node, acc when is_atom(name) ->
-          body = extract_body(rest)
+          body = AST.function_body(rest)
           arity = length(args || [])
           {node, [%{key: {name, arity}, visibility: :private, body: body} | acc]}
 
@@ -78,10 +78,6 @@ defmodule Archdo.Rules.Module.ResponsibilityClustering do
     |> Enum.reverse()
     |> Enum.uniq_by(& &1.key)
   end
-
-  defp extract_body([[do: body]]), do: body
-  defp extract_body([_args, [do: body]]), do: body
-  defp extract_body(_), do: nil
 
   # Build map: function_key -> set of local functions it calls (directly)
   defp build_call_graph(all_fns, all_fn_names) do

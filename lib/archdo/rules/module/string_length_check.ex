@@ -23,19 +23,19 @@ defmodule Archdo.Rules.Module.StringLengthCheck do
       AST.find_all(ast, fn
         # String.length(s) == 0
         {:==, _, [{{:., _, [{:__aliases__, _, [:String]}, :length]}, _, _}, val]} ->
-          zero_literal?(val)
+          AST.zero_literal?(val)
 
         # String.length(s) > 0
         {:>, _, [{{:., _, [{:__aliases__, _, [:String]}, :length]}, _, _}, val]} ->
-          zero_literal?(val)
+          AST.zero_literal?(val)
 
         # String.length(s) != 0
         {:!=, _, [{{:., _, [{:__aliases__, _, [:String]}, :length]}, _, _}, val]} ->
-          zero_literal?(val)
+          AST.zero_literal?(val)
 
         # 0 == String.length(s)
         {:==, _, [val, {{:., _, [{:__aliases__, _, [:String]}, :length]}, _, _}]} ->
-          zero_literal?(val)
+          AST.zero_literal?(val)
 
         _ ->
           false
@@ -52,10 +52,6 @@ defmodule Archdo.Rules.Module.StringLengthCheck do
       end
     )
   end
-
-  defp zero_literal?(0), do: true
-  defp zero_literal?({:__block__, _, [0]}), do: true
-  defp zero_literal?(_), do: false
 
   defp build_diagnostic(file, line, :empty_check) do
     Diagnostic.info("6.52",

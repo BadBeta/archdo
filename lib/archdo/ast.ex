@@ -275,6 +275,59 @@ defmodule Archdo.AST do
   def try_unwrap_atom(_), do: nil
 
   @doc """
+  Is this AST node a `0` literal (raw or literal-encoder-wrapped)?
+  """
+  @spec zero_literal?(Macro.t()) :: boolean()
+  def zero_literal?(0), do: true
+  def zero_literal?({:__block__, _, [0]}), do: true
+  def zero_literal?(_), do: false
+
+  @doc """
+  Is this AST node a `def` definition (with or without a `when` guard)?
+  Public-only — does NOT match `defp`. Use `extract_functions/2` if you
+  need to enumerate the actual functions.
+  """
+  @spec def_node?(Macro.t()) :: boolean()
+  def def_node?({:def, _, [{name, _, args} | _]})
+      when is_atom(name) and (is_list(args) or is_nil(args)),
+      do: true
+
+  def def_node?({:def, _, [{:when, _, [{name, _, args} | _]} | _]})
+      when is_atom(name) and (is_list(args) or is_nil(args)),
+      do: true
+
+  def def_node?(_), do: false
+
+  @doc """
+  Extract the parameter name from a function-arg AST node as a string.
+  Recognizes bare variables (`x`) and default-value forms (`x \\\\ value`).
+  Returns `nil` for unrecognized shapes (e.g., destructured arguments).
+  """
+  @spec arg_name(Macro.t()) :: String.t() | nil
+  def arg_name({name, _, ctx}) when is_atom(name) and is_atom(ctx), do: Atom.to_string(name)
+
+  def arg_name({:\\, _, [{name, _, _} | _]}) when is_atom(name), do: Atom.to_string(name)
+
+  def arg_name(_), do: nil
+
+  @doc """
+  Extract a `def`/`defp` clause's body from the inner argument list.
+  Both `[{do: body}]` (zero-arg) and `[args, {do: body}]` (with-args)
+  shapes are recognized; anything else returns `nil`.
+  """
+  @spec function_body(Macro.t()) :: Macro.t() | nil
+  def function_body([[do: body]]), do: body
+  def function_body([_args, [do: body]]), do: body
+  def function_body(_), do: nil
+
+  @doc """
+  Does the module AST declare `@moduledoc false`? Equivalent shorthand
+  for `internal_module?/1` but with the explicit name some rules use.
+  """
+  @spec moduledoc_false?(Macro.t()) :: boolean()
+  def moduledoc_false?(ast), do: internal_module?(ast)
+
+  @doc """
   Unwrap a literal value possibly wrapped by `Code.string_to_quoted/2`'s
   `literal_encoder` option. Returns the inner value for any literal type;
   returns the input unchanged for non-literals (similar to

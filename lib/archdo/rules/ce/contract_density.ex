@@ -173,7 +173,7 @@ defmodule Archdo.Rules.CE.ContractDensity do
   defp node_kind(node) do
     cond do
       doc_attr?(node) -> :doc_attr
-      def_node?(node) -> :def_node
+      AST.def_node?(node) -> :def_node
       true -> :other
     end
   end
@@ -193,16 +193,6 @@ defmodule Archdo.Rules.CE.ContractDensity do
   defp doc_attr?({:@, _, [{:doc, _, [_]}]}), do: true
   defp doc_attr?({:@, _, [{:doc, _, _}]}), do: true
   defp doc_attr?(_), do: false
-
-  defp def_node?({:def, _, [{name, _, args} | _]})
-       when is_atom(name) and (is_list(args) or args == nil),
-       do: true
-
-  defp def_node?({:def, _, [{:when, _, [{name, _, args} | _]} | _]})
-       when is_atom(name) and (is_list(args) or args == nil),
-       do: true
-
-  defp def_node?(_), do: false
 
   defp name_and_arity({:def, _, [{name, _, args} | _]}) when is_atom(name),
     do: {name, length(args || [])}

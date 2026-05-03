@@ -29,10 +29,10 @@ defmodule Archdo.Rules.Module.EnumCountEmptyCheck do
     ast
     |> AST.find_all(fn
       {op, _, [{:length, _, [_]}, zero]} when op in [:==, :!=, :>] ->
-        zero_value?(zero)
+        AST.zero_literal?(zero)
 
       {op, _, [zero, {:length, _, [_]}]} when op in [:==, :!=, :<] ->
-        zero_value?(zero)
+        AST.zero_literal?(zero)
 
       _ ->
         false
@@ -47,10 +47,10 @@ defmodule Archdo.Rules.Module.EnumCountEmptyCheck do
     ast
     |> AST.find_all(fn
       {op, _, [enum_count_call, zero]} when op in [:==, :!=, :>] ->
-        enum_count?(enum_count_call) and zero_value?(zero)
+        enum_count?(enum_count_call) and AST.zero_literal?(zero)
 
       {op, _, [zero, enum_count_call]} when op in [:==, :!=, :<] ->
-        enum_count?(enum_count_call) and zero_value?(zero)
+        enum_count?(enum_count_call) and AST.zero_literal?(zero)
 
       _ ->
         false
@@ -62,10 +62,6 @@ defmodule Archdo.Rules.Module.EnumCountEmptyCheck do
 
   defp enum_count?({{:., _, [{:__aliases__, _, [:Enum]}, :count]}, _, [_]}), do: true
   defp enum_count?(_), do: false
-
-  defp zero_value?(0), do: true
-  defp zero_value?({:__block__, _, [0]}), do: true
-  defp zero_value?(_), do: false
 
   defp build_diagnostic(file, line, kind, op) do
     func =

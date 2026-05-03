@@ -374,10 +374,8 @@ defmodule Archdo.Rules.Testing.CoverageGap do
       String.ends_with?(file, "_web.ex") or
       String.contains?(file, "/mix/") or
       String.contains?(file, "/migrations/") or
-      only_moduledoc_false?(ast)
+      AST.internal_module?(ast)
   end
-
-  defp only_moduledoc_false?(ast), do: AST.internal_module?(ast)
 
   # --- Matrix formatting ---
 

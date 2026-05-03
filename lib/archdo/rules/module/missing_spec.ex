@@ -25,7 +25,7 @@ defmodule Archdo.Rules.Module.MissingSpec do
         {:defmodule, _meta, [{:__aliases__, _, aliases}, [do: body]]} = node, acc ->
           module_name = Module.concat(aliases)
 
-          if has_moduledoc_false?(body) do
+          if AST.internal_module?(body) do
             {node, acc}
           else
             diagnostics = check_public_functions(file, body, module_name)
@@ -147,8 +147,6 @@ defmodule Archdo.Rules.Module.MissingSpec do
       _ -> false
     end)
   end
-
-  defp has_moduledoc_false?(body), do: AST.internal_module?(body)
 
   defp spec_args(0), do: ""
   defp spec_args(n), do: Enum.map_join(1..n, ", ", fn _ -> "term()" end)
