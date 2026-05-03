@@ -14,26 +14,11 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundary do
   @impl true
   def cleanup_pass, do: 3
 
-  @impl true
-  def analyze(file, ast, _opts) do
-    case in_scope?(file) do
-      true -> find_atom_creation(file, ast)
-      false -> []
-    end
-  end
-
   # §§ elixir-planning: §6.5 — boundary classification by file convention.
   # Rule fires only at the surfaces where untrusted input enters: Phoenix
   # controller / channel / live, Oban worker, custom plug. Domain context
   # modules (lib/my_app/accounts.ex) are NOT in scope — the existing 5.24
   # rule fires there at info severity.
-  defp in_scope?(file) do
-    not AST.test_file?(file) and
-      not String.contains?(file, "/mix/tasks/") and
-      not String.contains?(file, "/tasks/") and
-      boundary_file?(file)
-  end
-
   @boundary_markers [
     "_controller.ex",
     "/controllers/",
@@ -47,8 +32,19 @@ defmodule Archdo.Rules.Boundary.AtomAtBoundary do
     "_worker.ex"
   ]
 
-  defp boundary_file?(file) do
-    Enum.any?(@boundary_markers, &String.contains?(file, &1))
+  @impl true
+  def analyze(file, ast, _opts) do
+    case in_scope?(file) do
+      true -> find_atom_creation(file, ast)
+      false -> []
+    end
+  end
+
+  defp in_scope?(file) do
+    not AST.test_file?(file) and
+      not String.contains?(file, "/mix/tasks/") and
+      not String.contains?(file, "/tasks/") and
+      AST.path_contains_any?(file, @boundary_markers)
   end
 
   defp find_atom_creation(file, ast) do

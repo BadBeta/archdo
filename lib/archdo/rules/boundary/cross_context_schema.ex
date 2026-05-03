@@ -13,7 +13,7 @@ defmodule Archdo.Rules.Boundary.CrossContextSchema do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case AST.test_file?(file) or mix_file?(file) do
+    case AST.test_file?(file) or AST.mix_exs?(file) do
       true -> []
       false -> find_cross_context_schema_use(file, ast)
     end
@@ -83,10 +83,6 @@ defmodule Archdo.Rules.Boundary.CrossContextSchema do
       "Auth"
     ]
   end
-
-  # Extract the context name from a file path
-  # lib/my_app/accounts/user.ex → "Accounts"
-  defp mix_file?(file), do: String.ends_with?(file, "mix.exs")
 
   defp build_diagnostic(file, line, own_context) do
     Diagnostic.info("1.29",

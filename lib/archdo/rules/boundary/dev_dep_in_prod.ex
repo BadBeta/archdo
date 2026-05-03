@@ -2,7 +2,7 @@ defmodule Archdo.Rules.Boundary.DevDepInProd do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  alias Archdo.{Diagnostic, Fix}
+  alias Archdo.{AST, Diagnostic, Fix}
 
   @impl true
   def id, do: "4.29"
@@ -42,14 +42,10 @@ defmodule Archdo.Rules.Boundary.DevDepInProd do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case mix_exs?(file) do
+    case AST.mix_exs?(file) do
       true -> check_deps(file, ast)
       false -> []
     end
-  end
-
-  defp mix_exs?(file) do
-    String.ends_with?(file, "mix.exs")
   end
 
   defp check_deps(file, ast) do

@@ -58,11 +58,7 @@ defmodule Archdo.Rules.Boundary.RawMapInDomain do
   end
 
   defp in_scope?(file) do
-    not AST.test_file?(file) and not web_file?(file)
-  end
-
-  defp web_file?(file) do
-    Enum.any?(@web_markers, &String.contains?(file, &1))
+    not AST.test_file?(file) and not AST.path_contains_any?(file, @web_markers)
   end
 
   defp find_raw_map_threading(file, ast) do

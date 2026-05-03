@@ -201,14 +201,14 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
 
   # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
   # the regex-match shape ([_, name] vs other) and the
-  # safe_to_existing_atom result tag.
+  # try_existing_atom result tag.
   defp absorb_match([_, name], acc) do
     # Only consider references to atoms that already exist — i.e. names
     # the BEAM has already seen as function names elsewhere. Unknown
     # names can't refer to a private function we're checking, so dropping
     # them is correct AND avoids atom-table exhaustion on adversarial
     # source (skill: §7.7).
-    absorb_atom(safe_to_existing_atom(name), acc)
+    absorb_atom(AST.try_existing_atom(name), acc)
   end
 
   defp absorb_match(_other, acc), do: acc
@@ -217,12 +217,6 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
 
   defp absorb_atom({:ok, atom}, acc) do
     Enum.reduce(0..6, acc, fn arity, set -> MapSet.put(set, {atom, arity}) end)
-  end
-
-  defp safe_to_existing_atom(name) do
-    {:ok, String.to_existing_atom(name)}
-  rescue
-    ArgumentError -> :error
   end
 
   defp collect_calls_in_body(body, acc) do

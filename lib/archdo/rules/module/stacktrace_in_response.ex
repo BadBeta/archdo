@@ -14,22 +14,6 @@ defmodule Archdo.Rules.Module.StacktraceInResponse do
   @impl true
   def cleanup_pass, do: 5
 
-  @impl true
-  def analyze(file, ast, _opts) do
-    case AST.test_file?(file) do
-      true -> []
-      false -> maybe_analyze(file, ast)
-    end
-  end
-
-  # §§ elixir-implementing: §5.2 — multi-clause head, no if/else.
-  defp maybe_analyze(file, ast) do
-    case boundary_file?(file) do
-      true -> find_stacktrace_leaks(ast, file)
-      false -> []
-    end
-  end
-
   # Boundary surface: anywhere a function's return value can become an outbound
   # response. Phoenix controller/channel/live, JSON view modules, Absinthe
   # resolvers. The rule fires only inside these — domain modules can carry the
@@ -49,8 +33,20 @@ defmodule Archdo.Rules.Module.StacktraceInResponse do
     "/resolvers/"
   ]
 
-  defp boundary_file?(file) do
-    Enum.any?(@boundary_markers, &String.contains?(file, &1))
+  @impl true
+  def analyze(file, ast, _opts) do
+    case AST.test_file?(file) do
+      true -> []
+      false -> maybe_analyze(file, ast)
+    end
+  end
+
+  # §§ elixir-implementing: §5.2 — multi-clause head, no if/else.
+  defp maybe_analyze(file, ast) do
+    case AST.path_contains_any?(file, @boundary_markers) do
+      true -> find_stacktrace_leaks(ast, file)
+      false -> []
+    end
   end
 
   defp find_stacktrace_leaks(ast, file) do

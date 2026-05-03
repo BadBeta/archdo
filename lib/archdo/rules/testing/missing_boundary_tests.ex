@@ -70,7 +70,14 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
     covered = MapSet.intersection(MapSet.new(public_fns), tested_fns)
     coverage = MapSet.size(covered) / length(public_fns)
 
-    diagnostic_if_below_threshold(coverage < @coverage_threshold, coverage, covered, public_fns, file, ast)
+    diagnostic_if_below_threshold(
+      coverage < @coverage_threshold,
+      coverage,
+      covered,
+      public_fns,
+      file,
+      ast
+    )
   end
 
   defp diagnostic_if_below_threshold(false, _coverage, _covered, _public_fns, _file, _ast), do: []
@@ -107,8 +114,7 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
           detail:
             "If some public functions are never called from outside the context, " <>
               "make them private (defp). A smaller public API is easier to test thoroughly.",
-          applies_when:
-            "Some public functions are internal helpers exposed accidentally."
+          applies_when: "Some public functions are internal helpers exposed accidentally."
         )
       ],
       references: ["ARCHITECTURE_RULES.md#7.28"],
@@ -166,16 +172,10 @@ defmodule Archdo.Rules.Testing.MissingBoundaryTests do
     # a real function name in the atom table, it can't be testing one.
     # (Also avoids accumulating atoms for malformed test descriptions.)
     with [_, name] <- Regex.run(~r/^(\w+)(?:\/\d+)?$/, desc),
-         {:ok, atom} <- safe_existing_atom(name) do
+         {:ok, atom} <- AST.try_existing_atom(name) do
       atom
     else
       _ -> nil
     end
-  end
-
-  defp safe_existing_atom(name) do
-    {:ok, String.to_existing_atom(name)}
-  rescue
-    ArgumentError -> :error
   end
 end

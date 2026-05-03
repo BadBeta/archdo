@@ -14,14 +14,6 @@ defmodule Archdo.Rules.Boundary.InternalStructAsEncoder do
   @impl true
   def cleanup_pass, do: 10
 
-  @impl true
-  def analyze(file, ast, _opts) do
-    case in_scope?(file) do
-      true -> find_overbroad_encoder(file, ast)
-      false -> []
-    end
-  end
-
   # §§ elixir-planning: §6.5 — boundary scope. The rule fires only on
   # internal context modules (`lib/my_app/orders/order.ex`), not on:
   #   - top-level context modules (`lib/my_app/orders.ex`) — these CAN be
@@ -30,20 +22,6 @@ defmodule Archdo.Rules.Boundary.InternalStructAsEncoder do
   #     for the explicit purpose of being on-the-wire
   #   - Phoenix view / json / serializer modules
   #   - Test files
-  defp in_scope?(file) do
-    not AST.test_file?(file) and
-      internal_context_module?(file) and
-      not explicit_dto_module?(file) and
-      not view_module?(file)
-  end
-
-  defp internal_context_module?(file) do
-    case Path.split(file) do
-      ["lib", _app, _ctx, _ | _rest] -> true
-      _ -> false
-    end
-  end
-
   @dto_suffixes [
     "_dto.ex",
     "_request.ex",
@@ -52,10 +30,6 @@ defmodule Archdo.Rules.Boundary.InternalStructAsEncoder do
     "_command.ex",
     "_payload.ex"
   ]
-
-  defp explicit_dto_module?(file) do
-    Enum.any?(@dto_suffixes, &String.ends_with?(file, &1))
-  end
 
   @view_markers [
     "_json.ex",
@@ -66,8 +40,30 @@ defmodule Archdo.Rules.Boundary.InternalStructAsEncoder do
     "_serializer.ex"
   ]
 
-  defp view_module?(file) do
-    Enum.any?(@view_markers, &String.contains?(file, &1))
+  @impl true
+  def analyze(file, ast, _opts) do
+    case in_scope?(file) do
+      true -> find_overbroad_encoder(file, ast)
+      false -> []
+    end
+  end
+
+  defp in_scope?(file) do
+    not AST.test_file?(file) and
+      internal_context_module?(file) and
+      not explicit_dto_module?(file) and
+      not AST.path_contains_any?(file, @view_markers)
+  end
+
+  defp internal_context_module?(file) do
+    case Path.split(file) do
+      ["lib", _app, _ctx, _ | _rest] -> true
+      _ -> false
+    end
+  end
+
+  defp explicit_dto_module?(file) do
+    Enum.any?(@dto_suffixes, &String.ends_with?(file, &1))
   end
 
   defp find_overbroad_encoder(file, ast) do

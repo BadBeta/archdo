@@ -14,13 +14,11 @@ defmodule Archdo.Rules.Boundary.UmbrellaDepConsistency do
   def analyze(file, ast, _opts) do
     # This rule only fires on umbrella root mix.exs or child mix.exs files
     # For simplicity, check each mix.exs for in_umbrella deps missing `only:`
-    case mix_exs?(file) do
+    case AST.mix_exs?(file) do
       true -> check_umbrella_deps(file, ast)
       false -> []
     end
   end
-
-  defp mix_exs?(file), do: String.ends_with?(file, "mix.exs")
 
   defp check_umbrella_deps(file, ast) do
     {_, diagnostics} =

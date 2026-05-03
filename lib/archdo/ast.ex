@@ -38,6 +38,22 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  Check if a file path is a `mix.exs` file (project root or umbrella child).
+  """
+  @spec mix_exs?(String.t()) :: boolean()
+  def mix_exs?(file), do: String.ends_with?(file, "mix.exs")
+
+  @doc """
+  Check if a file path contains any of the given marker substrings. Used by
+  rules that classify a file as "boundary", "view", "web", "controller-or-
+  channel-or-…", etc. — each carrying its own `@<role>_markers` list.
+  """
+  @spec path_contains_any?(String.t(), [String.t()]) :: boolean()
+  def path_contains_any?(file, markers) when is_binary(file) and is_list(markers) do
+    Enum.any?(markers, &String.contains?(file, &1))
+  end
+
+  @doc """
   Extract the top-level module name from a file's AST as a String.
   Returns "Unknown" if no defmodule is found.
   """
@@ -409,6 +425,19 @@ defmodule Archdo.AST do
     String.to_existing_atom("Elixir." <> name)
   rescue
     ArgumentError -> nil
+  end
+
+  @doc """
+  Wrap `String.to_existing_atom/1` into `{:ok, atom} | :error`. Use for raw
+  names (function names, etc.) where you don't want to create new atoms on
+  untrusted input — and where `nil` is ambiguous because `nil` itself is a
+  valid atom.
+  """
+  @spec try_existing_atom(String.t()) :: {:ok, atom()} | :error
+  def try_existing_atom(name) when is_binary(name) do
+    {:ok, String.to_existing_atom(name)}
+  rescue
+    ArgumentError -> :error
   end
 
   @doc """
