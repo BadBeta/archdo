@@ -1,9 +1,13 @@
 defmodule Archdo.Rules.CE.BlackboxQuadrant do
   @moduledoc false
   @behaviour Archdo.Rule
+  @behaviour Archdo.Quadrant
 
   # §§ elixir-planning: §6 — CE-54 quadrant rule built on the M25
-  # Blackbox engine + M26 value axis.
+  # Blackbox engine + M26 value axis. Adopts the Archdo.Quadrant
+  # primitive: axes/3 computes (possibility × value) cells per public
+  # function, policy/0 declares which cells fire, finding_for/4
+  # builds the diagnostic.
   #
   # Two axes:
   #   possibility — can this function BE a building block?
@@ -24,9 +28,14 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
   # ISN'T (impure, side-effects, no spec). The diagnosis includes the
   # specific component(s) that failed so the fix is concrete.
   #
+  # axes/3 only emits a cell for a function when it has structural
+  # failures. The policy fires unconditionally on {:low, :high}; the
+  # "must have failures to be actionable" filter happens upstream so
+  # finding_for/4 always has concrete components to name.
+  #
   # Pack: :ce_composability (opt-in via `--packs core,ce_composability`).
 
-  alias Archdo.{AST, Blackbox, Diagnostic, Fix, Phoenix}
+  alias Archdo.{AST, Blackbox, Diagnostic, Fix, Phoenix, Quadrant}
 
   @impl Archdo.Rule
   def id, do: "CE-54"
@@ -42,11 +51,12 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
   def analyze(file, ast, opts) do
     case AST.test_file?(file) do
       true -> []
-      false -> find_actionable(file, ast, opts)
+      false -> Quadrant.evaluate(__MODULE__, file, ast, opts)
     end
   end
 
-  defp find_actionable(file, ast, opts) do
+  @impl Archdo.Quadrant
+  def axes(file, ast, opts) do
     layer = phoenix_layer(file, ast, opts)
     scores = Blackbox.score_module(ast)
 
@@ -55,18 +65,48 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
     |> Enum.zip(scores)
     |> Enum.flat_map(fn {{name, arity, meta, _args, body}, {_n, _a, _possibility, components}} ->
       value = Blackbox.value(body, name, layer)
-      value_class = Blackbox.value_class(value)
       structural = structural_possibility(components)
       failures = structural_failures(components)
 
-      case {possibility_class(structural), value_class, failures} do
-        {:low, :high, [_ | _]} ->
-          [build_diagnostic(file, name, arity, meta, structural, value, components)]
-
-        _ ->
+      case failures do
+        [] ->
           []
+
+        [_ | _] ->
+          cell = {possibility_class(structural), Blackbox.value_class(value)}
+
+          evidence = %{
+            name: name,
+            arity: arity,
+            meta: meta,
+            possibility: structural,
+            value: value,
+            components: components
+          }
+
+          [{cell, evidence}]
       end
     end)
+  end
+
+  @impl Archdo.Quadrant
+  def policy do
+    %{
+      {:low, :high} => {:fire, :warning, "CE-54", "Function wants to be a building block but isn't"}
+    }
+  end
+
+  @impl Archdo.Quadrant
+  def finding_for(_cell, _action, evidence, file) do
+    build_diagnostic(
+      file,
+      evidence.name,
+      evidence.arity,
+      evidence.meta,
+      evidence.possibility,
+      evidence.value,
+      evidence.components
+    )
   end
 
   # Filter out output_completeness from the actionable possibility —

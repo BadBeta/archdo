@@ -63,6 +63,16 @@ defmodule Archdo.Rules.Module.MissingTelemetry do
       has_telemetry_call?(ast) ->
         []
 
+      no_telemetry_marker?(ast) ->
+        # Authors opt out via `@archdo_no_telemetry "<reason>"`. The
+        # exemption covers two shapes the rule's heuristic doesn't:
+        #   1. Pure-data lookup modules (constants tables, id→pass
+        #      maps, label resolvers) — telemetry on a constant-time
+        #      lookup costs more than the lookup itself.
+        #   2. Library / CLI top-level facades whose observability
+        #      story is delegated to the caller (mix task, MCP, IEx).
+        []
+
       true ->
         module_name = AST.extract_module_name(ast)
 
@@ -101,6 +111,16 @@ defmodule Archdo.Rules.Module.MissingTelemetry do
           )
         ]
     end
+  end
+
+  # Detect the @archdo_no_telemetry marker — module-level attribute
+  # whose value is a binary string explaining why the rule shouldn't
+  # apply to this module.
+  defp no_telemetry_marker?(ast) do
+    AST.contains?(ast, fn
+      {:@, _, [{:archdo_no_telemetry, _, [_]}]} -> true
+      _ -> false
+    end)
   end
 
   defp has_telemetry_call?(ast) do

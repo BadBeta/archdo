@@ -69,6 +69,16 @@ defmodule Archdo do
     Severity
   }
 
+  # §§ elixir-planning: §6 — observability deferred to the consumer.
+  # Archdo is a library / CLI tool. Its callers (mix archdo, the MCP
+  # server, interactive IEx) do their own logging / progress reporting;
+  # adding :telemetry.span here would require an extra dep for
+  # spans nobody attaches to. Rule 4.19's @archdo_no_telemetry
+  # exemption applies.
+  Module.register_attribute(__MODULE__, :archdo_no_telemetry, persist: true)
+
+  @archdo_no_telemetry "library/CLI — observability is the caller's responsibility (mix task, MCP, IEx)"
+
   @doc """
   Analyze all .ex files under the given paths and return diagnostics.
   Per-file rules only (Phase 1) unless `:boundaries` is set.

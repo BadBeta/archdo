@@ -23,6 +23,15 @@ defmodule Archdo.CleanupPass do
        metrics, blackbox quadrant, etc.).
   """
 
+  # §§ elixir-planning: §6 — pure-data lookup module. All public
+  # functions are constant-time map / list lookups against compile-time
+  # tables (rule_id → pass, pass → rules, pass → label). Wrapping these
+  # in :telemetry.span would cost more than the lookup; rule 4.19's
+  # @archdo_no_telemetry exemption applies.
+  Module.register_attribute(__MODULE__, :archdo_no_telemetry, persist: true)
+
+  @archdo_no_telemetry "compile-time rule_id → pass / pass → rules lookup tables"
+
   @type pass :: 1..14
 
   # §§ elixir-implementing: §1 #23 SSOT — the mapping is the single

@@ -94,6 +94,38 @@ defmodule Archdo.Rules.Module.MissingTelemetryTest do
     assert diags == []
   end
 
+  test "skips facades marked @archdo_no_telemetry" do
+    # Two shapes the rule's heuristic can't detect cleanly:
+    #   - pure-data lookup modules (telemetry overhead > lookup work)
+    #   - library/CLI facades (consumer attaches handlers, not us)
+    # Authors opt out with `@archdo_no_telemetry "<reason>"`.
+    facade =
+      parse(
+        """
+          defmodule MyApp.Constants do
+            @archdo_no_telemetry "static lookup table — telemetry on lookup is overhead"
+            def pass_for(rule_id), do: rule_id
+            def all_passes, do: [1, 2, 3]
+            def label_for(pass), do: to_string(pass)
+          end
+        """,
+        "lib/my_app/constants.ex"
+      )
+
+    sub =
+      parse(
+        """
+          defmodule MyApp.Constants.Internal do
+            defstruct [:id]
+          end
+        """,
+        "lib/my_app/constants/internal.ex"
+      )
+
+    diags = MissingTelemetry.analyze_project([facade, sub])
+    assert diags == []
+  end
+
   test "skips non-facade modules (no matching directory)" do
     standalone =
       parse(

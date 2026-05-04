@@ -36,11 +36,16 @@ defmodule Archdo.Compiled.Collector do
     GenServer.stop(__MODULE__)
   end
 
+  # Compilation traces from a large project can be hundreds of
+  # thousands of entries. The default 5s GenServer.call timeout is
+  # too tight for `:get_data` — make it explicit and generous.
+  @get_data_timeout :timer.seconds(30)
+
   @doc """
   Get all collected data. Call after compilation completes.
   """
   def get_data do
-    GenServer.call(__MODULE__, :get_data)
+    GenServer.call(__MODULE__, :get_data, @get_data_timeout)
   end
 
   # --- Callbacks ---
