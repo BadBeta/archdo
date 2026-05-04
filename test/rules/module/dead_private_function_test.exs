@@ -198,5 +198,27 @@ defmodule Archdo.Rules.Module.DeadPrivateFunctionTest do
       assert [diag] = diagnostics
       assert diag.message =~ "helper/3"
     end
+
+    test "does not flag a private function called via paren-less pipe" do
+      # `x |> foo` (no parens) parses as `{:foo, _, nil}` (variable
+      # form) rather than `{:foo, _, []}` (call form). The walker
+      # must recognize the pipe-RHS-as-call pattern.
+      code = ~S"""
+      defmodule MyApp.TFA do
+        def totp(secret) do
+          secret
+          |> generate_hmac(30)
+          |> hmac_dynamic_truncation
+          |> generate_hotp
+        end
+
+        defp generate_hmac(_secret, _period), do: :ok
+        defp hmac_dynamic_truncation(_hmac), do: 0
+        defp generate_hotp(_truncated), do: 123
+      end
+      """
+
+      assert_clean(DeadPrivateFunction, code)
+    end
   end
 end

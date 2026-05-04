@@ -235,6 +235,17 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
         when is_atom(name) and is_integer(arity) ->
           {node, MapSet.put(call_acc, {name, arity})}
 
+        # Pipe RHS without parens: `x |> foo` parses RHS as a variable
+        # `{:foo, _, nil}` rather than a zero-arg call `{:foo, _, []}`.
+        # The pipe operator turns it into a call with the LHS as first
+        # arg, so `foo/1` is actually called.
+        {:|>, _, [_lhs, {name, _, ctx}]} = node, call_acc
+        when is_atom(name) and is_atom(ctx) ->
+          case keyword_or_special?(name) do
+            true -> {node, call_acc}
+            false -> {node, MapSet.put(call_acc, {name, 1})}
+          end
+
         # Bare function call: foo(a, b) => {:foo, meta, [a, b]}
         {name, _meta, args} = node, call_acc when is_atom(name) and is_list(args) ->
           case keyword_or_special?(name) do
