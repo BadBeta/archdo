@@ -72,7 +72,7 @@ defmodule Archdo.Rules.Boundary.UmbrellaDepConsistency do
   # `only:` — this is already caught by rule 4.29. So this rule focuses on
   # in_umbrella deps that override env inconsistently.
   defp in_umbrella_without_override?(opts) do
-    has_in_umbrella?(opts) and has_runtime_false?(opts) and not has_only_option?(opts)
+    has_in_umbrella?(opts) and has_runtime_false?(opts) and not AST.dep_only_option?(opts)
   end
 
   defp has_in_umbrella?(opts) do
@@ -87,14 +87,6 @@ defmodule Archdo.Rules.Boundary.UmbrellaDepConsistency do
     Enum.any?(opts, fn
       {{:__block__, _, [:runtime]}, {:__block__, _, [false]}} -> true
       {:runtime, false} -> true
-      _ -> false
-    end)
-  end
-
-  defp has_only_option?(opts) do
-    Enum.any?(opts, fn
-      {{:__block__, _, [:only]}, _} -> true
-      {:only, _} -> true
       _ -> false
     end)
   end

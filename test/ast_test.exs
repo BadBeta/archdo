@@ -675,6 +675,24 @@ defmodule Archdo.ASTTest do
     end
   end
 
+  describe "dep_only_option?/1" do
+    test "true for the bare {:only, _} keyword form" do
+      assert AST.dep_only_option?([{:only, [:dev]}, {:runtime, false}])
+    end
+
+    test "true for the literal-encoded {{:__block__, _, [:only]}, _} form" do
+      assert AST.dep_only_option?([{{:__block__, [], [:only]}, [:test]}])
+    end
+
+    test "false when the keyword list has no :only entry" do
+      refute AST.dep_only_option?([{:runtime, false}, {:targets, [:host]}])
+    end
+
+    test "false for an empty keyword list" do
+      refute AST.dep_only_option?([])
+    end
+  end
+
   describe "contains_raise?/1" do
     test "true when AST contains a raise" do
       ast = quote do: raise("boom")

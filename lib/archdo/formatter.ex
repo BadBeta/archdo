@@ -461,7 +461,7 @@ defmodule Archdo.Formatter do
       title: d.title,
       message: d.message,
       why: d.why,
-      alternatives: Enum.map(d.alternatives, &fix_to_map/1),
+      alternatives: Enum.map(d.alternatives, &Fix.to_map/1),
       references: d.references,
       context: d.context,
       tags: d.tags,
@@ -469,8 +469,6 @@ defmodule Archdo.Formatter do
       line: d.line
     }
   end
-
-  defp fix_to_map(%Fix{} = fix), do: Fix.to_map(fix)
 
   defp render_markdown(%Diagnostic{} = d) do
     [

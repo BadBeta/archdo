@@ -107,15 +107,7 @@ defmodule Archdo.Rules.Boundary.DevDepInProd do
   end
 
   defp dev_only_without_only?(dep_name, opts) do
-    dep_name in @dev_only_deps and not has_only_option?(opts)
-  end
-
-  defp has_only_option?(opts) do
-    Enum.any?(opts, fn
-      {{:__block__, _, [:only]}, _} -> true
-      {:only, _} -> true
-      _ -> false
-    end)
+    dep_name in @dev_only_deps and not AST.dep_only_option?(opts)
   end
 
   defp meta_line(meta) do

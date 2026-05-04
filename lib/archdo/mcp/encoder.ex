@@ -28,15 +28,13 @@ defmodule Archdo.Mcp.Encoder do
       title: d.title,
       message: d.message,
       why: d.why,
-      alternatives: Enum.map(d.alternatives, &fix_to_map/1),
+      alternatives: Enum.map(d.alternatives, &Fix.to_map/1),
       references: d.references,
       context: stringify_context(d.context),
       file: d.file,
       line: d.line
     }
   end
-
-  defp fix_to_map(%Fix{} = fix), do: Fix.to_map(fix)
 
   defp summary(diagnostics) do
     {errors, warnings, infos, nitpicks} =

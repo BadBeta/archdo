@@ -338,6 +338,21 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  True if a Mix dependency-options keyword list contains an `:only` key.
+  Matches both the bare `{:only, _}` form and the literal-encoded
+  `{{:__block__, _, [:only]}, _}` form. Used by mix.exs-walking rules
+  (dev_dep_in_prod, umbrella_dep_consistency).
+  """
+  @spec dep_only_option?(keyword()) :: boolean()
+  def dep_only_option?(opts) do
+    Enum.any?(opts, fn
+      {{:__block__, _, [:only]}, _} -> true
+      {:only, _} -> true
+      _ -> false
+    end)
+  end
+
+  @doc """
   True if the AST contains a `Logger.error/warning/info/debug/notice` call.
   Used by rule CE-error-path-without-log and the plugin coverage matrix.
   """
