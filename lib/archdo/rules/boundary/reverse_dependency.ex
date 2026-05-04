@@ -20,20 +20,13 @@ defmodule Archdo.Rules.Boundary.ReverseDependency do
 
   @impl true
   def analyze(file, ast, opts) do
-    classification = phoenix_classification(file, ast, opts)
+    classification = Phoenix.resolve_classification(opts, file, ast)
 
     cond do
       classification.layer in @bridge_layers -> []
       web_layer?(classification.layer) -> []
       domain_file?(file) -> find_web_references(file, ast)
       true -> []
-    end
-  end
-
-  defp phoenix_classification(file, ast, opts) do
-    case Keyword.get(opts, :phoenix) do
-      %{layer: _} = c -> c
-      _ -> Phoenix.classify_file(file, ast)
     end
   end
 

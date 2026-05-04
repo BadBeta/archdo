@@ -284,4 +284,31 @@ defmodule Archdo.PhoenixTest do
       assert Phoenix.context_for_file("lib/myapp.ex") == nil
     end
   end
+
+  describe "resolve_classification/3" do
+    defp parse(code) do
+      {:ok, ast} = Code.string_to_quoted(code, columns: true, token_metadata: true)
+      ast
+    end
+
+    test "returns the pre-computed classification when opts carry :phoenix" do
+      preset = %{layer: :context, role: nil}
+      ast = parse("defmodule MyApp.Foo do\nend")
+
+      assert ^preset =
+               Phoenix.resolve_classification([phoenix: preset], "lib/foo.ex", ast)
+    end
+
+    test "falls back to classify_file when no :phoenix opt is given" do
+      ast = parse("defmodule MyApp.Accounts.User do\nend")
+      result = Phoenix.resolve_classification([], "lib/myapp/accounts/user.ex", ast)
+      assert %{layer: _} = result
+    end
+
+    test "ignores non-map :phoenix values and falls back to classify_file" do
+      ast = parse("defmodule MyApp.Accounts.User do\nend")
+      result = Phoenix.resolve_classification([phoenix: nil], "lib/myapp/accounts/user.ex", ast)
+      assert %{layer: _} = result
+    end
+  end
 end

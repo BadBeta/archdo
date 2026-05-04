@@ -17,15 +17,8 @@ defmodule Archdo.Rules.Module.LibConfigViaArgs do
 
   @impl true
   def analyze(file, ast, opts) do
-    classification = resolve_classification(opts, file, ast)
+    classification = Phoenix.resolve_classification(opts, file, ast)
     run_analysis(exempt?(file, ast, classification), file, ast)
-  end
-
-  defp resolve_classification(opts, file, ast) do
-    case Keyword.get(opts, :phoenix) do
-      %{layer: _} = c -> c
-      _ -> Phoenix.classify_file(file, ast)
-    end
   end
 
   defp exempt?(file, ast, classification) do

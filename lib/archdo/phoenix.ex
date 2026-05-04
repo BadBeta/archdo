@@ -69,6 +69,22 @@ defmodule Archdo.Phoenix do
   end
 
   @doc """
+  Resolve a Phoenix classification from rule opts, falling back to
+  `classify_file/2` when the caller didn't pre-compute it. Used by
+  rules that accept either a project-wide classification map (passed
+  in opts under `:phoenix` to avoid recomputing per-file) or compute
+  their own on demand.
+  """
+  @spec resolve_classification(keyword(), String.t(), Macro.t()) ::
+          classification() | %{layer: layer()}
+  def resolve_classification(opts, file, ast) do
+    case Keyword.get(opts, :phoenix) do
+      %{layer: _} = c -> c
+      _ -> classify_file(file, ast)
+    end
+  end
+
+  @doc """
   Extract the context segment from a `lib/<app>/<context>/...` file path.
   Returns the camelized context name (`"Accounts"`, `"OrderManagement"`)
   or `nil` if the path doesn't match the standard nested layout.
