@@ -2085,9 +2085,9 @@ Module nesting should not exceed the configured maximum depth.
 
 ### 10.3 Building-Block Composability
 
-Beyond the two structural rules above, Archdo measures composability per public function across six axes — input closure, determinism, output completeness, totality, side-effect freedom, and errors-as-values. Each function gets a blackbox score; modules and contexts roll up to a verdict (`:building_block`, `:leak`, or `:no_public_api`) so an entire context is a building block only when every module under its namespace is.
+Beyond the two structural rules above, Archdo measures composability per public function across six axes — input closure, determinism, output completeness, totality, side-effect freedom, and errors-as-values. Each function gets a building-block score; modules and contexts roll up to a verdict (`:building_block`, `:leak`, or `:no_public_api`) so an entire context is a building block only when every module under its namespace is.
 
-- **Why:** A "perfect black box" is the ideal building block — finite specified inputs, known input-to-output relation, no hidden state or side channels. Functions of this kind compose cleanly because reasoning locally is sufficient. The score is form, not substance: it tells you what you've earned the right to do (memoize, parallelize, distribute, property-test) without telling you whether the function is correct. (Composability, Substitutability)
+- **Why:** A function that meets all six axes — finite specified inputs, known input-to-output relation, no hidden state or side channels — is a **building block**: code we own and understand from the inside that nonetheless composes as cleanly as if it were opaque. (Externally-supplied code with the same properties would be a true *black box* — code we cannot see inside. In our own code we should never have black boxes; we have building blocks instead.) The score is form, not substance: it tells you what you've earned the right to do (memoize, parallelize, distribute, property-test) without telling you whether the function is correct. (Composability, Substitutability)
 - **Check:** Per-public-function score across the six axes; per-module mean; per-context aggregation. Surface via `mix archdo --building-blocks` and `mix archdo --metrics`. Drives CE-54, CE-55, CE-56, and CE-57 directly.
 - **Tolerate:** Boundary modules and adapters legitimately score low — that is expected at I/O seams. The diagnostic value is in stable-classified modules whose score is below threshold (CE-54), not in low scores per se.
 - **Severity:** Verdict only — see CE-54 / CE-55 / CE-56 / CE-57 for the rules that act on it.
@@ -2404,27 +2404,27 @@ PII-bearing schemas (CE-51 set) without a deletion or anonymization function exp
 - **Tolerate:** Schema documented as out-of-scope (employee data under separate legal basis, public profile data, anonymized analytics aggregates); marker.
 - **Severity:** `warning`
 
-### CE-54 Domain function with low blackbox score
+### CE-54 Domain function that should be a building block
 
-A public function in a `:stable`-classified module whose blackbox score (six axes — input closure, determinism, output completeness, totality, side-effect freedom, errors-as-values) is below threshold (default 0.7).
+A public function in a `:stable`-classified module whose building-block score (six axes — input closure, determinism, output completeness, totality, side-effect freedom, errors-as-values) is below threshold (default 0.7).
 
-- **Why:** The function lives in a part of the codebase that should consist of building blocks but isn't one. Composability suffers, testability degrades, and implicit dependencies on hidden state make the function hard to reason about locally. Every consumer must now know what's inside. (Composability)
-- **Check:** Compute blackbox score per the six-axis algorithm; cross-reference with the module's volatility classification; if the module is `:stable` and the score is below threshold, fire — finding reports which component(s) failed so the fix is concrete.
-- **Tolerate:** Function marked `@archdo_not_blackbox`; module marked `@archdo_volatility :volatile` overriding the heuristic; generated code.
-- **Severity:** `warning`
+- **Why:** The function lives in a part of the codebase that should consist of building blocks but isn't one yet. Composability suffers, testability degrades, and implicit dependencies on hidden state make the function hard to reason about locally — every consumer must know what's inside. The diagnosis points at the failed axes so the fix is concrete; this is constructive guidance, not a defect. (Composability)
+- **Check:** Compute the building-block score per the six-axis algorithm; cross-reference with the module's volatility classification; if the module is `:stable` and the score is below threshold, fire — finding reports which component(s) failed so the fix is concrete.
+- **Tolerate:** Function marked `@archdo_not_building_block`; module marked `@archdo_volatility :volatile` overriding the heuristic; generated code.
+- **Severity:** `info`
 
 ### CE-55 Building-block candidate untested as such
 
-A function with `blackbox_score ≥ 0.9` and no StreamData property test exercising it.
+A function with building-block score ≥ 0.9 and no StreamData property test exercising it.
 
-- **Why:** A function with score ≥ 0.9 already has every property property-based testing requires (purity, determinism, closed input domain, total output relation, side-effect freedom). The property test is the natural next move, not "if we have time" — the cost is low and the coverage gain is large. (Testability)
+- **Why:** A function at score ≥ 0.9 already has every property property-based testing requires (purity, determinism, closed input domain, total output relation, side-effect freedom). The property test is the natural next move, not "if we have time" — the cost is low and the coverage gain is large. (Testability)
 - **Check:** For each function classified `building_block`, search `test/` for an `ExUnitProperties.property` block calling the function.
 - **Tolerate:** Function marked `@archdo_no_property`; the property is genuinely hard to express (rare for true building blocks).
 - **Severity:** `info`
 
-### CE-56 Effect leak in a near-blackbox function
+### CE-56 Effect leak in a near-building-block function
 
-A function whose blackbox score *would* be ≥ 0.9 except for a single side-effect call (typically `Logger`, `:telemetry.execute`, or `Phoenix.PubSub.broadcast`).
+A function whose building-block score *would* be ≥ 0.9 except for a single side-effect call (typically `Logger`, `:telemetry.execute`, or `Phoenix.PubSub.broadcast`).
 
 - **Why:** Sharper diagnostic than "improve this function" — *this one call* is keeping a building block from existing. The fix is mechanical conceptually (move the effect up the call stack to the orchestrating layer). (Composability)
 - **Check:** For each function whose components other than side-effect-freedom score ≥ 0.9, count side-effect calls; if exactly one or two and they're observability-only (Logger, telemetry, PubSub), fire.
@@ -2433,7 +2433,7 @@ A function whose blackbox score *would* be ≥ 0.9 except for a single side-effe
 
 ### CE-57 Building-block candidate accepts unguarded input
 
-A near-blackbox function whose public signature accepts unguarded input — illegal inputs crash with `MatchError` / `FunctionClauseError` instead of returning `{:error, _}`.
+A near-building-block function whose public signature accepts unguarded input — illegal inputs crash with `MatchError` / `FunctionClauseError` instead of returning `{:error, _}`.
 
 - **Why:** Totality is the building-block axis that fails most often via "I'll match the happy case and let the rest crash." A building-block contract requires the caller can pass any value of the spec'd domain and get a defined response — exception flow disqualifies the function from memoization, parallelization, and distribution. (Totality)
 - **Check:** For functions otherwise scoring ≥ 0.9, verify either exhaustive pattern coverage of the spec'd input domain or a final catch-all clause returning `{:error, _}` rather than raising.

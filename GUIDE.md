@@ -383,7 +383,7 @@ end
 
 #### 3.1.6 Rule CE-57 — Unguarded building block (module-verdict propagation)
 
-**What it measures:** a function whose Blackbox score is ≥ 0.9 on the existing six structural components (input_closure, determinism, output_completeness, totality, side_effect_free, errors_as_values) but whose head does NOT constrain its input domain. A function `def discount(price, rate), do: max(0, price - round(price * rate))` scores 1.0 on every existing component but crashes on `discount("foo", :bar)` deep in the body with `ArithmeticError` — illegal input becomes an opaque crash instead of an expected error.
+**What it measures:** a function whose building-block score is ≥ 0.9 on the existing six structural components (input_closure, determinism, output_completeness, totality, side_effect_free, errors_as_values) but whose head does NOT constrain its input domain. A function `def discount(price, rate), do: max(0, price - round(price * rate))` scores 1.0 on every existing component but crashes on `discount("foo", :bar)` deep in the body with `ArithmeticError` — illegal input becomes an opaque crash instead of an expected error.
 
 **What changed:** the per-function CE-57 finding existed since M-Aux6 (April 2026). M-Plan6 propagates the input-safety verdict to `Blackbox.module_verdict/1` — the engine behind `mix archdo --building-blocks`. Previously a module with one unguarded fn could still appear as `:building_block` in the audit output, contradicting the per-function CE-57 finding. Now the module verdict combines:
 
@@ -912,18 +912,18 @@ end
 
 #### 3.2.9 `@archdo_no_property` — CE-55, CE-56
 
-**Suppresses:** CE-55 (building-block function without property test), CE-56 (effect leak in near-blackbox function).
+**Suppresses:** CE-55 (building-block function without property test), CE-56 (effect leak in near-building-block function).
 
-**What CE-55 detects:** a function with Blackbox score ≥ 0.9 + arity > 0 + no `property "..." do ... end` block referencing the function in test files. The function is structurally a building block but only example-tested.
+**What CE-55 detects:** a function with building-block score ≥ 0.9 + arity > 0 + no `property "..." do ... end` block referencing the function in test files. The function is structurally a building block but only example-tested.
 
-**What CE-56 detects:** a function where every Blackbox component score ≥ 0.9 EXCEPT side_effect_free, AND ≤ 2 observability-only side effects (Logger / `Phoenix.PubSub.broadcast` / `:telemetry.execute|span`). The function is one extracted side-effect away from being a building block.
+**What CE-56 detects:** a function where every building-block component score ≥ 0.9 EXCEPT side_effect_free, AND ≤ 2 observability-only side effects (Logger / `Phoenix.PubSub.broadcast` / `:telemetry.execute|span`). The function is one extracted side-effect away from being a building block.
 
 **Use the marker when:** the function's purpose IS to produce an observability effect, OR property testing is impractical:
 - Logger/telemetry emitter where the "side effect" IS the function's contract
 - Function whose input domain is too rich for StreamData generators (complex AST nodes, file system trees)
 - Function with deliberate non-determinism (UUID generation, timestamp emission)
 
-**Triggers CE-56 (BAD — near-blackbox with single Logger leak):**
+**Triggers CE-56 (BAD — near-building-block with single Logger leak):**
 
 ```elixir
 defmodule MyApp.Pricing do
@@ -1452,7 +1452,7 @@ The Change Economy (CE) rule family asks a different question than the core rule
 | `core` | All 203 original rules + CE-1, CE-2, CE-3, CE-4, CE-11, CE-12, CE-15, CE-17, CE-21, CE-23, CE-24, CE-25, CE-26, CE-27, CE-28, CE-29, CE-30, CE-31, CE-34, CE-35, CE-47, CE-48, CE-49, CE-50 | **on** | Architecture quality + cost-of-change essentials |
 | `ce_compliance` | CE-32 (missing traceability), CE-33 (dead requirement) | opt-in | Traceability between code and external requirements |
 | `ce_privacy` | CE-51 (PII field without designated handling), CE-52 (missing retention policy), CE-53 (PII schema without right-to-deletion path) | opt-in | GDPR / data-protection signals |
-| `ce_composability` | CE-54 (low-possibility-high-value blackbox), CE-55 (building-block function without property test), CE-56 (effect leak in near-blackbox), CE-57 (building-block candidate accepts unguarded input) | opt-in | "Could this function become a tested building block?" |
+| `ce_composability` | CE-54 (low-possibility-high-value building-block), CE-55 (building-block function without property test), CE-56 (effect leak in near-building-block), CE-57 (building-block candidate accepts unguarded input) | opt-in | "Could this function become a tested building block?" |
 
 Run a pack via `--packs`:
 
@@ -1498,10 +1498,10 @@ Selected CE rules — what each measures and indicates:
 | **CE-51** PII field without designated handling | Schema with PII-shaped fields (email, phone, SSN, password*, *_token) without `@derive {Inspect, except: [...]}` | PII appears in inspect output, error logs, and IEx sessions |
 | **CE-52** Missing retention policy | Schema with timestamps + user-like FK lacking `@retention` annotation OR a referencing Oban worker | Data accumulates indefinitely; GDPR right-to-erasure obligation untracked |
 | **CE-53** PII schema without right-to-deletion path | PII schema with no `delete_for_*` / `forget_*` / `anonymize_*` / `erase_*` function referencing it | Cannot fulfill data-subject deletion requests |
-| **CE-54** Low-possibility / high-value blackbox | Function in `:context` or `:schema` layer with structural component failure AND high substance score | Function is doing real domain work but isn't structured as a building block — hardest to test, most consequential when changed |
-| **CE-55** Building-block function without property test | Blackbox score ≥0.9 + arity > 0 + no `property "..." do ... end` block referencing the function in test files | Function is structurally a building block but only example-tested; property test would exercise the input domain |
-| **CE-56** Effect leak in near-blackbox | Every Blackbox component ≥0.9 EXCEPT side_effect_free, AND ≤2 observability-only side effects (Logger / Phoenix.PubSub.broadcast / `:telemetry.execute`) | Function is one extracted side-effect away from being a building block |
-| **CE-57** Unguarded building block | Blackbox score ≥0.9 + arity > 0 + at least one clause has bare-variable args without guard, all-specific patterns, or `{:error, _}` fallback | Function looks like a building block but accepts any input — illegal inputs crash deep instead of returning a controlled domain error |
+| **CE-54** Low-possibility / high-value building-block | Function in `:context` or `:schema` layer with structural component failure AND high substance score | Function is doing real domain work but isn't structured as a building block — hardest to test, most consequential when changed |
+| **CE-55** Building-block function without property test | building-block score ≥0.9 + arity > 0 + no `property "..." do ... end` block referencing the function in test files | Function is structurally a building block but only example-tested; property test would exercise the input domain |
+| **CE-56** Effect leak in near-building-block | Every building-block component ≥0.9 EXCEPT side_effect_free, AND ≤2 observability-only side effects (Logger / Phoenix.PubSub.broadcast / `:telemetry.execute`) | Function is one extracted side-effect away from being a building block |
+| **CE-57** Unguarded building block | building-block score ≥0.9 + arity > 0 + at least one clause has bare-variable args without guard, all-specific patterns, or `{:error, _}` fallback | Function looks like a building block but accepts any input — illegal inputs crash deep instead of returning a controlled domain error |
 
 For the full text and rationale of every CE rule, run `mix archdo --explain CE-XX`.
 
@@ -1788,7 +1788,7 @@ end
 
 **The architectural cost:** every catch-all rescue is a bug suppressor. The intended exception (e.g., `Ecto.NoResultsError` from `Repo.get!/2`) gets caught alongside `MatchError` (typo), `ArithmeticError` (division by zero), `DBConnection.ConnectionError` (downstream is down), `KeyError` (missing field). The function returns the same `nil` for all of them, and the operator has no signal to investigate.
 
-##### CE-54 — Low-possibility / high-value Blackbox
+##### CE-54 — Low-possibility / high-value building-block
 
 **Detects:** a function in the `:context` or `:schema` layer where:
 - Substance score is high (`AST size ≥ 30`)
@@ -1800,7 +1800,7 @@ end
 
 ##### CE-55 — Building-block function without property test
 
-**Detects:** a function that already passes the Blackbox 6-component check (score ≥ 0.9, arity > 0) AND is not exercised by any `property "..." do ... end` block in test files.
+**Detects:** a function that already passes the building-block 6-component check (score ≥ 0.9, arity > 0) AND is not exercised by any `property "..." do ... end` block in test files.
 
 **The architectural cost:** a function that's structurally pure, deterministic, total, and side-effect-free is the perfect candidate for property testing — the input domain can be generated, the output invariant asserted, and edge cases discovered automatically. Skipping property testing on these functions is leaving free verification on the table.
 
@@ -1819,7 +1819,7 @@ property "discount/2 is monotonic in rate" do
 end
 ```
 
-##### CE-56 — Effect leak in near-blackbox
+##### CE-56 — Effect leak in near-building-block
 
 **Detects:** see §3.2.9 (where the marker is documented).
 
@@ -1922,7 +1922,9 @@ Archdo.Phoenix.operational?(classification) :: boolean()
 
 **Used by:** CE-1, CE-2, CE-3, CE-4, CE-34, CE-35.
 
-#### 3.4.3 `Archdo.Blackbox` — composability scorer
+#### 3.4.3 `Archdo.Blackbox` — building-block scorer
+
+> **Naming note:** the module is `Archdo.Blackbox` for legacy reasons. Conceptually it scores *building-blocks* — code we own and can see inside that nonetheless composes as cleanly as if it were opaque. A true black box (code we cannot see inside) shouldn't exist in our own codebase.
 
 **Module:** `lib/archdo/blackbox.ex`. **Tests:** `test/archdo/blackbox_test.exs`.
 
@@ -2013,7 +2015,7 @@ Plus a third section (M-Aux5): top-20 near-block modules ranked by refactor dist
 - All argument patterns are specific (no bare-variable args)
 - The body's last expression is an `{:error, _}` literal (clause is the explicit error fallback)
 
-A function is well-guarded when EVERY clause is constrained. CE-57 and Blackbox both fire when ANY clause is unconstrained.
+A function is well-guarded when EVERY clause is constrained. CE-57 and the building-block analysis (`Archdo.Blackbox`) both fire when ANY clause is unconstrained.
 
 **API:**
 
@@ -2194,11 +2196,11 @@ end
 |------|------|--------|
 | **CE-2/CE-3** Volatility-substitutability | `{abstraction_class, volatility_tag}` ∈ `{:high, :low} × {:volatile, :stable, :mixed}` | `:low × :volatile` → CE-2 fire (missing seam at boundary). `:high × :stable` → CE-3 fire (over-engineered stable core). `:high × :volatile` and `:low × :stable` → `:no_finding` |
 | **CE-24** Complexity shape | `{cyclomatic_band, cognitive_band}` ∈ `{:low, :high} × {:low, :high}` | `:high × :high` → fire `CE-24-twisty` (nested + many branches). `:high × :low` → fire `CE-24-flat-dispatch` (many clauses, each shallow — 6.2 over-counting). `:low × :high` → fire `CE-24-deeply-nested-simple-dispatch`. `:low × :low` → `:no_finding` |
-| **CE-54** Blackbox quadrant | `{possibility, value}` ∈ `{:high, :low} × {:high, :low}` | `:low × :high` → fire (low-possibility / high-value: hardest to test, most consequential when changed). Other cells emit either `:no_finding` or paired CE-55/CE-56/CE-57 findings |
+| **CE-54** Building-block quadrant | `{possibility, value}` ∈ `{:high, :low} × {:high, :low}` | `:low × :high` → fire (low-possibility / high-value: hardest to test, most consequential when changed). Other cells emit either `:no_finding` or paired CE-55/CE-56/CE-57 findings |
 
 **Why this is more than three independent rules:** the quadrant pattern explicitly encodes that the diagnostic depends on a *combination* of classifications, not on each axis separately. Treating CE-2 as "fire when low abstraction" would over-fire on simple stable modules where low abstraction is correct. Treating CE-24 as "fire when cyclomatic high" over-fires on flat-dispatch tables where the shape is benign. The policy table makes the combinatorial truth explicit and reviewable.
 
-**Used by:** CE-2/CE-3 (volatility-substitutability), CE-24 (complexity shape), CE-54 (blackbox quadrant).
+**Used by:** CE-2/CE-3 (volatility-substitutability), CE-24 (complexity shape), CE-54 (building-block quadrant).
 
 ---
 

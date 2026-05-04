@@ -113,7 +113,7 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
   @impl Archdo.Quadrant
   def policy do
     %{
-      {:low, :high} => {:fire, :warning, "CE-54", "Function wants to be a building block but isn't"}
+      {:low, :high} => {:fire, :info, "CE-54", "Function could become a building block"}
     }
   end
 
@@ -168,8 +168,8 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
   defp build_diagnostic(file, name, arity, meta, possibility, value, components) do
     failed = failed_components(components)
 
-    Diagnostic.warning("CE-54",
-      title: "Function wants to be a building block but isn't",
+    Diagnostic.info("CE-54",
+      title: "Function could become a building block",
       message:
         "#{name}/#{arity} has high value (#{Float.round(value, 2)}) but low " <>
           "blackbox possibility (#{Float.round(possibility, 2)}). Failed " <>

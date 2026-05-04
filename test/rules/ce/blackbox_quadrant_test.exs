@@ -31,7 +31,7 @@ defmodule Archdo.Rules.CE.BlackboxQuadrantTest do
 
       diags = assert_flagged(BlackboxQuadrant, code, file: "lib/my_app/workflow.ex")
       assert hd(diags).rule_id == "CE-54"
-      assert hd(diags).severity == :warning
+      assert hd(diags).severity == :info
     end
 
     test "{:high, :low} (trivial pure function) does NOT fire" do
