@@ -29,11 +29,30 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
   def description,
     do: "Volatile call without explicit timeout option (uses Volatility classification)"
 
-  @timeout_keys %{
-    [:Tesla] => [:timeout, :recv_timeout, :receive_timeout],
-    [:Req] => [:receive_timeout, :pool_timeout, :connect_options],
-    [:Finch] => [:receive_timeout, :pool_timeout],
-    [:HTTPoison] => [:timeout, :recv_timeout]
+  # For each HTTP client, the keys list the timeout options the rule
+  # will accept as evidence the call is bounded, and the calls list
+  # names ONLY the functions that actually make a network request.
+  # Builder/configurator calls (`Req.new`, `Finch.build`, `Tesla.client`)
+  # don't make a request, so the timeout-option check doesn't apply.
+  @http_methods [:get, :post, :put, :patch, :delete, :head, :options, :request, :run]
+
+  @timeout_specs %{
+    [:Tesla] => %{
+      keys: [:timeout, :recv_timeout, :receive_timeout],
+      calls: @http_methods
+    },
+    [:Req] => %{
+      keys: [:receive_timeout, :pool_timeout, :connect_options],
+      calls: @http_methods
+    },
+    [:Finch] => %{
+      keys: [:receive_timeout, :pool_timeout],
+      calls: [:request, :stream, :stream_while]
+    },
+    [:HTTPoison] => %{
+      keys: [:timeout, :recv_timeout],
+      calls: @http_methods
+    }
   }
 
   @impl true
@@ -56,8 +75,8 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
   defp find_unbounded_http(file, ast) do
     calls =
       AST.find_all(ast, fn
-        {{:., _, [{:__aliases__, _, mod_parts}, _fun]}, _, _} ->
-          Map.has_key?(@timeout_keys, mod_parts)
+        {{:., _, [{:__aliases__, _, mod_parts}, fun]}, _, _} when is_atom(fun) ->
+          http_calling?(mod_parts, fun)
 
         _ ->
           false
@@ -65,7 +84,7 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
 
     Enum.flat_map(calls, fn
       {{:., _, [{:__aliases__, _, mod_parts}, fun]}, meta, args} ->
-        keys = Map.get(@timeout_keys, mod_parts, [])
+        keys = @timeout_specs |> Map.get(mod_parts, %{keys: []}) |> Map.fetch!(:keys)
 
         case has_timeout_option?(args, keys) do
           true ->
@@ -79,6 +98,16 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeout do
       _ ->
         []
     end)
+  end
+
+  # The call is HTTP-making (vs. config / builder) when the module is
+  # in @timeout_specs AND the function name is in that module's
+  # documented call list.
+  defp http_calling?(mod_parts, fun) do
+    case Map.get(@timeout_specs, mod_parts) do
+      %{calls: calls} -> fun in calls
+      _ -> false
+    end
   end
 
   defp has_timeout_option?(args, keys) do

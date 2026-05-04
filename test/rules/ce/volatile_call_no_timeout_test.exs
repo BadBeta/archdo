@@ -46,4 +46,40 @@ defmodule Archdo.Rules.CE.VolatileCallNoTimeoutTest do
 
     assert_clean(VolatileCallNoTimeout, code, file: "lib/my_app/pure.ex")
   end
+
+  test "does NOT fire on Req.new/0,1 — request-builder, not HTTP call" do
+    code = ~S"""
+    defmodule MyApp.Volatile do
+      def build do
+        Req.new(base_url: "https://example.com")
+      end
+    end
+    """
+
+    assert_clean(VolatileCallNoTimeout, code, file: "lib/my_app/volatile.ex")
+  end
+
+  test "does NOT fire on Finch.build/3 — request-builder, not HTTP call" do
+    code = ~S"""
+    defmodule MyApp.Volatile do
+      def build_get(url) do
+        Finch.build(:get, url)
+      end
+    end
+    """
+
+    assert_clean(VolatileCallNoTimeout, code, file: "lib/my_app/volatile.ex")
+  end
+
+  test "fires on Req.get/2 without timeout option (real HTTP call)" do
+    code = ~S"""
+    defmodule MyApp.Volatile do
+      def fetch(url) do
+        Req.get(url)
+      end
+    end
+    """
+
+    assert_flagged(VolatileCallNoTimeout, code, file: "lib/my_app/volatile.ex")
+  end
 end
