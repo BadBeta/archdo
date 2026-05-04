@@ -2,24 +2,27 @@
 
 Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, boundary enforcement, and some LLM code slop.
 
-**258 rules** across 12 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+**258 rules** across 13 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
 
 ## What it checks
 
 | Category | Rules | Examples |
 |----------|-------|----------|
 | **Boundaries & Architecture** | 34 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params, reverse dependencies, query in interface, cross-context schema/process/config coupling, shared DB/ETS tables, LiveView logic, N+1 preload, dev dep hygiene, compiled: cross-boundary calls, blast radius, orphan modules |
-| **Public API** | 3 | Missing @moduledoc, missing @spec |
+| **Public API & Documentation** | 3 | Missing `@moduledoc` (2.1), missing `@spec` (2.2), external calls into `@moduledoc false` modules (2.3); see also 6.33 (@doc on private functions, empty doc strings), CE-11/CE-12 (contract density on schemas/supervisors/public APIs), 1.12 (untyped boundaries returning `map()`/`keyword()` instead of structs), 1.21 (internal struct silently encoded), 3.3 (raw map threaded through domain), 4.12 (primitive obsession) |
 | **Single Source of Truth** | 6 | Type-2/3 clones, scattered config, reinvented enumerable |
 | **Coupling & Abstraction** | 30 | Behaviour size, broad imports, unused deps/aliases, mockability, feature envy, speculative generality, missing telemetry, N+1 queries, compiled: unused imports, weak deps, phantom deps |
 | **Change Economy** | 32 | Blackbox-quadrant policy, hidden coupling, churn hotspots, abstraction leakage, change amplifiers |
 | **OTP discipline** | 51 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock, callback sprawl, atom exhaustion, ETS/DETS cleanup, sequential-where-parallel |
-| **Module quality** | 54 | Complexity, error handling (7 rules), recursion (4 rules), **LLM slop detection** (5 sub-checks), dead functions, **performance traps** (8 rules: string concat, list ops, collection waste, regex, keyword lookup), nested control flow, boolean blindness, stub detection, **shadowed clauses**, **over-eager evaluation** (6 sub-checks), **sensitive data exposure** (6 sub-checks) |
+| **Module quality** | 54 | Complexity, recursion (4 rules), **LLM slop detection** (5 sub-checks), dead functions, **performance traps** (8 rules: string concat, list ops, collection waste, regex, keyword lookup), nested control flow, boolean blindness, stub detection, **shadowed clauses**, **over-eager evaluation** (6 sub-checks), **sensitive data exposure** (6 sub-checks) |
+| **Error Handling** *(cross-cutting)* | ~17 | Bare rescue swallows errors (6.9), raise instead of `{:ok,_}`/`{:error,_}` (6.10), inconsistent error shapes (6.11, 6.28), rescue-for-expected-failure (6.14), bang in ok/error function (6.15), exception laundering (6.18), no public-API catch-all (6.27), buried `try/rescue` (6.32), defensive nil returns (6.39), verbose ok-unwrap (6.40), bang in production external calls (4.20), stacktrace in HTTP response (5.52), error path without log (CE-28), error-atom drift across modules (CE-48), catch-all rescue without filter (CE-49), `:ok` loses richer last-expression result (CE-50) |
 | **Testing** | 27 | Coverage gaps, over-mocking, empty describe, missing error paths, untested modules, process leaks, flaky indicators, assert on implementation, compiled: test-only public |
 | **Event sourcing** | 9 | Aggregate purity, projection isolation, event immutability, command/event naming |
 | **State machines** | 6 | Unreachable states, terminal state integrity, implicit boolean state |
-| **Composition** | 2 | Deep `use` chains, excessive namespace depth |
+| **Composition & Composability** | 2 + per-module verdict | Deep `use` chains, excessive namespace depth; **per-module building-block verdict** scoring each public function on six composability axes (input closure, determinism, output completeness, totality, side-effect freedom, errors-as-values) |
 | **NIF safety** | 4 | Panic-inducing Rust patterns, scheduler misuse, missing behaviour wrapping |
+
+*Error Handling and the building-block axes are cross-cutting — their rules also appear under Module Quality, Boundaries, and Change Economy. Total unique rules: 258.*
 
 ### Building-block tests
 
