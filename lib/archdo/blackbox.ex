@@ -520,6 +520,52 @@ defmodule Archdo.Blackbox do
     min(raw, 1.0)
   end
 
+  @doc """
+  Score a function on the value axis with the function's CONTEXT —
+  whether it's a bang variant or a behaviour-callback implementation.
+  Both shapes have intrinsically low building-block value:
+
+    - **Bang functions (`fn!/n`)** declare "I raise on error" as the
+      contract. `errors_as_values` is intentionally false; the function
+      can't be a building block by design. The non-bang sibling (when
+      present) is the building-block candidate.
+
+    - **Behaviour-callback implementations** have their signature
+      dictated by the `@callback`, not by composition. The behaviour
+      IS the building-block contract; the implementation is the impure
+      adapter by design.
+
+  Both shapes return 0.0 — they SHIFT the cell to {:low, :low}, which
+  the CE-54 policy treats as `:no_finding`. This is value correction,
+  not exemption: these functions genuinely have low building-block
+  value because their signature/semantics are pinned by an external
+  contract.
+
+  Falls through to `value/3` when neither shape applies.
+  """
+  @spec value_for_function(
+          Macro.t() | nil,
+          atom(),
+          arity(),
+          atom() | nil,
+          MapSet.t({atom(), arity()})
+        ) :: float()
+  def value_for_function(body, name, arity, phoenix_layer, impls) do
+    cond do
+      bang_function?(name) -> 0.0
+      MapSet.member?(impls, {name, arity}) -> 0.0
+      true -> value(body, name, phoenix_layer)
+    end
+  end
+
+  defp bang_function?(name) when is_atom(name) do
+    name |> Atom.to_string() |> String.ends_with?("!")
+  end
+
+  # Macro-defined / dynamically-named functions can surface non-atom
+  # names through extract_functions. Treat them as non-bang.
+  defp bang_function?(_), do: false
+
   defp orchestrator_name?(name), do: name in @orchestrator_names
 
   defp substance_score(body) do

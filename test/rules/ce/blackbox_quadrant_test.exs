@@ -80,5 +80,37 @@ defmodule Archdo.Rules.CE.BlackboxQuadrantTest do
 
       assert_clean(BlackboxQuadrant, code, file: "lib/my_app/math.ex")
     end
+
+    test "adapter modules (@behaviour Foo) do NOT fire — impurity is by design" do
+      # Validated against real-world Oban (M-CG88): every Oban engine,
+      # notifier, peer, and plugin implements a project-defined
+      # @behaviour AND does substantial DB / GenServer / I/O work.
+      # The whole point of those behaviours is to swap the impure
+      # boundary at config time. Flagging the impurity inside an
+      # adapter is the wrong layer of analysis — the behaviour IS the
+      # building-block contract; the implementations are the impure
+      # adapters by design.
+      code = ~S"""
+      defmodule MyApp.Engines.Postgres do
+        @behaviour MyApp.Engine
+
+        @impl true
+        def insert_job(conf, changeset, opts) do
+          row = build_row(changeset, opts)
+          Logger.info("inserting", queue: row.queue, args: inspect(row.args))
+          {:ok, _} = MyApp.Repo.insert(row)
+          notify(conf, :inserted, row)
+          maybe_schedule(conf, row, opts)
+          {:ok, row}
+        end
+
+        defp build_row(changeset, _opts), do: changeset
+        defp notify(_, _, _), do: :ok
+        defp maybe_schedule(_, _, _), do: :ok
+      end
+      """
+
+      assert_clean(BlackboxQuadrant, code, file: "lib/my_app/engines/postgres.ex")
+    end
   end
 end

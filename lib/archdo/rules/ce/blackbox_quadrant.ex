@@ -59,12 +59,20 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
   def axes(file, ast, opts) do
     layer = phoenix_layer(file, ast, opts)
     scores = Blackbox.score_module(ast)
+    impls = AST.impl_callbacks(ast)
 
     ast
     |> AST.extract_functions(:public)
     |> Enum.zip(scores)
     |> Enum.flat_map(fn {{name, arity, meta, _args, body}, {_n, _a, _possibility, components}} ->
-      value = Blackbox.value(body, name, layer)
+      # value_for_function/5 corrects the value heuristic for shapes
+      # that have intrinsically low building-block value: bang
+      # functions (`fn!/n`) and behaviour-callback implementations.
+      # Both have their signature/semantics dictated by an external
+      # contract, so flagging them as "wants to be a building block
+      # but isn't" is the wrong layer of analysis. The cell shifts
+      # to {:low, :low} for these — no fire.
+      value = Blackbox.value_for_function(body, name, arity, layer, impls)
       structural = structural_possibility(components)
       failures = structural_failures(components)
 

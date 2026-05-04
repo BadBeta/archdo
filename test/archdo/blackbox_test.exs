@@ -458,4 +458,81 @@ defmodule Archdo.BlackboxTest do
       assert Blackbox.classify(0.39) == :boundary
     end
   end
+
+  describe "value_for_function/5 — context-aware value scoring" do
+    # Helper: produce a substantial-body AST (≥ @substance_threshold = 30 nodes).
+    defp substantial_body do
+      quote do
+        a = compute_x(input)
+        b = compute_y(a)
+        c = compute_z(b)
+        d = compute_w(c)
+        e = combine(a, b, c, d)
+        f = transform(e)
+        finalize(f)
+      end
+    end
+
+    test "regular function with substantial body returns standard value (high)" do
+      v = Blackbox.value_for_function(substantial_body(), :process, 1, :context, MapSet.new())
+      assert v >= 0.7, "expected high value for substantial fn in context layer, got #{v}"
+    end
+
+    test "bang function (`!`-suffixed name) drops to 0.0 — bang IS the contract" do
+      # `insert!/3`-shape: substantial body, but the bang declares
+      # 'I raise on error' which intentionally fails errors_as_values.
+      # Building-block-value of the bang variant is low by design; the
+      # non-bang sibling is the building-block candidate, not the bang.
+      v = Blackbox.value_for_function(substantial_body(), :insert!, 3, :context, MapSet.new())
+      assert v == 0.0
+    end
+
+    test "behaviour-callback implementation drops to 0.0 — signature is dictated by the behaviour" do
+      # `@impl true def insert_job/3`: signature dictated by the
+      # @behaviour, not designed for composition. The behaviour IS the
+      # building-block contract; the implementation is the impure
+      # adapter. Building-block-value of the implementation is low.
+      impls = MapSet.new([{:insert_job, 3}])
+
+      v = Blackbox.value_for_function(substantial_body(), :insert_job, 3, :context, impls)
+      assert v == 0.0
+    end
+
+    test "non-impl function on a module that ALSO has impls keeps standard value" do
+      # If a module implements a behaviour AND also exposes other
+      # public functions, only the impl-marked ones drop. Other
+      # public fns are scored normally.
+      impls = MapSet.new([{:insert_job, 3}])
+
+      v =
+        Blackbox.value_for_function(
+          substantial_body(),
+          :public_helper,
+          1,
+          :context,
+          impls
+        )
+
+      assert v >= 0.7
+    end
+
+    test "orchestrator-named function still scores 0.0 (existing behaviour preserved)" do
+      v = Blackbox.value_for_function(substantial_body(), :handle_call, 3, :context, MapSet.new())
+      assert v == 0.0
+    end
+
+    test "trivial body in non-context layer scores 0.0 — no substance, no layer boost" do
+      tiny = quote do: x * 2
+      v = Blackbox.value_for_function(tiny, :double, 1, nil, MapSet.new())
+      assert v == 0.0
+    end
+
+    test "trivial body in :context layer keeps the 0.2 layer boost (low band)" do
+      tiny = quote do: x * 2
+      v = Blackbox.value_for_function(tiny, :double, 1, :context, MapSet.new())
+      assert v == 0.2
+      # Still :low band — won't fire CE-54.
+      assert Blackbox.value_class(v) == :low
+    end
+  end
 end
