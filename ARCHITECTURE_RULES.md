@@ -2083,6 +2083,15 @@ Module nesting should not exceed the configured maximum depth.
 - **Tolerate:** Generated modules, umbrella app prefixes (which add one level).
 - **Severity:** `info`
 
+### 10.3 Building-Block Composability
+
+Beyond the two structural rules above, Archdo measures composability per public function across six axes — input closure, determinism, output completeness, totality, side-effect freedom, and errors-as-values. Each function gets a blackbox score; modules and contexts roll up to a verdict (`:building_block`, `:leak`, or `:no_public_api`) so an entire context is a building block only when every module under its namespace is.
+
+- **Why:** A "perfect black box" is the ideal building block — finite specified inputs, known input-to-output relation, no hidden state or side channels. Functions of this kind compose cleanly because reasoning locally is sufficient. The score is form, not substance: it tells you what you've earned the right to do (memoize, parallelize, distribute, property-test) without telling you whether the function is correct. (Composability, Substitutability)
+- **Check:** Per-public-function score across the six axes; per-module mean; per-context aggregation. Surface via `mix archdo --building-blocks` and `mix archdo --metrics`. Drives CE-54, CE-55, CE-56, and CE-57 directly.
+- **Tolerate:** Boundary modules and adapters legitimately score low — that is expected at I/O seams. The diagnostic value is in stable-classified modules whose score is below threshold (CE-54), not in low scores per se.
+- **Severity:** Verdict only — see CE-54 / CE-55 / CE-56 / CE-57 for the rules that act on it.
+
 ---
 
 ## 11. Native Interop (NIFs, Ports, Rustler)
@@ -2125,22 +2134,331 @@ Choose Port when safety matters more than NIF latency. Ports run in a separate O
 
 ---
 
+## 12. Change Economy
+
+The Change Economy pack measures the *cost of changing* the system, not its current shape. Where most rules ask "is this code well-structured today?", these ask "will the next requirement land cheaply, or will it require ripple changes across the codebase?". The pack splits **Substitutability** (the ability to swap an implementation, paid for via behaviours/protocols/adapters) from **Changeability** (the ability to modify code as requirements evolve, achieved through simplicity). Substitutability is wanted at volatile boundaries; Changeability is wanted everywhere — and the two have very different cost/benefit profiles.
+
+Volatility classification underlies most of these rules: a module that touches I/O, external services, or non-determinism is presumed volatile; a pure-domain module is presumed stable. Authors override with `@archdo_volatility :stable | :volatile | :mixed | :entry_point`; paths can be marked in `.archdo.exs`.
+
+### CE-1 Volatile module with hardcoded dependencies
+
+Volatile modules calling another volatile primitive directly, with no behaviour seam, no Mox port, and no injected dependency.
+
+- **Why:** Substitutability is the only mechanism that buys a test seam and vendor-drift insulation at a volatile boundary, and it's missing. Tests cannot exercise the module without real I/O; the dependency cannot be swapped. (Substitutability)
+- **Check:** For each volatile module, follow outgoing volatile calls and verify each is mediated by `@behaviour`-bound dispatch with a Mox mock, function-parameter injection, or `Application.get_env`-bound module slot.
+- **Tolerate:** Module marked `@archdo_volatility :stable` or `:entry_point`; entry-point modules (`use Mix.Task` / `use Application`) auto-exempt.
+- **Severity:** `warning`
+
+### CE-2 Volatile boundary lacks abstraction layer
+
+A volatile module is exposed to ≥ 2 non-volatile callers without any behaviour/protocol/configurable-adapter layer between them.
+
+- **Why:** When the external dependency changes (API version, vendor swap, deprecation), every caller is affected. The abstraction is the insulation that absorbs external change without ripple. (Substitutability, Insulation)
+- **Check:** For each volatile module with ≥ 2 distinct non-volatile callers, verify at least one caller reaches it through a behaviour, protocol, or configurable-adapter slot.
+- **Tolerate:** Single-caller helpers; framework-provided abstractions with their own test seam (Ecto.Repo, Phoenix.PubSub, Oban, OTP primitives).
+- **Severity:** `warning`
+
+### CE-3 Stable core with abstraction density above codebase median
+
+A stable module contains behaviours, protocols, configurable adapters, or injection points at higher density than the codebase median.
+
+- **Why:** Substitutability is being paid for in the part of the system that doesn't need it. Pure stable code already has full Changeability through simplicity alone; behaviours here add concepts the reader must navigate without buying a test seam or insulation. (Simplicity)
+- **Check:** Per-module `abstraction_density = (behaviours + protocols + configurable_slots + injected_deps) / public_function_count`; flag stable modules above 2× codebase median.
+- **Tolerate:** Module *defines* a behaviour or protocol (`@callback`, `defprotocol`); module is a documented public extension surface (`@archdo_extension_point true`).
+- **Severity:** `warning`
+
+### CE-4 Mixed-volatility module (split candidate)
+
+A module classified as mixed — neither a clean I/O boundary nor a clean domain core.
+
+- **Why:** Mixed modules sit between regimes and get neither benefit. Pure parts pay a Substitutability cost they wouldn't need; volatile parts can't get a clean test seam. Every change to the I/O parts forces re-testing the domain parts and vice versa. (Cohesion)
+- **Check:** Volatility classifier returns `:mixed` (volatile-call density between 0.05 and 0.40).
+- **Tolerate:** Small adapter modules where I/O density is structurally near 50% (e.g., a CSV importer); marker `@archdo_split_unjustified`.
+- **Severity:** `warning`
+
+### CE-11 Irreversible-decision module lacks contract density
+
+Modules representing hard-to-reverse decisions — Ecto schemas, supervision-tree shape, public APIs — without specs, tests, and documentation at adequate density.
+
+- **Why:** Irreversible decisions have asymmetric cost: getting them wrong is expensive to roll back. Specs + tests + docs are the cheapest insurance against drift, and they amortize across every consumer. (Risk-Weighted Investment)
+- **Check:** Identify schemas, supervisors, and modules in `package.exports` / `public_api_paths`; compare `@spec` coverage, test density, and `@moduledoc` + `@doc` coverage against codebase median.
+- **Tolerate:** Module marked with a deadline-bearing `@archdo_specs_pending` or equivalent.
+- **Severity:** `warning`
+
+### CE-12 Public-API module with low @spec coverage
+
+A module designated public API where fewer than 80% of public functions have `@spec`s.
+
+- **Why:** Public APIs without specs cannot be Dialyzer-verified, callers must read source to understand contracts, and breaking changes are silent at compile time. (Contract Stability)
+- **Check:** For each public-API module (Ecto schemas, Supervisor implementors, paths in `public_api_paths`), compute `spec_coverage` and fire below 0.80.
+- **Tolerate:** Module marked `@archdo_specs_pending` with a deadline.
+- **Severity:** `warning`
+
+### CE-15 Wrapper layer over framework-provided abstraction
+
+A project-defined behaviour with ≤ 1 production implementation that wraps a framework primitive (Ecto.Repo, Phoenix.PubSub, Oban, OTP) which already provides a working test seam.
+
+- **Why:** Double abstraction. The framework already provides Substitutability — Sandbox for Ecto, testing helpers for PubSub/Oban. The wrapper pays a layer cost for capabilities that already exist and typically fails to expose framework features cleanly, forcing leaky-abstraction escape hatches. (Avoid Double Abstraction)
+- **Check:** For each behaviour with ≤ 1 non-test implementor, identify the principal call target inside the impl; if it's a known framework abstraction with a documented test seam, flag the behaviour.
+- **Tolerate:** Wrapper enforces a *policy* the framework doesn't (tenant scoping, audit logging) — `@archdo_policy_wrapper`; wrapper exposes a domain-shaped interface and the framework is genuinely a hidden detail.
+- **Severity:** `warning`
+
+### CE-17 Connascence of meaning across modules
+
+The same magic value (number, string, atom) compared or assigned in ≥ 2 modules without a shared symbolic constant.
+
+- **Why:** Every consumer must know the magic value's meaning out-of-band. Renaming or renumbering forces search-and-replace across modules; missing a site is a silent bug. Connascence of meaning across modules is one of the strongest forms of coupling at the longest distance. (Connascence)
+- **Check:** Walk all modules; collect literals appearing in comparisons or status-shaped assignments; group by value; flag values appearing in ≥ 2 modules without a shared module-attribute, behaviour-defined, or `defenum`-style accessor.
+- **Tolerate:** Stable numeric constants (`0`, `1`, `-1`, status code `200`, port `80`/`443`); incidental local literals.
+- **Severity:** `warning`
+
+### CE-21 Acquire/release pair without bracket helper
+
+A module exposes paired public functions (`open`/`close`, `acquire`/`release`, `subscribe`/`unsubscribe`, `lock`/`unlock`) without a `with_X/2` bracket helper that pairs them.
+
+- **Why:** Every caller must remember to pair the calls and handle the cleanup branch on exception. Forgotten releases leak resources; orphaned locks deadlock. The pair is connascence of execution between two distant call sites. (Connascence of Execution)
+- **Check:** Match public function pairs by name; verify the same module exposes a bracket function whose body invokes the pair around a callback or `try/after`.
+- **Tolerate:** Pairs exposed for genuinely long-lived resources spanning multiple processes (`GenServer.start_link` + `GenServer.stop` for app-lifetime processes).
+- **Severity:** `info`
+
+### CE-23 High cognitive complexity public function
+
+A public function whose Campbell-style cognitive complexity exceeds threshold (default `> 15` warning, `> 25` error).
+
+- **Why:** Cognitive complexity tracks human reading difficulty, not graph paths. It does not penalize flat dispatch but penalizes nested control flow. The function is hard to read, hard to modify safely, and hard to test exhaustively — a Changeability and testability impediment. (Cognitive Load)
+- **Check:** AST walk per Campbell's rules: `+1` per control-flow structure, `+nesting_depth` per nested structure, `+1` per chained logical operator beyond the first, `+1` per recursion edge; multi-clause functions count as one `case` unless clauses contain nested logic.
+- **Tolerate:** Function marked `@archdo_complex_ok`; generated code (parsers, state-machine tables, schema-derived).
+- **Severity:** `warning` above 15, `error` above 25 (in strict mode)
+
+### CE-24 Cyclomatic / cognitive complexity shape mismatch
+
+Functions where cyclomatic and cognitive complexity disagree by more than 2× in either direction.
+
+- **Why:** The disagreement carries information neither metric alone provides: twisty-nested (cognitive ≫ cyclomatic) is the genuine refactor target pure cyclomatic linting misses; flat-dispatch (cyclomatic ≫ cognitive) is idiomatic Elixir over-counted by cyclomatic. (Calibrated Complexity)
+- **Check:** Compute both per function; classify as `flat-dispatch` (informational, auto-suppress cyclomatic complaints), `twisty-nested` (warning, often pairs with CE-23), `uniform-complex`, or `simple`.
+- **Tolerate:** Flat-dispatch shape is acknowledged at informational severity, not as a refactor recommendation.
+- **Severity:** `warning` (twisty-nested) / `info` (flat-dispatch)
+
+### CE-25 Cross-cutting concern density per function
+
+Functions where calls to known cross-cutting modules (Logger, telemetry, transactions, retry, authorization, audit) make up more than 40% of body expressions.
+
+- **Why:** Domain intent is buried under aspect noise. Adding a new aspect (rate limiting, idempotency tokens) requires editing every such function; removing one requires the same. The function reads as "do these cross-cutting things, and somewhere in the middle do the actual work." (Aspect Containment)
+- **Check:** Configure cross-cutting modules per `.archdo.exs`; for each function with ≥ 5 expressions, compute `density = cross_cutting_calls / total_expressions`; flag above 0.40.
+- **Tolerate:** Function is itself the bracket / pipeline aggregator (`@archdo_aspect_aggregator true`); function is at a documented composition layer (Plug, LiveView event handler).
+- **Severity:** `warning`
+
+### CE-26 Scattered cross-cutting concern
+
+Cross-cutting call sites where the call shape (event name, log key, telemetry path, audit category) varies as synonyms across the codebase.
+
+- **Why:** Consumers downstream — log aggregators, telemetry dashboards, audit pipelines, alerting rules — must know about every variant. Adding a new variant breaks dashboards silently; renaming requires coordinated change across producer code, dashboards, and alerts. (Taxonomy Stability)
+- **Check:** Collect call sites per cross-cutting module; group by first argument; cluster by string/list similarity; flag clusters of ≥ 3 high-similarity names.
+- **Tolerate:** Variants signed off by the dashboard/log-aggregator owner; variant required by an external schema.
+- **Severity:** `warning`
+
+### CE-27 Architectural boundary without telemetry span
+
+Phoenix controller actions, public-API entry points, `Mix.Task.run/1`, `Oban.Worker.perform/1`, and channel handlers lacking a `:telemetry.span` (or framework equivalent).
+
+- **Why:** The boundary is invisible to operations. Latency, error rates, and throughput cannot be measured; alerting cannot be wired up; SLO tracking is impossible. (Observability)
+- **Check:** Identify boundary entry points via the anchor set; scan the body and up to two call levels for `:telemetry.span`, `:telemetry.execute`, or framework-provided equivalents listed in `.archdo.exs` `telemetry_emitters`.
+- **Tolerate:** Module / function marked `@archdo_no_telemetry`; observability centralized at a higher layer (e.g., a Plug emitting telemetry for all routed requests).
+- **Severity:** `info`
+
+### CE-28 Error path without log
+
+Functions returning `{:error, _}` literals or containing `rescue` blocks without an in-scope `Logger` call.
+
+- **Why:** Errors disappear silently; debugging requires reproducing the path; alerting cannot fire on patterns the logs don't expose. (Observability)
+- **Check:** AST scan for `{:error, _}` literal returns and `rescue` clauses; walk up the static call graph two levels checking for `Logger.error`/`Logger.warning` referencing the error.
+- **Tolerate:** Error is normal control-flow tuple expected by the caller (`Repo.fetch` returning `{:error, :not_found}` as a domain answer); function tagged `@archdo_silent_error`.
+- **Severity:** `info`
+
+### CE-29 Process state without inspection hook
+
+Long-running stateful processes (`use GenServer`, `use Agent`, `:gen_statem` callback modules) without `format_status/1` or a documented inspection-friendly state shape.
+
+- **Why:** Debugging requires tracing or restarts; runbooks become guess-and-check; production support has no live introspection. For PII-bearing state, lacking an Inspect filter risks leaking via Observer or `:sys.get_state`. (Operability)
+- **Check:** Identify modules using long-running stateful behaviours; check for `format_status/1` or a documented state-shape attribute; for state structs with PII-pattern fields, also verify `@derive {Inspect, except: [...]}`.
+- **Tolerate:** State genuinely contains operational secrets requiring elevated access; marker `@archdo_opaque_state`.
+- **Severity:** `warning`
+
+### CE-30 Unanchored module or public function
+
+A module or specific public function not transitively reachable from any anchor.
+
+- **Why:** The code adds maintenance load, search-result noise, refactor friction, and dependency surface without contributing to any externally-visible behaviour. This is the most common form of "unjustified code" in LLM-generated and exploratory codebases. (Justification)
+- **Check:** Build the call + import/use graph; compute the closure of the anchor set (Phoenix routes, supervised processes, Mix tasks, Oban workers, `package.exports`, `additional_anchors`); flag anything outside the closure. Test-only-anchored modules are reported separately.
+- **Tolerate:** Module marked `@archdo_anchor` with a stated rationale (e.g., "called via :erpc from sibling node"); known plugin/extension hook (`@archdo_extension_point true`); generated code.
+- **Severity:** `info`
+
+### CE-31 Unanchored island (mutually-reachable cluster)
+
+A strongly-connected component in the call graph whose members are not transitively reachable from any anchor and not reached from any anchored code outside the cluster.
+
+- **Why:** More insidious than CE-30 because every module looks fine locally. The smell only emerges at "but who uses any of you, ultimately?". This is the *connected but unimportant* category that pure dead-code analysis cannot detect. (Justification)
+- **Check:** Tarjan's SCC algorithm on the call graph; for each SCC of size ≥ 2 with no member in the anchored closure, fire one grouped finding.
+- **Tolerate:** Any cluster member marked `@archdo_anchor`; cluster reachable via dynamic dispatch (`apply/3`, `Code.ensure_loaded/1`) — re-run with `--compiled` before treating as actionable.
+- **Severity:** `warning`
+
+### CE-32 Public function lacks requirement annotation (opt-in)
+
+Public functions on traceability-required paths without `@requirement`, `@spec_ref`, or `@trace`.
+
+- **Why:** In regulated industries (medical IEC 62304, aviation DO-178C, automotive ISO 26262, financial SOX), every line of code must trace to an approved requirement. Beyond compliance, the discipline forces deliberate intent: writing the requirement reference makes "why does this code exist?" an explicit authorial decision. (Compliance, Intent)
+- **Activation:** Opt-in via `.archdo.exs` `traceability_required_paths`.
+- **Check:** For each public function in marked paths, verify presence of `@requirement`, `@spec_ref`, or `@trace` immediately preceding the function or at module level.
+- **Tolerate:** Function marked `@archdo_no_trace` (rare; usually scaffolding with a deletion deadline).
+- **Severity:** `warning`
+
+### CE-33 Dead requirement (opt-in, reverse traceability)
+
+A requirement listed in an external requirements source with no referencing `@requirement` annotation in code.
+
+- **Why:** Closes the traceability loop. CE-32 says "every line of code traces to a requirement"; CE-33 says "every requirement traces to code." Without the reverse direction, requirements can be approved, planned, and forgotten without anyone noticing they were never implemented. (Compliance)
+- **Activation:** Opt-in via `.archdo.exs` `requirements_source` (CSV/YAML/JSON file or URL).
+- **Check:** Parse requirements source; collect all IDs; scan all `@requirement`/`@spec_ref`/`@trace` annotations; report set difference.
+- **Tolerate:** Requirements with status in the configured exempt list (`:cancelled`, `:deferred`, `:out_of_scope`).
+- **Severity:** `info`
+
+### CE-34 Volatile call without explicit timeout
+
+Call sites to volatile or non-deterministic dependencies without an explicit timeout argument or option.
+
+- **Why:** Default-infinite or vendor-default timeouts compound under failure — one slow downstream call stalls the calling process indefinitely, propagating to mailbox saturation and global outage. The 5s `GenServer.call` default is a frequent source of cascading failures. (Resilience)
+- **Check:** For each call to a tagged volatile module, parse the arg list / opts for timeout-shaped keys (`:timeout`, `:recv_timeout`, `:connect_timeout`, `:request_timeout`, `:pool_timeout`); flag if absent. `GenServer.call/2` with no third argument falls in this set.
+- **Tolerate:** Call inside a `Task` with its own supervised timeout; explicitly marked.
+- **Severity:** `info`
+
+### CE-35 Volatile boundary without retry / circuit breaker
+
+Modules classified `:volatile` calling external services without any retry library, exponential backoff helper, or circuit breaker visible in the call stack.
+
+- **Why:** Transient failures (network blips, downstream rate limits, vendor 503s) become user-visible errors; repeated failures cascade without protection. The volatility classification said "this dep will fail unpredictably" — ignoring that at the call site is the bug. (Resilience)
+- **Check:** For each volatile module's outbound volatile calls, walk up the call graph for retry/breaker patterns (`Retry.with_retries`, `:fuse.ask`, `.archdo.exs` `retry_helpers`/`breaker_helpers`).
+- **Tolerate:** Caller is itself an Oban / SQS-consumer job whose queue retries on failure; idempotent operation that doesn't need explicit retry.
+- **Severity:** `warning`
+
+### CE-47 Mixed return-shape within a context
+
+Bang public functions (`name!/n`) without a non-bang sibling for similar operations within the same context.
+
+- **Why:** Callers don't know which style to expect; refactoring a function from one style to another silently breaks call sites that handled the other shape. The bang form forces callers into rescue for normal control flow. (Contract Consistency)
+- **Check:** Per context module, classify each public function as bang or non-bang; group by base name; flag bang-only public functions and inconsistent ratios across the context.
+- **Tolerate:** Marker.
+- **Severity:** `warning`
+
+### CE-48 Error category drift
+
+Error atoms or structs that are clearly synonyms scattered across the codebase (e.g., `:not_found`, `:no_user`, `:user_not_found`, `:resource_missing`, `:missing` for the same conceptual failure).
+
+- **Why:** Consumers must pattern-match on every variant; adding a new variant breaks pattern-matching silently in consumers; the error taxonomy has no single source of truth. (Taxonomy Stability)
+- **Check:** Apply CE-26-style clustering specifically to the error half of `{:error, _}` returns; flag clusters of ≥ 3 distinct names referring to the same conceptual failure.
+- **Tolerate:** Errors are inherently distinct (`:user_not_found` vs `:order_not_found` are legitimately different categories); marker on the cluster.
+- **Severity:** `warning`
+
+### CE-49 Catch-all rescue
+
+`rescue _ -> ...` or `rescue _e -> ...` without a filter on exception types.
+
+- **Why:** Swallows specific exceptions the function shouldn't be handling — programming errors (`ArgumentError`, `KeyError`, `MatchError`) get the same treatment as legitimate runtime failures, hiding bugs that should surface immediately. (Fail Fast)
+- **Check:** AST scan of `rescue` clauses; flag any with bare wildcard or unfiltered single-variable pattern.
+- **Tolerate:** Truly last-line catch in a process boundary (Plug error renderer, GenServer exit-trap); marker `@archdo_boundary_rescue`.
+- **Severity:** `warning`
+
+### CE-50 `:ok` return loses information
+
+Functions returning literal `:ok` after operations whose result the caller would plausibly need.
+
+- **Why:** The caller cannot distinguish "operation succeeded with this result" from "operation succeeded with no result." Subsequent operations needing the result must re-fetch; tests cannot assert on what was created. (Information Preservation)
+- **Check:** Scan `def`s returning literal `:ok`; if the last meaningful expression is an operation that returns richer information (`Repo.insert/1`, an HTTP call) and that information is discarded, fire.
+- **Tolerate:** Operation is genuinely fire-and-forget (cache invalidation, notification dispatch); marker.
+- **Severity:** `warning`
+
+### CE-51 PII field without designated handling
+
+Schema fields whose names match PII patterns (`email`, `phone`, `ssn`, `*_token`, `password*`, `address`, `dob`, `national_id`, etc.) without `@derive {Inspect, except: [...]}`, a configured Logger filter, or an explicit handling annotation.
+
+- **Why:** PII leaks via logs (the most common breach surface), `inspect` output in error messages and Observer, telemetry payloads, crash dumps, and Repo query logging. The default `Inspect` impl on schemas reveals every field. (Privacy)
+- **Check:** Parse Ecto schemas; for each field matching the PII pattern list (configurable), verify presence of one of the three mitigations.
+- **Tolerate:** Field is intentionally public (`display_name`, `username`); marker via custom attribute or `.archdo.exs`.
+- **Severity:** `warning`
+
+### CE-52 Schema without retention policy
+
+Ecto schemas representing user-generated data (has `inserted_at`/`created_at` and a user/actor foreign key) without a scheduled cleanup job, retention annotation, or membership in `infinite_retention_schemas`.
+
+- **Why:** Unbounded data growth; under privacy law (GDPR Article 5(1)(e), CCPA §1798.105) unjustified indefinite retention is a compliance issue. Operationally, tables grow until queries slow down or storage fills up. (Privacy, Operability)
+- **Check:** Identify candidate schemas via heuristic; scan Oban worker modules, Quantum job definitions, and scheduled GenServers for queries against the schema; check for `@retention :forever` annotation or list membership.
+- **Tolerate:** Marker `@retention :forever, reason: "..."`; schema in `infinite_retention_schemas`.
+- **Severity:** `warning`
+
+### CE-53 PII schema without right-to-deletion path (opt-in)
+
+PII-bearing schemas (CE-51 set) without a deletion or anonymization function exposed somewhere in the codebase.
+
+- **Why:** GDPR Article 17 (right to erasure), CCPA §1798.105 (right to delete), Brazil LGPD Article 18(VI) all require this path. Without an explicit deletion / anonymization function, compliance is impossible — each subject deletion request becomes an ad-hoc engineering task with non-uniform results. (Privacy, Compliance)
+- **Activation:** Opt-in via `.archdo.exs` `gdpr_scope: true`.
+- **Check:** For each PII schema, search for a function whose name matches `delete_for_*`, `forget_*`, `anonymize_*`, `erase_*` (configurable) referencing the schema's table or struct.
+- **Tolerate:** Schema documented as out-of-scope (employee data under separate legal basis, public profile data, anonymized analytics aggregates); marker.
+- **Severity:** `warning`
+
+### CE-54 Domain function with low blackbox score
+
+A public function in a `:stable`-classified module whose blackbox score (six axes — input closure, determinism, output completeness, totality, side-effect freedom, errors-as-values) is below threshold (default 0.7).
+
+- **Why:** The function lives in a part of the codebase that should consist of building blocks but isn't one. Composability suffers, testability degrades, and implicit dependencies on hidden state make the function hard to reason about locally. Every consumer must now know what's inside. (Composability)
+- **Check:** Compute blackbox score per the six-axis algorithm; cross-reference with the module's volatility classification; if the module is `:stable` and the score is below threshold, fire — finding reports which component(s) failed so the fix is concrete.
+- **Tolerate:** Function marked `@archdo_not_blackbox`; module marked `@archdo_volatility :volatile` overriding the heuristic; generated code.
+- **Severity:** `warning`
+
+### CE-55 Building-block candidate untested as such
+
+A function with `blackbox_score ≥ 0.9` and no StreamData property test exercising it.
+
+- **Why:** A function with score ≥ 0.9 already has every property property-based testing requires (purity, determinism, closed input domain, total output relation, side-effect freedom). The property test is the natural next move, not "if we have time" — the cost is low and the coverage gain is large. (Testability)
+- **Check:** For each function classified `building_block`, search `test/` for an `ExUnitProperties.property` block calling the function.
+- **Tolerate:** Function marked `@archdo_no_property`; the property is genuinely hard to express (rare for true building blocks).
+- **Severity:** `info`
+
+### CE-56 Effect leak in a near-blackbox function
+
+A function whose blackbox score *would* be ≥ 0.9 except for a single side-effect call (typically `Logger`, `:telemetry.execute`, or `Phoenix.PubSub.broadcast`).
+
+- **Why:** Sharper diagnostic than "improve this function" — *this one call* is keeping a building block from existing. The fix is mechanical conceptually (move the effect up the call stack to the orchestrating layer). (Composability)
+- **Check:** For each function whose components other than side-effect-freedom score ≥ 0.9, count side-effect calls; if exactly one or two and they're observability-only (Logger, telemetry, PubSub), fire.
+- **Tolerate:** The effect is essential to the function's contract (the function's job is *to log*); marker.
+- **Severity:** `info`
+
+### CE-57 Building-block candidate accepts unguarded input
+
+A near-blackbox function whose public signature accepts unguarded input — illegal inputs crash with `MatchError` / `FunctionClauseError` instead of returning `{:error, _}`.
+
+- **Why:** Totality is the building-block axis that fails most often via "I'll match the happy case and let the rest crash." A building-block contract requires the caller can pass any value of the spec'd domain and get a defined response — exception flow disqualifies the function from memoization, parallelization, and distribution. (Totality)
+- **Check:** For functions otherwise scoring ≥ 0.9, verify either exhaustive pattern coverage of the spec'd input domain or a final catch-all clause returning `{:error, _}` rather than raising.
+- **Tolerate:** The unguarded input is a genuine programming error, not a domain failure (caller-side bug); marker `@archdo_intentional_crash`.
+- **Severity:** `info`
+
+---
+
 ## Rule Summary
 
 | Category | Count | Rule IDs |
 |----------|-------|----------|
-| Boundaries | 29 | 1.1–1.33 |
-| Public API | 2 | 2.1–2.2 |
-| Single Source of Truth | 5 | 3.1–3.5 |
+| Boundaries | 34 | 1.1–1.33, 1.1b |
+| Public API | 3 | 2.1–2.3 |
+| Single Source of Truth | 6 | 3.1–3.6 |
 | Coupling & Abstraction | 30 | 4.1–4.30 |
-| OTP Process Architecture | 43 | 5.1–5.45 |
-| Module Quality | 53 | 6.1–6.53 |
-| Test Architecture | 24 | 7.1–7.29 |
-| Event Sourcing | 8 | 8.1–8.8 |
-| State Machine | 3 | 9.1–9.3 |
+| OTP Process Architecture | 51 | 5.1–5.47, 5.50–5.55 |
+| Module Quality | 54 | 6.1–6.56 |
+| Test Architecture | 27 | 7.1–7.29 |
+| Event Sourcing | 9 | 8.1–8.9 |
+| State Machine | 6 | 9.1–9.3, SM-A/D/F |
 | Composition | 2 | 10.1–10.2 |
 | Native Interop | 4 | 11.1–11.4 |
-| **Total** | **200** | |
+| Change Economy | 32 | CE-1, CE-2/CE-3, CE-4, CE-11, CE-12, CE-15, CE-17, CE-21, CE-23–CE-35, CE-47–CE-57 |
+| **Total** | **258** | |
 
 Rules marked *(compiled)* require the `--compiled` flag and work by analyzing beam files after `mix compile`. They see ground-truth dependencies after macro expansion — no AST guessing.
 
