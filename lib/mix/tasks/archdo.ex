@@ -108,70 +108,128 @@ defmodule Mix.Tasks.Archdo do
       )
 
     paths = parse_list(Keyword.get(opts, :paths, "lib"))
+    invoke(pick_command(opts), opts, paths)
+  end
 
+  @doc false
+  # Pure dispatch decision. Exposed (with @doc false) so the precedence
+  # of all command-selection flags is unit-testable without invoking
+  # each command's side effects.
+  @spec pick_command(keyword()) :: command()
+  def pick_command(opts) do
+    pick_info_command(opts) || pick_action_command(opts)
+  end
+
+  @typep command ::
+           {:explain, String.t()}
+           | {:diagram, String.t()}
+           | :init
+           | :stats
+           | :list_packs
+           | :coverage
+           | :pass_coverage
+           | :metrics
+           | :building_blocks
+           | :compare
+           | :freeze
+           | :freeze_stats
+           | :since
+           | :fix
+           | :watch
+           | :normal
+
+  # Read-only / informational commands: print and exit. Listed in their
+  # legacy precedence order so a caller passing several flags gets the
+  # same command as before.
+  defp pick_info_command(opts) do
     cond do
-      Keyword.has_key?(opts, :explain) ->
-        run_explain(opts[:explain])
-
-      Keyword.get(opts, :init, false) ->
-        run_init()
-
-      Keyword.has_key?(opts, :diagram) ->
-        _ = run_diagram(opts[:diagram], paths)
-        :ok
-
-      Keyword.get(opts, :stats, false) ->
-        stats = Stats.collect(paths)
-        Mix.shell().info(Stats.format(stats))
-        :ok
-
-      Keyword.get(opts, :list_packs, false) ->
-        _ = run_list_packs()
-        :ok
-
-      Keyword.get(opts, :coverage, false) ->
-        Archdo.print_coverage_matrix(paths)
-        :ok
-
-      Keyword.get(opts, :pass_coverage, false) ->
-        run_pass_coverage(opts, paths)
-        :ok
-
-      Keyword.get(opts, :metrics, false) ->
-        Archdo.print_metrics_matrix(paths)
-        :ok
-
-      Keyword.get(opts, :building_blocks, false) ->
-        Archdo.print_building_blocks(paths)
-        :ok
-
-      Keyword.has_key?(opts, :compare_with) ->
-        run_compare(opts, paths)
-        :ok
-
-      Keyword.get(opts, :freeze, false) ->
-        run_opts = build_run_opts(opts)
-        Archdo.freeze_baseline(paths, run_opts)
-        :ok
-
-      Keyword.get(opts, :freeze_stats, false) ->
-        run_opts = build_run_opts(opts)
-        exit_status = Archdo.freeze_stats(paths, run_opts)
-        maybe_exit(exit_status)
-
-      Keyword.has_key?(opts, :since) ->
-        run_since(opts, paths)
-
-      Keyword.get(opts, :fix, false) ->
-        run_fix(opts, paths)
-
-      Keyword.get(opts, :watch, false) ->
-        run_watch(opts, paths)
-
-      true ->
-        run_normal(opts, paths)
+      Keyword.has_key?(opts, :explain) -> {:explain, opts[:explain]}
+      Keyword.get(opts, :init, false) -> :init
+      Keyword.has_key?(opts, :diagram) -> {:diagram, opts[:diagram]}
+      Keyword.get(opts, :stats, false) -> :stats
+      Keyword.get(opts, :list_packs, false) -> :list_packs
+      Keyword.get(opts, :coverage, false) -> :coverage
+      Keyword.get(opts, :pass_coverage, false) -> :pass_coverage
+      Keyword.get(opts, :metrics, false) -> :metrics
+      Keyword.get(opts, :building_blocks, false) -> :building_blocks
+      true -> nil
     end
   end
+
+  # Action commands: change state, run analysis, etc. Default is :normal.
+  defp pick_action_command(opts) do
+    cond do
+      Keyword.has_key?(opts, :compare_with) -> :compare
+      Keyword.get(opts, :freeze, false) -> :freeze
+      Keyword.get(opts, :freeze_stats, false) -> :freeze_stats
+      Keyword.has_key?(opts, :since) -> :since
+      Keyword.get(opts, :fix, false) -> :fix
+      Keyword.get(opts, :watch, false) -> :watch
+      true -> :normal
+    end
+  end
+
+  defp invoke({:explain, key}, _opts, _paths), do: run_explain(key)
+
+  defp invoke(:init, _opts, _paths), do: run_init()
+
+  defp invoke({:diagram, kind}, _opts, paths) do
+    _ = run_diagram(kind, paths)
+    :ok
+  end
+
+  defp invoke(:stats, _opts, paths) do
+    stats = Stats.collect(paths)
+    Mix.shell().info(Stats.format(stats))
+    :ok
+  end
+
+  defp invoke(:list_packs, _opts, _paths) do
+    _ = run_list_packs()
+    :ok
+  end
+
+  defp invoke(:coverage, _opts, paths) do
+    Archdo.print_coverage_matrix(paths)
+    :ok
+  end
+
+  defp invoke(:pass_coverage, opts, paths) do
+    run_pass_coverage(opts, paths)
+    :ok
+  end
+
+  defp invoke(:metrics, _opts, paths) do
+    Archdo.print_metrics_matrix(paths)
+    :ok
+  end
+
+  defp invoke(:building_blocks, _opts, paths) do
+    Archdo.print_building_blocks(paths)
+    :ok
+  end
+
+  defp invoke(:compare, opts, paths) do
+    run_compare(opts, paths)
+    :ok
+  end
+
+  defp invoke(:freeze, opts, paths) do
+    run_opts = build_run_opts(opts)
+    Archdo.freeze_baseline(paths, run_opts)
+    :ok
+  end
+
+  defp invoke(:freeze_stats, opts, paths) do
+    run_opts = build_run_opts(opts)
+    exit_status = Archdo.freeze_stats(paths, run_opts)
+    maybe_exit(exit_status)
+  end
+
+  defp invoke(:since, opts, paths), do: run_since(opts, paths)
+  defp invoke(:fix, opts, paths), do: run_fix(opts, paths)
+  defp invoke(:watch, opts, paths), do: run_watch(opts, paths)
+  defp invoke(:normal, opts, paths), do: run_normal(opts, paths)
 
   defp run_compare(opts, paths) do
     compare_paths = parse_list(Keyword.get(opts, :compare_with, ""))
