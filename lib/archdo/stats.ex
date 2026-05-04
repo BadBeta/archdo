@@ -214,73 +214,76 @@ defmodule Archdo.Stats do
   end
 
   defp analyze_ast(ast, path) do
-    {_, counts} =
-      Macro.prewalk(ast, empty_ast_stats(), fn
-        {:defmodule, _, _} = node, acc ->
-          {node, %{acc | modules: acc.modules + 1}}
-
-        {:def, meta, [{name, _, _} | _]} = node, acc when is_atom(name) ->
-          {node,
-           %{
-             acc
-             | public_fns: acc.public_fns + 1,
-               module_lines: [{path, name, AST.line(meta)} | acc.module_lines]
-           }}
-
-        {:defp, _, [{name, _, _} | _]} = node, acc when is_atom(name) ->
-          {node, %{acc | private_fns: acc.private_fns + 1}}
-
-        {:defmacro, _, [{name, _, _} | _]} = node, acc when is_atom(name) ->
-          {node, %{acc | macros: acc.macros + 1}}
-
-        {:defmacrop, _, [{name, _, _} | _]} = node, acc when is_atom(name) ->
-          {node, %{acc | macros: acc.macros + 1}}
-
-        {:test, _, [_ | _]} = node, acc ->
-          {node, %{acc | tests: acc.tests + 1}}
-
-        {:describe, _, [_ | _]} = node, acc ->
-          {node, %{acc | describes: acc.describes + 1}}
-
-        {:use, _, [{:__aliases__, _, [:GenServer]} | _]} = node, acc ->
-          {node, %{acc | genservers: acc.genservers + 1}}
-
-        {:use, _, [{:__aliases__, _, [:Supervisor]} | _]} = node, acc ->
-          {node, %{acc | supervisors: acc.supervisors + 1}}
-
-        {:use, _, [{:__aliases__, _, [_, :Schema]} | _]} = node, acc ->
-          {node, %{acc | schemas: acc.schemas + 1}}
-
-        {:schema, _, _} = node, acc ->
-          {node, %{acc | schemas: max(acc.schemas, 1)}}
-
-        {:defstruct, _, _} = node, acc ->
-          {node, %{acc | structs: acc.structs + 1}}
-
-        {:@, _, [{:behaviour, _, _}]} = node, acc ->
-          {node, %{acc | behaviours_implemented: acc.behaviours_implemented + 1}}
-
-        {:@, _, [{:callback, _, _}]} = node, acc ->
-          {node, %{acc | behaviours_defined: acc.behaviours_defined + 1}}
-
-        {:defprotocol, _, _} = node, acc ->
-          {node, %{acc | protocols: acc.protocols + 1}}
-
-        {:@, _, [{:spec, _, _}]} = node, acc ->
-          {node, %{acc | specs: acc.specs + 1}}
-
-        {:@, _, [{:moduledoc, _, [false]}]} = node, acc ->
-          {node, acc}
-
-        {:@, _, [{:moduledoc, _, [_]}]} = node, acc ->
-          {node, %{acc | moduledocs: acc.moduledocs + 1}}
-
-        node, acc ->
-          {node, acc}
-      end)
-
+    {_, counts} = Macro.prewalk(ast, empty_ast_stats(), &count_node(&1, &2, path))
     counts
   end
+
+  defp count_node({:defmodule, _, _} = node, acc, _path),
+    do: {node, %{acc | modules: acc.modules + 1}}
+
+  defp count_node({:def, meta, [{name, _, _} | _]} = node, acc, path)
+       when is_atom(name) do
+    {node,
+     %{
+       acc
+       | public_fns: acc.public_fns + 1,
+         module_lines: [{path, name, AST.line(meta)} | acc.module_lines]
+     }}
+  end
+
+  defp count_node({:defp, _, [{name, _, _} | _]} = node, acc, _path)
+       when is_atom(name),
+       do: {node, %{acc | private_fns: acc.private_fns + 1}}
+
+  defp count_node({:defmacro, _, [{name, _, _} | _]} = node, acc, _path)
+       when is_atom(name),
+       do: {node, %{acc | macros: acc.macros + 1}}
+
+  defp count_node({:defmacrop, _, [{name, _, _} | _]} = node, acc, _path)
+       when is_atom(name),
+       do: {node, %{acc | macros: acc.macros + 1}}
+
+  defp count_node({:test, _, [_ | _]} = node, acc, _path),
+    do: {node, %{acc | tests: acc.tests + 1}}
+
+  defp count_node({:describe, _, [_ | _]} = node, acc, _path),
+    do: {node, %{acc | describes: acc.describes + 1}}
+
+  defp count_node({:use, _, [{:__aliases__, _, [:GenServer]} | _]} = node, acc, _path),
+    do: {node, %{acc | genservers: acc.genservers + 1}}
+
+  defp count_node({:use, _, [{:__aliases__, _, [:Supervisor]} | _]} = node, acc, _path),
+    do: {node, %{acc | supervisors: acc.supervisors + 1}}
+
+  defp count_node({:use, _, [{:__aliases__, _, [_, :Schema]} | _]} = node, acc, _path),
+    do: {node, %{acc | schemas: acc.schemas + 1}}
+
+  defp count_node({:schema, _, _} = node, acc, _path),
+    do: {node, %{acc | schemas: max(acc.schemas, 1)}}
+
+  defp count_node({:defstruct, _, _} = node, acc, _path),
+    do: {node, %{acc | structs: acc.structs + 1}}
+
+  defp count_node({:@, _, [{:behaviour, _, _}]} = node, acc, _path),
+    do: {node, %{acc | behaviours_implemented: acc.behaviours_implemented + 1}}
+
+  defp count_node({:@, _, [{:callback, _, _}]} = node, acc, _path),
+    do: {node, %{acc | behaviours_defined: acc.behaviours_defined + 1}}
+
+  defp count_node({:defprotocol, _, _} = node, acc, _path),
+    do: {node, %{acc | protocols: acc.protocols + 1}}
+
+  defp count_node({:@, _, [{:spec, _, _}]} = node, acc, _path),
+    do: {node, %{acc | specs: acc.specs + 1}}
+
+  # `@moduledoc false` is intentional opt-out — don't count it.
+  defp count_node({:@, _, [{:moduledoc, _, [false]}]} = node, acc, _path),
+    do: {node, acc}
+
+  defp count_node({:@, _, [{:moduledoc, _, [_]}]} = node, acc, _path),
+    do: {node, %{acc | moduledocs: acc.moduledocs + 1}}
+
+  defp count_node(node, acc, _path), do: {node, acc}
 
   defp empty_ast_stats do
     %{
