@@ -87,60 +87,43 @@ defmodule Archdo.Compiled.DiagramSystem do
     end)
   end
 
-  defp classify_module(mod, info) do
+  @interface_markers [
+    "Controller",
+    "Live.",
+    "LiveView",
+    "Channel",
+    "Socket",
+    "Endpoint",
+    "Router",
+    "Plug.",
+    "Mix.Tasks."
+  ]
+
+  @infrastructure_markers [".Repo", "Mailer", ".Adapter", ".Client"]
+
+  @doc false
+  # Classify a module into one of the three architecture layers used by
+  # the system diagram. Public-but-doc-false so the layer-classification
+  # contract is unit-testable.
+  #
+  # `info` (the graph module-info map) is currently unused — the previous
+  # implementation had a redundant OTP-behaviour branch that fell through
+  # to the same :domain default. The arg is preserved so future callers
+  # can extend the classifier (e.g. split processes from plain modules)
+  # without changing the call site in classify_into_layers/2.
+  @spec classify_module(module(), %{behaviours: [module()]}) ::
+          :interface | :infrastructure | :domain
+  def classify_module(mod, _info) do
     mod_str = Atom.to_string(mod)
 
     cond do
-      # Interface layer: controllers, LiveView, channels, plugs, CLI
-      String.contains?(mod_str, "Controller") ->
-        :interface
-
-      String.contains?(mod_str, "Live.") ->
-        :interface
-
-      String.contains?(mod_str, "LiveView") ->
-        :interface
-
-      String.contains?(mod_str, "Channel") ->
-        :interface
-
-      String.contains?(mod_str, "Socket") ->
-        :interface
-
-      String.contains?(mod_str, "Endpoint") ->
-        :interface
-
-      String.contains?(mod_str, "Router") ->
-        :interface
-
-      String.contains?(mod_str, "Plug.") ->
-        :interface
-
-      String.contains?(mod_str, "Mix.Tasks.") ->
-        :interface
-
-      # Infrastructure: Repo, Mailer, HTTP clients, external service adapters
-      String.contains?(mod_str, ".Repo") ->
-        :infrastructure
-
-      String.contains?(mod_str, "Mailer") ->
-        :infrastructure
-
-      String.contains?(mod_str, ".Adapter") ->
-        :infrastructure
-
-      String.contains?(mod_str, ".Client") ->
-        :infrastructure
-
-      # Check if it's an OTP process (GenServer/Supervisor/Agent)
-      Enum.any?(info.behaviours, &(&1 in [Supervisor, GenServer, Agent, :gen_statem])) ->
-        :domain
-
-      # Default: domain
-      true ->
-        :domain
+      matches_any?(mod_str, @interface_markers) -> :interface
+      matches_any?(mod_str, @infrastructure_markers) -> :infrastructure
+      true -> :domain
     end
   end
+
+  defp matches_any?(str, markers), do: Enum.any?(markers, &String.contains?(str, &1))
 
   # --- State machine extraction ---
 
