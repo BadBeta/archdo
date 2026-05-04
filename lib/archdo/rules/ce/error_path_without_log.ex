@@ -64,36 +64,46 @@ defmodule Archdo.Rules.CE.ErrorPathWithoutLog do
     contains_error_literal?(body) or has_rescue_clause?(body)
   end
 
-  # Walks the body looking for a literal `{:error, _}` 2-tuple.
-  # Two AST shapes:
+  # Walks the body looking for a literal `{:error, _}` 2-tuple — but
+  # only in EXPRESSION positions. Pattern positions (case clause LHS,
+  # with-else clause LHS, fn clause LHS, `=` LHS, `<-` LHS) match
+  # `{:error, _}` rather than constructing it; they don't count.
+  #
+  # Two AST shapes for the literal itself:
   #   - bare parser:           {:error, reason}
   #   - literal_encoder parser: {{:__block__, _, [:error]}, reason}
-  defp contains_error_literal?(body) do
-    {_, hit?} =
-      Macro.prewalk(body, false, fn
-        node, true ->
-          {node, true}
+  defp contains_error_literal?(body), do: walk_expr(body)
 
-        {{:__block__, _, [:error]}, _reason} = node, false ->
-          {node, true}
+  # Clause shapes — walk the body (RHS of `->`), skip the patterns (LHS).
+  defp walk_expr({:->, _, [_patterns, body]}), do: walk_expr(body)
 
-        {:error, _reason} = node, false ->
-          {node, true}
+  # `=` and `<-` — walk the RHS expression, skip the LHS pattern.
+  defp walk_expr({:=, _, [_lhs, rhs]}), do: walk_expr(rhs)
+  defp walk_expr({:<-, _, [_lhs, rhs]}), do: walk_expr(rhs)
 
-        # 3+ element tuples (3-tuple shape used for function calls):
-        # {:{}, meta, [:error, reason]} or with __block__-wrapped :error
-        {:{}, _, [{:__block__, _, [:error]} | [_reason]]} = node, false ->
-          {node, true}
+  # The {:error, _} literal in expression position — both bare and
+  # literal_encoder-wrapped forms.
+  defp walk_expr({{:__block__, _, [:error]}, _reason}), do: true
+  defp walk_expr({:error, _reason}), do: true
 
-        {:{}, _, [:error | [_reason]]} = node, false ->
-          {node, true}
+  # 3+ element tuples (parser sometimes uses {:{}, _, [:error, reason]}
+  # for the 3+-tuple shape).
+  defp walk_expr({:{}, _, [{:__block__, _, [:error]} | _]}), do: true
+  defp walk_expr({:{}, _, [:error | _]}), do: true
 
-        node, false ->
-          {node, false}
-      end)
-
-    hit?
+  # Generic recursion: walk every child as expression. This is a
+  # superset — it also walks pattern-shaped children inside non-clause
+  # constructs (e.g., a `try` body) — but the only literal we're
+  # looking for is `{:error, _}`, which the clauses above gate on
+  # explicitly. The clause-shape skips above prevent the
+  # most-common-source-of-noise pattern positions.
+  defp walk_expr({form, _, args}) when is_list(args) do
+    walk_expr(form) or Enum.any?(args, &walk_expr/1)
   end
+
+  defp walk_expr(list) when is_list(list), do: Enum.any?(list, &walk_expr/1)
+  defp walk_expr({a, b}), do: walk_expr(a) or walk_expr(b)
+  defp walk_expr(_), do: false
 
   defp has_rescue_clause?(body) do
     AST.contains?(body, fn

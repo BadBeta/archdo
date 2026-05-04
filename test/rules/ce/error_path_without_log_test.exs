@@ -119,5 +119,66 @@ defmodule Archdo.Rules.CE.ErrorPathWithoutLogTest do
 
       assert_clean(ErrorPathWithoutLog, code)
     end
+
+    test "does NOT fire when {:error, _} appears only in case clause patterns (LHS)" do
+      # `case` clause heads MATCH `{:error, _}` — they don't return it.
+      # The function returns the body's last expression.
+      code = ~S"""
+      defmodule MyApp.Match do
+        def lookup(id) do
+          case fetch(id) do
+            {:ok, v} -> v
+            {:error, _reason} -> :not_found
+          end
+        end
+      end
+      """
+
+      assert_clean(ErrorPathWithoutLog, code)
+    end
+
+    test "does NOT fire when {:error, _} appears only in with-else patterns (LHS)" do
+      code = ~S"""
+      defmodule MyApp.WithElse do
+        def go(x) do
+          with {:ok, a} <- step1(x),
+               {:ok, b} <- step2(a) do
+            {:ok, b}
+          else
+            {:error, msg} -> :handled
+          end
+        end
+      end
+      """
+
+      assert_clean(ErrorPathWithoutLog, code)
+    end
+
+    test "does NOT fire when {:error, _} appears only in function-clause head (LHS)" do
+      code = ~S"""
+      defmodule MyApp.Heads do
+        def handle({:ok, v}), do: v
+        def handle({:error, _reason}), do: :default
+      end
+      """
+
+      assert_clean(ErrorPathWithoutLog, code)
+    end
+
+    test "still fires when {:error, _} is constructed and returned (not just matched)" do
+      # The literal IS being constructed at the return site — true positive.
+      code = ~S"""
+      defmodule MyApp.Returns do
+        def go(x) do
+          case fetch(x) do
+            {:ok, v} -> {:ok, v}
+            {:ok, _other} -> {:error, :unexpected}
+          end
+        end
+      end
+      """
+
+      assert_flagged(ErrorPathWithoutLog, code)
+    end
   end
 end
