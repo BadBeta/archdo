@@ -151,78 +151,90 @@ defmodule Archdo.Compiled.Diagram do
   """
   @spec blast_radius(CompiledGraph.t(), module()) :: String.t()
   def blast_radius(graph, module) do
-    report = Query.blast_radius(graph, module)
+    format_blast_radius(Query.blast_radius(graph, module), module)
+  end
+
+  @doc false
+  # Pure formatter — takes a precomputed Query.blast_radius report and
+  # renders the Mermaid string. Public-but-doc-false so the formatting
+  # is unit-testable without constructing a full CompiledGraph.
+  @spec format_blast_radius(map(), module()) :: String.t()
+  def format_blast_radius(report, module) do
     mod_name = AST.module_name(module)
 
-    lines = [
+    [
+      blast_header(module, mod_name),
+      blast_depth_subgraphs(report),
+      blast_connections(report, mod_name),
+      [""],
+      blast_depth_colors(report)
+    ]
+    |> Enum.concat()
+    |> Enum.join("\n")
+  end
+
+  @max_depth_rows 15
+
+  defp blast_header(module, mod_name) do
+    [
       "graph TD",
       "",
       "  #{sanitize_id(mod_name)}[\"#{AST.short_name(module)} · CHANGED\"]",
       "  style #{sanitize_id(mod_name)} fill:#F44336,color:#fff,stroke:#B71C1C",
       ""
     ]
-
-    depth_lines =
-      report.transitive_dependents
-      |> Enum.sort_by(fn {depth, _mods} -> depth end)
-      |> Enum.flat_map(fn {depth, mods} ->
-        subgraph_id = "depth_#{depth}"
-        header = ["  subgraph #{subgraph_id}[\"Depth #{depth} — #{length(mods)} modules\"]"]
-
-        mod_lines =
-          mods
-          |> Enum.take(15)
-          |> Enum.map(fn mod ->
-            id = sanitize_id(AST.module_name(mod))
-            "    #{id}[\"#{AST.short_name(mod)}\"]"
-          end)
-
-        more =
-          case length(mods) > 15 do
-            true -> ["    more_#{depth}[\"... +#{length(mods) - 15} more\"]"]
-            false -> []
-          end
-
-        footer = ["  end"]
-
-        header ++ mod_lines ++ more ++ footer ++ [""]
-      end)
-
-    # Connect changed module to depth 1
-    connect_lines =
-      case Map.get(report.transitive_dependents, 1, []) do
-        [] ->
-          []
-
-        depth1_mods ->
-          depth1_mods
-          |> Enum.take(15)
-          |> Enum.map(fn mod ->
-            "  #{sanitize_id(mod_name)} --> #{sanitize_id(AST.module_name(mod))}"
-          end)
-      end
-
-    # Color depth layers
-    color_lines =
-      report.transitive_dependents
-      |> Enum.sort_by(fn {depth, _} -> depth end)
-      |> Enum.flat_map(fn {depth, mods} ->
-        color =
-          case depth do
-            1 -> "#FF9800"
-            2 -> "#FFC107"
-            _ -> "#FFEB3B"
-          end
-
-        mods
-        |> Enum.take(15)
-        |> Enum.map(fn mod ->
-          "  style #{sanitize_id(AST.module_name(mod))} fill:#{color}"
-        end)
-      end)
-
-    Enum.join(lines ++ depth_lines ++ connect_lines ++ [""] ++ color_lines, "\n")
   end
+
+  defp blast_depth_subgraphs(report) do
+    report.transitive_dependents
+    |> Enum.sort_by(fn {depth, _} -> depth end)
+    |> Enum.flat_map(&depth_subgraph/1)
+  end
+
+  defp depth_subgraph({depth, mods}) do
+    total = length(mods)
+
+    [
+      "  subgraph depth_#{depth}[\"Depth #{depth} — #{total} modules\"]"
+    ] ++
+      Enum.map(Enum.take(mods, @max_depth_rows), fn mod ->
+        "    #{sanitize_id(AST.module_name(mod))}[\"#{AST.short_name(mod)}\"]"
+      end) ++
+      depth_overflow(total, depth) ++
+      ["  end", ""]
+  end
+
+  defp depth_overflow(total, depth) when total > @max_depth_rows,
+    do: ["    more_#{depth}[\"... +#{total - @max_depth_rows} more\"]"]
+
+  defp depth_overflow(_total, _depth), do: []
+
+  defp blast_connections(report, mod_name) do
+    report.transitive_dependents
+    |> Map.get(1, [])
+    |> Enum.take(@max_depth_rows)
+    |> Enum.map(fn mod ->
+      "  #{sanitize_id(mod_name)} --> #{sanitize_id(AST.module_name(mod))}"
+    end)
+  end
+
+  defp blast_depth_colors(report) do
+    report.transitive_dependents
+    |> Enum.sort_by(fn {depth, _} -> depth end)
+    |> Enum.flat_map(&depth_color_lines/1)
+  end
+
+  defp depth_color_lines({depth, mods}) do
+    color = depth_color(depth)
+
+    Enum.map(Enum.take(mods, @max_depth_rows), fn mod ->
+      "  style #{sanitize_id(AST.module_name(mod))} fill:#{color}"
+    end)
+  end
+
+  defp depth_color(1), do: "#FF9800"
+  defp depth_color(2), do: "#FFC107"
+  defp depth_color(_), do: "#FFEB3B"
 
   # --- Private helpers ---
 
