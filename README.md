@@ -2,7 +2,11 @@
 
 Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, boundary enforcement, and some LLM code slop.
 
-**203 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+**200 rules** across 11 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+
+### Building-block tests
+
+Beyond rule-based findings, Archdo scores every public function on six axes (input closure, determinism, output completeness, totality, side-effect freedom, errors-as-values) and rolls them up to a per-module verdict: `:building_block`, `:leak`, or `:no_public_api`. The verdict is library-aware (Hex-published modules anchor as public API), DSL-aware (modules with no public `def` are excluded rather than vacuously passing), and behaviour-aware (project-level `@callback` resolution covers older codebases without `@impl true`).
 
 ### LLM slop detection
 
@@ -15,7 +19,7 @@ Rule 6.33 detects five patterns of unnecessarily verbose code typically generate
 | **Boundaries & Architecture** | 29 | Dependency direction, context encapsulation, circular deps, chatty boundaries, unvalidated params, reverse dependencies, query in interface, cross-context schema/process/config coupling, shared DB/ETS tables, LiveView logic, N+1 preload, dev dep hygiene, compiled: cross-boundary calls, blast radius, orphan modules |
 | **Public API** | 2 | Missing @moduledoc, missing @spec |
 | **Single Source of Truth** | 5 | Type-2/3 clones, scattered config, reinvented enumerable |
-| **Coupling & Abstraction** | 28 | Behaviour size, broad imports, unused deps/aliases, mockability, feature envy, speculative generality, missing telemetry, N+1 queries, compiled: unused imports, weak deps, phantom deps |
+| **Coupling & Abstraction** | 30 | Behaviour size, broad imports, unused deps/aliases, mockability, feature envy, speculative generality, missing telemetry, N+1 queries, compiled: unused imports, weak deps, phantom deps |
 | **OTP discipline** | 43 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock, callback sprawl, atom exhaustion, ETS cleanup, sequential-where-parallel |
 | **Module quality** | 53 | Complexity, error handling (7 rules), recursion (4 rules), **LLM slop detection** (5 sub-checks), dead functions, **performance traps** (8 rules: string concat, list ops, collection waste, regex, keyword lookup), nested control flow, boolean blindness, stub detection, **shadowed clauses**, **over-eager evaluation** (6 sub-checks), **sensitive data exposure** (6 sub-checks) |
 | **Testing** | 24 | Coverage gaps, over-mocking, empty describe, missing error paths, untested modules, process leaks, flaky indicators, assert on implementation, compiled: test-only public |
