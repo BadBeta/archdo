@@ -471,21 +471,33 @@ defmodule Archdo do
   """
   @spec print_building_blocks([String.t()]) :: non_neg_integer()
   def print_building_blocks(paths \\ ["lib"]) do
-    source_files = collect_files(paths)
-    file_asts = AST.parse_files(source_files)
+    file_asts = paths |> collect_files() |> AST.parse_files()
+    {blocks, leaks, total_modules} = building_block_split(file_asts)
 
+    print_audit_intro()
+    print_modules_section(blocks, total_modules)
+    print_contexts_section(file_asts)
+    print_near_block_section(leaks)
+    print_audit_summary(leaks)
+
+    0
+  end
+
+  defp building_block_split(file_asts) do
     module_results =
       file_asts
       |> Enum.map(fn {file, ast} ->
-        module = AST.extract_module_name(ast)
-        verdict = Archdo.Blackbox.module_verdict(ast)
-        {module, file, ast, verdict}
+        {AST.extract_module_name(ast), file, ast, Archdo.Blackbox.module_verdict(ast)}
       end)
       |> Enum.reject(fn {module, _, _, _} -> module == "Unknown" end)
 
     {blocks, leaks} =
       Enum.split_with(module_results, fn {_, _, _, v} -> v == :building_block end)
 
+    {blocks, leaks, length(module_results)}
+  end
+
+  defp print_audit_intro do
     IO.puts("\nArchdo — Building Block Audit (M-Aux4)\n")
 
     IO.puts(
@@ -493,65 +505,62 @@ defmodule Archdo do
         "possibility metric (input_closure × determinism × output_completeness ×\n" <>
         "totality × side_effect_free × errors_as_values).\n"
     )
+  end
 
-    IO.puts("─── Building-block MODULES (#{length(blocks)} of #{length(module_results)}) ───\n")
+  defp print_modules_section(blocks, total) do
+    IO.puts("─── Building-block MODULES (#{length(blocks)} of #{total}) ───\n")
+    print_modules_list(blocks)
+  end
 
-    case blocks do
-      [] ->
-        IO.puts("  (none — likely missing @spec coverage; see --metrics for breakdown)\n")
+  defp print_modules_list([]),
+    do: IO.puts("  (none — likely missing @spec coverage; see --metrics for breakdown)\n")
 
-      list ->
-        list
-        |> Enum.map(fn {m, _, _, _} -> m end)
-        |> Enum.sort()
-        |> Enum.each(&IO.puts("  ✓ #{&1}"))
+  defp print_modules_list(list) do
+    list
+    |> Enum.map(fn {m, _, _, _} -> m end)
+    |> Enum.sort()
+    |> Enum.each(&IO.puts("  ✓ #{&1}"))
 
-        IO.puts("")
-    end
+    IO.puts("")
+  end
 
-    # Context audit: for each module that classifies as a :context per
-    # Phoenix.classify_file, check whether the entire namespace is a
-    # building block.
-    context_modules =
-      file_asts
-      |> Enum.flat_map(fn {file, ast} ->
-        case Phoenix.classify_file(file, ast).layer do
-          :context -> [AST.extract_module_name(ast)]
-          _ -> []
-        end
+  defp print_contexts_section(file_asts) do
+    contexts = collect_context_modules(file_asts)
+    print_contexts_list(contexts, file_asts)
+  end
+
+  defp collect_context_modules(file_asts) do
+    file_asts
+    |> Enum.flat_map(fn {file, ast} ->
+      case Phoenix.classify_file(file, ast).layer do
+        :context -> [AST.extract_module_name(ast)]
+        _ -> []
+      end
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp print_contexts_list([], _file_asts), do: :ok
+
+  defp print_contexts_list(contexts, file_asts) do
+    verdicts =
+      Enum.map(contexts, fn ctx ->
+        {ctx, Archdo.Blackbox.context_verdict(file_asts, ctx)}
       end)
-      |> Enum.uniq()
-      |> Enum.sort()
 
-    case context_modules do
-      [] ->
-        :ok
+    building_blocks = Enum.count(verdicts, fn {_, v} -> v == :building_block end)
 
-      contexts ->
-        verdicts =
-          Enum.map(contexts, fn ctx ->
-            {ctx, Archdo.Blackbox.context_verdict(file_asts, ctx)}
-          end)
+    IO.puts("─── Building-block CONTEXTS (#{building_blocks} of #{length(contexts)}) ───\n")
+    Enum.each(verdicts, &print_context_verdict/1)
+    IO.puts("")
+  end
 
-        building_block_contexts = Enum.filter(verdicts, fn {_, v} -> v == :building_block end)
-
-        IO.puts(
-          "─── Building-block CONTEXTS (#{length(building_block_contexts)} of #{length(contexts)}) ───\n"
-        )
-
-        Enum.each(verdicts, &print_context_verdict/1)
-
-        IO.puts("")
-    end
-
-    print_near_block_section(leaks)
-
+  defp print_audit_summary(leaks) do
     IO.puts(
       "\nLeaks summary: #{length(leaks)} modules have at least one impure or " <>
         "spec-less public function."
     )
-
-    0
   end
 
   # M-Aux5: rank non-block modules by refactor distance (count of failed
