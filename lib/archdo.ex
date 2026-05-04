@@ -575,9 +575,55 @@ defmodule Archdo do
         String.ends_with?(file, ".ex") and
         MapSet.member?(dirs_with_children, Path.rootname(file))
     end)
-    |> Enum.map(fn {_file, ast} -> AST.extract_module_name(ast) end)
+    |> Enum.map(fn {file, ast} -> primary_module_name(file, ast) end)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  # For files defining multiple modules (`lib/plug/upload.ex` defines
+  # both `Plug.Upload` AND `Plug.UploadError`), `extract_module_name/1`
+  # returns the FIRST defmodule encountered — which may not be the
+  # file's primary module. Convention is that the file's rootname
+  # implies the primary module name (`upload.ex` → `Plug.Upload`).
+  # If that name is among the file's defined modules, prefer it.
+  # Validated against Plug.
+  defp primary_module_name(file, ast) do
+    expected = filename_derived_module(file)
+
+    case expected != nil and contains_module?(ast, expected) do
+      true -> expected
+      false -> AST.extract_module_name(ast)
+    end
+  end
+
+  defp filename_derived_module(file) do
+    case Regex.run(~r{(?:^|/)lib/(.+?)\.ex$}, file) do
+      [_, path] ->
+        path
+        |> Path.split()
+        |> Enum.map(&Macro.camelize/1)
+        |> Enum.join(".")
+
+      _ ->
+        nil
+    end
+  end
+
+  defp contains_module?(ast, module_name) do
+    {_, found} =
+      Macro.prewalk(ast, false, fn
+        node, true ->
+          {node, true}
+
+        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, false ->
+          name = aliases |> Module.concat() |> AST.module_name()
+          {node, name == module_name}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found
   end
 
   defp print_contexts_list([], _file_asts), do: :ok

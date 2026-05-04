@@ -37,6 +37,47 @@ defmodule Archdo.AuditTest do
       assert output =~ "(none —" or output =~ "0 of 0"
     end
 
+    test "context audit prefers filename-derived module for multi-defmodule files", %{
+      tmp_dir: tmp_dir
+    } do
+      # Validated against Plug — `lib/plug/upload.ex` defines BOTH
+      # `Plug.Upload` AND `Plug.UploadError`. The directory
+      # `lib/plug/upload/` matches `Plug.Upload`, but the audit was
+      # picking the first-encountered defmodule (Plug.UploadError),
+      # producing misleading output:
+      #
+      #   ✗ Plug.UploadError — leaks: Plug.UploadError
+      #
+      # Fix: when a file's rootname-camelized module name is among
+      # the modules actually defined in the file, prefer that — it's
+      # the primary module by Elixir convention.
+      write(tmp_dir, "lib/my_app/upload.ex", ~S"""
+      defmodule MyApp.UploadError do
+        defexception [:message]
+      end
+
+      defmodule MyApp.Upload do
+        @moduledoc "Upload context."
+        @spec save(map()) :: :ok | {:error, term()}
+        def save(_attrs), do: :ok
+      end
+      """)
+
+      write(tmp_dir, "lib/my_app/upload/supervisor.ex", ~S"""
+      defmodule MyApp.Upload.Supervisor do
+        @moduledoc false
+        def child_spec(_), do: %{id: __MODULE__, start: {__MODULE__, :start_link, [[]]}}
+      end
+      """)
+
+      output = capture_io(fn -> Archdo.print_building_blocks([tmp_dir]) end)
+
+      assert output =~ "MyApp.Upload"
+
+      refute output =~ "MyApp.UploadError —",
+             "should not list UploadError as a context — Upload owns the namespace"
+    end
+
     test "context audit lists only modules with sub-namespace members", %{tmp_dir: tmp_dir} do
       # MyApp.Accounts is a real context — it has sub-modules under
       # lib/my_app/accounts/. MyApp.Backoff is a leaf module — no
