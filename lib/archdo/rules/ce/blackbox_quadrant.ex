@@ -59,7 +59,20 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
   def axes(file, ast, opts) do
     layer = phoenix_layer(file, ast, opts)
     scores = Blackbox.score_module(ast)
-    impls = AST.impl_callbacks(ast)
+
+    # Combine two impl-detection sources:
+    #   1. Explicit `@impl true` markers on individual functions.
+    #   2. Project-level resolution: read the module's `@behaviour Foo`
+    #      declarations and look up Foo's @callback specs in the
+    #      project-level callback map (built by Runner pre-pass via
+    #      AST.collect_behaviour_callbacks/1).
+    # Older codebases (validated against Commanded) declare
+    # `@behaviour Foo` without `@impl true` annotations on each
+    # implementation. The project-level resolution catches those.
+    explicit_impls = AST.impl_callbacks(ast)
+    project_callbacks = Keyword.get(opts, :behaviour_callbacks, %{})
+    inferred_impls = AST.module_implemented_callbacks(ast, project_callbacks)
+    impls = MapSet.union(explicit_impls, inferred_impls)
 
     ast
     |> AST.extract_functions(:public)

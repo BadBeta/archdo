@@ -21,6 +21,13 @@ defmodule Archdo.Runner do
   # The pre-pass only runs when at least one of these is enabled.
   @plug_coverage_consumers ["CE-27", "CE-28"]
 
+  # §§ M-CG90 — rules that consume the project-level behaviour-callback
+  # map (built by AST.collect_behaviour_callbacks/1). Lets per-file
+  # rules resolve `@behaviour Foo` to Foo's callback set without
+  # re-parsing every other file. The pre-pass only runs when at least
+  # one of these is enabled.
+  @behaviour_callbacks_consumers ["CE-54"]
+
   # The rule registries live on `Archdo.Rules` — `Rules.phase1_rules/0`
   # and `Rules.graph_rules/0`. Defdelegated here for the public API
   # callers (Mix tasks, MCP tools) that historically read these lists
@@ -43,6 +50,7 @@ defmodule Archdo.Runner do
     # rule is enabled (saves the parse) or when caller pre-supplied
     # the index (test seam + composition with analyze_with_graph/2).
     opts = maybe_compute_plug_coverage(opts, files, enabled_rules)
+    opts = maybe_compute_behaviour_callbacks(opts, files, enabled_rules)
 
     files
     |> Task.async_stream(
@@ -227,6 +235,24 @@ defmodule Archdo.Runner do
 
   defp plug_coverage_needed?(rules) do
     Enum.any?(rules, fn rule -> rule.id() in @plug_coverage_consumers end)
+  end
+
+  defp maybe_compute_behaviour_callbacks(opts, files, enabled_rules) do
+    cond do
+      Keyword.has_key?(opts, :behaviour_callbacks) ->
+        opts
+
+      not behaviour_callbacks_needed?(enabled_rules) ->
+        opts
+
+      true ->
+        file_asts = AST.parse_files(files)
+        Keyword.put(opts, :behaviour_callbacks, AST.collect_behaviour_callbacks(file_asts))
+    end
+  end
+
+  defp behaviour_callbacks_needed?(rules) do
+    Enum.any?(rules, fn rule -> rule.id() in @behaviour_callbacks_consumers end)
   end
 
   defp analyze_file(file, rules, opts) do

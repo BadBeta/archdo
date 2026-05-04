@@ -658,6 +658,123 @@ defmodule Archdo.ASTTest do
     end
   end
 
+  describe "collect_behaviour_callbacks/1" do
+    defp parse_file_ast(code) do
+      {:ok, ast} = Code.string_to_quoted(code)
+      ast
+    end
+
+    test "collects {name, arity} pairs for each @callback in a behaviour module" do
+      ast = parse_file_ast("""
+      defmodule MyApp.Cache do
+        @callback get(key :: term()) :: term() | nil
+        @callback put(key :: term(), value :: term()) :: :ok
+        @callback delete(key :: term()) :: :ok
+      end
+      """)
+
+      result = AST.collect_behaviour_callbacks([{"lib/cache.ex", ast}])
+      assert MapSet.member?(result["MyApp.Cache"], {:get, 1})
+      assert MapSet.member?(result["MyApp.Cache"], {:put, 2})
+      assert MapSet.member?(result["MyApp.Cache"], {:delete, 1})
+    end
+
+    test "skips modules without @callback declarations" do
+      ast = parse_file_ast("""
+      defmodule MyApp.Plain do
+        def f(x), do: x
+      end
+      """)
+
+      assert AST.collect_behaviour_callbacks([{"lib/plain.ex", ast}]) == %{}
+    end
+
+    test "merges callbacks from multiple behaviour modules in the project" do
+      ast1 = parse_file_ast("""
+      defmodule MyApp.A do
+        @callback foo() :: :ok
+      end
+      """)
+
+      ast2 = parse_file_ast("""
+      defmodule MyApp.B do
+        @callback bar(integer()) :: integer()
+      end
+      """)
+
+      result = AST.collect_behaviour_callbacks([{"a.ex", ast1}, {"b.ex", ast2}])
+      assert Map.has_key?(result, "MyApp.A")
+      assert Map.has_key?(result, "MyApp.B")
+    end
+  end
+
+  describe "module_implemented_callbacks/2" do
+    test "returns empty for a module without @behaviour declarations" do
+      ast = parse_file_ast("""
+      defmodule MyApp.Plain do
+        def f(x), do: x
+      end
+      """)
+
+      callbacks_map = %{"MyApp.Cache" => MapSet.new([{:get, 1}])}
+      assert MapSet.size(AST.module_implemented_callbacks(ast, callbacks_map)) == 0
+    end
+
+    test "resolves @behaviour Foo to Foo's callback set" do
+      ast = parse_file_ast("""
+      defmodule MyApp.Logger do
+        @behaviour MyApp.Middleware
+        def before_dispatch(p), do: p
+        def after_dispatch(p), do: p
+        def after_failure(p), do: p
+      end
+      """)
+
+      callbacks_map = %{
+        "MyApp.Middleware" =>
+          MapSet.new([{:before_dispatch, 1}, {:after_dispatch, 1}, {:after_failure, 1}])
+      }
+
+      result = AST.module_implemented_callbacks(ast, callbacks_map)
+      assert MapSet.member?(result, {:before_dispatch, 1})
+      assert MapSet.member?(result, {:after_dispatch, 1})
+      assert MapSet.member?(result, {:after_failure, 1})
+    end
+
+    test "returns empty when the behaviour is unknown to the project (e.g. GenServer)" do
+      ast = parse_file_ast("""
+      defmodule MyApp.Worker do
+        @behaviour GenServer
+        def init(_), do: {:ok, %{}}
+      end
+      """)
+
+      # Empty callbacks_map — we don't know GenServer's callbacks (they
+      # come from OTP, not the project).
+      assert MapSet.size(AST.module_implemented_callbacks(ast, %{})) == 0
+    end
+
+    test "unions callbacks from multiple @behaviour declarations" do
+      ast = parse_file_ast("""
+      defmodule MyApp.Combo do
+        @behaviour MyApp.A
+        @behaviour MyApp.B
+        def foo, do: :ok
+        def bar, do: :ok
+      end
+      """)
+
+      callbacks_map = %{
+        "MyApp.A" => MapSet.new([{:foo, 0}]),
+        "MyApp.B" => MapSet.new([{:bar, 0}])
+      }
+
+      result = AST.module_implemented_callbacks(ast, callbacks_map)
+      assert MapSet.member?(result, {:foo, 0})
+      assert MapSet.member?(result, {:bar, 0})
+    end
+  end
+
   describe "behaviour_or_protocol?/1" do
     test "true for @callback" do
       ast = quote do: (@callback do_thing() :: :ok)
