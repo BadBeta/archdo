@@ -104,7 +104,7 @@ Archdo needs `Jason` (JSON encoding) and `JSV` (JSON Schema validation for MCP t
 Archdo ships rules in two complementary layers:
 
 - **Core rules (226 rules in 11 categories)** — the original architecture-quality checks documented in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md). Always-on by default.
-- **Change Economy rules (32 rules across 4 opt-in packs)** — a second-generation rule family focused on the *cost of changing* the system rather than its current shape. Documented in [ARCHITECTURE_RULES_CHANGE_ECONOMY.md](ARCHITECTURE_RULES_CHANGE_ECONOMY.md). The `core` pack ships on by default; the `ce_compliance`, `ce_privacy`, and `ce_composability` packs are opt-in via `--packs`.
+- **Change Economy rules (32 rules across 4 opt-in packs)** — a second-generation rule family focused on the *cost of changing* the system rather than its current shape. The `core` pack ships on by default; the `ce_compliance`, `ce_privacy`, and `ce_composability` packs are opt-in via `--packs`.
 
 See §3.3 below for the Change Economy + pack system.
 
@@ -1029,7 +1029,7 @@ end
 
 **Common mistake:** marking every controller `@archdo_no_telemetry` because "we have a plug somewhere." The reason string MUST name the actual covering layer — when the plug is removed during a refactor, the markers become incorrect, and the team has no way to find them. Always name the specific module in the reason string.
 
-**Future enhancement:** M-Plan7 (deferred) will discover telemetry-emitting plugs in the router pipeline automatically and exempt the controllers they cover, making this marker mostly redundant. See PLAN_NEXT.md.
+**Future enhancement:** a deferred milestone will discover telemetry-emitting plugs in the router pipeline automatically and exempt the controllers they cover, making this marker mostly redundant.
 
 ---
 
@@ -1503,7 +1503,7 @@ Selected CE rules — what each measures and indicates:
 | **CE-56** Effect leak in near-blackbox | Every Blackbox component ≥0.9 EXCEPT side_effect_free, AND ≤2 observability-only side effects (Logger / Phoenix.PubSub.broadcast / `:telemetry.execute`) | Function is one extracted side-effect away from being a building block |
 | **CE-57** Unguarded building block | Blackbox score ≥0.9 + arity > 0 + at least one clause has bare-variable args without guard, all-specific patterns, or `{:error, _}` fallback | Function looks like a building block but accepts any input — illegal inputs crash deep instead of returning a controlled domain error |
 
-For the full text and rationale of every CE rule, see [ARCHITECTURE_RULES_CHANGE_ECONOMY.md](ARCHITECTURE_RULES_CHANGE_ECONOMY.md).
+For the full text and rationale of every CE rule, run `mix archdo --explain CE-XX`.
 
 #### 3.3.1 Selected CE rules — worked examples
 
@@ -2142,7 +2142,7 @@ Archdo.Compiled.Graph.find_recursive_calls(graph, mfa)  # self-loops
 - `Archdo.Graph` → CE-30, CE-31 (via `AnchorSet.closure/2`), and any rule needing module-level dependency information
 - `Archdo.Compiled.Graph` → all 21 compiled-analysis rules in `Archdo.Rules.Compiled.*`
 
-**Future split (M-Plan19):** `Archdo.Compiled.Graph` is currently 927 lines mixing build (struct + ingest) and read (query API) responsibilities. M-Plan19 (deferred) splits it into `Compiled.Graph` (build) + `Compiled.Query` (read), with `Archdo.Compiled` as the public facade. See PLAN_NEXT.md.
+**Future split (deferred):** `Archdo.Compiled.Graph` is currently 927 lines mixing build (struct + ingest) and read (query API) responsibilities. A deferred refactor splits it into `Compiled.Graph` (build) + `Compiled.Query` (read), with `Archdo.Compiled` as the public facade.
 
 #### 3.4.9 `Archdo.Quadrant` — 2-axis policy primitive (two-dimensional architectural tests)
 
