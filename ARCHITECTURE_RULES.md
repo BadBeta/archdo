@@ -2440,6 +2440,33 @@ A near-building-block function whose public signature accepts unguarded input �
 - **Tolerate:** The unguarded input is a genuine programming error, not a domain failure (caller-side bug); marker `@archdo_intentional_crash`.
 - **Severity:** `info`
 
+### CE-58 Function output flips the order of input types
+
+A function whose `@spec` input types appear in the return tuple but in a different order — `(T1, T2) → {T2, T1}` for arity 2, and the analogous permutation for higher arities.
+
+- **Why:** Pipelines compose by feeding one function's output into the next function's first argument. When a function takes `(T1, T2)` and returns `{T2, T1}`, the result cannot be piped into anything expecting `T1` first — including another instance of itself. The order flip prevents the most basic form of composition without a domain reason. (Composability)
+- **Check:** Per-function spec walk: extract the input type list and the return tuple (`{a, b}` or `{:{}, _, [...]}`); fire when the multisets are equal but the orders differ. Pure structural detection, no name heuristics.
+- **Tolerate:** The swap IS the function's purpose (e.g., `swap/2`) — moduledoc note or `@archdo_arg_order_ok` marker.
+- **Severity:** `info`
+
+### CE-59 Side-effect function does not pass input through
+
+A function with a typed first parameter `T` that performs a known side effect (`Logger`, `:telemetry.execute`, `Phoenix.PubSub.broadcast`, `Repo` writes, `File`/`IO`) and returns a value that is neither `T` nor `{:ok, T}`.
+
+- **Why:** Pipelines compose by feeding one function's output into the next function's first argument. A side-effect function that takes `T`, performs an observability effect, and returns `:ok` / `nil` / an unrelated atom forces callers to break the pipeline (assign, call for effect, continue with the original value). Returning `T` (or `{:ok, T}`) keeps the chain intact. (Composability)
+- **Check:** Per-function spec walk + body inspection. Skip when the first parameter is `any()` / `term()` (no concrete type to compare against). Skip when the return is `T`, `{:ok, T}`, or any union member is `T` / `{:ok, T}`. Otherwise, scan the body for a known side-effect call; fire if found.
+- **Tolerate:** The function's contract IS to return a different shape (e.g., an audit record); the side effect is the function's primary purpose.
+- **Severity:** `info`
+
+### CE-60 Pipeline shape mismatch between producer and consumer
+
+A producer function `g/n` returns a tuple of types `{T1, T2, ..., Tk}`; a consumer function `f/k` accepts the same multiset of types but in a different order. The pipeline `g(...) |> f(...)` cannot be expressed without manual re-shuffling.
+
+- **Why:** Cross-module pipeline composition requires that one function's output shape matches the next function's input shape. When the type multisets agree but the orders differ, the pipeline has to be written `f(elem(g(), 1), elem(g(), 0))` or via destructuring — losing the composition benefit. The fix is to reorder either the producer's return tuple or the consumer's parameter list; the rule reports the mismatch and leaves the resolution to the developer. (Composability, Structural Coupling)
+- **Check:** Project-level analysis. Index every spec's return tuple shape (producers) and every spec's input tuple shape with arity ≥ 2 (consumers). Fire on every (producer, consumer) pair where the type multisets match but the orders differ. Skip self-pairs.
+- **Tolerate:** The producer and consumer are intentionally independent; both orders have multiple call sites and reordering either would break callers — accept the mismatch and document the decision.
+- **Severity:** `info`
+
 ---
 
 ## Rule Summary
@@ -2457,8 +2484,8 @@ A near-building-block function whose public signature accepts unguarded input �
 | State Machine | 6 | 9.1–9.3, SM-A/D/F |
 | Composition | 2 | 10.1–10.2 |
 | Native Interop | 4 | 11.1–11.4 |
-| Change Economy | 32 | CE-1, CE-2/CE-3, CE-4, CE-11, CE-12, CE-15, CE-17, CE-21, CE-23–CE-35, CE-47–CE-57 |
-| **Total** | **258** | |
+| Change Economy | 35 | CE-1, CE-2/CE-3, CE-4, CE-11, CE-12, CE-15, CE-17, CE-21, CE-23–CE-35, CE-47–CE-60 |
+| **Total** | **261** | |
 
 Rules marked *(compiled)* require the `--compiled` flag and work by analyzing beam files after `mix compile`. They see ground-truth dependencies after macro expansion — no AST guessing.
 

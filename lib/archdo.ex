@@ -17,9 +17,10 @@ defmodule Archdo do
 
   ## What it ships
 
-    * **258 rules** across 12 categories (boundaries, coupling, change
+    * **261 rules** across 13 categories (boundaries, coupling, change
       economy, OTP, module quality, single-source-of-truth, testing, event
-      sourcing, state machines, composition, native interop, public API).
+      sourcing, state machines, composition, native interop, public API,
+      error handling).
     * **8 output formats**: `summary` (default tally table), `text` (full
       why+fixes), `brief` (warns/errors with fixes, info elided), `compact`
       (one-line per finding), `json`, `llm` (NDJSON for tooling), `sarif`

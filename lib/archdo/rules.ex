@@ -225,7 +225,9 @@ defmodule Archdo.Rules do
     Archdo.Rules.CE.OpaqueProcessState,
     Archdo.Rules.CE.BoundaryTelemetry,
     Archdo.Rules.CE.EffectLeak,
-    Archdo.Rules.CE.UnguardedBuildingBlock
+    Archdo.Rules.CE.UnguardedBuildingBlock,
+    Archdo.Rules.CE.PipelineOrderFlip,
+    Archdo.Rules.CE.PipelineSideEffectTerminator
   ]
 
   # --- Cross-file (graph) rules ---
@@ -287,6 +289,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.CE.WrapperOverFramework,
     Archdo.Rules.CE.UnanchoredModule,
     Archdo.Rules.CE.UnanchoredIsland,
+    Archdo.Rules.CE.PipelineShapeMismatch,
     Archdo.Rules.CE.MagicLiterals,
     Archdo.Rules.CE.VolatilitySubstitutability,
     Archdo.Rules.CE.ScatteredTaxonomy,

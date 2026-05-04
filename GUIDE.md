@@ -3294,7 +3294,7 @@ Archdo parses every file with `Code.string_to_quoted/2`, which can intern atoms.
 
 ## 13. Where to read next
 
-- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 258 rules listed by category with descriptions. Auto-generated from rule modules.
+- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 261 rules listed by category with descriptions. Auto-generated from rule modules.
 
 ---
 
