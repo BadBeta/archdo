@@ -130,6 +130,25 @@ defmodule Archdo.Rules.CE.UntestedBuildingBlockTest do
       assert Enum.any?(diags, &(&1.message =~ "a/1"))
       assert Enum.any?(diags, &(&1.message =~ "b/1"))
     end
+
+    test "fires once for a multi-clause function, not once per clause" do
+      # `admin?/1` with two clauses (`is_binary` guard + catch-all)
+      # should produce one diagnostic, not two.
+      file_asts = [
+        parse("lib/myapp/admin.ex", ~S"""
+        defmodule MyApp.Admin do
+          @spec admin?(any()) :: boolean()
+          def admin?(email) when is_binary(email), do: email == "root@example.com"
+          def admin?(_), do: false
+        end
+        """)
+      ]
+
+      diags = UntestedBuildingBlock.analyze_project(file_asts)
+
+      admin_diags = Enum.filter(diags, &(&1.message =~ "admin?/1"))
+      assert length(admin_diags) == 1
+    end
   end
 
   describe "pack assignment" do

@@ -98,11 +98,20 @@ defmodule Archdo.Blackbox do
     fns = AST.extract_functions(ast, :public)
     catch_all_set = collect_catch_alls(fns)
 
-    Enum.map(fns, fn {name, arity, _meta, args, body} ->
+    fns
+    |> Enum.map(fn {name, arity, _meta, args, body} ->
       components = score_function(body, name, arity, specs, args, catch_all_set)
       total = product(components)
       {name, arity, total, components}
     end)
+    # `extract_functions` returns one entry per clause head — multi-
+    # clause functions (with-guard plus catch-all) duplicate. Dedupe to
+    # one entry per (name, arity), keeping the worst score across
+    # clauses (lowest score is the conservative read of the function's
+    # building-block possibility — any clause that fails an axis fails
+    # the whole function for callers).
+    |> Enum.group_by(fn {n, a, _, _} -> {n, a} end)
+    |> Enum.map(fn {_key, group} -> Enum.min_by(group, fn {_, _, score, _} -> score end) end)
   end
 
   # Set of {name, arity} for which a catch-all clause exists.
