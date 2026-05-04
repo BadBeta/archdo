@@ -2,6 +2,17 @@ defmodule Archdo.CleanupPassTest do
   use ExUnit.Case, async: true
 
   alias Archdo.CleanupPass
+  alias Archdo.Rules.Boundary.AtomAtBoundary
+  alias Archdo.Rules.Boundary.InternalStructAsEncoder
+  alias Archdo.Rules.Boundary.RawMapInDomain
+  alias Archdo.Rules.EventSourcing.EventPayloadUnversioned
+  alias Archdo.Rules.Module.DynamicApplyFromInput
+  alias Archdo.Rules.Module.IoInspectInLib
+  alias Archdo.Rules.Module.ScatteredConfig
+  alias Archdo.Rules.Module.SecretStructInspect
+  alias Archdo.Rules.Module.StacktraceInResponse
+  alias Archdo.Rules.Module.UnsafeDeserialization
+  alias Archdo.Rules.OTP.AsyncDropsLoggerMetadata
 
   describe "pass_for/1" do
     test "returns pass for a new rule with cleanup_pass/0 callback (5.50 → pass 6)" do
@@ -103,25 +114,25 @@ defmodule Archdo.CleanupPassTest do
 
   describe "rule callback integration" do
     test "new rules implement cleanup_pass/0" do
-      assert Archdo.Rules.Module.UnsafeDeserialization.cleanup_pass() == 6
-      assert Archdo.Rules.Module.DynamicApplyFromInput.cleanup_pass() == 6
-      assert Archdo.Rules.Module.StacktraceInResponse.cleanup_pass() == 5
-      assert Archdo.Rules.Module.IoInspectInLib.cleanup_pass() == 5
-      assert Archdo.Rules.Module.SecretStructInspect.cleanup_pass() == 5
-      assert Archdo.Rules.OTP.AsyncDropsLoggerMetadata.cleanup_pass() == 13
-      assert Archdo.Rules.Boundary.AtomAtBoundary.cleanup_pass() == 3
-      assert Archdo.Rules.Boundary.RawMapInDomain.cleanup_pass() == 2
-      assert Archdo.Rules.Boundary.InternalStructAsEncoder.cleanup_pass() == 10
-      assert Archdo.Rules.EventSourcing.EventPayloadUnversioned.cleanup_pass() == 10
+      assert UnsafeDeserialization.cleanup_pass() == 6
+      assert DynamicApplyFromInput.cleanup_pass() == 6
+      assert StacktraceInResponse.cleanup_pass() == 5
+      assert IoInspectInLib.cleanup_pass() == 5
+      assert SecretStructInspect.cleanup_pass() == 5
+      assert AsyncDropsLoggerMetadata.cleanup_pass() == 13
+      assert AtomAtBoundary.cleanup_pass() == 3
+      assert RawMapInDomain.cleanup_pass() == 2
+      assert InternalStructAsEncoder.cleanup_pass() == 10
+      assert EventPayloadUnversioned.cleanup_pass() == 10
     end
 
     test "Archdo.CleanupPass.cleanup_pass_of/1 falls back to mapping when callback absent" do
       # A rule without the callback uses the curated mapping
-      assert Archdo.CleanupPass.cleanup_pass_of(Archdo.Rules.Module.ScatteredConfig) == 4
+      assert CleanupPass.cleanup_pass_of(ScatteredConfig) == 4
     end
 
     test "Archdo.CleanupPass.cleanup_pass_of/1 prefers the callback when present" do
-      assert Archdo.CleanupPass.cleanup_pass_of(Archdo.Rules.Module.UnsafeDeserialization) == 6
+      assert CleanupPass.cleanup_pass_of(UnsafeDeserialization) == 6
     end
 
     test "Archdo.CleanupPass.cleanup_pass_of/1 returns nil for fully untagged rules" do

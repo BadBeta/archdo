@@ -188,9 +188,7 @@ defmodule Archdo.Rules.CE.MissingRetentionPolicy do
         Fix.new(
           summary: "Add an Oban worker that prunes records older than the retention window",
           detail:
-            "`use Oban.Worker, queue: :cleanup` + `Repo.delete_all(from r in " <>
-              "\"#{table}\", where: r.inserted_at < ago(@retention_days, \"day\"))`. " <>
-              "Schedule via Oban.Plugins.Cron.",
+            ~s|`use Oban.Worker, queue: :cleanup` + `Repo.delete_all(from r in "#{table}", where: r.inserted_at < ago(@retention_days, "day"))`. Schedule via Oban.Plugins.Cron.|,
           applies_when: "The data has a finite useful lifetime."
         ),
         Fix.new(

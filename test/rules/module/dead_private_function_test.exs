@@ -167,16 +167,17 @@ defmodule Archdo.Rules.Module.DeadPrivateFunctionTest do
       # from sibling templates with `<.name />` syntax — not `name(...)`.
       # Without HEEx tag-form recognition, the rule false-positives on every
       # private LiveView function component (BUG-4 from hexpm field test).
-      code =
-        "defmodule MyAppWeb.Footer do\n" <>
-          "  use Phoenix.Component\n" <>
-          "  def footer(assigns) do\n" <>
-          "    ~H\"<footer><.footer_branding /><.footer_links class=\\\"mt\\\"/><.footer_copyright/></footer>\"\n" <>
-          "  end\n" <>
-          "  defp footer_branding(assigns), do: ~H\"<div>brand</div>\"\n" <>
-          "  defp footer_links(assigns), do: ~H\"<ul>links</ul>\"\n" <>
-          "  defp footer_copyright(assigns), do: ~H\"<small>c</small>\"\n" <>
-          "end\n"
+      code = ~S"""
+      defmodule MyAppWeb.Footer do
+        use Phoenix.Component
+        def footer(assigns) do
+          ~H"<footer><.footer_branding /><.footer_links class=\"mt\"/><.footer_copyright/></footer>"
+        end
+        defp footer_branding(assigns), do: ~H"<div>brand</div>"
+        defp footer_links(assigns), do: ~H"<ul>links</ul>"
+        defp footer_copyright(assigns), do: ~H"<small>c</small>"
+      end
+      """
 
       assert_clean(DeadPrivateFunction, code)
     end

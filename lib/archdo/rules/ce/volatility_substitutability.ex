@@ -71,7 +71,6 @@ defmodule Archdo.Rules.CE.VolatilitySubstitutability do
     end
   end
 
-
   @doc """
   Compute the abstraction density for a single module:
   `(behaviours + callbacks + protocols) / max(public_function_count, 1)`.

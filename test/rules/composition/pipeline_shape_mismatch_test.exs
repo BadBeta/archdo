@@ -40,7 +40,7 @@ defmodule Archdo.Rules.Composition.PipelineShapeMismatchTest do
       ]
 
       diags = analyze(file_asts)
-      assert length(diags) >= 1
+      assert match?([_ | _], diags)
       assert hd(diags).rule_id == "10.5"
       assert hd(diags).severity == :info
     end
@@ -199,7 +199,7 @@ defmodule Archdo.Rules.Composition.PipelineShapeMismatchTest do
       ]
 
       diags = analyze(file_asts)
-      assert length(diags) >= 1
+      assert match?([_ | _], diags)
       assert hd(diags).rule_id == "10.5"
     end
   end

@@ -138,21 +138,37 @@ defmodule Mix.Tasks.Archdo do
            | :watch
            | :normal
 
-  # Read-only / informational commands: print and exit. Listed in their
-  # legacy precedence order so a caller passing several flags gets the
-  # same command as before.
+  # Read-only / informational commands: print and exit. Each entry is
+  # `{key, kind}` — `:value` reads `opts[key]` and returns `{key, val}`;
+  # `:flag` returns `key` when the boolean is set. Order is precedence:
+  # the first matching entry wins.
+  @info_commands [
+    {:explain, :value},
+    {:init, :flag},
+    {:diagram, :value},
+    {:stats, :flag},
+    {:list_packs, :flag},
+    {:coverage, :flag},
+    {:pass_coverage, :flag},
+    {:metrics, :flag},
+    {:building_blocks, :flag}
+  ]
+
   defp pick_info_command(opts) do
-    cond do
-      Keyword.has_key?(opts, :explain) -> {:explain, opts[:explain]}
-      Keyword.get(opts, :init, false) -> :init
-      Keyword.has_key?(opts, :diagram) -> {:diagram, opts[:diagram]}
-      Keyword.get(opts, :stats, false) -> :stats
-      Keyword.get(opts, :list_packs, false) -> :list_packs
-      Keyword.get(opts, :coverage, false) -> :coverage
-      Keyword.get(opts, :pass_coverage, false) -> :pass_coverage
-      Keyword.get(opts, :metrics, false) -> :metrics
-      Keyword.get(opts, :building_blocks, false) -> :building_blocks
-      true -> nil
+    Enum.find_value(@info_commands, fn {key, kind} -> match_info_command(opts, key, kind) end)
+  end
+
+  defp match_info_command(opts, key, :value) do
+    case Keyword.has_key?(opts, key) do
+      true -> {key, opts[key]}
+      false -> nil
+    end
+  end
+
+  defp match_info_command(opts, key, :flag) do
+    case Keyword.get(opts, key, false) do
+      true -> key
+      false -> nil
     end
   end
 

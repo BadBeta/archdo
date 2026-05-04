@@ -15,7 +15,7 @@ defmodule Archdo.Compiled.DiagramSVG do
   #   - Style: solid=synchronous call, dashed=async/cast/send
 
   alias Archdo.AST
-  alias Archdo.Compiled.{SvgDocument, Graph, Query}
+  alias Archdo.Compiled.{Graph, Query, SvgDocument}
 
   # Layout constants
   @node_width 220
@@ -243,36 +243,19 @@ defmodule Archdo.Compiled.DiagramSVG do
   defp column_port(:dependency, x, ey, node_h), do: {x, ey + node_h / 2}
 
   defp render_wire({x1, y1}, {x2, y2}, call_count, _direction) do
-    # Bezier control points for smooth curve
     mid_x = (x1 + x2) / 2
     cp1_x = x1 + (mid_x - x1) * 0.6
     cp2_x = x2 - (mid_x - x1) * 0.6
-
-    thickness =
-      cond do
-        call_count >= 10 -> 3
-        call_count >= 3 -> 2
-        true -> 1.2
-      end
-
-    color =
-      cond do
-        call_count >= 10 -> @wire_ok
-        call_count >= 3 -> @wire_default
-        true -> @wire_default
-      end
-
-    opacity =
-      cond do
-        call_count >= 10 -> "0.9"
-        call_count >= 3 -> "0.6"
-        true -> "0.35"
-      end
+    {thickness, color, opacity} = wire_attrs(call_count)
 
     [
       ~s(<path d="M #{x1} #{y1} C #{cp1_x} #{y1}, #{cp2_x} #{y2}, #{x2} #{y2}" fill="none" stroke="#{color}" stroke-width="#{thickness}" opacity="#{opacity}"/>)
     ]
   end
+
+  defp wire_attrs(n) when n >= 10, do: {3, @wire_ok, "0.9"}
+  defp wire_attrs(n) when n >= 3, do: {2, @wire_default, "0.6"}
+  defp wire_attrs(_), do: {1.2, @wire_default, "0.35"}
 
   @ctx_max_members 16
   @ctx_max_externals 6
@@ -430,50 +413,49 @@ defmodule Archdo.Compiled.DiagramSVG do
       |> Enum.uniq()
 
     tags = for {:tagged_tuple, t} <- shapes, do: t
+    color_for_tags_or_shapes(tags, shapes)
+  end
 
+  defp color_for_tags_or_shapes(tags, shapes) do
+    color_for_tags(tags) || color_for_shapes(shapes) || @wire_default
+  end
+
+  defp color_for_tags(tags) do
     cond do
-      :ok in tags and :error in tags -> @wire_ok
       :ok in tags -> @wire_ok
       :error in tags -> @wire_error
+      true -> nil
+    end
+  end
+
+  defp color_for_shapes(shapes) do
+    cond do
       Enum.any?(shapes, &(&1 == :list)) -> @wire_list
       Enum.any?(shapes, &(&1 == :map)) -> @wire_map
       Enum.any?(shapes, &match?({:atom, _}, &1)) -> @wire_atom
-      true -> @wire_default
+      true -> nil
     end
   end
 
   defp format_return_tag(fn_info) do
-    shapes =
-      fn_info.clauses
-      |> Enum.map(& &1.return_shape)
-      |> Enum.uniq()
-
-    case shapes do
-      [{:tagged_tuple, :ok}] ->
-        "{:ok, _}"
-
-      [{:tagged_tuple, :error}] ->
-        "{:error, _}"
-
-      [{:atom, val}] ->
-        ":#{val}"
-
-      [:list] ->
-        "[...]"
-
-      [:map] ->
-        "%{}"
-
-      [:call] ->
-        "fn()"
-
-      _ ->
-        tags = for {:tagged_tuple, t} <- shapes, do: t
-
-        case tags do
-          [] -> ""
-          _ -> Enum.map_join(tags, "|", &":#{&1}")
-        end
-    end
+    fn_info.clauses
+    |> Enum.map(& &1.return_shape)
+    |> Enum.uniq()
+    |> render_return_tag()
   end
+
+  defp render_return_tag([{:tagged_tuple, :ok}]), do: "{:ok, _}"
+  defp render_return_tag([{:tagged_tuple, :error}]), do: "{:error, _}"
+  defp render_return_tag([{:atom, val}]), do: ":#{val}"
+  defp render_return_tag([:list]), do: "[...]"
+  defp render_return_tag([:map]), do: "%{}"
+  defp render_return_tag([:call]), do: "fn()"
+
+  defp render_return_tag(shapes) do
+    tags = for {:tagged_tuple, t} <- shapes, do: t
+    join_tags(tags)
+  end
+
+  defp join_tags([]), do: ""
+  defp join_tags(tags), do: Enum.map_join(tags, "|", &":#{&1}")
 end

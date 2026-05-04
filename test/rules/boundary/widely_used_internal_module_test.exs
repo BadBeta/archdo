@@ -44,10 +44,7 @@ defmodule Archdo.Rules.Boundary.WidelyUsedInternalModuleTest do
       assert diag.message =~ "MyApp.Internals"
       assert diag.message =~ "3" or diag.message =~ "many" or diag.message =~ "widely"
       # References the new skill section
-      detail_text =
-        diag.alternatives
-        |> Enum.map(& &1.detail)
-        |> Enum.join(" ")
+      detail_text = Enum.map_join(diag.alternatives, " ", & &1.detail)
 
       assert detail_text =~ "shared" or detail_text =~ "promote" or detail_text =~ "facade"
     end

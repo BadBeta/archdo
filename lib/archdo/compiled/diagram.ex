@@ -958,43 +958,25 @@ defmodule Archdo.Compiled.Diagram do
   end
 
   defp format_return_shape(fn_info) do
-    shapes =
-      fn_info.clauses
-      |> Enum.map(& &1.return_shape)
-      |> Enum.uniq()
+    fn_info.clauses
+    |> Enum.map(& &1.return_shape)
+    |> Enum.uniq()
+    |> render_shapes()
+  end
 
-    case shapes do
-      [{:tagged_tuple, :ok}] ->
-        "{:ok, _}"
+  defp render_shapes([{:tagged_tuple, :ok}]), do: "{:ok, _}"
+  defp render_shapes([{:tagged_tuple, :error}]), do: "{:error, _}"
+  defp render_shapes([{:atom, val}]), do: ":#{val}"
+  defp render_shapes([:list]), do: "[...]"
+  defp render_shapes([:map]), do: "%{}"
+  defp render_shapes([:binary]), do: "<<>>"
+  defp render_shapes([:call]), do: "fn()"
+  defp render_shapes([:variable]), do: "var"
+  defp render_shapes([{:mixed, _}]), do: "mixed"
 
-      [{:tagged_tuple, :error}] ->
-        "{:error, _}"
-
-      [{:atom, val}] ->
-        ":#{val}"
-
-      [:list] ->
-        "[...]"
-
-      [:map] ->
-        "%{}"
-
-      [:binary] ->
-        "<<>>"
-
-      [:call] ->
-        "fn()"
-
-      [:variable] ->
-        "var"
-
-      [{:mixed, _}] ->
-        "mixed"
-
-      _ ->
-        tags = for {:tagged_tuple, t} <- shapes, do: t
-        format_tag_list(tags)
-    end
+  defp render_shapes(shapes) do
+    tags = for {:tagged_tuple, t} <- shapes, do: t
+    format_tag_list(tags)
   end
 
   # §§ elixir-implementing: §2.1 — multi-clause head dispatching on

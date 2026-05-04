@@ -134,7 +134,7 @@ defmodule Archdo.AnchorSet do
   # the top supervisor down through every supervised child.
 
   defp add_supervisor_children(acc, ast) do
-    case is_supervisor_module?(ast) do
+    case supervisor_module?(ast) do
       false ->
         acc
 
@@ -148,7 +148,7 @@ defmodule Archdo.AnchorSet do
   # §§ elixir-implementing: §2.1 — multi-clause membership match. A
   # module IS a supervisor when its body uses Application (top-level),
   # Supervisor, or DynamicSupervisor.
-  defp is_supervisor_module?(ast) do
+  defp supervisor_module?(ast) do
     AST.contains?(ast, fn
       {:use, _, [{:__aliases__, _, [:Application]} | _]} -> true
       {:use, _, [{:__aliases__, _, [:Supervisor]} | _]} -> true

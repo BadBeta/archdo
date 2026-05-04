@@ -21,21 +21,18 @@ defmodule Archdo.AST.Behaviour do
   @spec collect_callbacks([{String.t(), Macro.t()}]) ::
           %{String.t() => MapSet.t({atom(), arity()})}
   def collect_callbacks(file_asts) do
-    Enum.reduce(file_asts, %{}, fn {_file, ast}, acc ->
-      case AST.extract_module_name(ast) do
-        "Unknown" ->
-          acc
-
-        mod_name ->
-          callbacks = scan_callback_specs(ast)
-
-          case MapSet.size(callbacks) do
-            0 -> acc
-            _ -> Map.put(acc, mod_name, callbacks)
-          end
-      end
-    end)
+    Enum.reduce(file_asts, %{}, fn {_file, ast}, acc -> add_module_callbacks(acc, ast) end)
   end
+
+  defp add_module_callbacks(acc, ast) do
+    case AST.extract_module_name(ast) do
+      "Unknown" -> acc
+      mod_name -> put_if_nonempty(acc, mod_name, scan_callback_specs(ast))
+    end
+  end
+
+  defp put_if_nonempty(acc, _mod_name, callbacks) when callbacks == %MapSet{}, do: acc
+  defp put_if_nonempty(acc, mod_name, callbacks), do: Map.put(acc, mod_name, callbacks)
 
   defp scan_callback_specs(ast) do
     {_, callbacks} =

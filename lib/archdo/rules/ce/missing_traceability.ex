@@ -129,10 +129,7 @@ defmodule Archdo.Rules.CE.MissingTraceability do
         Fix.new(
           summary: "Add @requirement immediately before the function",
           detail:
-            "`@requirement \"REQ-1234\"` or `@requirement [\"REQ-1234\", " <>
-              "\"REQ-1235\"]` for multiple. Place above the `def`. For external " <>
-              "standards: `@spec_ref \"RFC 7231 §6.5.1\"`. For composite trace: " <>
-              "`@trace ~w(REQ-1234 ADR-0042)`.",
+            ~s|`@requirement "REQ-1234"` or `@requirement ["REQ-1234", "REQ-1235"]` for multiple. Place above the `def`. For external standards: `@spec_ref "RFC 7231 §6.5.1"`. For composite trace: `@trace ~w(REQ-1234 ADR-0042)`.|,
           applies_when: "A requirement covers this function."
         ),
         Fix.new(

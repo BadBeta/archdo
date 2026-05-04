@@ -103,17 +103,53 @@ defmodule Archdo.Phoenix do
   # --- layer detection ---
 
   defp detect_layer(path, uses) do
+    detect_path_specific_layer(path) ||
+      detect_uses_layer(uses) ||
+      detect_path_fallback_layer(path)
+  end
+
+  defp detect_path_specific_layer(path) do
     cond do
       test_path?(path) -> :test
       operational_path?(path) -> :operational
+      true -> nil
+    end
+  end
+
+  defp detect_uses_layer(uses) do
+    detect_app_or_task_layer(uses) ||
+      detect_phoenix_role_layer(uses) ||
+      detect_ecto_layer(uses)
+  end
+
+  defp detect_app_or_task_layer(uses) do
+    cond do
       Map.has_key?(uses, Mix.Task) -> :operational
       Map.has_key?(uses, Application) -> :application_root
+      true -> nil
+    end
+  end
+
+  defp detect_phoenix_role_layer(uses) do
+    cond do
       uses_role?(uses, [Phoenix.Router], [:router]) -> :router
       uses_role?(uses, [Phoenix.LiveView], [:live_view]) -> :live_view
       uses_role?(uses, [Phoenix.Component], [:live_component, :html, :component]) -> :component
       uses_role?(uses, [Phoenix.Controller], [:controller]) -> :controller
+      true -> nil
+    end
+  end
+
+  defp detect_ecto_layer(uses) do
+    cond do
       Map.has_key?(uses, Ecto.Migration) -> :migration
       Map.has_key?(uses, Ecto.Schema) -> :schema
+      true -> nil
+    end
+  end
+
+  defp detect_path_fallback_layer(path) do
+    cond do
       web_path?(path) -> :web
       lib_path?(path) -> :context
       true -> :other

@@ -623,8 +623,7 @@ defmodule Archdo do
       [_, path] ->
         path
         |> Path.split()
-        |> Enum.map(&Macro.camelize/1)
-        |> Enum.join(".")
+        |> Enum.map_join(".", &Macro.camelize/1)
 
       _ ->
         nil

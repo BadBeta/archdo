@@ -44,11 +44,7 @@ defmodule Archdo.Rules.OTP.ReceiveInCallback do
         Diagnostic.error("5.11",
           title: "receive inside GenServer callback",
           message: "A receive block appears inside #{cb_name}",
-          why:
-            "GenServer's behaviour delivers messages through its own selective receive loop using internal " <>
-              "tags like :\"$gen_call\" and :\"$gen_cast\". A user-written `receive` consumes those internal " <>
-              "messages and corrupts the state machine — replies vanish, callers time out, and system messages " <>
-              "stop being handled. Official docs are explicit: never call receive inside a GenServer callback.",
+          why: ~s(GenServer's behaviour delivers messages through its own selective receive loop using internal tags like :"$gen_call" and :"$gen_cast". A user-written `receive` consumes those internal messages and corrupts the state machine — replies vanish, callers time out, and system messages stop being handled. Official docs are explicit: never call receive inside a GenServer callback.),
           alternatives: [
             Fix.new(
               summary: "Use handle_info to receive the asynchronous reply",

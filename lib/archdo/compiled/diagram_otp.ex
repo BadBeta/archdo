@@ -12,7 +12,7 @@ defmodule Archdo.Compiled.DiagramOTP do
   #   - Supervision links: solid lines from supervisor frame to child
 
   alias Archdo.AST
-  alias Archdo.Compiled.{SvgDocument, Graph, OTPTopology}
+  alias Archdo.Compiled.{Graph, OTPTopology, SvgDocument}
 
   # Process / message kinds shared with `OTPTopology` (single source of truth).
   @kind_supervisor :supervisor
