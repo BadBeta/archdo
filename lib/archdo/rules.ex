@@ -69,6 +69,8 @@ defmodule Archdo.Rules do
     Archdo.Rules.OTP.CallbackSprawl,
     Archdo.Rules.OTP.AtomInHotPath,
     Archdo.Rules.OTP.EtsWithoutCleanup,
+    Archdo.Rules.OTP.DetsOrderedSet,
+    Archdo.Rules.OTP.DetsOwnershipLeak,
     # Module quality rules
     Archdo.Rules.Module.MissingModuledoc,
     Archdo.Rules.Module.MissingSpec,

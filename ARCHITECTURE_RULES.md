@@ -1126,6 +1126,24 @@ GenServer with too many distinct `handle_call`/`handle_cast`/`handle_info` messa
 - **Tolerate:** Tables created in Application.start (owned by the application, not a process). Tables with `:heir` option set.
 - **Severity:** `info`
 
+### 5.46 DETS :ordered_set Type
+
+`:dets.open_file/2` called with `type: :ordered_set` — DETS does not support ordered sets.
+
+- **Why:** DETS table types are `:set`, `:bag`, and `:duplicate_bag`. There is no `:ordered_set` in DETS — only ETS supports it. The call crashes at runtime with `{:error, {:badarg, ...}}` and is invisible until the code path first runs in production. The mistake is easy because ETS and DETS share most other options. (Correctness)
+- **Check:** Find `:dets.open_file/2` calls whose options keyword list contains `type: :ordered_set`.
+- **Tolerate:** Test files (the call is presumably exercising the error path).
+- **Severity:** `warning`
+
+### 5.47 DETS Ownership Leak
+
+A GenServer that calls `:dets.open_file` in `init/1` (or elsewhere) without a `terminate/2` that closes the table.
+
+- **Why:** DETS tables are on-disk files. Unlike ETS, the file persists when the owning process exits — but the file's internal state (in-flight buffer, dirty pages) is only flushed on `:dets.close/1`. A supervisor-restarted GenServer that opens the same file may face a corrupted-file recovery (`auto_repair`), data loss for unflushed writes, or `:error, :system_limit` if the previous handle wasn't closed. Always close DETS in `terminate/2`. (Resource Management, Correctness)
+- **Check:** Find GenServer modules with `:dets.open_file` calls and no `terminate/2` callback.
+- **Tolerate:** Plain modules (non-GenServer one-shot scripts), test files. DETS tables held by short-lived processes that aren't supervisor-restarted.
+- **Severity:** `warning`
+
 ### 5.50 Unsafe Deserialization or Runtime Eval
 
 `:erlang.binary_to_term` without `:safe`, `Code.eval_string/eval_quoted`, or `Jason.decode` with `keys: :atoms` on untrusted input.
