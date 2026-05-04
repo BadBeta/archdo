@@ -1,8 +1,8 @@
-defmodule Archdo.Rules.CE.PipelineShapeMismatch do
+defmodule Archdo.Rules.Composition.PipelineShapeMismatch do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  # CE-60. Cross-module pipeline mismatch: a producer function `g/n`
+  # 10.5. Cross-module pipeline mismatch: a producer function `g/n`
   # whose `@spec` return is a tuple of types `{T1, T2, ..., Tk}` and a
   # consumer function `f/k` whose `@spec` input types are the same
   # multiset of types, but in a different order. The pipeline
@@ -14,7 +14,7 @@ defmodule Archdo.Rules.CE.PipelineShapeMismatch do
   alias Archdo.{AST, Diagnostic, Fix}
 
   @impl true
-  def id, do: "CE-60"
+  def id, do: "10.5"
 
   @impl true
   def description,
@@ -115,7 +115,7 @@ defmodule Archdo.Rules.CE.PipelineShapeMismatch do
   end
 
   defp build_diagnostic(producer, consumer) do
-    Diagnostic.info("CE-60",
+    Diagnostic.info("10.5",
       title: "Pipeline shape mismatch between producer and consumer",
       message:
         "#{short(producer)} returns a tuple of types that #{short(consumer)} accepts, " <>

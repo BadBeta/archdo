@@ -1,7 +1,7 @@
-defmodule Archdo.Rules.CE.OrderedChainConstraintsTest do
+defmodule Archdo.Rules.Composition.OrderedChainConstraintsTest do
   use Archdo.RuleCase
 
-  alias Archdo.Rules.CE.OrderedChainConstraints
+  alias Archdo.Rules.Composition.OrderedChainConstraints
 
   describe "duplicate plug" do
     test "fires when the same plug is declared twice in one pipeline" do
@@ -20,7 +20,7 @@ defmodule Archdo.Rules.CE.OrderedChainConstraintsTest do
 
       diags = assert_flagged(OrderedChainConstraints, code)
       assert Enum.any?(diags, &(&1.message =~ "duplicate"))
-      assert hd(diags).rule_id == "CE-61"
+      assert hd(diags).rule_id == "10.6"
       assert hd(diags).severity == :warning
     end
 

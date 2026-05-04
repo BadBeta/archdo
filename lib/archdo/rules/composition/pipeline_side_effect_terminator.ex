@@ -1,8 +1,8 @@
-defmodule Archdo.Rules.CE.PipelineSideEffectTerminator do
+defmodule Archdo.Rules.Composition.PipelineSideEffectTerminator do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  # CE-59. A function that performs a known side effect (Logger,
+  # 10.4. A function that performs a known side effect (Logger,
   # telemetry, PubSub, Repo write, IO) but returns a value that is
   # neither the first parameter's type nor `{:ok, T}` over it. The
   # caller cannot pipe the result onward because the input was
@@ -24,7 +24,7 @@ defmodule Archdo.Rules.CE.PipelineSideEffectTerminator do
   @side_effect_atom_modules [:telemetry, :logger, :file, :gen_tcp, :gen_udp]
 
   @impl true
-  def id, do: "CE-59"
+  def id, do: "10.4"
 
   @impl true
   def description,
@@ -143,7 +143,7 @@ defmodule Archdo.Rules.CE.PipelineSideEffectTerminator do
   defp side_effect_call?(_), do: false
 
   defp build_diagnostic(file, name, arity, meta) do
-    Diagnostic.info("CE-59",
+    Diagnostic.info("10.4",
       title: "Side-effect function does not pass input through",
       message:
         "#{name}/#{arity} performs a side effect (Logger / telemetry / PubSub / Repo / IO) " <>

@@ -1,7 +1,7 @@
-defmodule Archdo.Rules.CE.PipelineSideEffectTerminatorTest do
+defmodule Archdo.Rules.Composition.PipelineSideEffectTerminatorTest do
   use Archdo.RuleCase
 
-  alias Archdo.Rules.CE.PipelineSideEffectTerminator
+  alias Archdo.Rules.Composition.PipelineSideEffectTerminator
 
   describe "fires when a side-effecting function does not pass its first arg through" do
     test "Logger side effect, returns :ok" do
@@ -17,7 +17,7 @@ defmodule Archdo.Rules.CE.PipelineSideEffectTerminatorTest do
       """
 
       diags = assert_flagged(PipelineSideEffectTerminator, code)
-      assert hd(diags).rule_id == "CE-59"
+      assert hd(diags).rule_id == "10.4"
       assert hd(diags).severity == :info
       assert hd(diags).message =~ "record"
     end
@@ -34,7 +34,7 @@ defmodule Archdo.Rules.CE.PipelineSideEffectTerminatorTest do
       """
 
       diags = assert_flagged(PipelineSideEffectTerminator, code)
-      assert hd(diags).rule_id == "CE-59"
+      assert hd(diags).rule_id == "10.4"
     end
 
     test "telemetry side effect, returns atom" do
@@ -49,7 +49,7 @@ defmodule Archdo.Rules.CE.PipelineSideEffectTerminatorTest do
       """
 
       diags = assert_flagged(PipelineSideEffectTerminator, code)
-      assert hd(diags).rule_id == "CE-59"
+      assert hd(diags).rule_id == "10.4"
     end
   end
 

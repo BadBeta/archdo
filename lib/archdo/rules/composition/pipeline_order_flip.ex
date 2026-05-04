@@ -1,8 +1,8 @@
-defmodule Archdo.Rules.CE.PipelineOrderFlip do
+defmodule Archdo.Rules.Composition.PipelineOrderFlip do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  # CE-58. A function whose @spec input types are a permutation (but
+  # 10.3. A function whose @spec input types are a permutation (but
   # not equal) of the return tuple's element types. Such a function
   # cannot be chained back into itself or into any other function
   # expecting the input order — pipelines through it require manual
@@ -11,7 +11,7 @@ defmodule Archdo.Rules.CE.PipelineOrderFlip do
   alias Archdo.{AST, Diagnostic, Fix}
 
   @impl true
-  def id, do: "CE-58"
+  def id, do: "10.3"
 
   @impl true
   def description, do: "Function input types appear in return type but in a different order"
@@ -93,7 +93,7 @@ defmodule Archdo.Rules.CE.PipelineOrderFlip do
   end
 
   defp build_diagnostic(file, name, arity, meta) do
-    Diagnostic.info("CE-58",
+    Diagnostic.info("10.3",
       title: "Function output flips the order of input types",
       message:
         "#{name}/#{arity} returns the same types it accepts but in a different order — " <>

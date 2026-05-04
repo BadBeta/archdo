@@ -1,8 +1,8 @@
-defmodule Archdo.Rules.CE.OrderedChainConstraints do
+defmodule Archdo.Rules.Composition.OrderedChainConstraints do
   @moduledoc false
   @behaviour Archdo.Rule
 
-  # CE-61. An ordered list of middleware (Phoenix Plug pipelines, and
+  # 10.6. An ordered list of middleware (Phoenix Plug pipelines, and
   # by extension any chain shaped the same way) imposes structural
   # constraints: certain entries must precede others, certain
   # categories must be present in certain pipeline shapes, and an
@@ -36,7 +36,7 @@ defmodule Archdo.Rules.CE.OrderedChainConstraints do
   @browser_signal_plugs [:put_root_layout, :put_secure_browser_headers, :fetch_live_flash]
 
   @impl true
-  def id, do: "CE-61"
+  def id, do: "10.6"
 
   @impl true
   def description,
@@ -167,7 +167,7 @@ defmodule Archdo.Rules.CE.OrderedChainConstraints do
   end
 
   defp build_duplicate(file, pipeline, line, display) do
-    Diagnostic.warning("CE-61",
+    Diagnostic.warning("10.6",
       title: "Duplicate plug in pipeline",
       message: "Pipeline :#{pipeline} has a duplicate plug: #{display}",
       why:
@@ -189,7 +189,7 @@ defmodule Archdo.Rules.CE.OrderedChainConstraints do
   end
 
   defp build_ordering(file, pipeline, line, before_label, after_label) do
-    Diagnostic.warning("CE-61",
+    Diagnostic.warning("10.6",
       title: "Ordered chain violation: #{after_label} runs before #{before_label}",
       message:
         "Pipeline :#{pipeline} has #{after_label} entries before #{before_label} entries — " <>
@@ -215,7 +215,7 @@ defmodule Archdo.Rules.CE.OrderedChainConstraints do
   end
 
   defp build_csrf(file, pipeline, line) do
-    Diagnostic.warning("CE-61",
+    Diagnostic.warning("10.6",
       title: "Browser pipeline missing CSRF protection",
       message:
         "Pipeline :#{pipeline} looks like a browser pipeline but does not include " <>

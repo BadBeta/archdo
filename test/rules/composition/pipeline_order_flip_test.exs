@@ -1,7 +1,7 @@
-defmodule Archdo.Rules.CE.PipelineOrderFlipTest do
+defmodule Archdo.Rules.Composition.PipelineOrderFlipTest do
   use Archdo.RuleCase
 
-  alias Archdo.Rules.CE.PipelineOrderFlip
+  alias Archdo.Rules.Composition.PipelineOrderFlip
 
   describe "fires when arity-2 function flips its input order on output" do
     test "(integer, atom) :: {atom, integer}" do
@@ -13,7 +13,7 @@ defmodule Archdo.Rules.CE.PipelineOrderFlipTest do
       """
 
       diags = assert_flagged(PipelineOrderFlip, code)
-      assert hd(diags).rule_id == "CE-58"
+      assert hd(diags).rule_id == "10.3"
       assert hd(diags).severity == :info
       assert hd(diags).message =~ "swap"
     end
@@ -27,7 +27,7 @@ defmodule Archdo.Rules.CE.PipelineOrderFlipTest do
       """
 
       diags = assert_flagged(PipelineOrderFlip, code)
-      assert hd(diags).rule_id == "CE-58"
+      assert hd(diags).rule_id == "10.3"
     end
   end
 
@@ -119,7 +119,7 @@ defmodule Archdo.Rules.CE.PipelineOrderFlipTest do
       """
 
       diags = assert_flagged(PipelineOrderFlip, code)
-      assert hd(diags).rule_id == "CE-58"
+      assert hd(diags).rule_id == "10.3"
     end
 
     test "arity-3 does not fire when output preserves input order" do
@@ -143,7 +143,7 @@ defmodule Archdo.Rules.CE.PipelineOrderFlipTest do
       """
 
       diags = assert_flagged(PipelineOrderFlip, code)
-      assert hd(diags).rule_id == "CE-58"
+      assert hd(diags).rule_id == "10.3"
     end
   end
 end

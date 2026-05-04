@@ -1,7 +1,7 @@
-defmodule Archdo.Rules.CE.PipelineShapeMismatchTest do
+defmodule Archdo.Rules.Composition.PipelineShapeMismatchTest do
   use ExUnit.Case, async: true
 
-  alias Archdo.Rules.CE.PipelineShapeMismatch
+  alias Archdo.Rules.Composition.PipelineShapeMismatch
 
   defp parse(code, file) do
     {:ok, ast} =
@@ -41,7 +41,7 @@ defmodule Archdo.Rules.CE.PipelineShapeMismatchTest do
 
       diags = analyze(file_asts)
       assert length(diags) >= 1
-      assert hd(diags).rule_id == "CE-60"
+      assert hd(diags).rule_id == "10.5"
       assert hd(diags).severity == :info
     end
   end
@@ -200,7 +200,7 @@ defmodule Archdo.Rules.CE.PipelineShapeMismatchTest do
 
       diags = analyze(file_asts)
       assert length(diags) >= 1
-      assert hd(diags).rule_id == "CE-60"
+      assert hd(diags).rule_id == "10.5"
     end
   end
 end
