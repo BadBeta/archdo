@@ -103,7 +103,7 @@ Archdo needs `Jason` (JSON encoding) and `JSV` (JSON Schema validation for MCP t
 
 Archdo ships rules in two complementary layers:
 
-- **Core rules (203 rules in 11 categories)** — the original architecture-quality checks documented in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md). Always-on by default.
+- **Core rules (226 rules in 11 categories)** — the original architecture-quality checks documented in [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md). Always-on by default.
 - **Change Economy rules (32 rules across 4 opt-in packs)** — a second-generation rule family focused on the *cost of changing* the system rather than its current shape. Documented in [ARCHITECTURE_RULES_CHANGE_ECONOMY.md](ARCHITECTURE_RULES_CHANGE_ECONOMY.md). The `core` pack ships on by default; the `ce_compliance`, `ce_privacy`, and `ce_composability` packs are opt-in via `--packs`.
 
 See §3.3 below for the Change Economy + pack system.
@@ -3292,7 +3292,7 @@ Archdo parses every file with `Code.string_to_quoted/2`, which can intern atoms.
 
 ## 13. Where to read next
 
-- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 203 rules listed by category with descriptions. Auto-generated from rule modules.
+- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 258 rules listed by category with descriptions. Auto-generated from rule modules.
 - **[README.md](README.md)** — quick intro, installation, and feature overview.
 
 ---
