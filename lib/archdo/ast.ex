@@ -255,6 +255,44 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  True if the node represents the literal `true` — either the bare boolean
+  or the `{:__block__, _, [true]}` form emitted by Elixir's literal
+  encoder. Used by rules that detect always-true conditions in `case`,
+  `cond`, and `with`/`else` clauses.
+  """
+  @spec literal_true?(Macro.t()) :: boolean()
+  def literal_true?({:__block__, _, [true]}), do: true
+  def literal_true?(true), do: true
+  def literal_true?(_), do: false
+
+  @doc """
+  True if the pattern is a catch-all that shadows everything after it —
+  either the bare underscore `_` or a regular variable name (which binds
+  anything). Variables whose name starts with `_` are EXCLUDED — they're
+  the idiomatic "intentionally unused" convention, not a wildcard the
+  caller forgot to constrain.
+  """
+  @spec catch_all_pattern?(Macro.t()) :: boolean()
+  def catch_all_pattern?({:_, _, _}), do: true
+
+  def catch_all_pattern?({name, _, context})
+      when is_atom(name) and is_atom(context) and name != :_ do
+    not String.starts_with?(Atom.to_string(name), "_")
+  end
+
+  def catch_all_pattern?(_), do: false
+
+  @doc """
+  True if the node is a callback shape — an `fn` literal or an `&`
+  capture. Used by rules that walk arguments of `Enum.map`-style
+  callers to inspect the callback body.
+  """
+  @spec callback_capture?(Macro.t()) :: boolean()
+  def callback_capture?({:fn, _, _}), do: true
+  def callback_capture?({:&, _, _}), do: true
+  def callback_capture?(_), do: false
+
+  @doc """
   Parse a file into its quoted AST. Returns `{:ok, ast}` or `{:error, reason}`.
   """
   @spec parse_file(String.t()) :: {:ok, Macro.t()} | {:error, String.t()}

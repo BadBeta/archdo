@@ -115,13 +115,9 @@ defmodule Archdo.Rules.Module.InefficientListOperation do
 
   defp callback_diags(args, file, kind, predicate) do
     args
-    |> Enum.filter(&callback_arg?/1)
+    |> Enum.filter(&AST.callback_capture?/1)
     |> Enum.flat_map(&diags_in_callback(&1, file, kind, predicate))
   end
-
-  defp callback_arg?({:fn, _, _}), do: true
-  defp callback_arg?({:&, _, _}), do: true
-  defp callback_arg?(_), do: false
 
   defp diags_in_callback(callback, file, kind, predicate) do
     Enum.map(AST.find_all(callback, predicate), fn {_, meta, _} ->

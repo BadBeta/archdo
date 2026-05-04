@@ -283,7 +283,7 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
 
   defp find_in_callbacks(args, predicate) do
     args
-    |> Enum.filter(&callback?/1)
+    |> Enum.filter(&AST.callback_capture?/1)
     |> Enum.flat_map(fn callback -> find_matches(callback, predicate) end)
   end
 
@@ -293,10 +293,6 @@ defmodule Archdo.Rules.Helpers.LoopDetection do
       _non_triple -> []
     end)
   end
-
-  defp callback?({:fn, _, _}), do: true
-  defp callback?({:&, _, _}), do: true
-  defp callback?(_), do: false
 
   defp extract_do_block(args) do
     Enum.find_value(args, fn

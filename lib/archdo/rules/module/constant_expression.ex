@@ -34,7 +34,7 @@ defmodule Archdo.Rules.Module.ConstantExpression do
         # cond do true -> ... ; more_clauses end (true as FIRST clause with more after)
         {:cond, meta, [[do: [{:->, _, [[condition], _body]} | more]]]} = node, acc
         when is_list(more) and more != [] ->
-          case literal_true?(condition) do
+          case AST.literal_true?(condition) do
             true ->
               {node, [build_cond_diagnostic(file, AST.line(meta)) | acc]}
 
@@ -54,10 +54,6 @@ defmodule Archdo.Rules.Module.ConstantExpression do
   defp constant_boolean?(true), do: true
   defp constant_boolean?(false), do: true
   defp constant_boolean?(_), do: false
-
-  defp literal_true?({:__block__, _, [true]}), do: true
-  defp literal_true?(true), do: true
-  defp literal_true?(_), do: false
 
   defp build_if_diagnostic(file, line, condition) do
     value = AST.unwrap_literal(condition)

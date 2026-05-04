@@ -612,4 +612,65 @@ defmodule Archdo.ASTTest do
       refute MapSet.member?(result, "MyApp.Public")
     end
   end
+
+  describe "literal_true?/1" do
+    test "matches the wrapped block form {:__block__, _, [true]}" do
+      assert AST.literal_true?({:__block__, [], [true]})
+    end
+
+    test "matches the bare boolean true" do
+      assert AST.literal_true?(true)
+    end
+
+    test "does not match false" do
+      refute AST.literal_true?(false)
+      refute AST.literal_true?({:__block__, [], [false]})
+    end
+
+    test "does not match other AST nodes" do
+      refute AST.literal_true?({:==, [], [1, 1]})
+      refute AST.literal_true?(nil)
+      refute AST.literal_true?({:my_var, [], nil})
+    end
+  end
+
+  describe "catch_all_pattern?/1" do
+    test "matches the underscore pattern {:_, _, _}" do
+      assert AST.catch_all_pattern?({:_, [], nil})
+    end
+
+    test "matches a regular variable (binds anything that follows)" do
+      assert AST.catch_all_pattern?({:foo, [], Elixir})
+    end
+
+    test "EXCLUDES underscore-prefixed variables (idiomatic discard)" do
+      # `_foo` signals "I know I'm ignoring this", not a wildcard the
+      # caller forgot to constrain — both unreachable_clause and
+      # defensive_nil_return treat these as deliberate, not catch-all.
+      refute AST.catch_all_pattern?({:_x, [], Elixir})
+      refute AST.catch_all_pattern?({:_anything, [], nil})
+    end
+
+    test "does not match literal patterns" do
+      refute AST.catch_all_pattern?(:ok)
+      refute AST.catch_all_pattern?({:ok, []})
+      refute AST.catch_all_pattern?(42)
+    end
+  end
+
+  describe "callback_capture?/1" do
+    test "matches an `fn` literal" do
+      assert AST.callback_capture?({:fn, [], [{:->, [], [[], :ok]}]})
+    end
+
+    test "matches an & capture" do
+      assert AST.callback_capture?({:&, [], [{:/, [], [{:Foo, [], Elixir}, 1]}]})
+    end
+
+    test "does not match other AST" do
+      refute AST.callback_capture?({:my_var, [], nil})
+      refute AST.callback_capture?(:atom)
+      refute AST.callback_capture?(nil)
+    end
+  end
 end

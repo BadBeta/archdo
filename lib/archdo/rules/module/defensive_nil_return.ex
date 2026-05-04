@@ -46,19 +46,10 @@ defmodule Archdo.Rules.Module.DefensiveNilReturn do
 
   # Match: _ -> nil (where nil may be wrapped in __block__)
   defp catch_all_returning_nil?({:->, _, [[pattern], body]}) do
-    catch_all_pattern?(pattern) and bare_nil?(body)
+    AST.catch_all_pattern?(pattern) and bare_nil?(body)
   end
 
   defp catch_all_returning_nil?(_), do: false
-
-  defp catch_all_pattern?({:_, _, _}), do: true
-
-  defp catch_all_pattern?({name, _, context})
-       when is_atom(name) and is_atom(context) and name != :_ do
-    not String.starts_with?(Atom.to_string(name), "_")
-  end
-
-  defp catch_all_pattern?(_), do: false
 
   defp bare_nil?({:__block__, _, [nil]}), do: true
   defp bare_nil?(nil), do: true

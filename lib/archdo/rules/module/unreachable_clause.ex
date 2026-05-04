@@ -38,7 +38,7 @@ defmodule Archdo.Rules.Module.UnreachableClause do
     clauses
     |> Enum.with_index()
     |> Enum.reduce(acc, fn {{:->, _, [[pattern | _guards], _body]}, index}, acc ->
-      case catch_all_pattern?(pattern) and index < length(clauses) - 1 do
+      case AST.catch_all_pattern?(pattern) and index < length(clauses) - 1 do
         true ->
           line = AST.line(case_meta)
           [build_case_diagnostic(file, line) | acc]
@@ -53,7 +53,7 @@ defmodule Archdo.Rules.Module.UnreachableClause do
     clauses
     |> Enum.with_index()
     |> Enum.reduce(acc, fn {{:->, _, [[condition], _body]}, index}, acc ->
-      case literal_true?(condition) and index < length(clauses) - 1 do
+      case AST.literal_true?(condition) and index < length(clauses) - 1 do
         true ->
           line = AST.line(cond_meta)
           [build_cond_diagnostic(file, line) | acc]
@@ -63,21 +63,6 @@ defmodule Archdo.Rules.Module.UnreachableClause do
       end
     end)
   end
-
-  # Catch-all patterns: `_` or a bare variable (no destructuring, no pinning)
-  defp catch_all_pattern?({:_, _, _}), do: true
-
-  defp catch_all_pattern?({name, _, context})
-       when is_atom(name) and is_atom(context) and name != :_ do
-    not String.starts_with?(Atom.to_string(name), "_")
-  end
-
-  defp catch_all_pattern?(_), do: false
-
-  # Match `true` which may be wrapped in __block__ by literal_encoder
-  defp literal_true?({:__block__, _, [true]}), do: true
-  defp literal_true?(true), do: true
-  defp literal_true?(_), do: false
 
   defp build_case_diagnostic(file, line) do
     Diagnostic.warning("6.35",
