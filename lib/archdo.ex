@@ -540,13 +540,25 @@ defmodule Archdo do
   end
 
   defp collect_context_modules(file_asts) do
+    # A real context = a module file (lib/app/foo.ex) WITH a
+    # corresponding directory (lib/app/foo/) holding sub-modules.
+    # Mirrors rule 4.19's `context_facade?/2` heuristic: a leaf
+    # module without a sub-namespace isn't a context. (Without this
+    # filter, the audit listed every domain module as a "context"
+    # with the awkward "leaks: Foo" output where Foo was the module
+    # itself — validated against Oban.)
+    dirs_with_children =
+      file_asts
+      |> Enum.map(fn {file, _} -> Path.dirname(file) end)
+      |> MapSet.new()
+
     file_asts
-    |> Enum.flat_map(fn {file, ast} ->
-      case Phoenix.classify_file(file, ast).layer do
-        :context -> [AST.extract_module_name(ast)]
-        _ -> []
-      end
+    |> Enum.filter(fn {file, ast} ->
+      Phoenix.classify_file(file, ast).layer == :context and
+        String.ends_with?(file, ".ex") and
+        MapSet.member?(dirs_with_children, Path.rootname(file))
     end)
+    |> Enum.map(fn {_file, ast} -> AST.extract_module_name(ast) end)
     |> Enum.uniq()
     |> Enum.sort()
   end
