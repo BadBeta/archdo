@@ -293,6 +293,90 @@ defmodule Archdo.AST do
   def callback_capture?(_), do: false
 
   @doc """
+  True if the AST defines a behaviour (`@callback`) or a protocol
+  (`defprotocol`). Used by metrics that compute abstraction density
+  and rules that exempt behaviour-defining modules from rules
+  premised on concrete modules.
+  """
+  @spec behaviour_or_protocol?(Macro.t()) :: boolean()
+  def behaviour_or_protocol?(ast) do
+    contains?(ast, fn
+      {:@, _, [{:callback, _, _}]} -> true
+      {:defprotocol, _, _} -> true
+      _ -> false
+    end)
+  end
+
+  @doc """
+  True if the AST contains a `:telemetry.span/3` or `:telemetry.execute/3`
+  call. Matches both the bare-atom form `:telemetry.span(...)` and the
+  literal-encoder-wrapped `{:__block__, _, [:telemetry]}` form.
+
+  Used by rule CE-27 (boundary entry without telemetry) and the plugin
+  coverage matrix.
+  """
+  @spec contains_telemetry?(Macro.t()) :: boolean()
+  def contains_telemetry?(ast) do
+    contains?(ast, fn
+      {{:., _, [:telemetry, fun]}, _, _} when fun in [:span, :execute] -> true
+      {{:., _, [{:__block__, _, [:telemetry]}, fun]}, _, _} when fun in [:span, :execute] -> true
+      _ -> false
+    end)
+  end
+
+  @doc """
+  True if the AST contains a `Logger.error/warning/info/debug/notice` call.
+  Used by rule CE-error-path-without-log and the plugin coverage matrix.
+  """
+  @spec contains_logger?(Macro.t()) :: boolean()
+  def contains_logger?(ast) do
+    contains?(ast, fn
+      {{:., _, [{:__aliases__, _, [:Logger]}, fun]}, _, _}
+      when fun in [:error, :warning, :info, :debug, :notice] ->
+        true
+
+      _ ->
+        false
+    end)
+  end
+
+  @doc """
+  Extract the user-facing test name from the args list of an ExUnit
+  `test "name", do: ...` AST. Returns the literal string when the name
+  is a bare binary or wrapped by the literal-encoder, `"(unknown)"`
+  otherwise (e.g. interpolated names).
+  """
+  @spec extract_test_name([Macro.t()]) :: String.t()
+  def extract_test_name([name | _]) when is_binary(name), do: name
+  def extract_test_name([{:__block__, _, [name]} | _]) when is_binary(name), do: name
+  def extract_test_name(_), do: "(unknown)"
+
+  @doc """
+  Walk an ExUnit module AST and return one tuple per `test` block:
+  `{name_ast, meta, body_or_nil}`. Used by testing rules that want to
+  inspect each test's body (no_assertion, missing_error_path, long_test,
+  over_mocking).
+  """
+  @spec extract_test_blocks(Macro.t()) :: [{Macro.t(), keyword(), Macro.t() | nil}]
+  def extract_test_blocks(ast) do
+    ast
+    |> find_all(fn
+      {:test, _meta, [_name | _]} -> true
+      _ -> false
+    end)
+    |> Enum.map(fn {:test, meta, [name | rest]} ->
+      body =
+        case rest do
+          [_, [do: body]] -> body
+          [[do: body]] -> body
+          _ -> nil
+        end
+
+      {name, meta, body}
+    end)
+  end
+
+  @doc """
   Parse a file into its quoted AST. Returns `{:ok, ast}` or `{:error, reason}`.
   """
   @spec parse_file(String.t()) :: {:ok, Macro.t()} | {:error, String.t()}

@@ -21,7 +21,7 @@ defmodule Archdo.Rules.Testing.MissingErrorPath do
   end
 
   defp check_error_path_coverage(file, ast) do
-    test_blocks = extract_test_blocks(ast)
+    test_blocks = AST.extract_test_blocks(ast)
     total = length(test_blocks)
 
     case total >= @min_test_count do
@@ -37,24 +37,6 @@ defmodule Archdo.Rules.Testing.MissingErrorPath do
           _ -> []
         end
     end
-  end
-
-  defp extract_test_blocks(ast) do
-    ast
-    |> AST.find_all(fn
-      {:test, _meta, [_name | _]} -> true
-      _ -> false
-    end)
-    |> Enum.map(fn {:test, meta, [name | rest]} ->
-      body =
-        case rest do
-          [_, [do: body]] -> body
-          [[do: body]] -> body
-          _ -> nil
-        end
-
-      {name, meta, body}
-    end)
   end
 
   defp has_error_pattern?(nil), do: false

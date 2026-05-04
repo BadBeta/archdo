@@ -30,7 +30,7 @@ defmodule Archdo.Rules.Testing.LongTest do
     |> Enum.map(fn {:test, meta, args} ->
       body = List.last(args)
       size = AST.ast_size(body)
-      name = extract_test_name(args)
+      name = AST.extract_test_name(args)
 
       if size > @max_test_nodes do
         Diagnostic.info("7.12",
@@ -70,7 +70,4 @@ defmodule Archdo.Rules.Testing.LongTest do
     |> Enum.reject(&is_nil/1)
   end
 
-  defp extract_test_name([name | _]) when is_binary(name), do: name
-  defp extract_test_name([{:__block__, _, [name]} | _]) when is_binary(name), do: name
-  defp extract_test_name(_), do: "(unknown)"
 end

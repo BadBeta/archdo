@@ -34,7 +34,7 @@ defmodule Archdo.Rules.Testing.NoAssertion do
 
     for {_, meta, args} = node <- tests,
         not has_assertion?(node) do
-      test_name = extract_test_name(args)
+      test_name = AST.extract_test_name(args)
 
       Diagnostic.warning("7.9",
         title: "Test without assertions",
@@ -102,7 +102,4 @@ defmodule Archdo.Rules.Testing.NoAssertion do
   defp non_trivial_pattern?([_ | _]), do: true
   defp non_trivial_pattern?(_), do: false
 
-  defp extract_test_name([name | _]) when is_binary(name), do: name
-  defp extract_test_name([{:__block__, _, [name]} | _]) when is_binary(name), do: name
-  defp extract_test_name(_), do: "(unknown)"
 end

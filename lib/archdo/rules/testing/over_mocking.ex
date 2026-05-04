@@ -21,7 +21,7 @@ defmodule Archdo.Rules.Testing.OverMocking do
 
   defp find_over_mocked_tests(file, ast) do
     ast
-    |> extract_test_blocks()
+    |> AST.extract_test_blocks()
     |> Enum.flat_map(fn {name, meta, body} ->
       expect_count = count_calls(body, :expect)
       stub_count = count_calls(body, :stub)
@@ -36,24 +36,6 @@ defmodule Archdo.Rules.Testing.OverMocking do
         true ->
           []
       end
-    end)
-  end
-
-  defp extract_test_blocks(ast) do
-    ast
-    |> AST.find_all(fn
-      {:test, _meta, [_name | _]} -> true
-      _ -> false
-    end)
-    |> Enum.map(fn {:test, meta, [name | rest]} ->
-      body =
-        case rest do
-          [_, [do: body]] -> body
-          [[do: body]] -> body
-          _ -> nil
-        end
-
-      {name, meta, body}
     end)
   end
 

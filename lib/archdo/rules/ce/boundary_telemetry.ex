@@ -69,7 +69,7 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
     {_, _, meta, _, _} = hd(clauses)
 
     any_telemetry? =
-      Enum.any?(clauses, fn {_, _, _, _, body} -> body && contains_telemetry?(body) end)
+      Enum.any?(clauses, fn {_, _, _, _, body} -> body && AST.contains_telemetry?(body) end)
 
     diag_if_no_telemetry(any_telemetry?, file, name, arity, meta, layer)
   end
@@ -141,19 +141,6 @@ defmodule Archdo.Rules.CE.BoundaryTelemetry do
       {:use, _, [{:__aliases__, _, [:Mix, :Task]}]} -> true
       {:use, _, [{:__aliases__, _, [:Mix, :Task]}, _]} -> true
       _ -> false
-    end)
-  end
-
-  defp contains_telemetry?(body) do
-    AST.contains?(body, fn
-      {{:., _, [:telemetry, fun]}, _, _} when fun in [:span, :execute] ->
-        true
-
-      {{:., _, [{:__block__, _, [:telemetry]}, fun]}, _, _} when fun in [:span, :execute] ->
-        true
-
-      _ ->
-        false
     end)
   end
 

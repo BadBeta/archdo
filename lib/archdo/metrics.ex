@@ -111,21 +111,13 @@ defmodule Archdo.Metrics do
   defp identify_abstract_modules(file_asts) do
     file_asts
     |> Enum.flat_map(fn {_file, ast} ->
-      if abstract_module?(ast) do
+      if AST.behaviour_or_protocol?(ast) do
         [AST.extract_module_name(ast)]
       else
         []
       end
     end)
     |> MapSet.new()
-  end
-
-  defp abstract_module?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:callback, _, _}]} -> true
-      {:defprotocol, _, _} -> true
-      _ -> false
-    end)
   end
 
   # Heuristic: anything in a top-level stdlib-ish namespace is excluded

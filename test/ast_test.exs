@@ -658,6 +658,116 @@ defmodule Archdo.ASTTest do
     end
   end
 
+  describe "behaviour_or_protocol?/1" do
+    test "true for @callback" do
+      ast = quote do: (@callback do_thing() :: :ok)
+      assert AST.behaviour_or_protocol?(ast)
+    end
+
+    test "true for defprotocol" do
+      ast = quote do: (defprotocol MyProto, do: (def call(x)))
+      assert AST.behaviour_or_protocol?(ast)
+    end
+
+    test "false for plain modules" do
+      ast = quote(do: (defmodule MyMod, do: (def f, do: 1)))
+      refute AST.behaviour_or_protocol?(ast)
+    end
+  end
+
+  describe "contains_telemetry?/1" do
+    test "true for :telemetry.span/3" do
+      ast = quote do: :telemetry.span([:my_app, :op], %{}, fn -> {:ok, %{}} end)
+      assert AST.contains_telemetry?(ast)
+    end
+
+    test "true for :telemetry.execute/3" do
+      ast = quote do: :telemetry.execute([:my_app, :event], %{count: 1}, %{})
+      assert AST.contains_telemetry?(ast)
+    end
+
+    test "false for unrelated calls" do
+      ast = quote do: Logger.info("hi")
+      refute AST.contains_telemetry?(ast)
+    end
+  end
+
+  describe "contains_logger?/1" do
+    test "true for Logger.info" do
+      ast = quote do: Logger.info("hi")
+      assert AST.contains_logger?(ast)
+    end
+
+    test "true for Logger.error / warning / debug / notice" do
+      for level <- [:error, :warning, :debug, :notice] do
+        # Build {Logger, level} call AST manually via quote unquote
+        ast = quote do: unquote({{:., [], [{:__aliases__, [], [:Logger]}, level]}, [], ["msg"]})
+        assert AST.contains_logger?(ast), "expected Logger.#{level} to be detected"
+      end
+    end
+
+    test "false for unrelated calls" do
+      ast = quote do: IO.puts("hi")
+      refute AST.contains_logger?(ast)
+    end
+  end
+
+  describe "extract_test_name/1" do
+    test "returns a bare-string test name" do
+      assert "renders home" = AST.extract_test_name(["renders home", [do: nil]])
+    end
+
+    test "returns a literal-encoded test name" do
+      assert "wrapped" =
+               AST.extract_test_name([{:__block__, [], ["wrapped"]}, [do: nil]])
+    end
+
+    test "returns (unknown) for non-string names" do
+      assert "(unknown)" = AST.extract_test_name([{:foo, [], nil}])
+      assert "(unknown)" = AST.extract_test_name([])
+    end
+  end
+
+  describe "extract_test_blocks/1" do
+    test "extracts a list of {name, meta, body} for each test block" do
+      ast =
+        quote do
+          defmodule MyApp.Test do
+            use ExUnit.Case
+            test "first", do: assert(true)
+            test "second", do: assert(true)
+          end
+        end
+
+      blocks = AST.extract_test_blocks(ast)
+      assert length(blocks) == 2
+      names = Enum.map(blocks, fn {n, _meta, _body} -> n end)
+      assert "first" in names
+      assert "second" in names
+    end
+
+    test "returns body=nil for tests without a do-block" do
+      ast =
+        quote do
+          test("no body")
+        end
+
+      blocks = AST.extract_test_blocks(ast)
+      assert [{"no body", _meta, nil}] = blocks
+    end
+
+    test "returns [] when there are no tests" do
+      ast =
+        quote do
+          defmodule X do
+            def f, do: 1
+          end
+        end
+
+      assert [] = AST.extract_test_blocks(ast)
+    end
+  end
+
   describe "callback_capture?/1" do
     test "matches an `fn` literal" do
       assert AST.callback_capture?({:fn, [], [{:->, [], [[], :ok]}]})

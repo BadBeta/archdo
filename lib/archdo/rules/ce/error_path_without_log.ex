@@ -56,7 +56,7 @@ defmodule Archdo.Rules.CE.ErrorPathWithoutLog do
   end
 
   defp needs_log?(body) do
-    error_path?(body) and not contains_log?(body)
+    error_path?(body) and not AST.contains_logger?(body)
   end
 
   # Body has a literal `{:error, _}` return OR a rescue clause.
@@ -111,17 +111,6 @@ defmodule Archdo.Rules.CE.ErrorPathWithoutLog do
           {{:__block__, _, [:rescue]}, _} -> true
           _ -> false
         end)
-
-      _ ->
-        false
-    end)
-  end
-
-  defp contains_log?(body) do
-    AST.contains?(body, fn
-      {{:., _, [{:__aliases__, _, [:Logger]}, fun]}, _, _}
-      when fun in [:error, :warning, :info, :debug, :notice] ->
-        true
 
       _ ->
         false

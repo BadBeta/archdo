@@ -63,7 +63,7 @@ defmodule Archdo.Rules.CE.VolatilitySubstitutability do
     median = codebase_median(production)
 
     for {file, ast} <- production,
-        not behaviour_module?(ast),
+        not AST.behaviour_or_protocol?(ast),
         cell = cell_for(file, ast, median),
         action = Map.get(@policy, cell, :no_finding),
         action != :no_finding do
@@ -71,17 +71,6 @@ defmodule Archdo.Rules.CE.VolatilitySubstitutability do
     end
   end
 
-  # Behaviour-defining modules legitimately have high abstraction density
-  # (the @callbacks ARE the public surface). The {:high, :stable} CE-3
-  # cell flags "abstraction without payoff", which doesn't apply when
-  # the module IS the abstraction other modules implement.
-  defp behaviour_module?(ast) do
-    AST.contains?(ast, fn
-      {:@, _, [{:callback, _, _}]} -> true
-      {:defprotocol, _, _} -> true
-      _ -> false
-    end)
-  end
 
   @doc """
   Compute the abstraction density for a single module:

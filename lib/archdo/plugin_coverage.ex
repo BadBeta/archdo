@@ -62,8 +62,8 @@ defmodule Archdo.PluginCoverage do
       true ->
         kinds =
           []
-          |> add_if(contains_telemetry?(ast), :telemetry)
-          |> add_if(contains_logger?(ast), :log)
+          |> add_if(AST.contains_telemetry?(ast), :telemetry)
+          |> add_if(AST.contains_logger?(ast), :log)
 
         {:plug, AST.extract_module_name(ast), kinds}
     end
@@ -81,29 +81,4 @@ defmodule Archdo.PluginCoverage do
     |> Enum.any?(fn {name, arity, _, _, _} -> name == @plug_callback and arity == 2 end)
   end
 
-  # §§ elixir-implementing: §1 rule 23 — reuse the same telemetry-call
-  # AST shapes CE-27 already matches, so detection stays consistent.
-  defp contains_telemetry?(ast) do
-    AST.contains?(ast, fn
-      {{:., _, [:telemetry, fun]}, _, _} when fun in [:span, :execute] ->
-        true
-
-      {{:., _, [{:__block__, _, [:telemetry]}, fun]}, _, _} when fun in [:span, :execute] ->
-        true
-
-      _ ->
-        false
-    end)
-  end
-
-  defp contains_logger?(ast) do
-    AST.contains?(ast, fn
-      {{:., _, [{:__aliases__, _, [:Logger]}, fun]}, _, _}
-      when fun in [:error, :warning, :info, :debug, :notice] ->
-        true
-
-      _ ->
-        false
-    end)
-  end
 end
