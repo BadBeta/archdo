@@ -62,17 +62,28 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
   # module (e.g. `:erlang`, `:gen_server`).
   defp literal_module?({:__aliases__, _, _}), do: true
   defp literal_module?({:__MODULE__, _, _}), do: true
+  defp literal_module?({:__block__, _, [inner]}), do: literal_module?(inner)
   defp literal_module?(atom) when is_atom(atom), do: true
+  defp literal_module?({:unquote, _, _}), do: true
   defp literal_module?(_), do: false
 
+  defp literal_atom?({:__block__, _, [inner]}), do: literal_atom?(inner)
   defp literal_atom?(atom) when is_atom(atom), do: true
+  defp literal_atom?({:unquote, _, _}), do: true
   defp literal_atom?(_), do: false
 
   # Function-reference literals: `&Mod.fun/2` capture, anonymous `fn ... end`,
   # or a literal atom (rare — Erlang local-fun reference).
+  # `unquote(...)` is also accepted: inside a macro context it resolves
+  # to a compile-time-determined value from the surrounding `for`/list,
+  # not a user-controlled runtime dispatch.
+  # `{:__block__, _, [inner]}` is the production parser's literal-encoder
+  # wrap and unwraps to the underlying form.
+  defp literal_fun_ref?({:__block__, _, [inner]}), do: literal_fun_ref?(inner)
   defp literal_fun_ref?({:&, _, _}), do: true
   defp literal_fun_ref?({:fn, _, _}), do: true
   defp literal_fun_ref?(atom) when is_atom(atom), do: true
+  defp literal_fun_ref?({:unquote, _, _}), do: true
   defp literal_fun_ref?(_), do: false
 
   defp diag_apply3_module(file, meta) do

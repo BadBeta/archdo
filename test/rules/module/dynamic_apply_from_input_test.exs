@@ -95,6 +95,26 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInputTest do
 
       assert_clean(DynamicApplyFromInput, code)
     end
+
+    test "allows apply with unquote(...) — compile-time-built name" do
+      # Pleroma-style: `apply(__MODULE__, unquote(:"#{x}_relation"), args)`
+      # inside a macro generates a finite set of named functions, not a
+      # user-controlled dispatch. The function name is determined at
+      # compile time from a constant list, so it's not an RCE vector.
+      code = ~S"""
+      defmodule MyApp.Relations do
+        for target <- [:blocked, :muted] do
+          def unquote(:"#{target}_users")(user) do
+            __MODULE__
+            |> apply(unquote(:"#{target}_relation"), [user])
+            |> Repo.all()
+          end
+        end
+      end
+      """
+
+      assert_clean(DynamicApplyFromInput, code)
+    end
   end
 
   describe "analyze/3 — apply/2 with variable function reference" do
