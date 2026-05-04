@@ -123,6 +123,36 @@ defmodule Archdo.StatsTest do
       assert stats.lib.moduledocs == 1
     end
 
+    test "counts @moduledoc false declarations separately", %{tmp_dir: tmp_dir} do
+      write(tmp_dir, "lib/documented.ex", ~S"""
+      defmodule MyApp.Documented do
+        @moduledoc "hello"
+      end
+      """)
+
+      write(tmp_dir, "lib/internal_a.ex", ~S"""
+      defmodule MyApp.InternalA do
+        @moduledoc false
+      end
+      """)
+
+      write(tmp_dir, "lib/internal_b.ex", ~S"""
+      defmodule MyApp.InternalB do
+        @moduledoc false
+      end
+      """)
+
+      write(tmp_dir, "lib/undeclared.ex", ~S"""
+      defmodule MyApp.Undeclared do
+      end
+      """)
+
+      stats = Stats.collect([tmp_dir])
+      assert stats.lib.modules == 4
+      assert stats.lib.moduledocs == 1
+      assert stats.lib.moduledocs_false == 2
+    end
+
     test "counts @spec attributes", %{tmp_dir: tmp_dir} do
       write(tmp_dir, "lib/spec_sample.ex", ~S"""
       defmodule MyApp.Specced do

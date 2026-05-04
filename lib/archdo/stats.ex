@@ -159,6 +159,7 @@ defmodule Archdo.Stats do
       structs: sum_field(file_results, :structs),
       specs: sum_field(file_results, :specs),
       moduledocs: sum_field(file_results, :moduledocs),
+      moduledocs_false: sum_field(file_results, :moduledocs_false),
       avg_module_lines: avg_module_lines(file_results),
       largest_module: largest_module(file_results)
     }
@@ -276,9 +277,11 @@ defmodule Archdo.Stats do
   defp count_node({:@, _, [{:spec, _, _}]} = node, acc, _path),
     do: {node, %{acc | specs: acc.specs + 1}}
 
-  # `@moduledoc false` is intentional opt-out — don't count it.
+  # `@moduledoc false` is an intentional internal-module marker —
+  # tracked separately from documented modules so the stats output
+  # can distinguish "documented" from "declared internal".
   defp count_node({:@, _, [{:moduledoc, _, [false]}]} = node, acc, _path),
-    do: {node, acc}
+    do: {node, %{acc | moduledocs_false: acc.moduledocs_false + 1}}
 
   defp count_node({:@, _, [{:moduledoc, _, [_]}]} = node, acc, _path),
     do: {node, %{acc | moduledocs: acc.moduledocs + 1}}
@@ -302,6 +305,7 @@ defmodule Archdo.Stats do
       structs: 0,
       specs: 0,
       moduledocs: 0,
+      moduledocs_false: 0,
       module_lines: []
     }
   end
@@ -348,6 +352,7 @@ defmodule Archdo.Stats do
       structs: a.structs + b.structs,
       specs: a.specs + b.specs,
       moduledocs: a.moduledocs + b.moduledocs,
+      moduledocs_false: a.moduledocs_false + b.moduledocs_false,
       avg_module_lines: 0,
       largest_module: {"", 0}
     }
@@ -379,6 +384,22 @@ defmodule Archdo.Stats do
         n -> "#{Float.round(stats.moduledocs / n * 100, 0)}%"
       end
 
+    internal_coverage =
+      case stats.modules do
+        0 -> "—"
+        n -> "#{Float.round(stats.moduledocs_false / n * 100, 0)}%"
+      end
+
+    undeclared =
+      case stats.modules do
+        0 ->
+          "—"
+
+        n ->
+          missing = n - stats.moduledocs - stats.moduledocs_false
+          "#{Float.round(missing / n * 100, 0)}%"
+      end
+
     [
       "┌─ #{title} ─────────────────────────────────────────────",
       "│",
@@ -398,7 +419,9 @@ defmodule Archdo.Stats do
       row("  Macros", stats.macros),
       "│",
       row("@spec coverage", spec_coverage),
-      row("@moduledoc coverage", doc_coverage),
+      row("@moduledoc documented", doc_coverage),
+      row("@moduledoc false (internal)", internal_coverage),
+      row("@moduledoc undeclared", undeclared),
       maybe_test_rows(stats),
       maybe_otp_rows(stats),
       "└──────────────────────────────────────────────────────────"
