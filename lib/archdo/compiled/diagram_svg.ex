@@ -274,137 +274,153 @@ defmodule Archdo.Compiled.DiagramSVG do
     ]
   end
 
+  @ctx_max_members 16
+  @ctx_max_externals 6
+  @ctx_grid_cols 3
+  @ctx_node_w 180
+  @ctx_node_h 36
+  @ctx_grid_gap_x 30
+  @ctx_grid_gap_y 16
+  @ctx_frame_margin 60
+
   defp render_context_svg(graph, ctx) do
+    layout = compute_context_layout(graph, ctx)
+    elements = build_context_elements(ctx, layout)
+    SvgDocument.wrap_svg(elements, layout.total_w, layout.total_h)
+  end
+
+  defp compute_context_layout(graph, ctx) do
     member_set = MapSet.new(ctx.members)
-    members = Enum.take(ctx.members, 16)
+    members = Enum.take(ctx.members, @ctx_max_members)
+    rows = ceil(length(members) / @ctx_grid_cols)
 
-    # Layout members in a grid
-    cols = 3
-    rows = ceil(length(members) / cols)
-    node_w = 180
-    node_h = 36
-    gap_x = 30
-    gap_y = 16
-    margin = 60
+    grid_w = @ctx_grid_cols * (@ctx_node_w + @ctx_grid_gap_x) - @ctx_grid_gap_x
+    grid_h = rows * (@ctx_node_h + @ctx_grid_gap_y) - @ctx_grid_gap_y
+    frame_w = grid_w + @ctx_frame_margin * 2
+    frame_h = grid_h + @ctx_frame_margin * 2 + 40
 
-    grid_w = cols * (node_w + gap_x) - gap_x
-    grid_h = rows * (node_h + gap_y) - gap_y
+    ext_callers = collect_external_callers(graph, ctx, member_set)
+    ext_deps = collect_external_deps(graph, ctx, member_set)
 
-    frame_w = grid_w + margin * 2
-    frame_h = grid_h + margin * 2 + 40
+    left_col_w = column_width(ext_callers, @node_width + @col_gap)
+    right_col_w = column_width(ext_deps, @col_gap + @node_width)
 
-    # External callers
-    ext_callers =
-      ctx.members
-      |> Enum.flat_map(fn mod ->
-        Enum.reject(Query.known_by(graph, mod), fn e -> MapSet.member?(member_set, e.module) end)
-      end)
-      |> Enum.uniq_by(& &1.module)
-      |> Enum.take(6)
+    %{
+      members: members,
+      ext_callers: ext_callers,
+      ext_deps: ext_deps,
+      frame_x: left_col_w + 20,
+      frame_y: 30,
+      frame_w: frame_w,
+      frame_h: frame_h,
+      total_w: left_col_w + frame_w + right_col_w + 40,
+      total_h: max(frame_h, max(length(ext_callers), length(ext_deps)) * 50) + 60
+    }
+  end
 
-    # External deps
-    ext_deps =
-      ctx.members
-      |> Enum.flat_map(fn mod ->
-        Enum.reject(Query.knows_about(graph, mod), fn e ->
-          MapSet.member?(member_set, e.module)
-        end)
-      end)
-      |> Enum.uniq_by(& &1.module)
-      |> Enum.take(6)
+  @doc false
+  # Column width — zero when there are no entries to render in that
+  # column, the configured width otherwise. @doc false for testability
+  # (it's a tiny pure helper but pinning the empty/non-empty contract
+  # in a test prevents future "default to width" regressions).
+  @spec column_width(list(), non_neg_integer()) :: non_neg_integer()
+  def column_width([], _), do: 0
+  def column_width(_, width), do: width
 
-    left_col_w =
-      case ext_callers do
-        [] -> 0
-        _ -> @node_width + @col_gap
-      end
+  @doc false
+  # Pick {bg, border, label} for a member box. is_boundary? is the
+  # caller's pre-computed `mod == ctx.boundary_module` so this stays a
+  # pure data function.
+  @spec member_style(boolean(), module()) :: {String.t(), String.t(), String.t()}
+  def member_style(true, mod),
+    do: {"#2D4F3D", "#4CAF50", "#{AST.short_name(mod)} [BOUNDARY]"}
 
-    right_col_w =
-      case ext_deps do
-        [] -> 0
-        _ -> @col_gap + @node_width
-      end
+  def member_style(false, mod), do: {@node_bg, @node_border, AST.short_name(mod)}
 
-    total_w = left_col_w + frame_w + right_col_w + 40
-    total_h = max(frame_h, max(length(ext_callers), length(ext_deps)) * 50) + 60
+  defp collect_external_callers(graph, ctx, member_set) do
+    ctx.members
+    |> Enum.flat_map(fn mod ->
+      Enum.reject(Query.known_by(graph, mod), &MapSet.member?(member_set, &1.module))
+    end)
+    |> Enum.uniq_by(& &1.module)
+    |> Enum.take(@ctx_max_externals)
+  end
 
-    frame_x = left_col_w + 20
-    frame_y = 30
+  defp collect_external_deps(graph, ctx, member_set) do
+    ctx.members
+    |> Enum.flat_map(fn mod ->
+      Enum.reject(Query.knows_about(graph, mod), &MapSet.member?(member_set, &1.module))
+    end)
+    |> Enum.uniq_by(& &1.module)
+    |> Enum.take(@ctx_max_externals)
+  end
 
-    # Context frame
-    frame_elements = [
-      ~s(<rect x="#{frame_x}" y="#{frame_y}" width="#{frame_w}" height="#{frame_h}" rx="8" fill="#{@boundary_bg}" stroke="#{@boundary_border}" stroke-width="2" stroke-dasharray="6,3"/>),
-      ~s(<text x="#{frame_x + frame_w / 2}" y="#{frame_y + 22}" text-anchor="middle" fill="#{@accent}" font-size="14" font-weight="600" font-family="monospace">#{ctx.context}</text>),
-      ~s(<text x="#{frame_x + frame_w / 2}" y="#{frame_y + 38}" text-anchor="middle" fill="#{@dim_text}" font-size="10" font-family="monospace">cohesion: #{ctx.cohesion} | coupling: #{ctx.coupling} | #{length(ctx.members)} modules</text>)
+  defp build_context_elements(ctx, layout) do
+    frame_elements(ctx, layout) ++
+      member_elements(ctx, layout) ++
+      caller_elements(layout) ++
+      dep_elements(layout)
+  end
+
+  defp frame_elements(ctx, %{frame_x: fx, frame_y: fy, frame_w: fw, frame_h: fh}) do
+    [
+      ~s(<rect x="#{fx}" y="#{fy}" width="#{fw}" height="#{fh}" rx="8" fill="#{@boundary_bg}" stroke="#{@boundary_border}" stroke-width="2" stroke-dasharray="6,3"/>),
+      ~s(<text x="#{fx + fw / 2}" y="#{fy + 22}" text-anchor="middle" fill="#{@accent}" font-size="14" font-weight="600" font-family="monospace">#{ctx.context}</text>),
+      ~s(<text x="#{fx + fw / 2}" y="#{fy + 38}" text-anchor="middle" fill="#{@dim_text}" font-size="10" font-family="monospace">cohesion: #{ctx.cohesion} | coupling: #{ctx.coupling} | #{length(ctx.members)} modules</text>)
     ]
+  end
 
-    # Members inside the frame
-    member_elements =
-      members
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {mod, idx} ->
-        col = rem(idx, cols)
-        row = div(idx, cols)
-        mx = frame_x + margin + col * (node_w + gap_x)
-        my = frame_y + margin + 20 + row * (node_h + gap_y)
+  defp member_elements(ctx, layout) do
+    layout.members
+    |> Enum.with_index()
+    |> Enum.flat_map(&member_element(&1, ctx, layout))
+  end
 
-        is_boundary = mod == ctx.boundary_module
+  defp member_element({mod, idx}, ctx, layout) do
+    col = rem(idx, @ctx_grid_cols)
+    row = div(idx, @ctx_grid_cols)
+    mx = layout.frame_x + @ctx_frame_margin + col * (@ctx_node_w + @ctx_grid_gap_x)
+    my = layout.frame_y + @ctx_frame_margin + 20 + row * (@ctx_node_h + @ctx_grid_gap_y)
 
-        bg =
-          case is_boundary do
-            true -> "#2D4F3D"
-            false -> @node_bg
-          end
+    {bg, border, label} = member_style(mod == ctx.boundary_module, mod)
 
-        border =
-          case is_boundary do
-            true -> "#4CAF50"
-            false -> @node_border
-          end
+    [
+      ~s(<rect x="#{mx}" y="#{my}" width="#{@ctx_node_w}" height="#{@ctx_node_h}" rx="4" fill="#{bg}" stroke="#{border}" stroke-width="1.5"/>),
+      ~s(<text x="#{mx + @ctx_node_w / 2}" y="#{my + 22}" text-anchor="middle" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{label}</text>)
+    ]
+  end
 
-        label =
-          case is_boundary do
-            true -> "#{AST.short_name(mod)} [BOUNDARY]"
-            false -> AST.short_name(mod)
-          end
+  defp caller_elements(layout) do
+    layout.ext_callers
+    |> Enum.with_index()
+    |> Enum.flat_map(&caller_element(&1, layout))
+  end
 
-        [
-          ~s(<rect x="#{mx}" y="#{my}" width="#{node_w}" height="#{node_h}" rx="4" fill="#{bg}" stroke="#{border}" stroke-width="1.5"/>),
-          ~s(<text x="#{mx + node_w / 2}" y="#{my + 22}" text-anchor="middle" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{label}</text>)
-        ]
-      end)
+  defp caller_element({entry, idx}, layout) do
+    ey = 40 + idx * 50
 
-    # External callers (left)
-    caller_elements =
-      ext_callers
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {entry, idx} ->
-        ey = 40 + idx * 50
+    [
+      ~s(<rect x="20" y="#{ey}" width="#{@node_width}" height="36" rx="4" fill="#1E3A5F" stroke="#2563EB" stroke-width="1"/>),
+      ~s(<text x="30" y="#{ey + 22}" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{AST.short_name(entry.module)}</text>),
+      ~s(<path d="M #{20 + @node_width} #{ey + 18} L #{layout.frame_x} #{layout.frame_y + layout.frame_h / 2}" fill="none" stroke="#{@wire_ok}" stroke-width="1.2" opacity="0.4"/>)
+    ]
+  end
 
-        [
-          ~s(<rect x="20" y="#{ey}" width="#{@node_width}" height="36" rx="4" fill="#1E3A5F" stroke="#2563EB" stroke-width="1"/>),
-          ~s(<text x="30" y="#{ey + 22}" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{AST.short_name(entry.module)}</text>),
-          ~s(<path d="M #{20 + @node_width} #{ey + 18} L #{frame_x} #{frame_y + frame_h / 2}" fill="none" stroke="#{@wire_ok}" stroke-width="1.2" opacity="0.4"/>)
-        ]
-      end)
+  defp dep_elements(layout) do
+    layout.ext_deps
+    |> Enum.with_index()
+    |> Enum.flat_map(&dep_element(&1, layout))
+  end
 
-    # External deps (right)
-    dep_elements =
-      ext_deps
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {entry, idx} ->
-        ey = 40 + idx * 50
-        dx = frame_x + frame_w + @col_gap
+  defp dep_element({entry, idx}, layout) do
+    ey = 40 + idx * 50
+    dx = layout.frame_x + layout.frame_w + @col_gap
 
-        [
-          ~s(<rect x="#{dx}" y="#{ey}" width="#{@node_width}" height="36" rx="4" fill="#3D2E1E" stroke="#D97706" stroke-width="1"/>),
-          ~s(<text x="#{dx + 10}" y="#{ey + 22}" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{AST.short_name(entry.module)}</text>),
-          ~s(<path d="M #{frame_x + frame_w} #{frame_y + frame_h / 2} L #{dx} #{ey + 18}" fill="none" stroke="#{@wire_atom}" stroke-width="1.2" opacity="0.4" stroke-dasharray="4,2"/>)
-        ]
-      end)
-
-    all = frame_elements ++ member_elements ++ caller_elements ++ dep_elements
-    SvgDocument.wrap_svg(all, total_w, total_h)
+    [
+      ~s(<rect x="#{dx}" y="#{ey}" width="#{@node_width}" height="36" rx="4" fill="#3D2E1E" stroke="#D97706" stroke-width="1"/>),
+      ~s(<text x="#{dx + 10}" y="#{ey + 22}" fill="#{@text_color}" font-size="#{@font_size}" font-family="monospace">#{AST.short_name(entry.module)}</text>),
+      ~s(<path d="M #{layout.frame_x + layout.frame_w} #{layout.frame_y + layout.frame_h / 2} L #{dx} #{ey + 18}" fill="none" stroke="#{@wire_atom}" stroke-width="1.2" opacity="0.4" stroke-dasharray="4,2"/>)
+    ]
   end
 
   defp wire_color_for_fn(fn_info) do
