@@ -222,6 +222,124 @@ defmodule Archdo.Rules.CE.UnanchoredModuleTest do
       assert diag.message =~ "macro" or diag.message =~ "dynamic"
     end
 
+    test "library projects: public modules are anchors (validated against Floki)" do
+      # In a project with `package/0` in mix.exs (a Hex-publishable
+      # library), there's no Phoenix route / Mix.Task / Application
+      # to anchor from — the PUBLIC API itself is the anchor set.
+      # Every module not marked `@moduledoc false` IS reachable by
+      # external library consumers. CE-30's AST closure walk has no
+      # signal here without library awareness.
+      #
+      # Validated against Floki: 30 CE-30 findings before, all on
+      # public lib modules that are part of the API surface.
+      #
+      # The runner threads `library?: true` via opts when it detects
+      # mix.exs has package/0. Tests pass it explicitly.
+      public =
+        parse(
+          """
+          defmodule MyLib do
+            @moduledoc "Public API"
+            def parse(input), do: MyLib.Parser.parse(input)
+          end
+          """,
+          "lib/mylib.ex"
+        )
+
+      internal_reached =
+        parse(
+          """
+          defmodule MyLib.Parser do
+            @moduledoc false
+            def parse(input), do: input
+          end
+          """,
+          "lib/mylib/parser.ex"
+        )
+
+      internal_orphan =
+        parse(
+          """
+          defmodule MyLib.Orphan do
+            @moduledoc false
+            def stale, do: :stale
+          end
+          """,
+          "lib/mylib/orphan.ex"
+        )
+
+      diags =
+        UnanchoredModule.analyze_project(
+          [public, internal_reached, internal_orphan],
+          library?: true
+        )
+
+      flagged = Enum.map(diags, & &1.context.module)
+
+      refute "MyLib" in flagged, "public lib module should be anchored by being public API"
+
+      refute "MyLib.Parser" in flagged,
+             "internal module reached from public should be anchored transitively"
+
+      assert "MyLib.Orphan" in flagged,
+             "internal module unreached from any public module should still flag"
+    end
+
+    test "library projects: behaviour-implementor modules are anchored even when @moduledoc false" do
+      # Pluggable adapter modules (Floki.HTMLParser.FastHtml /
+      # Html5ever / Mochiweb shape) are @moduledoc false but reached
+      # via runtime config — invisible to AST analysis. They DO
+      # declare @behaviour Foo where Foo is a project-defined
+      # behaviour. Anchor them by virtue of implementing a project
+      # behaviour.
+      behaviour =
+        parse(
+          """
+          defmodule MyLib.Parser do
+            @callback parse(binary()) :: term()
+          end
+          """,
+          "lib/mylib/parser.ex"
+        )
+
+      adapter =
+        parse(
+          """
+          defmodule MyLib.Parser.Fast do
+            @moduledoc false
+            @behaviour MyLib.Parser
+            def parse(input), do: input
+          end
+          """,
+          "lib/mylib/parser/fast.ex"
+        )
+
+      diags =
+        UnanchoredModule.analyze_project([behaviour, adapter], library?: true)
+
+      flagged = Enum.map(diags, & &1.context.module)
+
+      refute "MyLib.Parser.Fast" in flagged,
+             "behaviour-implementor module reached via runtime config should be anchored"
+    end
+
+    test "library mode is opt-in — without library?: true, public modules can flag" do
+      # Sanity: library mode is gated on the opts flag. With it
+      # absent (or false), CE-30 behaves as before.
+      public =
+        parse(
+          """
+          defmodule MyLib do
+            def parse(input), do: input
+          end
+          """,
+          "lib/mylib.ex"
+        )
+
+      diags = UnanchoredModule.analyze_project([public])
+      assert ["MyLib"] = Enum.map(diags, & &1.context.module)
+    end
+
     test "fixes include a 'run with --compiled and cross-check' option" do
       file_asts = [
         parse(

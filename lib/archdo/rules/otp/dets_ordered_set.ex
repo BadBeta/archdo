@@ -20,7 +20,8 @@ defmodule Archdo.Rules.OTP.DetsOrderedSet do
   end
 
   defp find_dets_ordered_set(file, ast) do
-    AST.find_all(ast, &dets_open_with_ordered_set?/1)
+    ast
+    |> AST.find_all(&dets_open_with_ordered_set?/1)
     |> Enum.map(fn {_, meta, _} -> build_diagnostic(file, AST.line(meta)) end)
   end
 

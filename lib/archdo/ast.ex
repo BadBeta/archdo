@@ -578,94 +578,15 @@ defmodule Archdo.AST do
     end)
   end
 
-  @doc """
-  Build a project-level callback map from a list of `{file, ast}` tuples.
-  For each module declaring `@callback name(args) :: return`, the result
-  contains an entry `module_name => MapSet.of({name, arity})`.
+  @doc "See `Archdo.AST.Behaviour.collect_callbacks/1`."
+  defdelegate collect_behaviour_callbacks(file_asts),
+    to: Archdo.AST.Behaviour,
+    as: :collect_callbacks
 
-  Used by rules that need to identify "is this function a callback
-  implementation of a project-defined behaviour?" without relying on
-  `@impl true` annotations (which older codebases often omit).
-  """
-  @spec collect_behaviour_callbacks([{String.t(), Macro.t()}]) ::
-          %{String.t() => MapSet.t({atom(), arity()})}
-  def collect_behaviour_callbacks(file_asts) do
-    Enum.reduce(file_asts, %{}, fn {_file, ast}, acc ->
-      case extract_module_name(ast) do
-        "Unknown" ->
-          acc
-
-        mod_name ->
-          callbacks = scan_callback_specs(ast)
-
-          case MapSet.size(callbacks) do
-            0 -> acc
-            _ -> Map.put(acc, mod_name, callbacks)
-          end
-      end
-    end)
-  end
-
-  defp scan_callback_specs(ast) do
-    {_, callbacks} =
-      Macro.prewalk(ast, MapSet.new(), fn
-        {:@, _, [{:callback, _, [{:"::", _, [{name, _, args}, _ret]}]}]} = node, acc
-        when is_atom(name) and is_list(args) ->
-          {node, MapSet.put(acc, {name, length(args)})}
-
-        {:@, _, [{:callback, _, [{:"::", _, [{name, _, nil}, _ret]}]}]} = node, acc
-        when is_atom(name) ->
-          {node, MapSet.put(acc, {name, 0})}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    callbacks
-  end
-
-  @doc """
-  Resolve a module's `@behaviour Foo` declarations to the union of Foo's
-  callbacks, given a project-level callback map (built by
-  `collect_behaviour_callbacks/1`).
-
-  Returns a `MapSet.t({name, arity})` of every callback the module
-  implicitly implements via its declared behaviours. Useful for rules
-  that want to treat callback-impl public functions differently from
-  ordinary public API.
-
-  Behaviours unknown to the map (e.g. `GenServer` from OTP, or a
-  library's behaviour that's outside the analyzed paths) contribute
-  nothing — only project-defined behaviours resolve.
-  """
-  @spec module_implemented_callbacks(
-          Macro.t(),
-          %{String.t() => MapSet.t({atom(), arity()})}
-        ) :: MapSet.t({atom(), arity()})
-  def module_implemented_callbacks(ast, callbacks_map) when is_map(callbacks_map) do
-    ast
-    |> declared_behaviour_names()
-    |> Enum.reduce(MapSet.new(), fn behaviour_name, acc ->
-      Map.get(callbacks_map, behaviour_name, MapSet.new()) |> MapSet.union(acc)
-    end)
-  end
-
-  defp declared_behaviour_names(ast) do
-    {_, names} =
-      Macro.prewalk(ast, MapSet.new(), fn
-        {:@, _, [{:behaviour, _, [{:__aliases__, _, parts}]}]} = node, acc when is_list(parts) ->
-          name = parts |> Module.concat() |> module_name()
-          {node, MapSet.put(acc, name)}
-
-        {:@, _, [{:behaviour, _, [atom]}]} = node, acc when is_atom(atom) ->
-          {node, MapSet.put(acc, module_name(atom))}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    names
-  end
+  @doc "See `Archdo.AST.Behaviour.implemented_callbacks/2`."
+  defdelegate module_implemented_callbacks(ast, callbacks_map),
+    to: Archdo.AST.Behaviour,
+    as: :implemented_callbacks
 
   @doc """
   Check if the caller module shares a root namespace with target module parts,

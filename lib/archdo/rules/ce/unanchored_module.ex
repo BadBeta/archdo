@@ -34,7 +34,14 @@ defmodule Archdo.Rules.CE.UnanchoredModule do
   def analyze_project(file_asts, opts \\ []) do
     production_asts = Enum.reject(file_asts, fn {file, _} -> AST.test_file?(file) end)
 
-    anchors = AnchorSet.compute(production_asts)
+    library? = Keyword.get(opts, :library?, false)
+
+    anchors =
+      production_asts
+      |> AnchorSet.compute()
+      |> add_library_public_anchors(production_asts, library?)
+      |> add_behaviour_implementor_anchors(production_asts, library?)
+
     graph = Graph.build(production_asts)
     closure = AnchorSet.closure(anchors, graph)
     reached_via_compiled = Keyword.get(opts, :compiled_reached_modules, MapSet.new())
@@ -46,6 +53,65 @@ defmodule Archdo.Rules.CE.UnanchoredModule do
         not reached_via_compiled?(module, reached_via_compiled) do
       build_diagnostic(module, file)
     end
+  end
+
+  # In a library project (mix.exs has package/0), every module that
+  # ISN'T marked `@moduledoc false` is part of the public API and is
+  # therefore anchored — external consumers reach it directly. Without
+  # this, a Hex library like Floki has no anchors at all (no Phoenix
+  # route, no Application, no Mix.Task) and every public module
+  # flags. Validated against Floki: 30 → ~1 CE-30 findings.
+  #
+  # Library status is threaded via opts[:library?] (computed once by
+  # the runner) rather than auto-detected per-rule. Auto-detection
+  # via find_mix_root is unreliable in unit tests that use synthetic
+  # file paths — find_mix_root walks the filesystem and may pick up
+  # the test runner's own mix.exs.
+  defp add_library_public_anchors(anchors, production_asts, true) do
+    public_modules =
+      for {_file, ast} <- production_asts,
+          module = AST.extract_module_name(ast),
+          module != "Unknown",
+          not AST.internal_module?(ast),
+          into: MapSet.new(),
+          do: module
+
+    MapSet.union(anchors, public_modules)
+  end
+
+  defp add_library_public_anchors(anchors, _production_asts, _not_library), do: anchors
+
+  # Behaviour-implementor modules are pluggable adapters reached via
+  # runtime config (`Application.get_env(:my_app, :backend)`) — the
+  # static AST graph can't see those edges. Anchor any module that
+  # declares `@behaviour Foo` where Foo is a project-defined
+  # behaviour. Validated against Floki — clears
+  # Floki.HTMLParser.{FastHtml,Html5ever,Mochiweb} which are dispatched
+  # via Application config.
+  #
+  # Library-context only: in an application, behaviour implementors
+  # are typically reached via supervised processes or explicit
+  # registration that the AST graph CAN see, so anchoring them
+  # blindly there would over-suppress.
+  defp add_behaviour_implementor_anchors(anchors, production_asts, true) do
+    project_callbacks = AST.collect_behaviour_callbacks(production_asts)
+
+    implementor_modules =
+      for {_file, ast} <- production_asts,
+          module = AST.extract_module_name(ast),
+          module != "Unknown",
+          implements_project_behaviour?(ast, project_callbacks),
+          into: MapSet.new(),
+          do: module
+
+    MapSet.union(anchors, implementor_modules)
+  end
+
+  defp add_behaviour_implementor_anchors(anchors, _production_asts, _not_library), do: anchors
+
+  defp implements_project_behaviour?(ast, project_callbacks) do
+    callbacks = AST.module_implemented_callbacks(ast, project_callbacks)
+    MapSet.size(callbacks) > 0
   end
 
   # §§ elixir-implementing: §5.2 — multi-clause head, no if/else.

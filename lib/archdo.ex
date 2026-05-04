@@ -272,6 +272,14 @@ defmodule Archdo do
     file_asts =
       for file <- source_files, {:ok, ast} <- [AST.parse_file(file)], do: {file, ast}
 
+    # Detect library context once and thread via opts. Rules like
+    # CE-30 (UnanchoredModule) need to know the project is a Hex
+    # library (mix.exs has package/0) so public modules anchor by
+    # virtue of being public API. find_mix_root walks up from a real
+    # source-file path; works in production runs but unreliable in
+    # unit tests with synthetic paths — hence the opts seam.
+    opts = maybe_put_library(opts, source_files)
+
     file_ast_rules = filter_project_rules(Rules.project_file_ast_rules(), opts)
     file_path_rules = filter_project_rules(Rules.project_file_path_rules(), opts)
 
@@ -327,6 +335,15 @@ defmodule Archdo do
     rules
     |> Runner.filter_rules_for_packs(packs)
     |> Runner.filter_rules_for_cleanup_pass(Keyword.get(opts, :cleanup_pass))
+  end
+
+  defp maybe_put_library(opts, []), do: opts
+
+  defp maybe_put_library(opts, [first_file | _]) do
+    case Keyword.has_key?(opts, :library?) do
+      true -> opts
+      false -> Keyword.put(opts, :library?, AST.library?(AST.find_mix_root(first_file)))
+    end
   end
 
   defp invoke_project_rule(rule, file_asts, opts) do
