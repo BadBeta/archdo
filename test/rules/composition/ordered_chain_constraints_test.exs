@@ -162,6 +162,30 @@ defmodule Archdo.Rules.Composition.OrderedChainConstraintsTest do
       assert_clean(OrderedChainConstraints, code)
     end
 
+    test "does not fire when CSRF is provided by a sibling pipeline (composed via pipe_through)" do
+      # Idiomatic Phoenix pattern: a separate `:csrf` pipeline that
+      # routes compose with `pipe_through [:browser, :csrf]`. The
+      # browser pipeline itself doesn't need :protect_from_forgery if
+      # the file has a sibling pipeline that provides it.
+      code = ~S"""
+      defmodule MyAppWeb.Router do
+        use Phoenix.Router
+
+        pipeline :browser do
+          plug :accepts, ["html"]
+          plug :fetch_session
+          plug :put_root_layout, html: {MyAppWeb.Layouts, :root}
+        end
+
+        pipeline :csrf do
+          plug :protect_from_forgery
+        end
+      end
+      """
+
+      assert_clean(OrderedChainConstraints, code)
+    end
+
     test "does not fire on api-shaped pipelines without CSRF" do
       code = ~S"""
       defmodule MyAppWeb.Router do
@@ -201,6 +225,63 @@ defmodule Archdo.Rules.Composition.OrderedChainConstraintsTest do
       """
 
       assert_clean(OrderedChainConstraints, code, file: "test/my_app_web/router_test.exs")
+    end
+  end
+
+  describe "production parser form (literal_encoder wraps atoms)" do
+    # The production parser uses `literal_encoder` so atom literals become
+    # `{:__block__, _, [:atom]}`. Pipeline detection must handle this.
+    test "fires on browser pipeline missing CSRF — production form" do
+      file = "lib/my_app_web/router.ex"
+
+      {:ok, ast} =
+        Code.string_to_quoted(
+          ~S"""
+          defmodule MyAppWeb.Router do
+            use Phoenix.Router
+
+            pipeline :browser do
+              plug :accepts, ["html"]
+              plug :fetch_session
+              plug :put_root_layout, html: {MyAppWeb.Layouts, :root}
+            end
+          end
+          """,
+          file: file,
+          columns: true,
+          token_metadata: true,
+          literal_encoder: &{:ok, {:__block__, &2, [&1]}}
+        )
+
+      diags = OrderedChainConstraints.analyze(file, ast, [])
+      assert Enum.any?(diags, &(&1.message =~ "protect_from_forgery"))
+    end
+
+    test "fires on duplicate plug — production form" do
+      file = "lib/my_app_web/router.ex"
+
+      {:ok, ast} =
+        Code.string_to_quoted(
+          ~S"""
+          defmodule MyAppWeb.Router do
+            use Phoenix.Router
+
+            pipeline :browser do
+              plug :accepts, ["html"]
+              plug :fetch_session
+              plug :protect_from_forgery
+              plug :fetch_session
+            end
+          end
+          """,
+          file: file,
+          columns: true,
+          token_metadata: true,
+          literal_encoder: &{:ok, {:__block__, &2, [&1]}}
+        )
+
+      diags = OrderedChainConstraints.analyze(file, ast, [])
+      assert Enum.any?(diags, &(&1.message =~ "duplicate"))
     end
   end
 end

@@ -45,16 +45,27 @@ defmodule Archdo.Rules.Composition.OrderedChainConstraints do
   @impl true
   def analyze(file, ast, _opts) do
     case AST.test_file?(file) do
-      true -> []
-      false -> find_pipelines(ast) |> Enum.flat_map(&check_pipeline(file, &1))
+      true ->
+        []
+
+      false ->
+        pipelines = find_pipelines(ast)
+        csrf_elsewhere? = Enum.any?(pipelines, fn {_, _, entries} -> has_csrf?(entries) end)
+        Enum.flat_map(pipelines, &check_pipeline(file, &1, csrf_elsewhere?))
     end
   end
 
   defp find_pipelines(ast) do
     {_, pipelines} =
       Macro.prewalk(ast, [], fn
-        {:pipeline, meta, [name, [do: body]]} = node, acc when is_atom(name) ->
-          {node, [{name, meta, plug_entries(body)} | acc]}
+        {:pipeline, meta, [name_form, opts_form]} = node, acc ->
+          case {unwrap_atom(name_form), do_body_from(opts_form)} do
+            {name, body} when is_atom(name) and not is_nil(body) ->
+              {node, [{name, meta, plug_entries(body)} | acc]}
+
+            _ ->
+              {node, acc}
+          end
 
         node, acc ->
           {node, acc}
@@ -62,6 +73,21 @@ defmodule Archdo.Rules.Composition.OrderedChainConstraints do
 
     pipelines
   end
+
+  # Production parser wraps atom literals in `{:__block__, _, [:atom]}`;
+  # bare parser leaves them as atoms.
+  defp unwrap_atom({:__block__, _, [atom]}) when is_atom(atom), do: atom
+  defp unwrap_atom(atom) when is_atom(atom), do: atom
+  defp unwrap_atom(_), do: nil
+
+  # Pipeline body is the value bound to the `:do` keyword. Both bare
+  # (`[do: body]`) and wrapped (`[{{:__block__, _, [:do]}, body}]`)
+  # forms must be handled.
+  defp do_body_from([do: body]), do: body
+
+  defp do_body_from([{{:__block__, _, [:do]}, body} | _]), do: body
+
+  defp do_body_from(_), do: nil
 
   defp plug_entries({:__block__, _, statements}), do: Enum.flat_map(statements, &plug_entry/1)
   defp plug_entries(single), do: plug_entry(single)
@@ -75,15 +101,17 @@ defmodule Archdo.Rules.Composition.OrderedChainConstraints do
 
   defp plug_entry(_), do: []
 
+  defp plug_key({:__block__, _, [name]}) when is_atom(name), do: {:atom, name}
   defp plug_key(name) when is_atom(name), do: {:atom, name}
   defp plug_key({:__aliases__, _, parts}), do: {:module, parts}
   defp plug_key(other), do: {:other, other}
 
+  defp plug_display({:__block__, _, [name]}) when is_atom(name), do: ":#{name}"
   defp plug_display(name) when is_atom(name), do: ":#{name}"
   defp plug_display({:__aliases__, _, parts}), do: Enum.join(parts, ".")
   defp plug_display(_), do: "(complex)"
 
-  defp check_pipeline(file, {name, meta, entries}) do
+  defp check_pipeline(file, {name, meta, entries}, csrf_elsewhere?) do
     line = AST.line(meta)
 
     auth_keys = Enum.map(@auth_plugs, &{:atom, &1})
@@ -95,7 +123,7 @@ defmodule Archdo.Rules.Composition.OrderedChainConstraints do
       duplicates(file, name, line, entries),
       ordering(file, name, line, entries, auth_keys, authz_keys, "auth", "authz"),
       ordering(file, name, line, entries, parsers_keys, session_keys, "Plug.Parsers", "session"),
-      missing_csrf(file, name, line, entries)
+      missing_csrf(file, name, line, entries, csrf_elsewhere?)
     ]
     |> List.flatten()
   end
@@ -136,7 +164,9 @@ defmodule Archdo.Rules.Composition.OrderedChainConstraints do
 
   defp key_in_set?(key, set), do: key in set
 
-  defp missing_csrf(file, pipeline, line, entries) do
+  defp missing_csrf(_file, _pipeline, _line, _entries, true = _csrf_elsewhere?), do: []
+
+  defp missing_csrf(file, pipeline, line, entries, false) do
     case browser_pipeline?(pipeline, entries) and not has_csrf?(entries) do
       true -> [build_csrf(file, pipeline, line)]
       false -> []

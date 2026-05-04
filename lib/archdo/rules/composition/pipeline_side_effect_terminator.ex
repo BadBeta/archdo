@@ -173,8 +173,15 @@ defmodule Archdo.Rules.Composition.PipelineSideEffectTerminator do
   # atom keys in `{:__block__, _, [tuple]}`; the unwrap clause
   # handles both that form and the plain quoted form used in tests.
   defp contains_ok_tuple?({:__block__, _, [inner]}), do: contains_ok_tuple?(inner)
+
+  # 2-tuple `{:ok, T}` — bare and literal-encoded forms.
   defp contains_ok_tuple?({{:__block__, _, [:ok]}, _}), do: true
   defp contains_ok_tuple?({:ok, _}), do: true
+
+  # 3+ tuple with :ok head — `{:ok, A, B, ...}`. AST shape is
+  # `{:{}, _, [:ok | _]}` either with the head wrapped or bare.
+  defp contains_ok_tuple?({:{}, _, [{:__block__, _, [:ok]} | _]}), do: true
+  defp contains_ok_tuple?({:{}, _, [:ok | _]}), do: true
 
   defp contains_ok_tuple?({:|, _, [left, right]}),
     do: contains_ok_tuple?(left) or contains_ok_tuple?(right)

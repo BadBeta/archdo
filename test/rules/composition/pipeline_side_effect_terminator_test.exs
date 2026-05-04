@@ -117,6 +117,24 @@ defmodule Archdo.Rules.Composition.PipelineSideEffectTerminatorTest do
       assert_clean(PipelineSideEffectTerminator, code)
     end
 
+    test "function returning {:ok, A, B, C} 4-tuple does not fire" do
+      # Some functions return wider success tuples — `{:ok, value, meta, version}`
+      # — which still compose: the caller pattern-matches the head atom :ok.
+      # This is not a pipeline terminator.
+      code = ~S"""
+      defmodule MyApp.Cache do
+        @spec authorize(map(), atom()) ::
+                {:ok, term(), Ecto.UUID.t(), non_neg_integer()} | {:error, :not_found}
+        def authorize(scope, action) do
+          Logger.info("authorize", scope: scope, action: action)
+          {:ok, scope, "uuid", 0}
+        end
+      end
+      """
+
+      assert_clean(PipelineSideEffectTerminator, code)
+    end
+
     test "Repo READ (all) does not fire" do
       code = ~S"""
       defmodule MyApp.Accounts do
