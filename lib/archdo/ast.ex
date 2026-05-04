@@ -64,33 +64,8 @@ defmodule Archdo.AST do
     Enum.any?(markers, &String.contains?(file, &1))
   end
 
-  @doc """
-  Extract the top-level module name from a file's AST as a String.
-  Returns "Unknown" if no defmodule is found.
-
-  For files with nested defmodules (e.g. a private struct module
-  declared inside the file's primary module), returns the OUTER
-  module name. Without the "first wins" guard, prewalk visits the
-  outer module first then overwrites with the inner one, returning
-  the deepest nested name — wrong for callers that want the file's
-  primary module.
-  """
-  @spec extract_module_name(Macro.t()) :: String.t()
-  def extract_module_name(ast) do
-    {_, name} =
-      Macro.prewalk(ast, "Unknown", fn
-        {:defmodule, _, [{:__aliases__, _, aliases} | _]} = node, "Unknown" ->
-          case safe_concat(aliases) do
-            nil -> {node, "Unknown"}
-            mod -> {node, module_name(mod)}
-          end
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    name
-  end
+  @doc "See `Archdo.AST.Function.extract_module_name/1`."
+  defdelegate extract_module_name(ast), to: Archdo.AST.Function
 
   @doc """
   Parse a list of files into `{file, ast}` tuples. Files that fail to parse
@@ -122,15 +97,8 @@ defmodule Archdo.AST do
     Enum.map_join(parts, ".", &Atom.to_string/1)
   end
 
-  @doc """
-  Is the AST argument node a catch-all? Matches the wildcard `_` and any
-  bare variable (`{name, _, ctx}` where both `name` and `ctx` are atoms).
-  Used by rules that classify argument shapes.
-  """
-  @spec catch_all_arg?(Macro.t()) :: boolean()
-  def catch_all_arg?({:_, _, ctx}) when is_atom(ctx), do: true
-  def catch_all_arg?({var, _, ctx}) when is_atom(var) and is_atom(ctx), do: true
-  def catch_all_arg?(_), do: false
+  @doc "See `Archdo.AST.Predicate.catch_all_arg?/1`."
+  defdelegate catch_all_arg?(node), to: Archdo.AST.Predicate
 
   @doc """
   Walk an AST collecting diagnostics. The `collector` is invoked
@@ -181,20 +149,8 @@ defmodule Archdo.AST do
 
   def destructures?(_), do: false
 
-  @doc """
-  Predicate: is this clause a "catch-all terminator"?
-
-  Takes a clause tuple from `extract_functions/2` (`{name, arity, meta,
-  args, body}`). Returns true when every arg is a wildcard or bare
-  variable (no nested patterns) — the canonical Elixir tree-walker
-  base case (`def f(_), do: 1`, `def collect(_, acc), do: acc`).
-  """
-  @spec catch_all_terminator?(term()) :: boolean()
-  def catch_all_terminator?({_name, _arity, _meta, args, _body}) when is_list(args) do
-    Enum.all?(args, &catch_all_arg?/1)
-  end
-
-  def catch_all_terminator?(_), do: false
+  @doc "See `Archdo.AST.Predicate.catch_all_terminator?/1`."
+  defdelegate catch_all_terminator?(clause), to: Archdo.AST.Predicate
 
   @doc """
   Predicate: is this multi-clause function a "shape walker"?
@@ -217,16 +173,8 @@ defmodule Archdo.AST do
 
   def shape_walker?(_), do: false
 
-  @doc """
-  Unwrap a string literal possibly wrapped by `Code.string_to_quoted/2`'s
-  `literal_encoder` option (which produces `{:__block__, _, [s]}`). Returns
-  `nil` for non-strings — use a different helper if you need a fallback to
-  `Macro.to_string/1`.
-  """
-  @spec unwrap_string(Macro.t()) :: String.t() | nil
-  def unwrap_string({:__block__, _, [s]}) when is_binary(s), do: s
-  def unwrap_string(s) when is_binary(s), do: s
-  def unwrap_string(_), do: nil
+  @doc "See `Archdo.AST.Unwrap.string/1`."
+  defdelegate unwrap_string(ast), to: Archdo.AST.Unwrap, as: :string
 
   @doc """
   Return the list of statements at the top of an AST body. A bare body is
@@ -266,21 +214,10 @@ defmodule Archdo.AST do
   def literal_true?(_), do: false
 
   @doc """
-  True if the pattern is a catch-all that shadows everything after it —
-  either the bare underscore `_` or a regular variable name (which binds
-  anything). Variables whose name starts with `_` are EXCLUDED — they're
-  the idiomatic "intentionally unused" convention, not a wildcard the
-  caller forgot to constrain.
+  See `Archdo.AST.Predicate.catch_all_pattern?/1`.
   """
   @spec catch_all_pattern?(Macro.t()) :: boolean()
-  def catch_all_pattern?({:_, _, _}), do: true
-
-  def catch_all_pattern?({name, _, context})
-      when is_atom(name) and is_atom(context) and name != :_ do
-    not String.starts_with?(Atom.to_string(name), "_")
-  end
-
-  def catch_all_pattern?(_), do: false
+  defdelegate catch_all_pattern?(node), to: Archdo.AST.Predicate
 
   @doc """
   True if the node is a callback shape — an `fn` literal or an `&`
@@ -368,41 +305,11 @@ defmodule Archdo.AST do
     end)
   end
 
-  @doc """
-  Extract the user-facing test name from the args list of an ExUnit
-  `test "name", do: ...` AST. Returns the literal string when the name
-  is a bare binary or wrapped by the literal-encoder, `"(unknown)"`
-  otherwise (e.g. interpolated names).
-  """
-  @spec extract_test_name([Macro.t()]) :: String.t()
-  def extract_test_name([name | _]) when is_binary(name), do: name
-  def extract_test_name([{:__block__, _, [name]} | _]) when is_binary(name), do: name
-  def extract_test_name(_), do: "(unknown)"
+  @doc "See `Archdo.AST.Function.extract_test_name/1`."
+  defdelegate extract_test_name(args), to: Archdo.AST.Function
 
-  @doc """
-  Walk an ExUnit module AST and return one tuple per `test` block:
-  `{name_ast, meta, body_or_nil}`. Used by testing rules that want to
-  inspect each test's body (no_assertion, missing_error_path, long_test,
-  over_mocking).
-  """
-  @spec extract_test_blocks(Macro.t()) :: [{Macro.t(), keyword(), Macro.t() | nil}]
-  def extract_test_blocks(ast) do
-    ast
-    |> find_all(fn
-      {:test, _meta, [_name | _]} -> true
-      _ -> false
-    end)
-    |> Enum.map(fn {:test, meta, [name | rest]} ->
-      body =
-        case rest do
-          [_, [do: body]] -> body
-          [[do: body]] -> body
-          _ -> nil
-        end
-
-      {name, meta, body}
-    end)
-  end
+  @doc "See `Archdo.AST.Function.extract_test_blocks/1`."
+  defdelegate extract_test_blocks(ast), to: Archdo.AST.Function
 
   @doc """
   Parse a file into its quoted AST. Returns `{:ok, ast}` or `{:error, reason}`.
@@ -492,40 +399,14 @@ defmodule Archdo.AST do
 
   def do_body(_), do: nil
 
-  @doc """
-  Extract a module's body as a list of statements. Returns `[]` for
-  non-module nodes or modules with empty bodies. Single-statement
-  bodies are returned as a one-element list.
-  """
-  @spec module_body(Macro.t()) :: [Macro.t()]
-  def module_body({:defmodule, _, [_alias, kw]}) when is_list(kw) do
-    case do_body(kw) do
-      {:__block__, _, statements} -> statements
-      nil -> []
-      single -> [single]
-    end
-  end
+  @doc "See `Archdo.AST.Module.body/1`."
+  defdelegate module_body(ast), to: Archdo.AST.Module, as: :body
 
-  def module_body(_), do: []
+  @doc "See `Archdo.AST.Unwrap.atom/1`."
+  defdelegate unwrap_atom(ast), to: Archdo.AST.Unwrap, as: :atom
 
-  @doc """
-  Unwrap a literal_encoder-wrapped atom (`{:__block__, _, [:atom]}`)
-  to its bare atom form. Pass through anything else unchanged.
-  """
-  @spec unwrap_atom(Macro.t()) :: Macro.t()
-  def unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
-  def unwrap_atom(other), do: other
-
-  @doc """
-  Strict variant of `unwrap_atom/1`: returns the atom if the input is one
-  (possibly literal-encoder-wrapped), or `nil` for anything else. Use
-  when downstream code filters via `Enum.reject(&is_nil/1)` and would
-  silently misbehave on non-atom passthrough.
-  """
-  @spec try_unwrap_atom(Macro.t()) :: atom() | nil
-  def try_unwrap_atom({:__block__, _, [a]}) when is_atom(a), do: a
-  def try_unwrap_atom(a) when is_atom(a), do: a
-  def try_unwrap_atom(_), do: nil
+  @doc "See `Archdo.AST.Unwrap.try_atom/1`."
+  defdelegate try_unwrap_atom(ast), to: Archdo.AST.Unwrap, as: :try_atom
 
   @doc """
   Is this AST node a `0` literal (raw or literal-encoder-wrapped)?
@@ -580,16 +461,8 @@ defmodule Archdo.AST do
   @spec moduledoc_false?(Macro.t()) :: boolean()
   def moduledoc_false?(ast), do: internal_module?(ast)
 
-  @doc """
-  Unwrap a literal value possibly wrapped by `Code.string_to_quoted/2`'s
-  `literal_encoder` option. Returns the inner value for any literal type;
-  returns the input unchanged for non-literals (similar to
-  `unwrap_atom/1` but type-agnostic — use when the unwrap target could
-  be an atom, integer, float, string, or any other literal).
-  """
-  @spec unwrap_literal(Macro.t()) :: Macro.t()
-  def unwrap_literal({:__block__, _, [v]}), do: v
-  def unwrap_literal(other), do: other
+  @doc "See `Archdo.AST.Unwrap.literal/1`."
+  defdelegate unwrap_literal(ast), to: Archdo.AST.Unwrap, as: :literal
 
   @doc """
   True when the AST contains a module attribute named `marker_name`
@@ -660,105 +533,11 @@ defmodule Archdo.AST do
     found?
   end
 
-  @doc """
-  Extract function definitions from a module AST.
-  Returns `[{name, arity, meta, args, body}]`.
-  """
-  @spec extract_functions(Macro.t(), :all | :public | :private) :: [
-          {atom(), non_neg_integer(), keyword(), [Macro.t()], Macro.t()}
-        ]
-  def extract_functions(ast, visibility \\ :all) do
-    {_, fns} = Macro.prewalk(ast, [], &collect_function(&1, &2, visibility))
-    Enum.reverse(fns)
-  end
+  @doc "See `Archdo.AST.Function.extract_functions/2`."
+  defdelegate extract_functions(ast, visibility \\ :all), to: Archdo.AST.Function
 
-  # Guarded clauses wrap the head in a `:when` tuple:
-  #   {:def, _, [{:when, _, [{name, _, args}, _guard]}, body]}
-  # Match those FIRST — otherwise the catch-all clauses below pick up
-  # `:when` as the function name and the guard's arg list as the args.
-  defp collect_function(
-         {:def, meta, [{:when, _, [{name, _, args} | _]}, body]} = node,
-         acc,
-         visibility
-       )
-       when visibility in [:all, :public] do
-    add_extracted_fn(node, acc, name, args, meta, body)
-  end
-
-  defp collect_function(
-         {:defp, meta, [{:when, _, [{name, _, args} | _]}, body]} = node,
-         acc,
-         visibility
-       )
-       when visibility in [:all, :private] do
-    add_extracted_fn(node, acc, name, args, meta, body)
-  end
-
-  defp collect_function(
-         {:def, meta, [{name, _, args}, body]} = node,
-         acc,
-         visibility
-       )
-       when visibility in [:all, :public] do
-    add_extracted_fn(node, acc, name, args, meta, body)
-  end
-
-  defp collect_function(
-         {:defp, meta, [{name, _, args}, body]} = node,
-         acc,
-         visibility
-       )
-       when visibility in [:all, :private] do
-    add_extracted_fn(node, acc, name, args, meta, body)
-  end
-
-  defp collect_function(node, acc, _visibility), do: {node, acc}
-
-  defp add_extracted_fn(node, acc, name, args, meta, body) do
-    arity = length(args || [])
-    {node, [{name, arity, meta, args || [], body} | acc]}
-  end
-
-  @doc """
-  Extract specific GenServer callback definitions from the AST.
-  Returns a map of callback_name => [{meta, args, body}].
-  """
-  @spec extract_callbacks(Macro.t()) :: %{atom() => [{keyword(), [Macro.t()], Macro.t() | nil}]}
-  def extract_callbacks(ast) do
-    callbacks = %{
-      init: [],
-      handle_call: [],
-      handle_cast: [],
-      handle_info: [],
-      handle_continue: [],
-      terminate: []
-    }
-
-    {_, result} =
-      Macro.prewalk(ast, callbacks, fn
-        {:def, meta, [{callback_name, _, args} | _] = clause_parts} = node, acc
-        when callback_name in [
-               :init,
-               :handle_call,
-               :handle_cast,
-               :handle_info,
-               :handle_continue,
-               :terminate
-             ] ->
-          body = find_body(clause_parts)
-          entry = {meta, args || [], body}
-          {node, Map.update!(acc, callback_name, &[entry | &1])}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    Map.new(result, fn {k, v} -> {k, Enum.reverse(v)} end)
-  end
-
-  defp find_body([_, [do: body]]), do: body
-  defp find_body([_, body]) when is_list(body), do: Keyword.get(body, :do)
-  defp find_body(_), do: nil
+  @doc "See `Archdo.AST.Function.extract_callbacks/1`."
+  defdelegate extract_callbacks(ast), to: Archdo.AST.Function
 
   @doc """
   Count the number of AST nodes in a tree. Useful for size-based heuristics.
@@ -820,19 +599,8 @@ defmodule Archdo.AST do
     caller_root == target_root
   end
 
-  @doc """
-  Convert a module atom or Elixir.-prefixed string to a clean module name string.
-  """
-  @spec module_name(atom() | String.t()) :: String.t()
-  def module_name(mod) when is_atom(mod) do
-    mod
-    |> Atom.to_string()
-    |> String.replace_leading("Elixir.", "")
-  end
-
-  def module_name(mod) when is_binary(mod) do
-    String.replace_leading(mod, "Elixir.", "")
-  end
+  @doc "See `Archdo.AST.Module.name/1`."
+  defdelegate module_name(mod), to: Archdo.AST.Module, as: :name
 
   @doc """
   Return the last segment of a module name (e.g. `MyApp.Accounts.User` → `"User"`).
@@ -870,14 +638,8 @@ defmodule Archdo.AST do
     Enum.any?(paths, &String.starts_with?(file, &1))
   end
 
-  @doc """
-  Check if a module name is the namespace itself or lives under it (i.e.
-  `name == namespace` or starts with `namespace.`). Operates on string forms.
-  """
-  @spec module_under_namespace?(String.t(), String.t()) :: boolean()
-  def module_under_namespace?(name, namespace) when is_binary(name) and is_binary(namespace) do
-    name == namespace or String.starts_with?(name, namespace <> ".")
-  end
+  @doc "See `Archdo.AST.Module.under_namespace?/2`."
+  defdelegate module_under_namespace?(name, namespace), to: Archdo.AST.Module, as: :under_namespace?
 
   @doc """
   Resolve a module-name string to its existing atom. Returns `nil` when no
