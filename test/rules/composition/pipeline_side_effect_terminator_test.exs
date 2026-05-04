@@ -22,13 +22,43 @@ defmodule Archdo.Rules.Composition.PipelineSideEffectTerminatorTest do
       assert hd(diags).message =~ "record"
     end
 
-    test "Repo.insert side effect, returns nil" do
+    test "Repo WRITE (insert) returning nil does fire" do
       code = ~S"""
       defmodule MyApp.Saver do
         @spec persist(map()) :: nil
         def persist(record) do
           Repo.insert(record)
           nil
+        end
+      end
+      """
+
+      diags = assert_flagged(PipelineSideEffectTerminator, code)
+      assert hd(diags).rule_id == "10.4"
+    end
+
+    test "IO.puts side effect does fire" do
+      code = ~S"""
+      defmodule MyApp.Print do
+        @spec announce(String.t()) :: :ok
+        def announce(message) do
+          IO.puts(message)
+          :ok
+        end
+      end
+      """
+
+      diags = assert_flagged(PipelineSideEffectTerminator, code)
+      assert hd(diags).rule_id == "10.4"
+    end
+
+    test "File.write side effect does fire" do
+      code = ~S"""
+      defmodule MyApp.Files do
+        @spec save(String.t()) :: :ok
+        def save(content) do
+          File.write("/tmp/x", content)
+          :ok
         end
       end
       """
@@ -54,6 +84,52 @@ defmodule Archdo.Rules.Composition.PipelineSideEffectTerminatorTest do
   end
 
   describe "does NOT fire" do
+    test "Repo READ (get_by) does not fire — criteria, not subject" do
+      # `find_user_by(opts) :: User.t() | nil` is a query: opts is
+      # criteria, not the pipeline subject. The function transforms
+      # criteria into an entity; that's not a side-effect terminator.
+      code = ~S"""
+      defmodule MyApp.Accounts do
+        @spec find_user_by(Keyword.t()) :: User.t() | nil
+        def find_user_by(opts) do
+          Repo.get_by(User, opts)
+        end
+      end
+      """
+
+      assert_clean(PipelineSideEffectTerminator, code)
+    end
+
+    test "constructor returning {:ok, U} where U ≠ first-arg type does not fire" do
+      # `create_session(user, name) :: {:ok, Session.t()} | {:error, _}`
+      # is a constructor: the user is context, the session is the new
+      # entity. The pipeline composes by piping the RESULT through
+      # `with` — not by piping the user through.
+      code = ~S"""
+      defmodule MyApp.Accounts do
+        @spec create_session(User.t(), String.t()) :: {:ok, Session.t()} | {:error, term()}
+        def create_session(user, name) do
+          Repo.insert(%Session{user_id: user.id, name: name})
+        end
+      end
+      """
+
+      assert_clean(PipelineSideEffectTerminator, code)
+    end
+
+    test "Repo READ (all) does not fire" do
+      code = ~S"""
+      defmodule MyApp.Accounts do
+        @spec list_users(Keyword.t()) :: [User.t()]
+        def list_users(opts) do
+          Repo.all(from u in User, where: u.active == ^opts[:active])
+        end
+      end
+      """
+
+      assert_clean(PipelineSideEffectTerminator, code)
+    end
+
     test "function returns its first arg after the side effect" do
       code = ~S"""
       defmodule MyApp.Audit do

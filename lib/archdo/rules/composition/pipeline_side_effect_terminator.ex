@@ -3,25 +3,96 @@ defmodule Archdo.Rules.Composition.PipelineSideEffectTerminator do
   @behaviour Archdo.Rule
 
   # 10.4. A function that performs a known side effect (Logger,
-  # telemetry, PubSub, Repo write, IO) but returns a value that is
-  # neither the first parameter's type nor `{:ok, T}` over it. The
-  # caller cannot pipe the result onward because the input was
-  # consumed without being passed through. Recoverable by returning
-  # the input value (or `{:ok, input}`) after the effect.
+  # telemetry, Phoenix.PubSub, Repo writes, IO writes, File writes)
+  # but returns a value that is neither the first parameter's type
+  # nor `{:ok, T}` over it. The caller cannot pipe the result onward
+  # because the input was consumed without being passed through.
+  # Recoverable by returning the input value (or `{:ok, input}`).
 
   alias Archdo.{AST, Diagnostic, Fix}
 
-  @side_effect_modules [
-    [:Logger],
-    [:Phoenix, :PubSub],
-    [:Repo],
-    [:Ecto, :Repo],
-    [:File],
-    [:IO]
+  # Side-effect call catalog. Two forms:
+  #   - `{module_parts, :any}` — every call to the module is a side
+  #     effect (Logger.info / Logger.warning / Logger.error / etc.)
+  #   - `{module_parts, [fun, ...]}` — only specific functions count.
+  #     This is what distinguishes Repo writes from Repo reads:
+  #     `Repo.insert/update/delete` ARE side effects (the input is
+  #     persisted and the wrapping function commonly drops it);
+  #     `Repo.get/get_by/all/one/exists?` are reads — the first arg
+  #     is criteria, not the pipeline subject, so a query returning
+  #     a different shape is NOT a "lost subject" anti-pattern.
+  @side_effect_calls [
+    {[:Logger], :any},
+    {[:Phoenix, :PubSub],
+     [
+       :broadcast,
+       :broadcast!,
+       :broadcast_from,
+       :broadcast_from!,
+       :local_broadcast,
+       :local_broadcast_from
+     ]},
+    {[:Repo],
+     [
+       :insert,
+       :insert!,
+       :insert_all,
+       :insert_or_update,
+       :insert_or_update!,
+       :update,
+       :update!,
+       :update_all,
+       :delete,
+       :delete!,
+       :delete_all
+     ]},
+    {[:Ecto, :Repo],
+     [
+       :insert,
+       :insert!,
+       :insert_all,
+       :insert_or_update,
+       :insert_or_update!,
+       :update,
+       :update!,
+       :update_all,
+       :delete,
+       :delete!,
+       :delete_all
+     ]},
+    {[:IO], [:puts, :write, :binwrite, :inspect_no_op]},
+    {[:File],
+     [
+       :write,
+       :write!,
+       :touch,
+       :touch!,
+       :mkdir,
+       :mkdir!,
+       :mkdir_p,
+       :mkdir_p!,
+       :rm,
+       :rm!,
+       :rmdir,
+       :rmdir!,
+       :cp,
+       :cp!,
+       :cp_r,
+       :cp_r!,
+       :rename,
+       :chmod,
+       :chmod!,
+       :chown,
+       :chown!
+     ]}
   ]
 
-  # Erlang-style atom-prefix calls (`:telemetry.*`, `:logger.*`).
-  @side_effect_atom_modules [:telemetry, :logger, :file, :gen_tcp, :gen_udp]
+  # Erlang-style atom-prefix calls. `:telemetry.execute` is the
+  # observability call worth tracking; `:logger` is the OTP logger.
+  @side_effect_atom_calls [
+    {:telemetry, [:execute, :span]},
+    {:logger, :any}
+  ]
 
   @impl true
   def id, do: "10.4"
@@ -88,14 +159,27 @@ defmodule Archdo.Rules.Composition.PipelineSideEffectTerminator do
 
   defp return_compatible?(return_type, first_arg_key) do
     type_key(return_type) == first_arg_key or
-      ok_tuple_of?(return_type, first_arg_key) or
+      contains_ok_tuple?(return_type) or
       union_contains?(return_type, first_arg_key)
   end
 
-  # `{:ok, T}` and `{:ok, T} | {:error, _}` patterns.
-  defp ok_tuple_of?({{:__block__, _, [:ok]}, t}, target_key), do: type_key(t) == target_key
-  defp ok_tuple_of?({:ok, t}, target_key), do: type_key(t) == target_key
-  defp ok_tuple_of?(_, _), do: false
+  # Any `{:ok, _}` in the return shape — including unions like
+  # `{:ok, U} | {:error, _}` — counts as compose-able. The function
+  # returns a wrapped value the caller can chain via `with`, even if
+  # U is not the first-arg type (constructor pattern: first arg is
+  # context, return is the new entity).
+  #
+  # Production parser (`literal_encoder`) wraps every 2-tuple with
+  # atom keys in `{:__block__, _, [tuple]}`; the unwrap clause
+  # handles both that form and the plain quoted form used in tests.
+  defp contains_ok_tuple?({:__block__, _, [inner]}), do: contains_ok_tuple?(inner)
+  defp contains_ok_tuple?({{:__block__, _, [:ok]}, _}), do: true
+  defp contains_ok_tuple?({:ok, _}), do: true
+
+  defp contains_ok_tuple?({:|, _, [left, right]}),
+    do: contains_ok_tuple?(left) or contains_ok_tuple?(right)
+
+  defp contains_ok_tuple?(_), do: false
 
   # Walk a pipe-shaped union (`a | b | c` → `{:|, _, [a, {:|, _, [b, c]}]}`).
   defp union_contains?({:|, _, [left, right]}, target_key) do
@@ -132,12 +216,22 @@ defmodule Archdo.Rules.Composition.PipelineSideEffectTerminator do
     found?
   end
 
-  defp side_effect_call?({{:., _, [{:__aliases__, _, parts}, _fun]}, _, _}) do
-    parts in @side_effect_modules
+  defp side_effect_call?({{:., _, [{:__aliases__, _, parts}, fun]}, _, _})
+       when is_atom(fun) do
+    Enum.any?(@side_effect_calls, fn
+      {^parts, :any} -> true
+      {^parts, funs} when is_list(funs) -> fun in funs
+      _ -> false
+    end)
   end
 
-  defp side_effect_call?({{:., _, [mod, _fun]}, _, _}) when is_atom(mod) do
-    mod in @side_effect_atom_modules
+  defp side_effect_call?({{:., _, [mod, fun]}, _, _})
+       when is_atom(mod) and is_atom(fun) do
+    Enum.any?(@side_effect_atom_calls, fn
+      {^mod, :any} -> true
+      {^mod, funs} when is_list(funs) -> fun in funs
+      _ -> false
+    end)
   end
 
   defp side_effect_call?(_), do: false
@@ -146,7 +240,7 @@ defmodule Archdo.Rules.Composition.PipelineSideEffectTerminator do
     Diagnostic.info("10.4",
       title: "Side-effect function does not pass input through",
       message:
-        "#{name}/#{arity} performs a side effect (Logger / telemetry / PubSub / Repo / IO) " <>
+        "#{name}/#{arity} performs a side effect (Logger / telemetry / PubSub / Repo write / IO write / File write) " <>
           "but returns a value that drops the input — the function terminates any pipeline " <>
           "that flows through it",
       why:
