@@ -84,14 +84,31 @@ defmodule Archdo.Rules.CE.ErrorCategoryDrift do
   # many error names without contributing to category meaning.
   @stop_words ~w(not no is an the of for and or to a)
 
-  # Canonicalize an error atom to its single most-distinctive stem.
-  # Pure token-set canonicalization (CE-26-style) misses real synonyms:
-  # `:not_found`, `:user_not_found`, `:no_user_found` have different
-  # token sets but cluster around "found" as the discriminating stem.
-  # Picking the longest non-stop-word stem groups them correctly.
+  # Common "outcome" words shared by many distinct error categories.
+  # `:file_not_found`, `:host_not_found`, `:link_not_found` are NOT
+  # synonyms — they describe semantically distinct failures (filesystem
+  # vs network vs URL). Filtered BEFORE stemming so atoms cluster only
+  # on the WHAT (file / host / link / user), not the outcome word that
+  # happens to be shared.
+  @outcome_words ~w(
+    found miss missing exist exists existed support supported supports
+    supporting error errored invalid unknown allow allowed allowing
+    forbidden allowed available avail unavailable timeout timed_out
+    expired expire exceed exceeded fail failed failure success ok
+    deleted deletion delete denied permitted refused rejected
+    started starting started_already already
+  )
+
+  # Canonicalize an error atom to its sorted DISCRIMINATOR set —
+  # the non-stop-word, non-outcome stems. Atoms cluster when their
+  # discriminator sets match exactly:
   #
-  # Returns nil for atoms that don't have a meaningful distinctive stem
-  # (single short token: `:ok`, `:nil`, `:invalid`).
+  #   :user_not_found, :no_user_found       → {user}     — cluster
+  #   :file_not_found, :host_not_found      → {file}/{host} — DON'T cluster
+  #   :not_found                            → {}          — excluded (no signal)
+  #
+  # Returns nil when the discriminator set is empty (the atom is pure
+  # outcome words and contributes no clustering signal).
   defp canonical(atom) do
     parts =
       atom
@@ -99,16 +116,17 @@ defmodule Archdo.Rules.CE.ErrorCategoryDrift do
       |> String.downcase()
       |> String.split(~r/[\s._\-:\/]+/, trim: true)
 
-    stems =
+    discriminators =
       for part <- parts,
           part not in @stop_words,
+          part not in @outcome_words,
           stem = Naming.stem(part),
           String.length(stem) >= 3,
           do: stem
 
-    case stems do
+    case discriminators do
       [] -> nil
-      _ -> Enum.max_by(stems, &String.length/1)
+      list -> list |> Enum.sort() |> Enum.uniq() |> Enum.join(",")
     end
   end
 

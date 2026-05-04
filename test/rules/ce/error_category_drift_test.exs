@@ -17,20 +17,23 @@ defmodule Archdo.Rules.CE.ErrorCategoryDriftTest do
 
   describe "CE-48 — error atoms scattered across the codebase" do
     test "fires on synonym error atoms across multiple modules" do
+      # All three atoms share the same WHAT ("user") with different
+      # outcome words ("not_found", "no_..._found", "missing"). They're
+      # genuine synonyms — same conceptual failure, different names.
       file_asts = [
         parse("lib/a.ex", ~S"""
         defmodule A do
-          def go, do: {:error, :not_found}
+          def go, do: {:error, :user_not_found}
         end
         """),
         parse("lib/b.ex", ~S"""
         defmodule B do
-          def go, do: {:error, :user_not_found}
+          def go, do: {:error, :no_user_found}
         end
         """),
         parse("lib/c.ex", ~S"""
         defmodule C do
-          def go, do: {:error, :no_user_found}
+          def go, do: {:error, :user_missing}
         end
         """)
       ]
@@ -93,6 +96,32 @@ defmodule Archdo.Rules.CE.ErrorCategoryDriftTest do
         parse("lib/c.ex", ~S"""
         defmodule C do
           def go, do: {:error, :not_found}
+        end
+        """)
+      ]
+
+      assert ErrorCategoryDrift.analyze_project(file_asts) == []
+    end
+
+    test "does NOT cluster atoms whose discriminating prefix differs" do
+      # `:file_not_found`, `:host_not_found`, `:link_not_found` are NOT
+      # synonyms — they describe semantically distinct failures
+      # (filesystem vs network vs URL). The current "longest stem"
+      # canonicalization wrongly groups them under "found".
+      file_asts = [
+        parse("lib/a.ex", ~S"""
+        defmodule A do
+          def go, do: {:error, :file_not_found}
+        end
+        """),
+        parse("lib/b.ex", ~S"""
+        defmodule B do
+          def go, do: {:error, :host_not_found}
+        end
+        """),
+        parse("lib/c.ex", ~S"""
+        defmodule C do
+          def go, do: {:error, :link_not_found}
         end
         """)
       ]
