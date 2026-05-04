@@ -76,7 +76,7 @@ defmodule Archdo.Rules.Module.ExceptionLaundering do
   # 1. Catches a specific exception type (not bare _)
   # 2. Raises a DIFFERENT exception in the body (not reraise)
   defp launders_exception?({:->, _, [pattern, body]}) do
-    catches_specific?(pattern) and raises_different?(body) and not reraising?(body)
+    catches_specific?(pattern) and AST.contains_raise?(body) and not reraising?(body)
   end
 
   defp launders_exception?(_), do: false
@@ -84,13 +84,6 @@ defmodule Archdo.Rules.Module.ExceptionLaundering do
   defp catches_specific?([{:in, _, [_, _]}]), do: true
   defp catches_specific?([{:__aliases__, _, _}]), do: true
   defp catches_specific?(_), do: false
-
-  defp raises_different?(body) do
-    AST.contains?(body, fn
-      {:raise, _, _} -> true
-      _ -> false
-    end)
-  end
 
   defp reraising?(body) do
     AST.contains?(body, fn

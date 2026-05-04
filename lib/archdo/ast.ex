@@ -325,6 +325,19 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  True if the AST contains a `raise` expression. Used by rules that
+  detect non-bang functions that raise (raise_in_non_bang) and
+  rules that detect exception laundering (rescue/raise patterns).
+  """
+  @spec contains_raise?(Macro.t()) :: boolean()
+  def contains_raise?(ast) do
+    contains?(ast, fn
+      {:raise, _, _} -> true
+      _ -> false
+    end)
+  end
+
+  @doc """
   True if the AST contains a `Logger.error/warning/info/debug/notice` call.
   Used by rule CE-error-path-without-log and the plugin coverage matrix.
   """

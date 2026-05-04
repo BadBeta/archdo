@@ -24,11 +24,11 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
   end
 
   defp cycle_diagnostic(cycle, graph) do
-    cycle_str = Enum.map_join(cycle, " → ", &normalize/1)
+    cycle_str = Enum.map_join(cycle, " → ", &AST.module_name/1)
 
     # Use the first module's file for location
-    first = normalize(hd(cycle))
-    second = normalize(Enum.at(cycle, 1))
+    first = AST.module_name(hd(cycle))
+    second = AST.module_name(Enum.at(cycle, 1))
 
     graph.edges
     |> find_cycle_edge(first, second)
@@ -91,6 +91,4 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
     )
   end
 
-  defp normalize(mod) when is_atom(mod), do: AST.module_name(mod)
-  defp normalize(mod) when is_binary(mod), do: mod
 end

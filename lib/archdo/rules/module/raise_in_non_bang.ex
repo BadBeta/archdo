@@ -62,7 +62,7 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
         # Dunder names are framework/macro convention.
         not dunder_name?(name),
         body != nil,
-        contains_raise?(body),
+        AST.contains_raise?(body),
         not has_rescue?(body),
         do: build_diagnostic(file, name, arity, meta)
   end
@@ -70,13 +70,6 @@ defmodule Archdo.Rules.Module.RaiseInNonBang do
   defp dunder_name?(name) do
     name_str = Atom.to_string(name)
     String.starts_with?(name_str, "__") and String.ends_with?(name_str, "__")
-  end
-
-  defp contains_raise?(body) do
-    AST.contains?(body, fn
-      {:raise, _, _} -> true
-      _ -> false
-    end)
   end
 
   # If the function has its own rescue block, the raise is intentionally caught

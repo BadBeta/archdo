@@ -27,7 +27,7 @@ defmodule Archdo.Rules.Boundary.ContextEncapsulation do
     |> Enum.uniq_by(fn edge -> {edge.source, edge.target} end)
     |> Enum.map(fn edge ->
       target_context = Config.owning_context(config, edge.target)
-      ctx_name = normalize(target_context)
+      ctx_name = AST.module_name(target_context)
 
       Diagnostic.warning("1.2",
         title: "Reach into context internals",
@@ -70,13 +70,8 @@ defmodule Archdo.Rules.Boundary.ContextEncapsulation do
   end
 
   defp internal_module?(target, context) do
-    ctx_str = normalize(context)
-
-    target_str =
-      case target do
-        t when is_binary(t) -> t
-        t -> normalize(t)
-      end
+    ctx_str = AST.module_name(context)
+    target_str = AST.module_name(target)
 
     # The target is under the context namespace but is NOT the context itself
     target_str != ctx_str and String.starts_with?(target_str, ctx_str <> ".")
@@ -87,7 +82,4 @@ defmodule Archdo.Rules.Boundary.ContextEncapsulation do
     String.ends_with?(edge.target, "Schema") or
       Graph.edge_of_type?(edge, :alias)
   end
-
-  defp normalize(mod) when is_atom(mod), do: AST.module_name(mod)
-  defp normalize(mod) when is_binary(mod), do: mod
 end

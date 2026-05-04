@@ -675,6 +675,18 @@ defmodule Archdo.ASTTest do
     end
   end
 
+  describe "contains_raise?/1" do
+    test "true when AST contains a raise" do
+      ast = quote do: raise("boom")
+      assert AST.contains_raise?(ast)
+    end
+
+    test "false for plain returns" do
+      ast = quote do: {:ok, 1}
+      refute AST.contains_raise?(ast)
+    end
+  end
+
   describe "contains_telemetry?/1" do
     test "true for :telemetry.span/3" do
       ast = quote do: :telemetry.span([:my_app, :op], %{}, fn -> {:ok, %{}} end)
