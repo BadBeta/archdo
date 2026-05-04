@@ -2467,6 +2467,15 @@ A producer function `g/n` returns a tuple of types `{T1, T2, ..., Tk}`; a consum
 - **Tolerate:** The producer and consumer are intentionally independent; both orders have multiple call sites and reordering either would break callers — accept the mismatch and document the decision.
 - **Severity:** `info`
 
+### CE-61 Ordered middleware chain violates constraints
+
+A `pipeline :name do plug ... end` block (Phoenix router) — or any chain of the same shape — violates one of three structural constraints: (a) the same plug is declared twice in one pipeline; (b) an authorization plug runs before its authentication counterpart; (c) a browser-shaped pipeline is missing CSRF protection.
+
+- **Why:** Middleware chains encode security and observability invariants by ordering and presence. Auth must run before authz; parsers must run before session; browser pipelines that accept session cookies must include CSRF protection. A duplicate entry usually indicates a refactor leftover that runs the plug twice with the second instance's config silently overwriting the first. (Security, Composition Discipline)
+- **Check:** Walk every `pipeline :name do ... end` block; collect the ordered list of `plug` entries. Apply: duplicate-key check; auth-before-authz ordering (against a configurable list of auth/authz plug names); `Plug.Parsers`-before-`:fetch_session` ordering; presence of `:protect_from_forgery` in any `:browser`-named pipeline or any pipeline that includes browser-signal plugs (`:put_root_layout`, `:put_secure_browser_headers`, `:fetch_live_flash`).
+- **Tolerate:** A pipeline whose name happens to be `:browser` but serves only public, non-mutating routes (rare); duplicate plug intentional with two different configs (very rare — usually refactor whichever plug actually does what's needed). Pipeline-specific exemption via `# archdo:allow CE-61` on the pipeline line.
+- **Severity:** `warning`
+
 ---
 
 ## Rule Summary
@@ -2484,8 +2493,8 @@ A producer function `g/n` returns a tuple of types `{T1, T2, ..., Tk}`; a consum
 | State Machine | 6 | 9.1–9.3, SM-A/D/F |
 | Composition | 2 | 10.1–10.2 |
 | Native Interop | 4 | 11.1–11.4 |
-| Change Economy | 35 | CE-1, CE-2/CE-3, CE-4, CE-11, CE-12, CE-15, CE-17, CE-21, CE-23–CE-35, CE-47–CE-60 |
-| **Total** | **261** | |
+| Change Economy | 36 | CE-1, CE-2/CE-3, CE-4, CE-11, CE-12, CE-15, CE-17, CE-21, CE-23–CE-35, CE-47–CE-61 |
+| **Total** | **262** | |
 
 Rules marked *(compiled)* require the `--compiled` flag and work by analyzing beam files after `mix compile`. They see ground-truth dependencies after macro expansion — no AST guessing.
 

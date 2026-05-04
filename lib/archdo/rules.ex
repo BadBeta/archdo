@@ -227,7 +227,8 @@ defmodule Archdo.Rules do
     Archdo.Rules.CE.EffectLeak,
     Archdo.Rules.CE.UnguardedBuildingBlock,
     Archdo.Rules.CE.PipelineOrderFlip,
-    Archdo.Rules.CE.PipelineSideEffectTerminator
+    Archdo.Rules.CE.PipelineSideEffectTerminator,
+    Archdo.Rules.CE.OrderedChainConstraints
   ]
 
   # --- Cross-file (graph) rules ---

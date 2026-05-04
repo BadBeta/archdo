@@ -17,7 +17,7 @@ defmodule Archdo do
 
   ## What it ships
 
-    * **261 rules** across 13 categories (boundaries, coupling, change
+    * **262 rules** across 13 categories (boundaries, coupling, change
       economy, OTP, module quality, single-source-of-truth, testing, event
       sourcing, state machines, composition, native interop, public API,
       error handling).
