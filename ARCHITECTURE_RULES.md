@@ -1172,10 +1172,10 @@ Structs with too many fields suggest the data model should be decomposed.
 
 File length as an architecture signal — long files do too much.
 
-- **Why:** Files over 500 lines are hard to navigate and typically contain mixed concerns. Over 1000 lines almost certainly have multiple responsibilities that should be in separate modules. (Readability, SRP)
-- **Check:** Count source lines per file. 500 = warning, 1000 = error.
-- **Tolerate:** Generated files, comprehensive test files with many test cases.
-- **Severity:** `warning` / `error`
+- **Why:** Files over 1000 lines are hard to navigate and typically contain mixed concerns. Over 2000 lines almost certainly have multiple responsibilities that should be in separate modules. Below ~1000 the line count is too noisy to be a useful signal — Phoenix-generated context modules and internal protocols/parsers/code generators routinely sit in the 500–1000-line band while remaining cohesive. (Readability, SRP)
+- **Check:** Count source lines per file. 1000 = info, 2000 = warning.
+- **Tolerate:** Generated files, comprehensive test files with many test cases, internal protocols / parsers / code generators that are genuinely one large unit.
+- **Severity:** `info` / `warning`
 
 ### 6.5 Function Fan-Out
 

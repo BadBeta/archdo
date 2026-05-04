@@ -8,8 +8,14 @@ defmodule Archdo.Rules.Module.ModuleLength do
 
   alias Archdo.{AST, Diagnostic, Fix}
 
-  @warn_lines 500
-  @error_lines 1000
+  # Calibrated against real Elixir codebases — the canonical Phoenix
+  # generators emit context modules in the 500–900-line range, and
+  # internal protocols / parsers / code generators are routinely
+  # 800–1200 lines while still being internally cohesive. Below 1000
+  # the line count is too noisy to be a useful signal; above it,
+  # cohesion concerns start to dominate.
+  @warn_lines 1000
+  @error_lines 2000
 
   @impl true
   def id, do: "6.4"
@@ -19,21 +25,19 @@ defmodule Archdo.Rules.Module.ModuleLength do
 
   @impl true
   def analyze(file, _ast, _opts) do
-    if AST.test_file?(file) do
-      []
-    else
-      case File.read(file) do
-        {:ok, content} ->
-          lines =
-            content
-            |> String.split("\n")
-            |> length()
+    run_analysis(AST.test_file?(file), file)
+  end
 
-          check_length(file, lines)
+  defp run_analysis(true, _file), do: []
 
-        _ ->
-          []
-      end
+  defp run_analysis(false, file) do
+    case File.read(file) do
+      {:ok, content} ->
+        lines = content |> String.split("\n") |> length()
+        check_length(file, lines)
+
+      _ ->
+        []
     end
   end
 
@@ -57,7 +61,7 @@ defmodule Archdo.Rules.Module.ModuleLength do
       title: "Module file too long",
       message: "File has #{lines} lines (warn at #{@warn_lines}, error at #{@error_lines})",
       why:
-        "Long files almost always hide multiple responsibilities. Above ~500 lines navigation gets harder, " <>
+        "Long files almost always hide multiple responsibilities. Above ~1000 lines navigation gets harder, " <>
           "git diffs become noisy, and the file starts pulling in dependencies that only some of its " <>
           "functions use. The line count is a leading indicator of cohesion problems.",
       alternatives: [
