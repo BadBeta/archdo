@@ -332,13 +332,15 @@ defmodule Archdo.Compiled.DiagramSystem do
     # Layer 1: Outside World (top)
     {outside_elems, y, _pos0} =
       render_horizontal_layer(
-        @margin,
-        y,
-        w,
-        layout.layer_h,
-        "Outside World",
-        @layer_bg_outside,
-        @layer_border_outside,
+        %{
+          x: @margin,
+          y: y,
+          width: w,
+          height: layout.layer_h,
+          title: "Outside World",
+          bg_color: @layer_bg_outside,
+          border_color: @layer_border_outside
+        },
         render_outside_nodes(outside),
         []
       )
@@ -350,13 +352,15 @@ defmodule Archdo.Compiled.DiagramSystem do
 
     {interface_elems, y, pos_interface} =
       render_horizontal_layer(
-        @margin,
-        y,
-        w,
-        layout.layer_h,
-        "Interface",
-        @layer_bg_interface,
-        @layer_border_interface,
+        %{
+          x: @margin,
+          y: y,
+          width: w,
+          height: layout.layer_h,
+          title: "Interface",
+          bg_color: @layer_bg_interface,
+          border_color: @layer_border_interface
+        },
         render_module_nodes(interface_mods, @layer_border_interface, 8),
         interface_mods
       )
@@ -379,13 +383,15 @@ defmodule Archdo.Compiled.DiagramSystem do
 
     {domain_elems, y, pos_domain} =
       render_horizontal_layer(
-        @margin,
-        y,
-        w,
-        layout.domain_layer_h,
-        "Domain",
-        @layer_bg_domain,
-        @layer_border_domain,
+        %{
+          x: @margin,
+          y: y,
+          width: w,
+          height: layout.domain_layer_h,
+          title: "Domain",
+          bg_color: @layer_bg_domain,
+          border_color: @layer_border_domain
+        },
         domain_nodes ++ sm_nodes,
         all_domain_mods
       )
@@ -397,13 +403,15 @@ defmodule Archdo.Compiled.DiagramSystem do
 
     {infra_elems, y, pos_infra} =
       render_horizontal_layer(
-        @margin,
-        y,
-        w,
-        layout.layer_h,
-        "Infrastructure",
-        @layer_bg_infra,
-        @layer_border_infra,
+        %{
+          x: @margin,
+          y: y,
+          width: w,
+          height: layout.layer_h,
+          title: "Infrastructure",
+          bg_color: @layer_bg_infra,
+          border_color: @layer_border_infra
+        },
         render_module_nodes(infra_mods, @layer_border_infra, 6),
         infra_mods
       )
@@ -413,13 +421,15 @@ defmodule Archdo.Compiled.DiagramSystem do
     # Layer 5: Inside Tools (bottom)
     {tools_elems, _y, _pos_tools} =
       render_horizontal_layer(
-        @margin,
-        y,
-        w,
-        layout.layer_h,
-        "Inside Tools",
-        @layer_bg_tools,
-        @layer_border_tools,
+        %{
+          x: @margin,
+          y: y,
+          width: w,
+          height: layout.layer_h,
+          title: "Inside Tools",
+          bg_color: @layer_bg_tools,
+          border_color: @layer_border_tools
+        },
         render_tool_nodes(tools),
         []
       )
@@ -450,50 +460,51 @@ defmodule Archdo.Compiled.DiagramSystem do
     wrap_svg(all, layout.total_w, layout.total_h)
   end
 
-  defp render_horizontal_layer(
-         x,
-         y,
-         width,
-         height,
-         title,
-         bg_color,
-         border_color,
-         node_renderers,
-         modules
-       ) do
-    frame = [
-      ~s[<rect x="#{x}" y="#{y}" width="#{width}" height="#{height}" rx="8" fill="#{bg_color}" stroke="#{border_color}" stroke-width="1.5" opacity="0.6"/>],
-      ~s[<text x="#{x + 12}" y="#{y + 17}" fill="#{border_color}" font-size="11" font-weight="600" font-family="monospace">#{title}</text>]
-    ]
+  # Layer spec — geometry + style for one horizontal layer.
+  @typep layer_spec :: %{
+           x: number(),
+           y: number(),
+           width: number(),
+           height: number(),
+           title: String.t(),
+           bg_color: String.t(),
+           border_color: String.t()
+         }
 
-    # Spread nodes horizontally and track positions
-    # Pad modules to match renderers length so zip works
+  @spec render_horizontal_layer(layer_spec(), [(number(), number() -> [String.t()])], [module()]) ::
+          {[String.t()], number(), map()}
+  defp render_horizontal_layer(spec, node_renderers, modules) do
+    frame = layer_frame(spec)
+    {node_elems, positions} = layer_node_elements(spec, node_renderers, modules)
+    {frame ++ List.flatten(Enum.reverse(node_elems)), spec.y + spec.height, positions}
+  end
+
+  defp layer_frame(%{x: x, y: y, width: w, height: h, title: title, bg_color: bg, border_color: bc}) do
+    [
+      ~s[<rect x="#{x}" y="#{y}" width="#{w}" height="#{h}" rx="8" fill="#{bg}" stroke="#{bc}" stroke-width="1.5" opacity="0.6"/>],
+      ~s[<text x="#{x + 12}" y="#{y + 17}" fill="#{bc}" font-size="11" font-weight="600" font-family="monospace">#{title}</text>]
+    ]
+  end
+
+  defp layer_node_elements(spec, node_renderers, modules) do
+    # Pad modules to match renderers length so zip works.
     padded_modules =
       modules ++ List.duplicate(nil, max(0, length(node_renderers) - length(modules)))
 
-    {node_elems, positions} =
-      node_renderers
-      |> Enum.zip(padded_modules)
-      |> Enum.with_index()
-      |> Enum.reduce({[], %{}}, fn {{renderer, mod}, idx}, {elems, pos} ->
-        nx = x + @layer_padding + idx * (@node_w + @node_gap)
-        ny = y + @layer_header + @layer_padding
-
-        new_elems = renderer.(nx, ny)
-
-        center_x = nx + @node_w / 2
-
-        new_pos =
-          case mod do
-            nil -> pos
-            _ -> Map.put(pos, mod, {center_x, ny, ny + @node_h})
-          end
-
-        {[new_elems | elems], new_pos}
-      end)
-
-    {frame ++ List.flatten(Enum.reverse(node_elems)), y + height, positions}
+    node_renderers
+    |> Enum.zip(padded_modules)
+    |> Enum.with_index()
+    |> Enum.reduce({[], %{}}, fn {{renderer, mod}, idx}, {elems, pos} ->
+      nx = spec.x + @layer_padding + idx * (@node_w + @node_gap)
+      ny = spec.y + @layer_header + @layer_padding
+      {[renderer.(nx, ny) | elems], track_position(pos, mod, nx, ny)}
+    end)
   end
+
+  defp track_position(pos, nil, _nx, _ny), do: pos
+
+  defp track_position(pos, mod, nx, ny),
+    do: Map.put(pos, mod, {nx + @node_w / 2, ny, ny + @node_h})
 
   # Tunnel size
   @tunnel_size 8
