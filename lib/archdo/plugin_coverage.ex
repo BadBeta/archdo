@@ -75,10 +75,47 @@ defmodule Archdo.PluginCoverage do
   # A plug module defines `def call(conn, _opts)` — the Plug behaviour
   # callback. We don't require `@behaviour Plug` because many plug
   # modules omit it; the call/2 shape is the load-bearing signal.
+  #
+  # Path-specific plugs (`def call(%{request_path: "..."}, _)`) are
+  # excluded — they run at endpoint level but only do work for matching
+  # paths, so their Logger calls don't actually cover all requests.
+  # Webhook plugs (Stripe, Tax-ID-Pro, etc.) follow this shape.
   defp plug_module?(ast) do
-    ast
-    |> AST.extract_functions(:public)
-    |> Enum.any?(fn {name, arity, _, _, _} -> name == @plug_callback and arity == 2 end)
+    call_clauses =
+      ast
+      |> AST.extract_functions(:public)
+      |> Enum.filter(fn {name, arity, _, _, _} -> name == @plug_callback and arity == 2 end)
+
+    case call_clauses do
+      [] -> false
+      clauses -> Enum.all?(clauses, &covering_plug_clause?/1)
+    end
   end
 
+  defp covering_plug_clause?({_name, _arity, _meta, args, _body}) do
+    not path_specific_args?(args)
+  end
+
+  # First argument of `call/2` is the conn. Path-specific shape:
+  # `%{request_path: "..."}` or `%{request_path: "..."} = conn` —
+  # the conn map is destructured to a literal request_path.
+  defp path_specific_args?([first | _]) do
+    request_path_match?(first)
+  end
+
+  defp path_specific_args?(_), do: false
+
+  defp request_path_match?({:=, _, [lhs, rhs]}) do
+    request_path_match?(lhs) or request_path_match?(rhs)
+  end
+
+  defp request_path_match?({:%{}, _, fields}) when is_list(fields) do
+    Enum.any?(fields, fn
+      {:request_path, _} -> true
+      {{:__block__, _, [:request_path]}, _} -> true
+      _ -> false
+    end)
+  end
+
+  defp request_path_match?(_), do: false
 end

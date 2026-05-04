@@ -127,6 +127,34 @@ defmodule Archdo.PluginCoverageTest do
       refute "MyAppWeb.Plugs.Bare" in coverage.log_plugs
     end
 
+    test "does NOT classify a path-specific webhook plug as covering" do
+      # Webhook plugs match a specific request_path in the head.
+      # They run at endpoint level but only do work for matching paths,
+      # so they don't actually cover all requests with their Logger calls.
+      file_asts = [
+        parse(
+          """
+          defmodule MyAppWeb.Plugs.StripeWebhook do
+            require Logger
+
+            def init(opts), do: opts
+
+            def call(%{request_path: "/api/webhook/stripe"} = conn, _) do
+              Logger.error("stripe failed", body: conn.body_params)
+              conn
+            end
+
+            def call(conn, _), do: conn
+          end
+          """,
+          "lib/my_app_web/plugs/stripe_webhook.ex"
+        )
+      ]
+
+      coverage = PluginCoverage.scan(file_asts)
+      refute "MyAppWeb.Plugs.StripeWebhook" in coverage.log_plugs
+    end
+
     test "returns empty index for project with no modules" do
       coverage = PluginCoverage.scan([])
       assert coverage == %{telemetry_plugs: [], log_plugs: []}
