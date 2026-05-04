@@ -830,128 +830,131 @@ defmodule Archdo.Compiled.Diagram do
     end
   end
 
+  @max_external_groups 8
+  @max_internal_modules 12
+
   defp render_dataflow_context(graph, ctx) do
+    format_dataflow_context(gather_dataflow_data(graph, ctx))
+  end
+
+  defp gather_dataflow_data(graph, ctx) do
     member_set = MapSet.new(ctx.members)
-    ctx_id = sanitize_id(ctx.context)
-
-    # Classify members by role
     boundary = ctx.boundary_module
-    internal = Enum.reject(ctx.members, &(&1 == boundary))
 
-    # Find external callers (incoming to context)
-    external_callers =
-      ctx.members
-      |> Enum.flat_map(fn mod ->
-        for e <- Query.known_by(graph, mod),
-            not MapSet.member?(member_set, e.module),
-            do: {e.module, mod, e.functions_called, e.call_count}
-      end)
-      |> Enum.group_by(fn {caller, _callee, _fns, _count} -> caller end)
-      |> Enum.take(8)
+    %{
+      ctx_id: sanitize_id(ctx.context),
+      ctx_name: ctx.context,
+      boundary: boundary,
+      internal: Enum.reject(ctx.members, &(&1 == boundary)),
+      external_callers: gather_external_callers(graph, ctx, member_set),
+      external_deps: gather_external_deps(graph, ctx, member_set),
+      internal_wiring: gather_internal_wiring(graph, ctx, member_set)
+    }
+  end
 
-    # Find external dependencies (outgoing from context)
-    external_deps =
-      ctx.members
-      |> Enum.flat_map(fn mod ->
-        for e <- Query.knows_about(graph, mod),
-            not MapSet.member?(member_set, e.module),
-            do: {mod, e.module, e.functions_called, e.call_count}
-      end)
-      |> Enum.group_by(fn {_caller, dep, _fns, _count} -> dep end)
-      |> Enum.sort_by(fn {_dep, calls} -> -length(calls) end)
-      |> Enum.take(8)
+  defp gather_external_callers(graph, ctx, member_set) do
+    ctx.members
+    |> Enum.flat_map(fn mod ->
+      for e <- Query.known_by(graph, mod),
+          not MapSet.member?(member_set, e.module),
+          do: {e.module, mod, e.functions_called, e.call_count}
+    end)
+    |> Enum.group_by(fn {caller, _callee, _fns, _count} -> caller end)
+    |> Enum.take(@max_external_groups)
+  end
 
-    lines = ["graph LR", ""]
+  defp gather_external_deps(graph, ctx, member_set) do
+    ctx.members
+    |> Enum.flat_map(fn mod ->
+      for e <- Query.knows_about(graph, mod),
+          not MapSet.member?(member_set, e.module),
+          do: {mod, e.module, e.functions_called, e.call_count}
+    end)
+    |> Enum.group_by(fn {_caller, dep, _fns, _count} -> dep end)
+    |> Enum.sort_by(fn {_dep, calls} -> -length(calls) end)
+    |> Enum.take(@max_external_groups)
+  end
 
-    # Left side: external callers
-    caller_lines =
-      Enum.flat_map(external_callers, &external_caller_lines/1)
-
-    # Center: context subgraph
-    context_lines = ["", "  subgraph #{ctx_id}[\"#{ctx.context}\"]"]
-
-    boundary_line =
-      case boundary do
-        nil ->
-          []
-
-        mod ->
-          id = sanitize_id(AST.module_name(mod))
-          ["    #{id}{{\"#{AST.short_name(mod)} · BOUNDARY\"}}"]
+  defp gather_internal_wiring(graph, ctx, member_set) do
+    ctx.members
+    |> Enum.flat_map(fn mod ->
+      for e <- Query.knows_about(graph, mod),
+          MapSet.member?(member_set, e.module) do
+        from_id = sanitize_id(AST.module_name(mod))
+        to_id = sanitize_id(AST.module_name(e.module))
+        "  #{from_id} --> #{to_id}"
       end
+    end)
+    |> Enum.uniq()
+  end
 
-    internal_lines =
-      internal
-      |> Enum.take(12)
-      |> Enum.map(fn mod ->
-        id = sanitize_id(AST.module_name(mod))
-        "    #{id}[\"#{AST.short_name(mod)}\"]"
-      end)
+  @doc false
+  # Pure formatter — given the gathered dataflow data, returns the
+  # Mermaid LR diagram string. Public-but-doc-false so the format
+  # contract is unit-testable without constructing a CompiledGraph.
+  @spec format_dataflow_context(map()) :: String.t()
+  def format_dataflow_context(data) do
+    [
+      ["graph LR", ""],
+      Enum.flat_map(data.external_callers, &external_caller_lines/1),
+      context_subgraph_lines(data),
+      data.internal_wiring,
+      [""],
+      Enum.flat_map(data.external_deps, &external_dep_lines/1),
+      [""],
+      boundary_style_lines(data.boundary),
+      caller_style_lines(data.external_callers),
+      dep_style_lines(data.external_deps)
+    ]
+    |> Enum.concat()
+    |> Enum.join("\n")
+  end
 
-    more_line =
-      case length(internal) > 12 do
-        true -> ["    more_#{ctx_id}[\"... +#{length(internal) - 12} more\"]"]
-        false -> []
-      end
+  defp context_subgraph_lines(data) do
+    ["", "  subgraph #{data.ctx_id}[\"#{data.ctx_name}\"]"] ++
+      boundary_node_line(data.boundary) ++
+      internal_node_lines(data.internal) ++
+      internal_overflow_line(data.ctx_id, length(data.internal)) ++
+      ["  end", ""]
+  end
 
-    context_end = ["  end", ""]
+  defp boundary_node_line(nil), do: []
 
-    # Internal wiring within context
-    internal_wiring =
-      ctx.members
-      |> Enum.flat_map(fn mod ->
-        for e <- Query.knows_about(graph, mod),
-            MapSet.member?(member_set, e.module) do
-          from_id = sanitize_id(AST.module_name(mod))
-          to_id = sanitize_id(AST.module_name(e.module))
-          "  #{from_id} --> #{to_id}"
-        end
-      end)
-      |> Enum.uniq()
+  defp boundary_node_line(mod) do
+    id = sanitize_id(AST.module_name(mod))
+    ["    #{id}{{\"#{AST.short_name(mod)} · BOUNDARY\"}}"]
+  end
 
-    # Right side: external dependencies
-    dep_lines = Enum.flat_map(external_deps, &external_dep_lines/1)
+  defp internal_node_lines(internal) do
+    internal
+    |> Enum.take(@max_internal_modules)
+    |> Enum.map(fn mod ->
+      id = sanitize_id(AST.module_name(mod))
+      "    #{id}[\"#{AST.short_name(mod)}\"]"
+    end)
+  end
 
-    # Styling
-    style_lines = [""]
+  defp internal_overflow_line(ctx_id, total) when total > @max_internal_modules,
+    do: ["    more_#{ctx_id}[\"... +#{total - @max_internal_modules} more\"]"]
 
-    boundary_style =
-      case boundary do
-        nil ->
-          []
+  defp internal_overflow_line(_ctx_id, _total), do: []
 
-        mod ->
-          ["  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
-      end
+  defp boundary_style_lines(nil), do: []
 
-    # Style external callers as input terminals (blue)
-    caller_style =
-      Enum.map(external_callers, fn {caller, _} ->
-        "  style #{sanitize_id(AST.module_name(caller))} fill:#BBDEFB,stroke:#1565C0"
-      end)
+  defp boundary_style_lines(mod) do
+    ["  style #{sanitize_id(AST.module_name(mod))} fill:#4CAF50,color:#fff,stroke:#2E7D32"]
+  end
 
-    # Style external deps as output terminals (orange)
-    dep_style =
-      Enum.map(external_deps, fn {dep, _} ->
-        "  style #{sanitize_id(AST.module_name(dep))} fill:#FFE0B2,stroke:#E65100"
-      end)
+  defp caller_style_lines(external_callers) do
+    Enum.map(external_callers, fn {caller, _} ->
+      "  style #{sanitize_id(AST.module_name(caller))} fill:#BBDEFB,stroke:#1565C0"
+    end)
+  end
 
-    Enum.join(
-      lines ++
-        caller_lines ++
-        context_lines ++
-        boundary_line ++
-        internal_lines ++
-        more_line ++
-        context_end ++
-        internal_wiring ++
-        [""] ++
-        dep_lines ++
-        style_lines ++
-        boundary_style ++
-        caller_style ++ dep_style,
-      "\n"
-    )
+  defp dep_style_lines(external_deps) do
+    Enum.map(external_deps, fn {dep, _} ->
+      "  style #{sanitize_id(AST.module_name(dep))} fill:#FFE0B2,stroke:#E65100"
+    end)
   end
 
   defp format_return_shape(fn_info) do
