@@ -96,26 +96,37 @@ defmodule Archdo.PluginCoverage do
     not path_specific_args?(args)
   end
 
-  # First argument of `call/2` is the conn. Path-specific shape:
-  # `%{request_path: "..."}` or `%{request_path: "..."} = conn` —
-  # the conn map is destructured to a literal request_path.
-  defp path_specific_args?([first | _]) do
-    request_path_match?(first)
-  end
+  # The `call/2` first arg is the conn. A plug is path/condition-aware
+  # (not blanket-covering) when the conn pattern matches on a routing
+  # field — `request_path`, `path_info`, or `method`. Bare `conn`,
+  # `%Conn{} = conn`, and `%Plug.Conn{}` (no field matches) are
+  # blanket-covering.
+  @discriminating_fields [:request_path, :path_info, :method]
 
+  defp path_specific_args?([first | _]), do: discriminating_match?(first)
   defp path_specific_args?(_), do: false
 
-  defp request_path_match?({:=, _, [lhs, rhs]}) do
-    request_path_match?(lhs) or request_path_match?(rhs)
+  defp discriminating_match?({:=, _, [lhs, rhs]}) do
+    discriminating_match?(lhs) or discriminating_match?(rhs)
   end
 
-  defp request_path_match?({:%{}, _, fields}) when is_list(fields) do
-    Enum.any?(fields, fn
-      {:request_path, _} -> true
-      {{:__block__, _, [:request_path]}, _} -> true
-      _ -> false
-    end)
+  # Bare map match: %{request_path: ...} or %{path_info: ...}.
+  defp discriminating_match?({:%{}, _, fields}) when is_list(fields) do
+    Enum.any?(fields, &discriminating_field?/1)
   end
 
-  defp request_path_match?(_), do: false
+  # Struct match: %Plug.Conn{request_path: ...}, %Conn{method: ...} —
+  # AST shape is `{:%, _, [aliases, {:%{}, _, fields}]}`.
+  defp discriminating_match?({:%, _, [_aliases, {:%{}, _, fields}]}) when is_list(fields) do
+    Enum.any?(fields, &discriminating_field?/1)
+  end
+
+  defp discriminating_match?(_), do: false
+
+  defp discriminating_field?({field, _}) when is_atom(field), do: field in @discriminating_fields
+
+  defp discriminating_field?({{:__block__, _, [field]}, _}) when is_atom(field),
+    do: field in @discriminating_fields
+
+  defp discriminating_field?(_), do: false
 end

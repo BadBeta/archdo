@@ -127,6 +127,60 @@ defmodule Archdo.PluginCoverageTest do
       refute "MyAppWeb.Plugs.Bare" in coverage.log_plugs
     end
 
+    test "does NOT classify a path_info-matching plug as covering" do
+      # Algora-style: `def call(%Conn{path_info: pi} = conn, %{path_info: pi})`
+      # — pins the conn's path_info against the opts. Only fires for the
+      # path configured at mount time. Not covering all requests.
+      file_asts = [
+        parse(
+          """
+          defmodule MyAppWeb.Plugs.GithubWebhook do
+            require Logger
+
+            def init(opts), do: Map.new(opts)
+
+            def call(%Plug.Conn{path_info: path_info} = conn, %{path_info: path_info}) do
+              Logger.error("github webhook failed", body: conn.body_params)
+              conn
+            end
+
+            def call(conn, _), do: conn
+          end
+          """,
+          "lib/my_app_web/plugs/github_webhook.ex"
+        )
+      ]
+
+      coverage = PluginCoverage.scan(file_asts)
+      refute "MyAppWeb.Plugs.GithubWebhook" in coverage.log_plugs
+    end
+
+    test "does NOT classify a method-matching plug as covering" do
+      # Method-specific plug: only handles POST, etc.
+      file_asts = [
+        parse(
+          """
+          defmodule MyAppWeb.Plugs.PostOnly do
+            require Logger
+
+            def init(opts), do: opts
+
+            def call(%Plug.Conn{method: "POST"} = conn, _) do
+              Logger.warning("post received", path: conn.request_path)
+              conn
+            end
+
+            def call(conn, _), do: conn
+          end
+          """,
+          "lib/my_app_web/plugs/post_only.ex"
+        )
+      ]
+
+      coverage = PluginCoverage.scan(file_asts)
+      refute "MyAppWeb.Plugs.PostOnly" in coverage.log_plugs
+    end
+
     test "does NOT classify a path-specific webhook plug as covering" do
       # Webhook plugs match a specific request_path in the head.
       # They run at endpoint level but only do work for matching paths,
