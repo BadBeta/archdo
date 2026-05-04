@@ -27,12 +27,19 @@ defmodule Archdo.Rules.Module.NaturalSeams do
   defp check_prefix_clusters(file, ast) do
     fns = AST.extract_functions(ast, :public)
 
-    # Extract prefixes (first word) from function names
+    # Extract prefixes (first word) from function names. Deduplicate
+    # by name within each prefix group: a single multi-clause function
+    # with N clauses (e.g. `builder_for(:error)`/(:warning)/(:info)/...)
+    # is ONE function, not N separate prefix-cluster members. The
+    # natural-seam intent is "this module has 4+ DISTINCT functions
+    # sharing a prefix", not "this module has 4+ clauses of one
+    # multi-clause function".
     prefix_groups =
       fns
       |> Enum.map(fn {name, _, _, _, _} -> {name, extract_prefix(name)} end)
       |> Enum.reject(fn {_, prefix} -> is_nil(prefix) end)
       |> Enum.group_by(fn {_, prefix} -> prefix end, fn {name, _} -> name end)
+      |> Enum.map(fn {prefix, names} -> {prefix, Enum.uniq(names)} end)
       |> Enum.filter(fn {_prefix, names} -> length(names) >= @min_prefix_group end)
 
     if length(prefix_groups) >= 2 do
