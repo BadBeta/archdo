@@ -19,14 +19,14 @@ Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (
 | **Testing** | 27 | Coverage gaps, over-mocking, empty describe, missing error paths, untested modules, process leaks, flaky indicators, assert on implementation, compiled: test-only public |
 | **Event sourcing** | 9 | Aggregate purity, projection isolation, event immutability, command/event naming |
 | **State machines** | 6 | Unreachable states, terminal state integrity, implicit boolean state |
-| **Composition & Composability** | 2 + per-module verdict | Deep `use` chains, excessive namespace depth; **per-module building-block verdict** scoring each public function on six composability axes (input closure, determinism, output completeness, totality, side-effect freedom, errors-as-values) |
+| **Composition & Composability** | 2 + verdicts | Deep `use` chains, excessive namespace depth; **per-module and per-context building-block verdicts** scoring each public function on six composability axes (input closure, determinism, output completeness, totality, side-effect freedom, errors-as-values), then rolling them up so an entire context is a building block only when every module under its namespace is |
 | **NIF safety** | 4 | Panic-inducing Rust patterns, scheduler misuse, missing behaviour wrapping |
 
 *Error Handling and the building-block axes are cross-cutting — their rules also appear under Module Quality, Boundaries, and Change Economy. Total unique rules: 258.*
 
 ### Building-block tests
 
-Beyond rule-based findings, Archdo scores every public function and rolls the scores up into a per-module verdict — flagging modules whose interfaces are too tangled, too partial, or hidden behind side effects.
+Beyond rule-based findings, Archdo scores every public function and rolls the scores up into per-module and per-context verdicts — flagging modules and contexts whose interfaces are too tangled, too partial, or hidden behind side effects. A context passes only when every module under its namespace passes.
 
 ### LLM slop detection
 
