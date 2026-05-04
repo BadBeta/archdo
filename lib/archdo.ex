@@ -499,15 +499,26 @@ defmodule Archdo do
   @spec print_building_blocks([String.t()]) :: non_neg_integer()
   def print_building_blocks(paths \\ ["lib"]) do
     file_asts = paths |> collect_files() |> AST.parse_files()
-    {blocks, leaks, total_modules} = building_block_split(file_asts)
+    {blocks, leaks, empty, total_with_api} = building_block_split(file_asts)
 
     print_audit_intro()
-    print_modules_section(blocks, total_modules)
+    print_modules_section(blocks, total_with_api)
+    print_empty_modules_note(empty)
     print_contexts_section(file_asts)
     print_near_block_section(leaks)
     print_audit_summary(leaks)
 
     0
+  end
+
+  defp print_empty_modules_note([]), do: :ok
+
+  defp print_empty_modules_note(empty) do
+    IO.puts(
+      "  (#{length(empty)} module(s) had no public functions to score — DSL " <>
+        "configurations, behaviour declarations, or all-private helpers — " <>
+        "excluded from the count)\n"
+    )
   end
 
   defp building_block_split(file_asts) do
@@ -518,10 +529,20 @@ defmodule Archdo do
       end)
       |> Enum.reject(fn {module, _, _, _} -> module == "Unknown" end)
 
-    {blocks, leaks} =
-      Enum.split_with(module_results, fn {_, _, _, v} -> v == :building_block end)
+    # Three buckets:
+    #   blocks:        :building_block — passed all checks
+    #   empty:         :no_public_api  — DSL config, behaviour decl, etc.
+    #                                    excluded from both counts.
+    #   leaks:         {:leaks_at, _}  — failed at least one check
+    blocks = Enum.filter(module_results, &(elem(&1, 3) == :building_block))
+    empty = Enum.filter(module_results, &(elem(&1, 3) == :no_public_api))
+    leaks = Enum.filter(module_results, &match?({:leaks_at, _}, elem(&1, 3)))
 
-    {blocks, leaks, length(module_results)}
+    # Total excludes :no_public_api modules — they had nothing to
+    # demonstrate. The fraction "blocks of total" is meaningful only
+    # when "total" means "modules with public API".
+    total_with_api = length(blocks) + length(leaks)
+    {blocks, leaks, empty, total_with_api}
   end
 
   defp print_audit_intro do

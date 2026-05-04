@@ -144,6 +144,7 @@ defmodule Archdo.Blackbox do
   @type leak_reason :: float() | :unguarded_input
   @type module_verdict ::
           :building_block
+          | :no_public_api
           | {:leaks_at, [{atom(), arity(), leak_reason()}]}
 
   @building_block_threshold 0.9
@@ -153,23 +154,30 @@ defmodule Archdo.Blackbox do
   across public function scores) AND input-guard analysis (M-Plan6).
 
   A module IS a building block only when:
-    1. EVERY public function scores ≥ #{@building_block_threshold}
+    1. It has at least one public function, AND
+    2. EVERY public function scores ≥ #{@building_block_threshold}
        on the structural six-component check, AND
-    2. EVERY public function (with arity > 0) constrains its input
+    3. EVERY public function (with arity > 0) constrains its input
        domain (guard, all-specific patterns, or `{:error, _}` fallback).
+
+  Modules with NO public functions return `:no_public_api` — they
+  haven't demonstrated building-block status; they're DSL
+  configurations, behaviour declarations, or callback-only modules.
+  Validated against ash_hq, where Ash Resource modules
+  (`use Ash.Resource`) have zero public defs at the AST level (the
+  DSL generates code at compile time). Reporting them as
+  building-blocks vacuously was misleading.
 
   Failures are reported via `{:leaks_at, [{name, arity, reason}, ...]}`
   where `reason` is either a `float()` (structural score below threshold)
   or `:unguarded_input` (passes the structural check but accepts any
   input — flagged by Archdo.InputGuard).
-
-  Modules with no public functions are vacuously building blocks.
   """
   @spec module_verdict(Macro.t()) :: module_verdict()
   def module_verdict(ast) do
     case score_module(ast) do
       [] ->
-        :building_block
+        :no_public_api
 
       scores ->
         structural_leaks =
@@ -226,6 +234,10 @@ defmodule Archdo.Blackbox do
     leaks =
       Enum.flat_map(members, fn {name, ast} ->
         case module_verdict(ast) do
+          # An empty module (DSL config, behaviour declaration, all-
+          # private helper) doesn't drag the context's verdict — it
+          # has nothing to leak. The context aggregate ignores it.
+          :no_public_api -> []
           :building_block -> []
           {:leaks_at, _} -> [name]
         end

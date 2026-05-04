@@ -152,6 +152,25 @@ defmodule Archdo.BlackboxTest do
   end
 
   describe "module_verdict/1 (M-Aux4 — min not mean)" do
+    test "module with zero public functions returns :no_public_api (not :building_block)" do
+      # Validated against ash_hq — Ash Resource modules
+      # (`use Ash.Resource`) have ZERO public defs at the AST level
+      # (the DSL generates code at compile time). Returning
+      # :building_block vacuously was misleading: the audit listed
+      # 38 of 108 modules as "building blocks" when most were just
+      # DSL configurations with nothing to score. A module hasn't
+      # demonstrated building-block-ness if it has no public
+      # function to demonstrate it.
+      ast =
+        parse_def("""
+        defmodule M do
+          use Ash.Resource
+        end
+        """)
+
+      assert Blackbox.module_verdict(ast) == :no_public_api
+    end
+
     test "all-pure module returns :building_block" do
       # M-Plan6: combined verdict now requires input safety. Guards
       # constrain the input domain, satisfying the InputGuard check.
@@ -186,7 +205,11 @@ defmodule Archdo.BlackboxTest do
       assert Enum.any?(leaks, fn {name, _arity, _reason} -> name == :b end)
     end
 
-    test "module with no public functions is vacuously a building block" do
+    test "module with no public functions returns :no_public_api (not :building_block)" do
+      # M-CG93 (validated against ash_hq): an empty module hasn't
+      # demonstrated building-block status — it's a DSL config,
+      # behaviour declaration, or all-private helper. Reporting
+      # :building_block vacuously was misleading.
       ast =
         parse_def("""
         defmodule M do
@@ -195,7 +218,7 @@ defmodule Archdo.BlackboxTest do
         end
         """)
 
-      assert Blackbox.module_verdict(ast) == :building_block
+      assert Blackbox.module_verdict(ast) == :no_public_api
     end
 
     test "M-Plan6: pure module with guarded inputs is :building_block" do
