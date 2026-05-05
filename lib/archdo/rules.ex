@@ -67,6 +67,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.OTP.EtsOwnershipLeak,
     Archdo.Rules.OTP.HardcodedCallTimeout,
     Archdo.Rules.OTP.CallbackSprawl,
+    Archdo.Rules.OTP.MissingTelemetryObanWorker,
     Archdo.Rules.OTP.AtomInHotPath,
     Archdo.Rules.OTP.EtsWithoutCleanup,
     Archdo.Rules.OTP.DetsOrderedSet,
