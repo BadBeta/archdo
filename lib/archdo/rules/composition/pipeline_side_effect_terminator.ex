@@ -99,7 +99,8 @@ defmodule Archdo.Rules.Composition.PipelineSideEffectTerminator do
 
   @impl true
   def description,
-    do: "Side-effecting function does not pass its input through to the output (terminates pipelines)"
+    do:
+      "Side-effecting function does not pass its input through to the output (terminates pipelines)"
 
   @impl true
   def analyze(file, ast, _opts) do

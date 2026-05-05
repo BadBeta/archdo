@@ -52,8 +52,7 @@ defmodule Archdo.Rules.OTP.DetsOwnershipLeak do
 
     Diagnostic.warning("5.47",
       title: "DETS table without cleanup",
-      message:
-        "#{module_name} opens a DETS table but has no terminate/2 to close it",
+      message: "#{module_name} opens a DETS table but has no terminate/2 to close it",
       why:
         "DETS tables are on-disk files. Unlike ETS, the file persists when the owning " <>
           "process exits — but the file's internal state (in-flight buffer, dirty pages) " <>

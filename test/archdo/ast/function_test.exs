@@ -10,13 +10,14 @@ defmodule Archdo.AST.FunctionTest do
 
   describe "extract_module_name/1" do
     test "returns the outer module name for nested defmodules" do
-      ast = parse("""
-      defmodule MyApp.Outer do
-        defmodule Inner do
-          defstruct [:x]
+      ast =
+        parse("""
+        defmodule MyApp.Outer do
+          defmodule Inner do
+            defstruct [:x]
+          end
         end
-      end
-      """)
+        """)
 
       assert "MyApp.Outer" = AstFn.extract_module_name(ast)
     end
@@ -29,12 +30,13 @@ defmodule Archdo.AST.FunctionTest do
 
   describe "extract_functions/2" do
     test "extracts all functions by default" do
-      ast = parse("""
-      defmodule M do
-        def pub(x), do: x
-        defp priv(x), do: x
-      end
-      """)
+      ast =
+        parse("""
+        defmodule M do
+          def pub(x), do: x
+          defp priv(x), do: x
+        end
+        """)
 
       names = AstFn.extract_functions(ast) |> Enum.map(&elem(&1, 0))
       assert :pub in names
@@ -42,12 +44,13 @@ defmodule Archdo.AST.FunctionTest do
     end
 
     test "filters by visibility (:public)" do
-      ast = parse("""
-      defmodule M do
-        def pub(x), do: x
-        defp priv(x), do: x
-      end
-      """)
+      ast =
+        parse("""
+        defmodule M do
+          def pub(x), do: x
+          defp priv(x), do: x
+        end
+        """)
 
       names = AstFn.extract_functions(ast, :public) |> Enum.map(&elem(&1, 0))
       assert names == [:pub]
@@ -56,12 +59,13 @@ defmodule Archdo.AST.FunctionTest do
 
   describe "extract_callbacks/1" do
     test "groups GenServer callbacks by name" do
-      ast = parse("""
-      defmodule MyServer do
-        def init(_), do: {:ok, %{}}
-        def handle_call(:get, _from, state), do: {:reply, state, state}
-      end
-      """)
+      ast =
+        parse("""
+        defmodule MyServer do
+          def init(_), do: {:ok, %{}}
+          def handle_call(:get, _from, state), do: {:reply, state, state}
+        end
+        """)
 
       cbs = AstFn.extract_callbacks(ast)
       assert is_list(cbs[:init])
@@ -82,13 +86,14 @@ defmodule Archdo.AST.FunctionTest do
 
   describe "extract_test_blocks/1" do
     test "returns one tuple per test block" do
-      ast = parse("""
-      defmodule MyTest do
-        use ExUnit.Case
-        test "first", do: assert(true)
-        test "second", do: assert(true)
-      end
-      """)
+      ast =
+        parse("""
+        defmodule MyTest do
+          use ExUnit.Case
+          test "first", do: assert(true)
+          test "second", do: assert(true)
+        end
+        """)
 
       blocks = AstFn.extract_test_blocks(ast)
       assert length(blocks) == 2

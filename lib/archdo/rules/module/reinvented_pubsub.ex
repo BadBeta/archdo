@@ -58,44 +58,44 @@ defmodule Archdo.Rules.Module.ReinventedPubSub do
 
     [
       Diagnostic.warning("4.15",
-          title: "Hand-rolled pubsub",
-          message: "#{module_name} implements #{fn_list} on top of its own subscriber list",
-          why:
-            "Phoenix.PubSub, Registry (with :duplicate keys), and `:pg` already solve the subscriber-list " <>
-              "problem with concurrent dispatch, automatic cleanup when subscribers die, and (in PubSub's case) " <>
-              "cluster-wide fanout. A custom GenServer-as-pubsub typically loses cleanup on process death, " <>
-              "becomes a single bottleneck for all dispatch, and accumulates dead pids over time.",
-          alternatives: [
-            Fix.new(
-              summary: "Use Phoenix.PubSub for fan-out",
-              detail:
-                "Add `{Phoenix.PubSub, name: MyApp.PubSub}` to your supervision tree. Replace `subscribe/1` " <>
-                  "with `Phoenix.PubSub.subscribe(MyApp.PubSub, topic)` and `broadcast/1` with " <>
-                  "`Phoenix.PubSub.broadcast(MyApp.PubSub, topic, message)`. Subscribers automatically clean up " <>
-                  "when they die.",
-              applies_when: "The pattern is publish/subscribe to topics."
-            ),
-            Fix.new(
-              summary: "Use Registry with `:duplicate` keys",
-              detail:
-                "If you don't need PubSub's cluster support, a Registry with `keys: :duplicate` is lighter " <>
-                  "weight. Subscribers register themselves; the publisher iterates Registry.dispatch. Cleanup " <>
-                  "is automatic.",
-              applies_when: "Single-node fan-out without PubSub overhead."
-            ),
-            Fix.new(
-              summary: "Use `:telemetry` for observability events",
-              detail:
-                "If the events are about reporting state changes (metrics, logging, observability), use " <>
-                  "`:telemetry.execute/3` and let consumers attach handlers. No subscriber list to maintain.",
-              applies_when: "The events are observability-focused, not business commands."
-            )
-          ],
-          references: ["ARCHITECTURE_RULES.md#4.15"],
-          context: %{module: module_name},
-          file: file,
-          line: 1
-        )
+        title: "Hand-rolled pubsub",
+        message: "#{module_name} implements #{fn_list} on top of its own subscriber list",
+        why:
+          "Phoenix.PubSub, Registry (with :duplicate keys), and `:pg` already solve the subscriber-list " <>
+            "problem with concurrent dispatch, automatic cleanup when subscribers die, and (in PubSub's case) " <>
+            "cluster-wide fanout. A custom GenServer-as-pubsub typically loses cleanup on process death, " <>
+            "becomes a single bottleneck for all dispatch, and accumulates dead pids over time.",
+        alternatives: [
+          Fix.new(
+            summary: "Use Phoenix.PubSub for fan-out",
+            detail:
+              "Add `{Phoenix.PubSub, name: MyApp.PubSub}` to your supervision tree. Replace `subscribe/1` " <>
+                "with `Phoenix.PubSub.subscribe(MyApp.PubSub, topic)` and `broadcast/1` with " <>
+                "`Phoenix.PubSub.broadcast(MyApp.PubSub, topic, message)`. Subscribers automatically clean up " <>
+                "when they die.",
+            applies_when: "The pattern is publish/subscribe to topics."
+          ),
+          Fix.new(
+            summary: "Use Registry with `:duplicate` keys",
+            detail:
+              "If you don't need PubSub's cluster support, a Registry with `keys: :duplicate` is lighter " <>
+                "weight. Subscribers register themselves; the publisher iterates Registry.dispatch. Cleanup " <>
+                "is automatic.",
+            applies_when: "Single-node fan-out without PubSub overhead."
+          ),
+          Fix.new(
+            summary: "Use `:telemetry` for observability events",
+            detail:
+              "If the events are about reporting state changes (metrics, logging, observability), use " <>
+                "`:telemetry.execute/3` and let consumers attach handlers. No subscriber list to maintain.",
+            applies_when: "The events are observability-focused, not business commands."
+          )
+        ],
+        references: ["ARCHITECTURE_RULES.md#4.15"],
+        context: %{module: module_name},
+        file: file,
+        line: 1
+      )
     ]
   end
 

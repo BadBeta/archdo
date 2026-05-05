@@ -40,7 +40,8 @@ defmodule Archdo.Rules.Composition.OrderedChainConstraints do
 
   @impl true
   def description,
-    do: "Ordered middleware chain (Plug pipeline) violates ordering, presence, or uniqueness rules"
+    do:
+      "Ordered middleware chain (Plug pipeline) violates ordering, presence, or uniqueness rules"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -83,7 +84,7 @@ defmodule Archdo.Rules.Composition.OrderedChainConstraints do
   # Pipeline body is the value bound to the `:do` keyword. Both bare
   # (`[do: body]`) and wrapped (`[{{:__block__, _, [:do]}, body}]`)
   # forms must be handled.
-  defp do_body_from([do: body]), do: body
+  defp do_body_from(do: body), do: body
 
   defp do_body_from([{{:__block__, _, [:do]}, body} | _]), do: body
 

@@ -479,7 +479,15 @@ defmodule Archdo.Compiled.DiagramSystem do
     {frame ++ List.flatten(Enum.reverse(node_elems)), spec.y + spec.height, positions}
   end
 
-  defp layer_frame(%{x: x, y: y, width: w, height: h, title: title, bg_color: bg, border_color: bc}) do
+  defp layer_frame(%{
+         x: x,
+         y: y,
+         width: w,
+         height: h,
+         title: title,
+         bg_color: bg,
+         border_color: bc
+       }) do
     [
       ~s[<rect x="#{x}" y="#{y}" width="#{w}" height="#{h}" rx="8" fill="#{bg}" stroke="#{bc}" stroke-width="1.5" opacity="0.6"/>],
       ~s[<text x="#{x + 12}" y="#{y + 17}" fill="#{bc}" font-size="11" font-weight="600" font-family="monospace">#{title}</text>]

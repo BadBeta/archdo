@@ -90,5 +90,4 @@ defmodule Archdo.Rules.Boundary.CircularDependencies do
       line: line
     )
   end
-
 end

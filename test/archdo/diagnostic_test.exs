@@ -31,7 +31,8 @@ defmodule Archdo.DiagnosticTest do
 
     test "passes through optional fields (alternatives, references, context, tags)" do
       d =
-        Diagnostic.warning("1.5",
+        Diagnostic.warning(
+          "1.5",
           @required ++
             [
               alternatives: [Archdo.Fix.new(summary: "s", detail: "d", applies_when: "a")],

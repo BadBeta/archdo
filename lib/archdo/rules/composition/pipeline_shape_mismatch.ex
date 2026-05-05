@@ -18,7 +18,8 @@ defmodule Archdo.Rules.Composition.PipelineShapeMismatch do
 
   @impl true
   def description,
-    do: "Producer's tuple output is a permutation of a consumer's input order (no pipeline possible)"
+    do:
+      "Producer's tuple output is a permutation of a consumer's input order (no pipeline possible)"
 
   @doc """
   Project-level analysis. Walks every file's specs, indexes producer
@@ -55,7 +56,10 @@ defmodule Archdo.Rules.Composition.PipelineShapeMismatch do
           list
 
         elements ->
-          [%{file: file, module: module, name: name, arity: arity, types: elements, meta: meta} | list]
+          [
+            %{file: file, module: module, name: name, arity: arity, types: elements, meta: meta}
+            | list
+          ]
       end
     end)
   end
@@ -64,7 +68,10 @@ defmodule Archdo.Rules.Composition.PipelineShapeMismatch do
     Enum.reduce(specs, acc, fn {name, arity, args, _return, meta}, list ->
       case arity do
         a when a >= 2 ->
-          [%{file: file, module: module, name: name, arity: arity, types: args, meta: meta} | list]
+          [
+            %{file: file, module: module, name: name, arity: arity, types: args, meta: meta}
+            | list
+          ]
 
         _ ->
           list

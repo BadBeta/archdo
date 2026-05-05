@@ -75,10 +75,8 @@ defmodule Archdo.Rules.OTP.StalePidReference do
     do: Enum.any?(pairs, &pid_pair?/1)
 
   # Map.put(state, :pid, variable)
-  defp pid_storing_node?(
-         {{:., _, [{:__aliases__, _, [:Map]}, :put]}, _, [_, key, _]}
-       ),
-       do: pid_key_value?(key)
+  defp pid_storing_node?({{:., _, [{:__aliases__, _, [:Map]}, :put]}, _, [_, key, _]}),
+    do: pid_key_value?(key)
 
   defp pid_storing_node?(_), do: false
 

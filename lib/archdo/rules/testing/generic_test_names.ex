@@ -87,7 +87,8 @@ defmodule Archdo.Rules.Testing.GenericTestNames do
         ),
         Fix.new(
           summary: "Delete the test if it's a placeholder",
-          detail: ~s(If the test is named `"todo"` or `"foo"` because it was scaffolded and never finished, delete it.),
+          detail:
+            ~s(If the test is named `"todo"` or `"foo"` because it was scaffolded and never finished, delete it.),
           applies_when: "The test is unfinished scaffolding."
         )
       ],

@@ -133,7 +133,8 @@ defmodule Archdo.Rules.CE.DeadRequirement do
         ),
         Fix.new(
           summary: "Mark the requirement as deferred / cancelled / out_of_scope",
-          detail: ~s(In #{source_path}, change the entry to object form with a status: `{"id": "#{id}", "status": "deferred"}`. CE-33's actionable filter excludes statuses cancelled / deferred / out_of_scope / not_in_scope.),
+          detail:
+            ~s(In #{source_path}, change the entry to object form with a status: `{"id": "#{id}", "status": "deferred"}`. CE-33's actionable filter excludes statuses cancelled / deferred / out_of_scope / not_in_scope.),
           applies_when: "The requirement is intentionally not implemented in this codebase."
         )
       ],

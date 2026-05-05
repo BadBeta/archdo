@@ -101,5 +101,4 @@ defmodule Archdo.Rules.Testing.NoAssertion do
   defp non_trivial_pattern?({:%{}, _, _}), do: true
   defp non_trivial_pattern?([_ | _]), do: true
   defp non_trivial_pattern?(_), do: false
-
 end

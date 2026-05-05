@@ -52,16 +52,17 @@ defmodule Archdo.PiiSchemaTest do
 
   describe "schema_info/1" do
     test "returns module/table/pii_fields when the schema has PII" do
-      ast = parse(~S"""
-      defmodule MyApp.User do
-        use Ecto.Schema
-        schema "users" do
-          field :name, :string
-          field :email, :string
-          field :password_hash, :string
+      ast =
+        parse(~S"""
+        defmodule MyApp.User do
+          use Ecto.Schema
+          schema "users" do
+            field :name, :string
+            field :email, :string
+            field :password_hash, :string
+          end
         end
-      end
-      """)
+        """)
 
       info = PiiSchema.schema_info(ast)
       assert info.module == "MyApp.User"
@@ -72,25 +73,27 @@ defmodule Archdo.PiiSchemaTest do
     end
 
     test "returns nil when the schema has no PII fields" do
-      ast = parse(~S"""
-      defmodule MyApp.Post do
-        use Ecto.Schema
-        schema "posts" do
-          field :title, :string
-          field :body, :string
+      ast =
+        parse(~S"""
+        defmodule MyApp.Post do
+          use Ecto.Schema
+          schema "posts" do
+            field :title, :string
+            field :body, :string
+          end
         end
-      end
-      """)
+        """)
 
       assert PiiSchema.schema_info(ast) == nil
     end
 
     test "returns nil for non-schema modules" do
-      ast = parse(~S"""
-      defmodule MyApp.Plain do
-        def f, do: 1
-      end
-      """)
+      ast =
+        parse(~S"""
+        defmodule MyApp.Plain do
+          def f, do: 1
+        end
+        """)
 
       assert PiiSchema.schema_info(ast) == nil
     end

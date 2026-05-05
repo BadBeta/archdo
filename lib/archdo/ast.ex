@@ -649,7 +649,9 @@ defmodule Archdo.AST do
   end
 
   @doc "See `Archdo.AST.Module.under_namespace?/2`."
-  defdelegate module_under_namespace?(name, namespace), to: Archdo.AST.Module, as: :under_namespace?
+  defdelegate module_under_namespace?(name, namespace),
+    to: Archdo.AST.Module,
+    as: :under_namespace?
 
   @doc """
   Resolve a module-name string to its existing atom. Returns `nil` when no

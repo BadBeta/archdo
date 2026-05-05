@@ -50,36 +50,40 @@ defmodule Archdo.Rules.Helpers.LoopDetectionTest do
     end
 
     test "finds matches inside an Enum.map callback" do
-      ast = parse(~S"""
-      Enum.map(items, fn x -> IO.inspect(x) end)
-      """)
+      ast =
+        parse(~S"""
+        Enum.map(items, fn x -> IO.inspect(x) end)
+        """)
 
       hits = LoopDetection.find_in_loops(ast, inspect_predicate())
       assert hits != []
     end
 
     test "finds matches inside a Stream.map callback" do
-      ast = parse(~S"""
-      Stream.map(items, fn x -> IO.inspect(x) end)
-      """)
+      ast =
+        parse(~S"""
+        Stream.map(items, fn x -> IO.inspect(x) end)
+        """)
 
       assert LoopDetection.find_in_loops(ast, inspect_predicate()) != []
     end
 
     test "returns [] when the loop body has no matches" do
-      ast = parse(~S"""
-      Enum.map(items, fn x -> x + 1 end)
-      """)
+      ast =
+        parse(~S"""
+        Enum.map(items, fn x -> x + 1 end)
+        """)
 
       assert LoopDetection.find_in_loops(ast, inspect_predicate()) == []
     end
 
     test "ignores matches outside any loop construct" do
-      ast = parse(~S"""
-      defmodule M do
-        def f(x), do: IO.inspect(x)
-      end
-      """)
+      ast =
+        parse(~S"""
+        defmodule M do
+          def f(x), do: IO.inspect(x)
+        end
+        """)
 
       # IO.inspect appears, but not inside a loop callback — should miss.
       assert LoopDetection.find_in_loops(ast, inspect_predicate()) == []

@@ -69,5 +69,4 @@ defmodule Archdo.Rules.Testing.LongTest do
     end)
     |> Enum.reject(&is_nil/1)
   end
-
 end
