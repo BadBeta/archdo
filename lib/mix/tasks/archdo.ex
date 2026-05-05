@@ -215,8 +215,8 @@ defmodule Mix.Tasks.Archdo do
     :ok
   end
 
-  defp invoke(:metrics, _opts, paths) do
-    Archdo.print_metrics_matrix(paths)
+  defp invoke(:metrics, opts, paths) do
+    Archdo.print_metrics_matrix(paths, opts)
     :ok
   end
 

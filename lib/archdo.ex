@@ -70,6 +70,7 @@ defmodule Archdo do
     Severity
   }
 
+  alias Archdo.Compiled.Graph.Centrality
   alias Archdo.Stats.{FunctionMetrics, Halstead, Loc}
 
   # §§ elixir-planning: §6 — observability deferred to the consumer.
@@ -735,8 +736,8 @@ defmodule Archdo do
     "→ REFACTOR IN PLACE — pure subset depends on leaks; failures: #{sorted}"
   end
 
-  @spec print_metrics_matrix([String.t()]) :: non_neg_integer()
-  def print_metrics_matrix(paths \\ ["lib"]) do
+  @spec print_metrics_matrix([String.t()], keyword()) :: non_neg_integer()
+  def print_metrics_matrix(paths \\ ["lib"], opts \\ []) do
     source_files = collect_files(paths)
     file_asts = AST.parse_files(source_files)
 
@@ -753,8 +754,49 @@ defmodule Archdo do
     print_halstead_summary(file_asts)
     print_loc_summary(source_files)
     print_function_metrics_summary(file_asts)
+    maybe_print_pagerank_summary(opts, paths)
 
     0
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatches on the
+  # `--compiled` flag. PageRank requires the post-macro-expansion call
+  # graph from compiled BEAMs; without that flag, the section is absent.
+  defp maybe_print_pagerank_summary(opts, paths) do
+    case Keyword.get(opts, :compiled, false) do
+      true -> print_pagerank_summary(paths)
+      false -> :ok
+    end
+  end
+
+  defp print_pagerank_summary(paths) do
+    case build_compiled_graph(paths) do
+      {:ok, compiled_graph} -> do_print_pagerank(Centrality.page_rank(compiled_graph))
+      {:error, reason} -> IO.puts(:standard_error, "[archdo] pagerank: #{reason}")
+    end
+  end
+
+  defp do_print_pagerank(ranks) when map_size(ranks) == 0, do: :ok
+
+  defp do_print_pagerank(ranks) do
+    IO.puts("\nArchdo — PageRank Centrality (compiled call graph)\n")
+
+    IO.puts("Importance score — higher rank = more incoming references from")
+    IO.puts("other functions (transitive). Top 30 shown.\n")
+
+    IO.puts(:io_lib.format("~-75ts ~12ts~n", ["Module.function/arity", "PageRank"]))
+    IO.puts(String.duplicate("-", 92))
+
+    ranks
+    |> Enum.sort_by(fn {_node, r} -> -r end)
+    |> Enum.take(30)
+    |> Enum.each(fn {{mod, fun, arity}, r} ->
+      label = "#{inspect(mod)}.#{fun}/#{arity}"
+
+      IO.puts(:io_lib.format("~-75ts ~12.6f~n", [truncate(label, 75), r]))
+    end)
+
+    IO.puts(:io_lib.format("\nTotal nodes ranked: ~w~n", [map_size(ranks)]))
   end
 
   defp print_function_metrics_summary([]), do: :ok
