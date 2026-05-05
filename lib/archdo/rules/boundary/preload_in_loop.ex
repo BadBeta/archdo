@@ -15,9 +15,10 @@ defmodule Archdo.Rules.Boundary.PreloadInLoop do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case AST.test_file?(file) do
-      true -> []
-      false -> find_repo_in_loops(file, ast)
+    cond do
+      AST.test_file?(file) -> []
+      AST.has_marker?(ast, :archdo_intentional_n_plus_one) -> []
+      true -> find_repo_in_loops(file, ast)
     end
   end
 

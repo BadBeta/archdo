@@ -83,5 +83,21 @@ defmodule Archdo.Rules.Boundary.PreloadInLoopTest do
 
       assert_clean(PreloadInLoop, code, file: "test/my_app/orders_test.exs")
     end
+
+    test "does NOT fire when @archdo_intentional_n_plus_one marker is set on the module" do
+      code = ~S"""
+      defmodule MyApp.RareJob do
+        @archdo_intentional_n_plus_one "per-row checks against an external rate-limited API"
+
+        def run(ids) do
+          Enum.each(ids, fn id ->
+            MyApp.Repo.get(MyApp.Item, id)
+          end)
+        end
+      end
+      """
+
+      assert_clean(PreloadInLoop, code, file: "lib/my_app/rare_job.ex")
+    end
   end
 end
