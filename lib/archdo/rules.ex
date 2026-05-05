@@ -130,6 +130,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.RegexInLoop,
     Archdo.Rules.Module.InefficientListOperation,
     Archdo.Rules.Module.InefficientFilter,
+    Archdo.Rules.Module.TelemetryInRecursiveFunction,
     Archdo.Rules.Module.CollectionPerf,
     Archdo.Rules.Module.EagerEvaluation,
     Archdo.Rules.Module.SensitiveDataExposure,

@@ -75,22 +75,11 @@ defmodule Archdo.Rules.OTP.MissingTelemetryObanWorker do
   end
 
   defp maybe_collect_perform(meta, kw, acc) do
-    case do_body_from_kw(kw) do
+    case Unwrap.kw_get(kw, :do) do
       {:ok, body} -> [{meta, body} | acc]
       :error -> acc
     end
   end
-
-  defp do_body_from_kw([]), do: :error
-
-  defp do_body_from_kw([{key, val} | rest]) do
-    case Unwrap.try_atom(key) do
-      :do -> {:ok, val}
-      _ -> do_body_from_kw(rest)
-    end
-  end
-
-  defp do_body_from_kw([_ | rest]), do: do_body_from_kw(rest)
 
   defp build_diagnostic(file, line) do
     Diagnostic.info("5.56",

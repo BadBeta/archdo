@@ -47,4 +47,25 @@ defmodule Archdo.AST.Unwrap do
   @spec literal(Macro.t()) :: Macro.t()
   def literal({:__block__, _, [v]}), do: v
   def literal(other), do: other
+
+  @doc """
+  Look up a key in a 2-tuple-pair keyword list, tolerating both bare
+  atom keys (`Code.string_to_quoted/1`) and literal-encoder-wrapped
+  keys (`{:__block__, _, [:atom]}` from `Archdo.AST.parse_files/1`).
+  Returns `{:ok, val}` or `:error`.
+
+  Common use: extract the `:do` body from a `def`/`defp`/`case`/`with`
+  AST node uniformly across both AST sources.
+  """
+  @spec kw_get([{Macro.t(), Macro.t()}], atom()) :: {:ok, Macro.t()} | :error
+  def kw_get([], _target), do: :error
+
+  def kw_get([{key, val} | rest], target) do
+    case try_atom(key) do
+      ^target -> {:ok, val}
+      _ -> kw_get(rest, target)
+    end
+  end
+
+  def kw_get([_ | rest], target), do: kw_get(rest, target)
 end

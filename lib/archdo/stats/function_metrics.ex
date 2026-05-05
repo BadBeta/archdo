@@ -66,22 +66,8 @@ defmodule Archdo.Stats.FunctionMetrics do
     Enum.reverse(fns)
   end
 
-  # §§ elixir-implementing: §2.1 — production ASTs from
-  # `AST.parse_files` use `literal_encoder` which wraps keyword keys
-  # in `{:__block__, _, [atom]}`. This helper unwraps either shape so
-  # walkers work uniformly on both AST sources.
-  defp kw_get([], _), do: :error
-
-  defp kw_get([{key, val} | rest], target) do
-    case Unwrap.try_atom(key) do
-      ^target -> {:ok, val}
-      _ -> kw_get(rest, target)
-    end
-  end
-
-  defp kw_get([_ | rest], target), do: kw_get(rest, target)
-
-  defp kw_has?(kw, key), do: match?({:ok, _}, kw_get(kw, key))
+  defp kw_get(kw, key), do: Unwrap.kw_get(kw, key)
+  defp kw_has?(kw, key), do: match?({:ok, _}, Unwrap.kw_get(kw, key))
 
   defp analyze_function({head, body}) do
     {name, args} = head_info(head)
