@@ -39,7 +39,7 @@ defmodule Archdo.Compiled.Graph.Centrality do
   """
   @spec page_rank(Graph.t(), keyword()) :: rank_map()
   def page_rank(graph, opts \\ []) do
-    page_rank_from(collect_nodes(graph), graph_edges(graph), opts)
+    page_rank_from(Graph.all_nodes(graph), graph_edges(graph), opts)
   end
 
   @doc """
@@ -69,7 +69,7 @@ defmodule Archdo.Compiled.Graph.Centrality do
   @spec in_degree(Graph.t()) :: %{node_id() => non_neg_integer()}
   def in_degree(graph) do
     edges = graph_edges(graph)
-    in_degree_from(collect_nodes(graph), edges)
+    in_degree_from(Graph.all_nodes(graph), edges)
   end
 
   @doc """
@@ -79,7 +79,7 @@ defmodule Archdo.Compiled.Graph.Centrality do
   @spec out_degree(Graph.t()) :: %{node_id() => non_neg_integer()}
   def out_degree(graph) do
     edges = graph_edges(graph)
-    out_degree_from(collect_nodes(graph), edges)
+    out_degree_from(Graph.all_nodes(graph), edges)
   end
 
   @doc """
@@ -88,7 +88,7 @@ defmodule Archdo.Compiled.Graph.Centrality do
   @spec total_degree(Graph.t()) :: %{node_id() => non_neg_integer()}
   def total_degree(graph) do
     edges = graph_edges(graph)
-    total_degree_from(collect_nodes(graph), edges)
+    total_degree_from(Graph.all_nodes(graph), edges)
   end
 
   @doc "In-degree from explicit nodes + edges. Test-friendly companion."
@@ -136,7 +136,7 @@ defmodule Archdo.Compiled.Graph.Centrality do
   """
   @spec betweenness(Graph.t(), keyword()) :: %{node_id() => float()}
   def betweenness(graph, opts \\ []) do
-    betweenness_from(collect_nodes(graph), graph_edges(graph), opts)
+    betweenness_from(Graph.all_nodes(graph), graph_edges(graph), opts)
   end
 
   @doc """
@@ -281,7 +281,7 @@ defmodule Archdo.Compiled.Graph.Centrality do
   """
   @spec closeness(Graph.t()) :: %{node_id() => float()}
   def closeness(graph) do
-    closeness_from(collect_nodes(graph), graph_edges(graph))
+    closeness_from(Graph.all_nodes(graph), graph_edges(graph))
   end
 
   @doc "Closeness from explicit nodes + edges. Test-friendly companion."
@@ -398,22 +398,4 @@ defmodule Archdo.Compiled.Graph.Centrality do
     end
   end
 
-  # Union of every node referenced by an edge plus every module export.
-  # Including exports ensures isolated functions (no calls in or out)
-  # appear in the rank vector.
-  defp collect_nodes(graph) do
-    from_calls =
-      graph
-      |> Graph.calls()
-      |> Enum.flat_map(fn c -> [c.caller, c.callee] end)
-
-    from_exports =
-      graph
-      |> Graph.modules()
-      |> Enum.flat_map(fn {mod, info} ->
-        Enum.map(info.exports, fn {f, a} -> {mod, f, a} end)
-      end)
-
-    MapSet.new(from_calls ++ from_exports)
-  end
 end

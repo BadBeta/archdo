@@ -89,6 +89,29 @@ defmodule Archdo.Compiled.Graph do
   def protocol_impls(%__MODULE__{protocol_impls: impls}), do: impls
 
   @doc """
+  Union of every MFA tuple appearing as a caller or callee of any
+  edge, plus every module export. Returned as a `MapSet`. Used by
+  graph-algorithm callers (centrality, community detection) to
+  enumerate all nodes including isolated ones.
+  """
+  @spec all_nodes(t()) :: MapSet.t(mfa_tuple())
+  def all_nodes(%__MODULE__{} = graph) do
+    from_calls =
+      graph
+      |> calls()
+      |> Enum.flat_map(fn c -> [c.caller, c.callee] end)
+
+    from_exports =
+      graph
+      |> modules()
+      |> Enum.flat_map(fn {mod, info} ->
+        Enum.map(info.exports, fn {f, a} -> {mod, f, a} end)
+      end)
+
+    MapSet.new(from_calls ++ from_exports)
+  end
+
+  @doc """
   Stamp the graph with project-level metadata after the build.
   Lives here so callers don't need to destructure the opaque struct.
   """
