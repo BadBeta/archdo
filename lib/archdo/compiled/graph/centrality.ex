@@ -94,18 +94,23 @@ defmodule Archdo.Compiled.Graph.Centrality do
   @doc "In-degree from explicit nodes + edges. Test-friendly companion."
   @spec in_degree_from(Enumerable.t(), [{node_id(), node_id()}]) ::
           %{node_id() => non_neg_integer()}
-  def in_degree_from(nodes, edges) do
-    initial = Map.new(nodes, fn v -> {v, 0} end)
-    Enum.reduce(edges, initial, fn {_src, dst}, acc -> Map.update(acc, dst, 1, &(&1 + 1)) end)
-  end
+  def in_degree_from(nodes, edges), do: degree_count(nodes, edges, :dst)
 
   @doc "Out-degree from explicit nodes + edges. Test-friendly companion."
   @spec out_degree_from(Enumerable.t(), [{node_id(), node_id()}]) ::
           %{node_id() => non_neg_integer()}
-  def out_degree_from(nodes, edges) do
+  def out_degree_from(nodes, edges), do: degree_count(nodes, edges, :src)
+
+  defp degree_count(nodes, edges, end_kind) do
     initial = Map.new(nodes, fn v -> {v, 0} end)
-    Enum.reduce(edges, initial, fn {src, _dst}, acc -> Map.update(acc, src, 1, &(&1 + 1)) end)
+
+    Enum.reduce(edges, initial, fn edge, acc ->
+      Map.update(acc, edge_end(edge, end_kind), 1, &(&1 + 1))
+    end)
   end
+
+  defp edge_end({src, _dst}, :src), do: src
+  defp edge_end({_src, dst}, :dst), do: dst
 
   @doc "Total degree from explicit nodes + edges (in + out)."
   @spec total_degree_from(Enumerable.t(), [{node_id(), node_id()}]) ::
@@ -117,6 +122,154 @@ defmodule Archdo.Compiled.Graph.Centrality do
   end
 
   defp graph_edges(graph), do: Enum.map(Graph.calls(graph), fn c -> {c.caller, c.callee} end)
+
+  # --- Betweenness (Brandes 2001) ---
+
+  @doc """
+  Betweenness centrality on the call graph. Identifies bridge /
+  bottleneck functions — those that lie on many shortest paths between
+  other functions. Brandes' single-source-shortest-path algorithm.
+
+  Options:
+    * `:normalized` — divide raw counts by `(n-1)*(n-2)` (directed
+      normalization). Default `true`.
+  """
+  @spec betweenness(Graph.t(), keyword()) :: %{node_id() => float()}
+  def betweenness(graph, opts \\ []) do
+    betweenness_from(collect_nodes(graph), graph_edges(graph), opts)
+  end
+
+  @doc """
+  Betweenness from explicit nodes + edges. Test-friendly companion.
+  """
+  @spec betweenness_from(Enumerable.t(), [{node_id(), node_id()}], keyword()) ::
+          %{node_id() => float()}
+  def betweenness_from(nodes, edges, opts \\ []) do
+    node_set = MapSet.new(nodes)
+    n = MapSet.size(node_set)
+
+    case n < 3 do
+      true -> Map.new(node_set, fn v -> {v, 0.0} end)
+      false -> compute_betweenness(node_set, edges, n, opts)
+    end
+  end
+
+  defp compute_betweenness(node_set, edges, n, opts) do
+    successors = Enum.group_by(edges, fn {src, _} -> src end, fn {_, dst} -> dst end)
+    initial = Map.new(node_set, fn v -> {v, 0.0} end)
+
+    raw =
+      Enum.reduce(node_set, initial, fn s, bc ->
+        accumulate_from_source(s, node_set, successors, bc)
+      end)
+
+    case Keyword.get(opts, :normalized, true) do
+      true -> normalize_betweenness(raw, n)
+      false -> raw
+    end
+  end
+
+  defp accumulate_from_source(source, nodes, successors, bc) do
+    %{stack: stack, predecessors: preds, sigma: sigma} =
+      brandes_bfs(source, nodes, successors)
+
+    delta = Map.new(nodes, fn v -> {v, 0.0} end)
+
+    {_final_delta, final_bc} =
+      Enum.reduce(stack, {delta, bc}, fn w, {d, bc_acc} ->
+        accumulate_dependency(w, source, preds, sigma, d, bc_acc)
+      end)
+
+    final_bc
+  end
+
+  defp accumulate_dependency(w, source, preds, sigma, d, bc) do
+    d_w = Map.get(d, w)
+    sigma_w = Map.get(sigma, w)
+
+    d_updated =
+      Enum.reduce(Map.get(preds, w, []), d, fn v, d_acc ->
+        contribution = Map.get(sigma, v) / sigma_w * (1.0 + d_w)
+        Map.update!(d_acc, v, &(&1 + contribution))
+      end)
+
+    bc_updated =
+      case w == source do
+        true -> bc
+        false -> Map.update!(bc, w, &(&1 + d_w))
+      end
+
+    {d_updated, bc_updated}
+  end
+
+  # BFS from `source`. Returns the discovery stack (most-recent-first
+  # for reverse-iteration during dependency accumulation), the
+  # predecessor sets on shortest paths, and the path counts σ.
+  defp brandes_bfs(source, nodes, successors) do
+    distance = Map.put(Map.new(nodes, fn v -> {v, -1} end), source, 0)
+    sigma = Map.put(Map.new(nodes, fn v -> {v, 0} end), source, 1)
+
+    state = %{
+      queue: :queue.in(source, :queue.new()),
+      distance: distance,
+      sigma: sigma,
+      predecessors: %{},
+      stack: []
+    }
+
+    bfs_loop(state, successors)
+  end
+
+  defp bfs_loop(state, successors) do
+    case :queue.out(state.queue) do
+      {{:value, v}, q} ->
+        state = %{state | queue: q, stack: [v | state.stack]}
+        next = Enum.reduce(Map.get(successors, v, []), state, &visit_neighbor(v, &1, &2))
+        bfs_loop(next, successors)
+
+      {:empty, _} ->
+        state
+    end
+  end
+
+  defp visit_neighbor(v, w, state) do
+    state
+    |> maybe_enqueue_unseen(v, w)
+    |> maybe_count_path(v, w)
+  end
+
+  defp maybe_enqueue_unseen(state, v, w) do
+    case Map.get(state.distance, w) do
+      -1 ->
+        %{
+          state
+          | distance: Map.put(state.distance, w, Map.get(state.distance, v) + 1),
+            queue: :queue.in(w, state.queue)
+        }
+
+      _ ->
+        state
+    end
+  end
+
+  defp maybe_count_path(state, v, w) do
+    case Map.get(state.distance, w) == Map.get(state.distance, v) + 1 do
+      true ->
+        %{
+          state
+          | sigma: Map.update!(state.sigma, w, &(&1 + Map.get(state.sigma, v))),
+            predecessors: Map.update(state.predecessors, w, [v], &[v | &1])
+        }
+
+      false ->
+        state
+    end
+  end
+
+  defp normalize_betweenness(raw, n) do
+    factor = (n - 1) * (n - 2)
+    Map.new(raw, fn {v, val} -> {v, val / factor} end)
+  end
 
   # --- Algorithm ---
 

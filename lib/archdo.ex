@@ -774,10 +774,30 @@ defmodule Archdo do
       {:ok, compiled_graph} ->
         do_print_pagerank(Centrality.page_rank(compiled_graph))
         do_print_degree(compiled_graph)
+        do_print_betweenness(compiled_graph)
 
       {:error, reason} ->
         IO.puts(:standard_error, "[archdo] pagerank: #{reason}")
     end
+  end
+
+  defp do_print_betweenness(graph) do
+    bc = Centrality.betweenness(graph)
+
+    IO.puts("\nArchdo — Betweenness Centrality (compiled call graph)\n")
+    IO.puts("Bridge / bottleneck functions — those lying on many shortest")
+    IO.puts("paths between others. Top 10 shown.\n")
+
+    IO.puts(:io_lib.format("~-75ts ~12ts~n", ["Module.function/arity", "Betweenness"]))
+    IO.puts(String.duplicate("-", 92))
+
+    bc
+    |> Enum.sort_by(fn {_, v} -> -v end)
+    |> Enum.take(10)
+    |> Enum.each(fn {{mod, fun, arity}, v} ->
+      label = "#{inspect(mod)}.#{fun}/#{arity}"
+      IO.puts(:io_lib.format("~-75ts ~12.6f~n", [truncate(label, 75), v]))
+    end)
   end
 
   defp do_print_degree(graph) do

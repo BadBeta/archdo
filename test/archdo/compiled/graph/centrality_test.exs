@@ -103,4 +103,55 @@ defmodule Archdo.Compiled.Graph.CentralityTest do
       assert total[:e] == 1
     end
   end
+
+  describe "betweenness_from/3 — Brandes' algorithm" do
+    test "5-node directed star: center has betweenness 1.0 (normalized), leaves have 0" do
+      # Star: center ↔ each leaf (both directions).
+      # All 12 leaf→leaf shortest paths pass through center.
+      # Normalized BC(center) = 12 / ((5-1)*(5-2)) = 12/12 = 1.0.
+      nodes = [:c, :l1, :l2, :l3, :l4]
+
+      edges =
+        for leaf <- [:l1, :l2, :l3, :l4],
+            edge <- [{:c, leaf}, {leaf, :c}],
+            do: edge
+
+      bc = Centrality.betweenness_from(nodes, edges, [])
+
+      assert_in_delta bc[:c], 1.0, 1.0e-6
+      assert_in_delta bc[:l1], 0.0, 1.0e-6
+      assert_in_delta bc[:l2], 0.0, 1.0e-6
+      assert_in_delta bc[:l3], 0.0, 1.0e-6
+      assert_in_delta bc[:l4], 0.0, 1.0e-6
+    end
+
+    test "directed chain A→B→C: B is on the only intermediate path, A and C are endpoints" do
+      # Only one s→t path traverses an intermediate: A→C through B.
+      # Raw BC(B) = 1; normalized = 1 / ((3-1)*(3-2)) = 1/2 = 0.5.
+      bc = Centrality.betweenness_from([:a, :b, :c], [{:a, :b}, {:b, :c}], [])
+
+      assert_in_delta bc[:a], 0.0, 1.0e-6
+      assert_in_delta bc[:b], 0.5, 1.0e-6
+      assert_in_delta bc[:c], 0.0, 1.0e-6
+    end
+
+    test "4-node mesh A→{B,C}→D: B and C share the A→D bridge equally; A and D are endpoints" do
+      # Edges: A→B, A→C, B→D, C→D.
+      # Pair (A,D) has TWO shortest paths (A→B→D, A→C→D); B and C
+      # each get half the credit.
+      # Raw BC(B) = 0.5, BC(C) = 0.5; A and D are 0.
+      # Normalized: divide by (4-1)*(4-2) = 6 → 0.5/6 ≈ 0.0833.
+      bc =
+        Centrality.betweenness_from(
+          [:a, :b, :c, :d],
+          [{:a, :b}, {:a, :c}, {:b, :d}, {:c, :d}],
+          []
+        )
+
+      assert_in_delta bc[:a], 0.0, 1.0e-6
+      assert_in_delta bc[:b], 0.5 / 6, 1.0e-6
+      assert_in_delta bc[:c], 0.5 / 6, 1.0e-6
+      assert_in_delta bc[:d], 0.0, 1.0e-6
+    end
+  end
 end
