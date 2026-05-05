@@ -30,20 +30,7 @@ defmodule Archdo.Rules.OTP.MissingHandleAsync do
   end
 
   defp live_view_module?(file, ast) do
-    AST.live_view_file?(file) or live_view_use_form?(ast)
-  end
-
-  defp live_view_use_form?(ast) do
-    {_, found?} =
-      Macro.prewalk(ast, false, fn
-        {:use, _, [{:__aliases__, _, parts} | _]} = node, _acc ->
-          {node, parts == [:Phoenix, :LiveView] or List.last(parts) == :LiveView}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    found?
+    AST.live_view_file?(file) or AST.uses_live_view?(ast)
   end
 
   defp body_starts_async?(ast) do

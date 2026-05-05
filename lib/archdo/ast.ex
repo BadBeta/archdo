@@ -40,6 +40,25 @@ defmodule Archdo.AST do
   end
 
   @doc """
+  Check if a module AST declares `use Phoenix.LiveView` (or any
+  `use _.LiveView` form). Used by rules that target LV-specific
+  callbacks (`mount/3`, `handle_async/3`, etc.).
+  """
+  @spec uses_live_view?(Macro.t()) :: boolean()
+  def uses_live_view?(ast) do
+    {_, found?} =
+      Macro.prewalk(ast, false, fn
+        {:use, _, [{:__aliases__, _, parts} | _]} = node, _acc ->
+          {node, parts == [:Phoenix, :LiveView] or List.last(parts) == :LiveView}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found?
+  end
+
+  @doc """
   Check if a file path belongs to a Phoenix controller by naming convention.
   """
   @spec controller_file?(String.t()) :: boolean()

@@ -69,6 +69,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.OTP.CallbackSprawl,
     Archdo.Rules.OTP.MissingTelemetryObanWorker,
     Archdo.Rules.OTP.MissingHandleAsync,
+    Archdo.Rules.OTP.MissingTelemetryLiveViewMount,
     Archdo.Rules.OTP.AtomInHotPath,
     Archdo.Rules.OTP.EtsWithoutCleanup,
     Archdo.Rules.OTP.DetsOrderedSet,
@@ -146,6 +147,8 @@ defmodule Archdo.Rules do
     Archdo.Rules.Boundary.UmbrellaDepConsistency,
     Archdo.Rules.Boundary.UnusedAlias,
     Archdo.Rules.Boundary.UntypedBoundary,
+    Archdo.Rules.Boundary.MissingTelemetryAuthPlug,
+    Archdo.Rules.Boundary.MissingTelemetryHttpAdapter,
     # NIF rules
     Archdo.Rules.NIF.NifPanic,
     Archdo.Rules.NIF.NifBehindBehaviour,
