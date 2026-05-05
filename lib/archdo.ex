@@ -771,9 +771,36 @@ defmodule Archdo do
 
   defp print_pagerank_summary(paths) do
     case build_compiled_graph(paths) do
-      {:ok, compiled_graph} -> do_print_pagerank(Centrality.page_rank(compiled_graph))
-      {:error, reason} -> IO.puts(:standard_error, "[archdo] pagerank: #{reason}")
+      {:ok, compiled_graph} ->
+        do_print_pagerank(Centrality.page_rank(compiled_graph))
+        do_print_degree(compiled_graph)
+
+      {:error, reason} ->
+        IO.puts(:standard_error, "[archdo] pagerank: #{reason}")
     end
+  end
+
+  defp do_print_degree(graph) do
+    in_deg = Centrality.in_degree(graph)
+    out_deg = Centrality.out_degree(graph)
+
+    IO.puts("\nArchdo — Degree Centrality (compiled call graph)\n")
+    print_degree_section("Top 10 by in-degree (most-called)", in_deg)
+    print_degree_section("Top 10 by out-degree (highest fan-out)", out_deg)
+  end
+
+  defp print_degree_section(title, degree_map) do
+    IO.puts("\n#{title}\n")
+    IO.puts(:io_lib.format("~-75ts ~8ts~n", ["Module.function/arity", "degree"]))
+    IO.puts(String.duplicate("-", 88))
+
+    degree_map
+    |> Enum.sort_by(fn {_, d} -> -d end)
+    |> Enum.take(10)
+    |> Enum.each(fn {{mod, fun, arity}, d} ->
+      label = "#{inspect(mod)}.#{fun}/#{arity}"
+      IO.puts(:io_lib.format("~-75ts ~8w~n", [truncate(label, 75), d]))
+    end)
   end
 
   defp do_print_pagerank(ranks) when map_size(ranks) == 0, do: :ok

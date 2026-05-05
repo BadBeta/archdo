@@ -60,4 +60,47 @@ defmodule Archdo.Compiled.Graph.CentralityTest do
       end)
     end
   end
+
+  describe "in_degree_from/2 / out_degree_from/2 / total_degree_from/2" do
+    # Hand-built 5-node graph:
+    #   a → b, a → c, b → c, c → d, c → d (parallel edge), d → e
+    # Counts (each occurrence of an edge counts once):
+    #   a: in=0, out=2, total=2
+    #   b: in=1, out=1, total=2
+    #   c: in=2, out=2, total=4
+    #   d: in=2, out=1, total=3
+    #   e: in=1, out=0, total=1
+    @nodes [:a, :b, :c, :d, :e]
+    @edges [{:a, :b}, {:a, :c}, {:b, :c}, {:c, :d}, {:c, :d}, {:d, :e}]
+
+    test "in_degree counts incoming edges per node, including parallel edges" do
+      in_deg = Centrality.in_degree_from(@nodes, @edges)
+
+      assert in_deg[:a] == 0
+      assert in_deg[:b] == 1
+      assert in_deg[:c] == 2
+      assert in_deg[:d] == 2
+      assert in_deg[:e] == 1
+    end
+
+    test "out_degree counts outgoing edges per node, including parallel edges" do
+      out_deg = Centrality.out_degree_from(@nodes, @edges)
+
+      assert out_deg[:a] == 2
+      assert out_deg[:b] == 1
+      assert out_deg[:c] == 2
+      assert out_deg[:d] == 1
+      assert out_deg[:e] == 0
+    end
+
+    test "total_degree equals in_degree + out_degree per node" do
+      total = Centrality.total_degree_from(@nodes, @edges)
+
+      assert total[:a] == 2
+      assert total[:b] == 2
+      assert total[:c] == 4
+      assert total[:d] == 3
+      assert total[:e] == 1
+    end
+  end
 end

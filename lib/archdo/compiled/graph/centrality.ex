@@ -39,9 +39,7 @@ defmodule Archdo.Compiled.Graph.Centrality do
   """
   @spec page_rank(Graph.t(), keyword()) :: rank_map()
   def page_rank(graph, opts \\ []) do
-    edges = Enum.map(Graph.calls(graph), fn c -> {c.caller, c.callee} end)
-    nodes = collect_nodes(graph)
-    page_rank_from(nodes, edges, opts)
+    page_rank_from(collect_nodes(graph), graph_edges(graph), opts)
   end
 
   @doc """
@@ -63,6 +61,62 @@ defmodule Archdo.Compiled.Graph.Centrality do
       _ -> run(node_set, edges, n, opts)
     end
   end
+
+  @doc """
+  In-degree per node — count of incoming edges (including parallel
+  edges). Reads edges from the graph's call list.
+  """
+  @spec in_degree(Graph.t()) :: %{node_id() => non_neg_integer()}
+  def in_degree(graph) do
+    edges = graph_edges(graph)
+    in_degree_from(collect_nodes(graph), edges)
+  end
+
+  @doc """
+  Out-degree per node — count of outgoing edges (including parallel
+  edges).
+  """
+  @spec out_degree(Graph.t()) :: %{node_id() => non_neg_integer()}
+  def out_degree(graph) do
+    edges = graph_edges(graph)
+    out_degree_from(collect_nodes(graph), edges)
+  end
+
+  @doc """
+  Total degree per node — `in_degree + out_degree`.
+  """
+  @spec total_degree(Graph.t()) :: %{node_id() => non_neg_integer()}
+  def total_degree(graph) do
+    edges = graph_edges(graph)
+    total_degree_from(collect_nodes(graph), edges)
+  end
+
+  @doc "In-degree from explicit nodes + edges. Test-friendly companion."
+  @spec in_degree_from(Enumerable.t(), [{node_id(), node_id()}]) ::
+          %{node_id() => non_neg_integer()}
+  def in_degree_from(nodes, edges) do
+    initial = Map.new(nodes, fn v -> {v, 0} end)
+    Enum.reduce(edges, initial, fn {_src, dst}, acc -> Map.update(acc, dst, 1, &(&1 + 1)) end)
+  end
+
+  @doc "Out-degree from explicit nodes + edges. Test-friendly companion."
+  @spec out_degree_from(Enumerable.t(), [{node_id(), node_id()}]) ::
+          %{node_id() => non_neg_integer()}
+  def out_degree_from(nodes, edges) do
+    initial = Map.new(nodes, fn v -> {v, 0} end)
+    Enum.reduce(edges, initial, fn {src, _dst}, acc -> Map.update(acc, src, 1, &(&1 + 1)) end)
+  end
+
+  @doc "Total degree from explicit nodes + edges (in + out)."
+  @spec total_degree_from(Enumerable.t(), [{node_id(), node_id()}]) ::
+          %{node_id() => non_neg_integer()}
+  def total_degree_from(nodes, edges) do
+    in_deg = in_degree_from(nodes, edges)
+    out_deg = out_degree_from(nodes, edges)
+    Map.new(in_deg, fn {v, in_count} -> {v, in_count + Map.get(out_deg, v, 0)} end)
+  end
+
+  defp graph_edges(graph), do: Enum.map(Graph.calls(graph), fn c -> {c.caller, c.callee} end)
 
   # --- Algorithm ---
 
