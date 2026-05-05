@@ -775,10 +775,30 @@ defmodule Archdo do
         do_print_pagerank(Centrality.page_rank(compiled_graph))
         do_print_degree(compiled_graph)
         do_print_betweenness(compiled_graph)
+        do_print_closeness(compiled_graph)
 
       {:error, reason} ->
         IO.puts(:standard_error, "[archdo] pagerank: #{reason}")
     end
+  end
+
+  defp do_print_closeness(graph) do
+    cl = Centrality.closeness(graph)
+
+    IO.puts("\nArchdo — Closeness Centrality (compiled call graph)\n")
+    IO.puts("Distance-based central functions — those near everything they")
+    IO.puts("transitively call. Top 10 shown.\n")
+
+    IO.puts(:io_lib.format("~-75ts ~12ts~n", ["Module.function/arity", "Closeness"]))
+    IO.puts(String.duplicate("-", 92))
+
+    cl
+    |> Enum.sort_by(fn {_, v} -> -v end)
+    |> Enum.take(10)
+    |> Enum.each(fn {{mod, fun, arity}, v} ->
+      label = "#{inspect(mod)}.#{fun}/#{arity}"
+      IO.puts(:io_lib.format("~-75ts ~12.6f~n", [truncate(label, 75), v]))
+    end)
   end
 
   defp do_print_betweenness(graph) do

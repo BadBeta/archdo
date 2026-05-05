@@ -154,4 +154,39 @@ defmodule Archdo.Compiled.Graph.CentralityTest do
       assert_in_delta bc[:d], 0.0, 1.0e-6
     end
   end
+
+  describe "closeness_from/2" do
+    test "graph center has highest closeness on a 5-node bidirectional chain" do
+      # Bidirectional chain A↔B↔C↔D↔E. Distances from each node:
+      #   A → {B:1, C:2, D:3, E:4}, sum=10
+      #   B → {A:1, C:1, D:2, E:3}, sum=7
+      #   C → {A:2, B:1, D:1, E:2}, sum=6
+      #   D → {A:3, B:2, C:1, E:1}, sum=7
+      #   E → {A:4, B:3, C:2, D:1}, sum=10
+      # All can reach all 4 others; Wasserman-Faust = (k/sum)*(k/(n-1))
+      # with k=4, n-1=4. C has the smallest sum → highest closeness.
+      nodes = [:a, :b, :c, :d, :e]
+
+      edges =
+        [{:a, :b}, {:b, :c}, {:c, :d}, {:d, :e}]
+        |> Enum.flat_map(fn {x, y} -> [{x, y}, {y, x}] end)
+
+      cl = Centrality.closeness_from(nodes, edges)
+
+      max_node = cl |> Enum.max_by(fn {_, v} -> v end) |> elem(0)
+      assert max_node == :c
+      assert cl[:c] > cl[:b]
+      assert cl[:c] > cl[:d]
+      assert cl[:b] > cl[:a]
+      assert cl[:d] > cl[:e]
+    end
+
+    test "isolated node (no outgoing edges) has closeness 0" do
+      # A → B → C, D isolated. D can't reach any other node.
+      cl =
+        Centrality.closeness_from([:a, :b, :c, :d], [{:a, :b}, {:b, :c}])
+
+      assert cl[:d] == 0.0
+    end
+  end
 end

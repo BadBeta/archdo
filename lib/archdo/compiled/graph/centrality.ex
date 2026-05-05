@@ -271,6 +271,78 @@ defmodule Archdo.Compiled.Graph.Centrality do
     Map.new(raw, fn {v, val} -> {v, val / factor} end)
   end
 
+  # --- Closeness centrality ---
+
+  @doc """
+  Closeness centrality. For each node v, the score is the inverse of
+  the average shortest-path distance from v to every reachable node,
+  scaled by the fraction of reachable nodes (Wasserman-Faust). Values
+  lie in `[0, 1]`. Nodes with no outgoing reachable nodes score 0.
+  """
+  @spec closeness(Graph.t()) :: %{node_id() => float()}
+  def closeness(graph) do
+    closeness_from(collect_nodes(graph), graph_edges(graph))
+  end
+
+  @doc "Closeness from explicit nodes + edges. Test-friendly companion."
+  @spec closeness_from(Enumerable.t(), [{node_id(), node_id()}]) :: %{node_id() => float()}
+  def closeness_from(nodes, edges) do
+    node_set = MapSet.new(nodes)
+    successors = Enum.group_by(edges, fn {s, _} -> s end, fn {_, t} -> t end)
+    n_minus_1 = max(MapSet.size(node_set) - 1, 1)
+
+    Map.new(node_set, fn v -> {v, single_closeness(v, node_set, successors, n_minus_1)} end)
+  end
+
+  defp single_closeness(source, all_nodes, successors, n_minus_1) do
+    distances = closeness_bfs(source, all_nodes, successors)
+    reachable = Enum.filter(distances, fn {v, d} -> v != source and d != -1 end)
+    closeness_score(reachable, n_minus_1)
+  end
+
+  defp closeness_score([], _n_minus_1), do: 0.0
+
+  defp closeness_score(reachable, n_minus_1) do
+    k = length(reachable)
+    sum = Enum.reduce(reachable, 0, fn {_, d}, acc -> acc + d end)
+
+    case sum do
+      0 -> 0.0
+      _ -> k / sum * (k / n_minus_1)
+    end
+  end
+
+  # BFS for shortest-path distances from `source`. Unreachable nodes
+  # carry distance -1.
+  defp closeness_bfs(source, all_nodes, successors) do
+    distances = Map.put(Map.new(all_nodes, fn v -> {v, -1} end), source, 0)
+    closeness_bfs_loop(:queue.in(source, :queue.new()), distances, successors)
+  end
+
+  defp closeness_bfs_loop(queue, distances, successors) do
+    case :queue.out(queue) do
+      {{:value, v}, q} ->
+        d = Map.get(distances, v)
+
+        {next_q, next_d} =
+          Enum.reduce(Map.get(successors, v, []), {q, distances}, fn w, {qq, dd} ->
+            visit_for_distance(w, d + 1, qq, dd)
+          end)
+
+        closeness_bfs_loop(next_q, next_d, successors)
+
+      {:empty, _} ->
+        distances
+    end
+  end
+
+  defp visit_for_distance(w, candidate, queue, distances) do
+    case Map.get(distances, w) do
+      -1 -> {:queue.in(w, queue), Map.put(distances, w, candidate)}
+      _ -> {queue, distances}
+    end
+  end
+
   # --- Algorithm ---
 
   defp run(node_set, edges, n, opts) do
