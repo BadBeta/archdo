@@ -70,6 +70,8 @@ defmodule Archdo do
     Severity
   }
 
+  alias Archdo.Stats.{FunctionMetrics, Halstead, Loc}
+
   # §§ elixir-planning: §6 — observability deferred to the consumer.
   # Archdo is a library / CLI tool. Its callers (mix archdo, the MCP
   # server, interactive IEx) do their own logging / progress reporting;
@@ -748,8 +750,182 @@ defmodule Archdo do
 
     print_quadrant_distributions(file_asts)
     print_blackbox_summary(file_asts)
+    print_halstead_summary(file_asts)
+    print_loc_summary(source_files)
+    print_function_metrics_summary(file_asts)
 
     0
+  end
+
+  defp print_function_metrics_summary([]), do: :ok
+
+  defp print_function_metrics_summary(file_asts) do
+    per_function =
+      file_asts
+      |> Enum.flat_map(fn {file, ast} ->
+        Enum.map(FunctionMetrics.analyze(ast), fn m ->
+          {AST.extract_module_name(ast), file, m}
+        end)
+      end)
+
+    do_print_function_metrics(per_function)
+  end
+
+  defp do_print_function_metrics([]), do: :ok
+
+  defp do_print_function_metrics(per_function) do
+    IO.puts("\nArchdo — Function-Level Metrics\n")
+
+    IO.puts("Per-function statement / return-point / local / parameter counts.")
+
+    IO.puts("Top 20 by (statements + return_points) — high values flag candidates for review.\n")
+
+    IO.puts(
+      :io_lib.format("~-65ts ~6ts ~6ts ~6ts ~6ts~n", [
+        "Module.function/arity",
+        "stmts",
+        "rets",
+        "locals",
+        "params"
+      ])
+    )
+
+    IO.puts(String.duplicate("-", 96))
+
+    per_function
+    |> Enum.sort_by(fn {_, _, m} -> -(m.statements + m.return_points) end)
+    |> Enum.take(20)
+    |> Enum.each(fn {module, _file, m} ->
+      label = "#{module || "?"}.#{m.name}/#{m.arity}"
+
+      IO.puts(
+        :io_lib.format("~-65ts ~6w ~6w ~6w ~6w~n", [
+          truncate(label, 65),
+          m.statements,
+          m.return_points,
+          m.locals,
+          m.params
+        ])
+      )
+    end)
+
+    IO.puts(:io_lib.format("\nTotal functions analyzed: ~w~n", [length(per_function)]))
+  end
+
+  defp print_loc_summary([]), do: :ok
+
+  defp print_loc_summary(files) do
+    per_file = Enum.map(files, fn f -> {f, Loc.analyze(f)} end)
+
+    {phys, log, cmt, blk} =
+      Enum.reduce(per_file, {0, 0, 0, 0}, fn {_, l}, {p, lo, c, b} ->
+        {p + l.physical, lo + l.logical, c + l.comments, b + l.blanks}
+      end)
+
+    IO.puts("\nArchdo — Source Line Counts\n")
+
+    IO.puts("Per-file breakdown: physical = total lines; logical = top-level expressions")
+
+    IO.puts("(def/defmodule/etc.); cmt = comment-only lines; blk = blank lines.\n")
+
+    IO.puts(
+      :io_lib.format("~-55ts ~8ts ~8ts ~8ts ~8ts~n", [
+        "File",
+        "phys",
+        "log",
+        "cmt",
+        "blk"
+      ])
+    )
+
+    IO.puts(String.duplicate("-", 92))
+
+    per_file
+    |> Enum.sort_by(fn {_, l} -> -l.physical end)
+    |> Enum.take(20)
+    |> Enum.each(fn {file, l} ->
+      IO.puts(
+        :io_lib.format("~-55ts ~8w ~8w ~8w ~8w~n", [
+          truncate(Path.relative_to_cwd(file), 55),
+          l.physical,
+          l.logical,
+          l.comments,
+          l.blanks
+        ])
+      )
+    end)
+
+    IO.puts(
+      :io_lib.format(
+        "\nProject totals: phys = ~w, log = ~w, cmt = ~w, blk = ~w (top 20 of ~w files)~n",
+        [phys, log, cmt, blk, length(per_file)]
+      )
+    )
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
+  # the empty-list shape; reuses the Blackbox-section formatting
+  # idiom rather than introducing a new control structure.
+  defp print_halstead_summary([]), do: :ok
+
+  defp print_halstead_summary(file_asts) do
+    per_module =
+      file_asts
+      |> Enum.map(&module_halstead_entry/1)
+      |> Enum.reject(&is_nil/1)
+
+    do_print_halstead(per_module)
+  end
+
+  defp do_print_halstead([]), do: :ok
+
+  defp do_print_halstead(per_module) do
+    IO.puts("\nArchdo — Halstead Software-Science Metrics\n")
+
+    IO.puts(
+      "Per-module aggregate over all def/defp/defmacro bodies. Volume = length × log₂(vocab);"
+    )
+
+    IO.puts("Effort = volume × difficulty. Higher = more cognitive load to read or modify.\n")
+
+    IO.puts(:io_lib.format("~-55ts ~10ts ~10ts ~10ts~n", ["Module", "Vocab", "Volume", "Effort"]))
+
+    IO.puts(String.duplicate("-", 88))
+
+    per_module
+    |> Enum.sort_by(fn {_, _, h} -> -h.effort end)
+    |> Enum.take(20)
+    |> Enum.each(fn {module, _file, h} ->
+      IO.puts(
+        :io_lib.format("~-55ts ~10w ~10.1f ~10.1f~n", [
+          truncate(module, 55),
+          h.vocabulary,
+          h.volume,
+          h.effort
+        ])
+      )
+    end)
+
+    aggregate =
+      Enum.reduce(per_module, {0.0, 0.0}, fn {_, _, h}, {v, e} ->
+        {v + h.volume, e + h.effort}
+      end)
+
+    {total_v, total_e} = aggregate
+
+    IO.puts(
+      :io_lib.format(
+        "\nProject totals: volume = ~.1f, effort = ~.1f (top 20 shown of ~w modules)~n",
+        [total_v, total_e, length(per_module)]
+      )
+    )
+  end
+
+  defp module_halstead_entry({file, ast}) do
+    case AST.extract_module_name(ast) do
+      nil -> nil
+      module -> {module, file, Halstead.analyze(ast)}
+    end
   end
 
   # §§ elixir-planning: §6 — M25 Blackbox metric exposure. Per-module
