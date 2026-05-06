@@ -6,6 +6,36 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoder do
 
   @decoder_prefixes ~w(from_ parse_ decode_)
 
+  # FP class 1 — external-API serializers. Round-trip is owned by the
+  # third-party service, not us; absence of a local decoder is by design.
+  @external_service_serializer_names ~w(
+    to_stripe to_intercom to_segment to_slack to_github to_jira to_linear
+    to_zendesk to_freshdesk to_hubspot to_salesforce to_mailchimp to_sendgrid
+    to_twilio to_pagerduty to_datadog to_newrelic to_sentry to_postmark
+    to_resend to_brevo to_zoom to_calendly to_notion to_asana to_trello
+  )
+
+  # FP class 2 — lossy projections. Sub-component extraction; round-trip
+  # impossible by design (`to_minor_units` discards major-unit info).
+  @lossy_projection_names ~w(
+    to_integer to_int to_float to_decimal to_number to_string to_atom
+    to_charlist to_iodata to_binary to_boolean to_bool to_list to_map
+    to_minor_units to_major_units to_cents to_currency to_keyword
+    to_keyword_list to_tuple
+  )
+
+  # FP class 3 — stdlib-wrapper. Decoder lives in stdlib (`Date.from_iso8601`,
+  # `URI.parse`, `Jason.decode`), not this module.
+  @stdlib_wrapper_names ~w(
+    to_date to_date! to_datetime to_datetime! to_naive_datetime
+    to_naive_datetime! to_time to_time! to_iso8601 to_iso8601!
+    to_uri to_url to_query to_json to_json!
+  )
+
+  @fp_filtered_names @external_service_serializer_names ++
+                       @lossy_projection_names ++
+                       @stdlib_wrapper_names
+
   @impl true
   def id, do: "6.102"
 
@@ -27,7 +57,7 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoder do
 
     public_fns
     |> Enum.filter(&encoder_to_x_one?/1)
-    |> Enum.reject(fn {name, _, _, _, _} -> has_decoder?(Atom.to_string(name), fn_names) end)
+    |> Enum.reject(&suppressed?(&1, fn_names))
     |> Enum.uniq_by(fn {name, arity, _, _, _} -> {name, arity} end)
     |> Enum.map(fn {name, _arity, meta, _args, _body} ->
       build_diagnostic(file, AST.line(meta), name)
@@ -41,6 +71,13 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoder do
   end
 
   defp encoder_to_x_one?(_), do: false
+
+  # Suppress when name is FP-filtered (external-API / lossy / stdlib) or when a
+  # local decoder exists.
+  defp suppressed?({name, _, _, _, _}, fn_names) do
+    name_str = Atom.to_string(name)
+    name_str in @fp_filtered_names or has_decoder?(name_str, fn_names)
+  end
 
   # `to_X` should have at least one of `from_X`, `parse_X`, `decode_X`
   # in the same module's public surface.
