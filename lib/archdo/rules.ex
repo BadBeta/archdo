@@ -204,6 +204,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.StreamOverEnumOpportunity,
     Archdo.Rules.Module.ManualRecursionAsReduce,
     Archdo.Rules.Module.BuilderPatternNotThreaded,
+    Archdo.Rules.Module.EncoderWithoutDecoder,
     Archdo.Rules.Boundary.DevDepInProd,
     Archdo.Rules.Boundary.UmbrellaDepConsistency,
     Archdo.Rules.Boundary.UnusedAlias,
