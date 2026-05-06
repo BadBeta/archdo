@@ -9,7 +9,7 @@ defmodule Archdo.Rules.Module.ZipMapAsZipWith do
 
   @impl true
   def description,
-    do: "`Enum.zip |> Enum.map(fn {x, y} -> ... end)` — use Enum.zip_with/3 instead"
+    do: "`Enum.zip |> Enum.map(...)` — use Enum.zip_with (`/3` for two lists, `/2` for n)"
 
   @impl true
   def analyze(file, ast, _opts) do
@@ -53,9 +53,12 @@ defmodule Archdo.Rules.Module.ZipMapAsZipWith do
           "large lists and shorter notation for the common case.",
       alternatives: [
         Fix.new(
-          summary: "Replace with Enum.zip_with/3",
-          detail: "Enum.zip_with(xs, ys, fn x, y -> x + y end)",
-          applies_when: "When the map step's anonymous function destructures the zip pair."
+          summary: "Replace with Enum.zip_with",
+          detail:
+            "Two collections: Enum.zip_with(xs, ys, fn x, y -> x + y end)\n" <>
+              "N collections: Enum.zip_with([xs, ys, zs], fn [x, y, z] -> x + y + z end)\n" <>
+              "(`/2` takes a list of enumerables; `/3` takes exactly two.)",
+          applies_when: "When the map step's anonymous function destructures the zip element."
         )
       ],
       references: ["elixir-implementing/SKILL.md#2.2"],

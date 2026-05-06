@@ -25,11 +25,35 @@ defmodule Archdo.Rules.Module.FindThenTransform do
     end)
   end
 
-  # `... |> Enum.find(...) |> next()` where `next` is any call/capture.
-  # The next step receives the find result (or nil); the find_value
-  # form bakes the nil-handling into the predicate.
-  defp find_then_pipe?({:|>, _, [lhs, _rhs]}), do: ends_in_enum_find?(lhs)
+  # `... |> Enum.find(...) |> transform_call()` where the next step
+  # is a plain function call (not `case` / `if` / `with` — those are
+  # explicit nil-handling idioms where find_value isn't a clean
+  # replacement). The find_value form bakes nil-handling into the
+  # predicate, which only works when the transform is simple.
+  defp find_then_pipe?({:|>, _, [lhs, rhs]}) do
+    ends_in_enum_find?(lhs) and transform_step?(rhs)
+  end
+
   defp find_then_pipe?(_), do: false
+
+  # Skip explicit nil/error-handling control structures. The piped
+  # form `Enum.find(...) |> case do nil -> ... end` is a different
+  # idiom from a transform — find_value's inline pred-and-extract
+  # isn't always a cleaner replacement.
+  @control_flow_atoms [:case, :cond, :if, :unless, :with, :try, :receive, :fn]
+
+  defp transform_step?({fun, _, _})
+       when is_atom(fun) and fun in @control_flow_atoms,
+       do: false
+
+  # Plain function call (local) — find_value wins.
+  defp transform_step?({fun, _, args}) when is_atom(fun) and is_list(args), do: true
+  # Remote function call.
+  defp transform_step?({{:., _, _}, _, _}), do: true
+  # Capture form `&...`.
+  defp transform_step?({:&, _, _}), do: true
+
+  defp transform_step?(_), do: false
 
   defp ends_in_enum_find?({:|>, _, [_, rhs]}), do: enum_find_call?(rhs)
   defp ends_in_enum_find?(node), do: enum_find_call?(node)
