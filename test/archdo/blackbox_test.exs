@@ -558,4 +558,81 @@ defmodule Archdo.BlackboxTest do
       assert Blackbox.value_class(v) == :low
     end
   end
+
+  describe "composability_density/2" do
+    alias Archdo.FunctionGraph
+
+    defp build_graph(file_asts) do
+      asts =
+        Enum.map(file_asts, fn {file, code} ->
+          {:ok, ast} = Code.string_to_quoted(code)
+          {file, ast}
+        end)
+
+      FunctionGraph.build(asts)
+    end
+
+    test "counts distinct caller modules of a target module" do
+      graph =
+        build_graph([
+          {"lib/pricing.ex",
+           """
+           defmodule MyApp.Pricing do
+             def discount(price, rate), do: price * (1 - rate)
+           end
+           """},
+          {"lib/checkout.ex",
+           """
+           defmodule MyApp.Checkout do
+             def total(p, r), do: MyApp.Pricing.discount(p, r)
+           end
+           """},
+          {"lib/cart.ex",
+           """
+           defmodule MyApp.Cart do
+             def adjust(p, r), do: MyApp.Pricing.discount(p, r)
+           end
+           """}
+        ])
+
+      assert Blackbox.composability_density(graph, "MyApp.Pricing") == 2
+    end
+
+    test "returns 0 for an unused target" do
+      graph =
+        build_graph([
+          {"lib/lonely.ex",
+           """
+           defmodule MyApp.Lonely do
+             def f(x), do: x
+           end
+           """}
+        ])
+
+      assert Blackbox.composability_density(graph, "MyApp.Lonely") == 0
+    end
+
+    test "deduplicates multiple calls from same caller" do
+      graph =
+        build_graph([
+          {"lib/lib.ex",
+           """
+           defmodule MyApp.Lib do
+             def f(x), do: x
+             def g(x), do: x
+           end
+           """},
+          {"lib/heavy.ex",
+           """
+           defmodule MyApp.Heavy do
+             def a(x), do: MyApp.Lib.f(x)
+             def b(x), do: MyApp.Lib.f(x)
+             def c(x), do: MyApp.Lib.g(x)
+           end
+           """}
+        ])
+
+      assert Blackbox.composability_density(graph, "MyApp.Lib") == 1
+    end
+  end
 end

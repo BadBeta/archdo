@@ -614,4 +614,25 @@ defmodule Archdo.Blackbox do
   def value_class(v) when v >= 0.7, do: :high
   def value_class(v) when v >= 0.3, do: :medium
   def value_class(_), do: :low
+
+  @doc """
+  Composability density: count of distinct caller modules of a target
+  module's functions. High density = the target is composed broadly
+  across the codebase (a sign of a successful building block).
+
+  Counts each caller module ONCE regardless of how many target functions
+  it calls. Used in `mix archdo --explain` output for CE-54..57 to
+  contextualize a building-block module's reach.
+  """
+  @spec composability_density(Archdo.FunctionGraph.t(), String.t()) :: non_neg_integer()
+  def composability_density(%Archdo.FunctionGraph{calls_by_target: by_target}, target_module)
+      when is_binary(target_module) do
+    by_target
+    |> Enum.filter(fn {{m, _, _}, _calls} -> m == target_module end)
+    |> Enum.flat_map(fn {_, calls} -> calls end)
+    |> Enum.map(& &1.caller_module)
+    |> Enum.reject(&(&1 == target_module))
+    |> Enum.uniq()
+    |> length()
+  end
 end
