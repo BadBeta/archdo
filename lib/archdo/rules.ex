@@ -195,6 +195,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.EctoFragmentStringInterpolation,
     Archdo.Rules.Module.CodeEvalStringOrQuoted,
     Archdo.Rules.Module.HandRolledTokenCrypto,
+    Archdo.Rules.Module.ShortCircuitOverAccumulating,
     Archdo.Rules.Boundary.DevDepInProd,
     Archdo.Rules.Boundary.UmbrellaDepConsistency,
     Archdo.Rules.Boundary.UnusedAlias,
