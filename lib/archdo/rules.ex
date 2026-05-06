@@ -198,6 +198,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.ShortCircuitOverAccumulating,
     Archdo.Rules.Module.ResultMapOpportunity,
     Archdo.Rules.Module.PipeSubjectPosition,
+    Archdo.Rules.Module.NestedMapUpdateAsUpdateIn,
     Archdo.Rules.Boundary.DevDepInProd,
     Archdo.Rules.Boundary.UmbrellaDepConsistency,
     Archdo.Rules.Boundary.UnusedAlias,
