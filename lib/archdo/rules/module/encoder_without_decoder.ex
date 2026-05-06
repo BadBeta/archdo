@@ -32,9 +32,20 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoder do
     to_uri to_url to_query to_json to_json!
   )
 
+  # FP class 4 — internal-projection. Project a parent struct onto a sibling
+  # / summary / view-model struct. Round-trip is impossible because the
+  # projection drops fields by design; the inverse function legitimately
+  # doesn't exist in the parent module.
+  @internal_projection_names ~w(
+    to_metadata to_view to_view_model to_summary to_dto to_record
+    to_payload to_event to_struct to_form to_changeset to_params
+    to_attrs to_args to_props to_data to_row to_entry
+  )
+
   @fp_filtered_names @external_service_serializer_names ++
                        @lossy_projection_names ++
-                       @stdlib_wrapper_names
+                       @stdlib_wrapper_names ++
+                       @internal_projection_names
 
   @impl true
   def id, do: "6.102"

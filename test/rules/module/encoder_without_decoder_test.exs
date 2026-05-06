@@ -136,5 +136,62 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoderTest do
 
       assert_clean(EncoderWithoutDecoder, code)
     end
+
+    # FP class 4 — internal-projection names. These project a parent struct
+    # onto a sibling/summary struct (e.g., livebook's `Hubs.Personal.to_metadata/1`
+    # → `%Hubs.Metadata{}`). The reverse direction doesn't exist in the parent
+    # module by design; round-trip is impossible because the projection drops
+    # fields. Same shape as algora's `to_domain/1`.
+    test "does not flag `to_metadata/1` (internal projection)" do
+      code = ~S"""
+      defmodule MyApp.Hubs.Personal do
+        def to_metadata(personal) do
+          %{id: personal.id, name: personal.name}
+        end
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_view/1` (Phoenix view-model projection)" do
+      code = ~S"""
+      defmodule MyApp.Posts.Post do
+        def to_view(post), do: %{title: post.title, author: post.author.name}
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_summary/1` (summary projection)" do
+      code = ~S"""
+      defmodule MyApp.Reports.Report do
+        def to_summary(report), do: %{total: report.total, count: report.count}
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_dto/1` (DTO projection)" do
+      code = ~S"""
+      defmodule MyApp.User do
+        def to_dto(user), do: %{id: user.id, name: user.name}
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_params/1` (params projection)" do
+      code = ~S"""
+      defmodule MyApp.Form do
+        def to_params(form), do: %{name: form.name, age: form.age}
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
   end
 end
