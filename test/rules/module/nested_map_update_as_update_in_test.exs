@@ -36,18 +36,6 @@ defmodule Archdo.Rules.Module.NestedMapUpdateAsUpdateInTest do
       assert diag.message =~ "update_in"
     end
 
-    test "flags Map.put with nested Map.put (3 levels deep)" do
-      code = ~S"""
-      defmodule MyApp.Service do
-        def deep_set(state) do
-          Map.put(state, :a, Map.put(Map.get(state, :a, %{}), :b, 1))
-        end
-      end
-      """
-
-      [diag] = assert_flagged(NestedMapUpdateAsUpdateIn, code)
-    end
-
     test "flags multiple instances in one module" do
       code = ~S"""
       defmodule MyApp.Service do
@@ -58,6 +46,31 @@ defmodule Archdo.Rules.Module.NestedMapUpdateAsUpdateInTest do
 
       diagnostics = assert_flagged(NestedMapUpdateAsUpdateIn, code)
       assert length(diagnostics) == 2
+    end
+
+    test "flags Map.update with capture-form update-fn (`&Map.put(&1, ...)`)" do
+      code = ~S"""
+      defmodule MyApp.RequestBuilder do
+        def add_param(request, name, value) do
+          Map.update(request, :body, %{name => value}, &Map.put(&1, name, value))
+        end
+      end
+      """
+
+      [diag] = assert_flagged(NestedMapUpdateAsUpdateIn, code)
+      assert diag.message =~ "update_in"
+    end
+
+    test "flags Map.update! with capture-form update-fn" do
+      code = ~S"""
+      defmodule MyApp.Builder do
+        def annotate(request, key, value) do
+          Map.update!(request, :body, &Map.put(&1, key, value))
+        end
+      end
+      """
+
+      [_diag] = assert_flagged(NestedMapUpdateAsUpdateIn, code)
     end
   end
 
@@ -131,6 +144,58 @@ defmodule Archdo.Rules.Module.NestedMapUpdateAsUpdateInTest do
           state
           |> Map.update(:a, 1, &(&1 + 1))
           |> Map.update(:b, 1, &(&1 + 1))
+        end
+      end
+      """
+
+      assert_clean(NestedMapUpdateAsUpdateIn, code)
+    end
+  end
+
+  describe "FP filter — different-structure inner call" do
+    # Sequin-style: outer Map.put on `form_errors`, inner Map.put on `acc`
+    # bound by Enum.reduce's lambda. Different structures → not a nested-update.
+    test "does not flag Map.put with Enum.reduce in value-arg (different structure)" do
+      code = ~S"""
+      defmodule MyApp.FormErrors do
+        def collect(form_errors, modified_test_messages) do
+          Map.put(form_errors, :modified_test_messages,
+            Enum.reduce(modified_test_messages, %{}, fn {trace_id, result}, acc ->
+              case result do
+                {:ok, _} -> acc
+                %{error: errors} -> Map.put(acc, trace_id, errors)
+              end
+            end))
+        end
+      end
+      """
+
+      assert_clean(NestedMapUpdateAsUpdateIn, code)
+    end
+
+    # Map.update with Enum.reduce inside, where inner Map.put is on the reduce's
+    # accumulator, NOT the lambda param. Different structures → not nested.
+    test "does not flag Map.update whose lambda body is an Enum.reduce on a different acc" do
+      code = ~S"""
+      defmodule MyApp.Aggregator do
+        def merge(state, batches) do
+          Map.update(state, :totals, %{}, fn _existing ->
+            Enum.reduce(batches, %{}, fn batch, acc -> Map.put(acc, batch.id, batch.total) end)
+          end)
+        end
+      end
+      """
+
+      assert_clean(NestedMapUpdateAsUpdateIn, code)
+    end
+
+    # Map.put outer should NEVER flag — Map.put has no update-fn lambda, so any
+    # nested Map.put in its value-arg is on a different structure by construction.
+    test "does not flag Map.put outer with Map.put on Map.get of same key (no update-fn)" do
+      code = ~S"""
+      defmodule MyApp.Service do
+        def deep_set(state) do
+          Map.put(state, :a, Map.put(Map.get(state, :a, %{}), :b, 1))
         end
       end
       """
