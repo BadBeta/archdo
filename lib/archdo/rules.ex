@@ -197,6 +197,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.HandRolledTokenCrypto,
     Archdo.Rules.Module.ShortCircuitOverAccumulating,
     Archdo.Rules.Module.ResultMapOpportunity,
+    Archdo.Rules.Module.PipeSubjectPosition,
     Archdo.Rules.Boundary.DevDepInProd,
     Archdo.Rules.Boundary.UmbrellaDepConsistency,
     Archdo.Rules.Boundary.UnusedAlias,
