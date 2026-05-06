@@ -31,8 +31,15 @@ defmodule Archdo.Rules.Module.SystemTimeForDuration do
 
   defp maybe_diagnose_body(file, body) do
     case system_time_calls(body) do
-      [first, _ | _] -> [build_diagnostic(file, AST.line(elem(first, 1)))]
+      [first, _ | _] -> maybe_diagnose_with_subtraction(file, body, first)
       _ -> []
+    end
+  end
+
+  defp maybe_diagnose_with_subtraction(file, body, first) do
+    case has_subtraction?(body) do
+      true -> [build_diagnostic(file, AST.line(elem(first, 1)))]
+      false -> []
     end
   end
 
@@ -44,6 +51,17 @@ defmodule Archdo.Rules.Module.SystemTimeForDuration do
     do: true
 
   defp system_time_call?(_), do: false
+
+  # Duration-measurement pattern: `t1 - t0` between two values that came
+  # from the system_time calls. We don't trace the binding chain; we
+  # just require ANY `-` arithmetic in the body. JWT iat/exp use `+ N`,
+  # not `-`, so this discriminates well.
+  defp has_subtraction?(body) do
+    AST.contains?(body, fn
+      {:-, _, [_, _]} -> true
+      _ -> false
+    end)
+  end
 
   defp build_diagnostic(file, line) do
     Diagnostic.warning("6.89",

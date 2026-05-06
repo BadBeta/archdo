@@ -25,37 +25,64 @@ defmodule Archdo.Rules.OTP.SendAfterSelfTickLoop do
   defp find_loops(file, ast) do
     case AST.genserver_module?(ast) do
       false -> []
-      true -> ast |> AST.find_all(&self_tick_handle_info?/1) |> Enum.map(&diagnose(file, &1))
+      true -> diagnose_module(file, ast)
     end
   end
 
-  # `def handle_info(<msg>, state) do <body> end` where <body> contains
-  # `Process.send_after(self(), <same-msg>, <integer-literal>)`.
-  defp self_tick_handle_info?(
-         {:def, _, [{:handle_info, _, [msg | _]}, [{_, body}]]}
-       ),
-       do: rearm_present?(body, msg)
+  # Module-level pattern: ANY `def handle_info(<msg>, _)` paired with
+  # ANY `Process.send_after(self(), <same-msg>, <constant>)` somewhere
+  # in the same module — even via a helper like `defp schedule_poll`.
+  defp diagnose_module(file, ast) do
+    handle_info_msgs = collect_handle_info_msgs(ast)
+    rearms = collect_rearm_targets(ast)
 
-  defp self_tick_handle_info?(_), do: false
+    handle_info_msgs
+    |> Enum.flat_map(fn {msg, meta} ->
+      case Enum.any?(rearms, fn r -> ast_equiv?(r, msg) end) do
+        true -> [diagnose(file, {:def, meta, []})]
+        false -> []
+      end
+    end)
+    |> Enum.uniq()
+  end
 
-  defp rearm_present?(body, msg) do
-    AST.find_all(body, fn
+  defp collect_handle_info_msgs(ast) do
+    AST.find_all(ast, fn
+      {:def, _, [{:handle_info, _, [_msg | _]}, _]} -> true
+      _ -> false
+    end)
+    |> Enum.map(fn {:def, meta, [{:handle_info, _, [msg | _]}, _]} -> {msg, meta} end)
+  end
+
+  defp collect_rearm_targets(ast) do
+    AST.find_all(ast, fn
       {{:., _, [{:__aliases__, _, [:Process]}, :send_after]}, _,
-       [{:self, _, _}, sent, delay]} ->
-        ast_equiv?(sent, msg) and is_integer(delay)
+       [{:self, _, _}, _msg, delay]} ->
+        constant_delay?(delay)
 
       _ ->
         false
     end)
-    |> case do
-      [] -> false
-      _ -> true
-    end
+    |> Enum.map(fn {{:., _, _}, _, [_, msg, _]} -> msg end)
   end
 
-  # Loose equivalence — atom vs atom, identical literals.
-  defp ast_equiv?(a, b) when a == b, do: true
-  defp ast_equiv?(_, _), do: false
+  # Constant-cadence delay: integer literal or `@module_attribute`.
+  # Excludes per-call computed values (variables, arithmetic on state).
+  defp constant_delay?({:__block__, _, [d]}), do: constant_delay?(d)
+  defp constant_delay?(d) when is_integer(d), do: true
+  defp constant_delay?({:@, _, [{name, _, ctx}]}) when is_atom(name) and is_atom(ctx),
+    do: true
+
+  defp constant_delay?({:@, _, [{name, _, nil}]}) when is_atom(name), do: true
+  defp constant_delay?(_), do: false
+
+  # Loose equivalence — atom vs atom, identical literals. Unwraps the
+  # `literal_encoder` wrapper `{:__block__, _, [val]}` that production
+  # parsing puts around literal atoms / numbers / strings.
+  defp ast_equiv?(a, b), do: unwrap_literal(a) == unwrap_literal(b)
+
+  defp unwrap_literal({:__block__, _, [val]}), do: val
+  defp unwrap_literal(other), do: other
 
   defp diagnose(file, {:def, meta, _}) do
     Diagnostic.info("5.70",

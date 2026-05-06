@@ -32,6 +32,21 @@ defmodule Archdo.Rules.Module.SystemTimeForDurationTest do
       assert_clean(SystemTimeForDuration, code, file: "lib/my_app/audit.ex")
     end
 
+    test "ignores JWT iat/exp pattern (timestamps, not duration)" do
+      code = ~S"""
+      defmodule MyApp.Github.Crypto do
+        def generate_jwt do
+          %{
+            "iat" => System.system_time(:second),
+            "exp" => System.system_time(:second) + 600
+          }
+        end
+      end
+      """
+
+      assert_clean(SystemTimeForDuration, code, file: "lib/my_app/crypto.ex")
+    end
+
     test "ignores System.monotonic_time pair (correct usage)" do
       code = ~S"""
       defmodule MyApp.Bench do

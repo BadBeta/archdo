@@ -26,6 +26,23 @@ defmodule Archdo.Rules.OTP.SendAfterSelfTickLoopTest do
       assert hd(diags).rule_id == "5.70"
     end
 
+    test "flags send_after with module attribute delay (constant)" do
+      code = ~S"""
+      defmodule MyApp.Poller do
+        use GenServer
+        @poll_interval 5_000
+
+        def handle_info(:poll, state) do
+          do_work()
+          Process.send_after(self(), :poll, @poll_interval)
+          {:noreply, state}
+        end
+      end
+      """
+
+      assert_flagged(SendAfterSelfTickLoop, code, file: "lib/my_app/poller.ex")
+    end
+
     test "ignores send_after with varying delay (e.g., backoff)" do
       code = ~S"""
       defmodule MyApp.Retry do
@@ -55,6 +72,27 @@ defmodule Archdo.Rules.OTP.SendAfterSelfTickLoopTest do
       """
 
       assert_clean(SendAfterSelfTickLoop, code, file: "lib/my_app/worker.ex")
+    end
+
+    test "flags handle_info with re-arm via private helper (indirection)" do
+      code = ~S"""
+      defmodule MyApp.Poller do
+        use GenServer
+        @poll_interval 5_000
+
+        def handle_info(:poll, state) do
+          do_work()
+          schedule_poll()
+          {:noreply, state}
+        end
+
+        defp schedule_poll do
+          Process.send_after(self(), :poll, @poll_interval)
+        end
+      end
+      """
+
+      assert_flagged(SendAfterSelfTickLoop, code, file: "lib/my_app/poller.ex")
     end
 
     test "ignores non-GenServer modules" do
