@@ -39,13 +39,36 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoder do
   @internal_projection_names ~w(
     to_metadata to_view to_view_model to_summary to_dto to_record
     to_payload to_event to_struct to_form to_changeset to_params
-    to_attrs to_args to_props to_data to_row to_entry
+    to_attrs to_args to_props to_data to_row to_entry to_domain
+    to_local_string
   )
 
   @fp_filtered_names @external_service_serializer_names ++
                        @lossy_projection_names ++
                        @stdlib_wrapper_names ++
                        @internal_projection_names
+
+  # FP class 5 — external-service prefix patterns. A name starting with
+  # `to_<service>_<anything>` where `<service>` is a known external-API
+  # library is a service-specific serializer. Round-trip is owned by the
+  # service, not by us. Examples: `to_stripe_currency`, `to_brod_config`,
+  # `to_bq_interval_token`, `to_rich_text_preformatted` (Slack),
+  # `to_masto_date` (Mastodon), `to_timex_shift_key` (Timex library).
+  @external_service_serializer_prefixes ~w(
+    to_stripe_ to_intercom_ to_segment_ to_slack_ to_github_ to_jira_
+    to_linear_ to_zendesk_ to_freshdesk_ to_hubspot_ to_salesforce_
+    to_mailchimp_ to_sendgrid_ to_twilio_ to_pagerduty_ to_datadog_
+    to_newrelic_ to_sentry_ to_postmark_ to_resend_ to_brevo_
+    to_zoom_ to_calendly_ to_notion_ to_asana_ to_trello_
+    to_brod_ to_bq_ to_rich_text_ to_masto_ to_timex_
+  )
+
+  # FP class 6 — projection-suffix patterns. Function names ending in these
+  # suffixes are conventional projections (config/options, type-mapping,
+  # query/changeset/cast) where the inverse round-trip is not expected.
+  # Examples: `to_postgrex_opts`, `to_protocol_opts`, `to_json_types`,
+  # `to_elixir_types`, `to_schema_type`.
+  @projection_suffixes ~w(_opts _types _type)
 
   @impl true
   def id, do: "6.102"
@@ -83,11 +106,24 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoder do
 
   defp encoder_to_x_one?(_), do: false
 
-  # Suppress when name is FP-filtered (external-API / lossy / stdlib) or when a
-  # local decoder exists.
+  # Suppress when name is FP-filtered (external-API exact / external-service
+  # prefix / lossy / stdlib / internal-projection) or when a local decoder
+  # exists.
   defp suppressed?({name, _, _, _, _}, fn_names) do
     name_str = Atom.to_string(name)
-    name_str in @fp_filtered_names or has_decoder?(name_str, fn_names)
+
+    name_str in @fp_filtered_names or
+      external_service_prefix?(name_str) or
+      projection_suffix?(name_str) or
+      has_decoder?(name_str, fn_names)
+  end
+
+  defp external_service_prefix?(name_str) do
+    Enum.any?(@external_service_serializer_prefixes, &String.starts_with?(name_str, &1))
+  end
+
+  defp projection_suffix?(name_str) do
+    Enum.any?(@projection_suffixes, &String.ends_with?(name_str, &1))
   end
 
   # `to_X` should have at least one of `from_X`, `parse_X`, `decode_X`

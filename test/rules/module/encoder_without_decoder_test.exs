@@ -194,4 +194,147 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoderTest do
       assert_clean(EncoderWithoutDecoder, code)
     end
   end
+
+  describe "FP filter — external-service prefix patterns" do
+    # Library-prefix patterns: name starts with `to_<service>_` where the
+    # service is a known external API (Stripe, Brod/Kafka, BigQuery, Slack, etc.)
+    test "does not flag `to_stripe_currency/1` (Stripe-prefix)" do
+      code = ~S"""
+      defmodule MyApp.MoneyUtils do
+        def to_stripe_currency(money), do: %{amount: money.amount, currency: "usd"}
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_brod_config/1` (Brod/Kafka-prefix)" do
+      code = ~S"""
+      defmodule MyApp.KafkaSink do
+        def to_brod_config(sink), do: %{hosts: sink.hosts, topic: sink.topic}
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_bq_interval_token/1` (BigQuery-prefix)" do
+      code = ~S"""
+      defmodule MyApp.BqQuery do
+        def to_bq_interval_token(interval), do: "INTERVAL '#{interval}' DAY"
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_rich_text_preformatted/1` (Slack rich-text prefix)" do
+      code = ~S"""
+      defmodule MyApp.SlackAdaptor do
+        def to_rich_text_preformatted(text), do: %{type: "rich_text_preformatted", text: text}
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+  end
+
+  describe "FP filter — lossy projection extras" do
+    # `to_local_string` — i18n / locale projection; drops the underlying value's
+    # type info. Algora pattern.
+    test "does not flag `to_local_string/1` (locale projection)" do
+      code = ~S"""
+      defmodule MyApp.Util do
+        def to_local_string(n), do: :erlang.float_to_binary(n, decimals: 2)
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    # `to_domain` — extracts a domain name from a URL or struct. Lossy
+    # projection. Algora pattern.
+    test "does not flag `to_domain/1` (domain extraction)" do
+      code = ~S"""
+      defmodule MyApp.Util do
+        def to_domain(url), do: URI.parse(url).host
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+  end
+
+  describe "FP filter — suffix patterns" do
+    # `_opts` suffix: configuration/options projection for an external library.
+    # Round-trip not expected; opts are produced FOR the library, not from it.
+    test "does not flag `to_postgrex_opts/1` (_opts suffix)" do
+      code = ~S"""
+      defmodule MyApp.Db do
+        def to_postgrex_opts(db), do: [hostname: db.host, port: db.port]
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_protocol_opts/1` (_opts suffix)" do
+      code = ~S"""
+      defmodule MyApp.Db do
+        def to_protocol_opts(db), do: [ssl: db.ssl?]
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    # `_types` / `_type` suffix: type-mapping projection. e.g. pleroma's
+    # `to_json_types` and `to_elixir_types` form a pair, but neither is a
+    # round-trippable encoder; both are projections through a type system.
+    test "does not flag `to_json_types/1` (_types suffix)" do
+      code = ~S"""
+      defmodule MyApp.Config do
+        def to_json_types(config), do: %{values: Enum.map(config, &cast/1)}
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_schema_type/1` (_type suffix)" do
+      code = ~S"""
+      defmodule MyApp.BqSchema do
+        def to_schema_type(:string), do: "STRING"
+        def to_schema_type(:int), do: "INTEGER"
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+  end
+
+  describe "FP filter — additional library/service prefixes" do
+    # Mastodon API in pleroma
+    test "does not flag `to_masto_date/1` (Mastodon prefix)" do
+      code = ~S"""
+      defmodule MyApp.MastoApi do
+        def to_masto_date(dt), do: DateTime.to_iso8601(dt)
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    # Timex library wrapper in logflare
+    test "does not flag `to_timex_shift_key/1` (Timex prefix)" do
+      code = ~S"""
+      defmodule MyApp.Time do
+        def to_timex_shift_key(:day), do: :days
+        def to_timex_shift_key(:hour), do: :hours
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+  end
 end
