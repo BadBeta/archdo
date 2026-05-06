@@ -336,5 +336,17 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoderTest do
 
       assert_clean(EncoderWithoutDecoder, code)
     end
+
+    # `to_param/1` is the Phoenix.Param protocol method. Its inverse is
+    # route matching, not a `from_param` function. Hexpm pattern.
+    test "does not flag `to_param/1` (Phoenix.Param protocol)" do
+      code = ~S"""
+      defimpl Phoenix.Param, for: MyApp.Release do
+        def to_param(release), do: to_string(release.version)
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
   end
 end

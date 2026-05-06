@@ -40,7 +40,7 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoder do
     to_metadata to_view to_view_model to_summary to_dto to_record
     to_payload to_event to_struct to_form to_changeset to_params
     to_attrs to_args to_props to_data to_row to_entry to_domain
-    to_local_string
+    to_local_string to_param
   )
 
   @fp_filtered_names @external_service_serializer_names ++
