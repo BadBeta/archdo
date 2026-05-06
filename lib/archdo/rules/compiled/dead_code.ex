@@ -16,10 +16,24 @@ defmodule Archdo.Rules.Compiled.DeadCode do
   Compiled-mode analysis using the interaction graph.
   """
   @spec analyze_compiled(Compiled.t()) :: [Diagnostic.t()]
-  def analyze_compiled(graph) do
+  def analyze_compiled(graph), do: analyze_compiled(graph, [])
+
+  @spec analyze_compiled(Compiled.t(), keyword()) :: [Diagnostic.t()]
+  def analyze_compiled(graph, opts) do
+    library_publics = Keyword.get(opts, :library_public_modules, MapSet.new())
+
     graph
     |> Compiled.dead_functions()
+    |> Enum.reject(&function_in_public_library_module?(&1, library_publics))
     |> Enum.map(&build_diagnostic/1)
+  end
+
+  # Library mode: a "dead" public function in a public-API module is almost
+  # certainly called by consumers Archdo can't see. Skip those findings.
+  # The rule still fires on functions in `@moduledoc false` modules — those
+  # are intentionally non-public and being unused inside the library is real.
+  defp function_in_public_library_module?(%{module: module}, library_publics) do
+    MapSet.member?(library_publics, module)
   end
 
   defp build_diagnostic(%{module: module, function: func, arity: arity}) do

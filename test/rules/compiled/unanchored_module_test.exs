@@ -107,4 +107,36 @@ defmodule Archdo.Rules.Compiled.UnanchoredModuleTest do
       assert UnanchoredModule.analyze_compiled(%{}) == []
     end
   end
+
+  describe "library mode — public modules are auto-anchored" do
+    # In a library project, every public module (not @moduledoc false) is
+    # part of the public API. Without this carve-out, every public module
+    # flags as unreachable because library consumers — the actual callers —
+    # aren't visible to the analyzer. Same shape as CE-30's library handling.
+    test "find_unanchored/2 with library publics included treats them as anchors" do
+      deps = %{
+        MyLib.PublicAPI => [MyLib.Internal],
+        MyLib.Internal => [],
+        MyLib.OtherPublicAPI => [],
+        MyLib.TrulyOrphan => []
+      }
+
+      # Simulate library mode: AST anchors empty, but public modules
+      # treated as anchors.
+      ast_anchors = MapSet.new()
+      library_publics = MapSet.new([MyLib.PublicAPI, MyLib.OtherPublicAPI])
+      combined = MapSet.union(ast_anchors, library_publics)
+
+      assert UnanchoredModule.find_unanchored(deps, combined) == [MyLib.TrulyOrphan]
+    end
+
+    test "in non-library mode, public modules without anchors stay orphan" do
+      deps = %{MyApp.PublicAPI => [], MyApp.Other => []}
+
+      # No library carve-out — public modules without explicit anchors
+      # remain unanchored.
+      assert UnanchoredModule.find_unanchored(deps, MapSet.new()) ==
+               [MyApp.Other, MyApp.PublicAPI]
+    end
+  end
 end

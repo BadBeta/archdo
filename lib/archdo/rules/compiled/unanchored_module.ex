@@ -35,10 +35,17 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
   @spec analyze_compiled(Compiled.t(), keyword()) :: [Diagnostic.t()]
   def analyze_compiled(graph, opts) do
     anchors = Keyword.get(opts, :ast_anchor_modules, MapSet.new())
+    library_publics = Keyword.get(opts, :library_public_modules, MapSet.new())
 
-    case MapSet.size(anchors) do
+    # Library mode carve-out: in a Hex package (mix.exs has package/0),
+    # every public module (not @moduledoc false) is reachable by external
+    # consumers we cannot see. Treating those as anchors prevents the
+    # "every public API module is unreachable" false-positive class.
+    combined_anchors = MapSet.union(anchors, library_publics)
+
+    case MapSet.size(combined_anchors) do
       0 -> []
-      _ -> find_unanchored_diagnostics(graph, anchors, opts)
+      _ -> find_unanchored_diagnostics(graph, combined_anchors, opts)
     end
   end
 

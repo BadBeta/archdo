@@ -158,7 +158,7 @@ defmodule Archdo do
         case build_compiled_graph(paths) do
           {:ok, graph} ->
             reached = compute_reached_modules(graph)
-            {anchors, ast_graph} = compute_ast_anchors_and_graph(paths)
+            {anchors, ast_graph, library_publics} = compute_ast_anchors_and_graph(paths)
 
             new_opts =
               opts
@@ -166,6 +166,7 @@ defmodule Archdo do
               |> Keyword.put(:compiled_reached_modules, reached)
               |> Keyword.put(:ast_anchor_modules, anchors)
               |> Keyword.put(:ast_graph, ast_graph)
+              |> Keyword.put(:library_public_modules, library_publics)
 
             {new_opts, graph}
 
@@ -193,8 +194,37 @@ defmodule Archdo do
       |> MapSet.new()
 
     ast_graph = Graph.build(production)
+    library_publics = compute_library_public_modules(production, paths)
 
-    {anchors, ast_graph}
+    {anchors, ast_graph, library_publics}
+  end
+
+  # Library carve-out: when mix.exs declares package/0 (Hex package), every
+  # public module (not @moduledoc false) is part of the public API and
+  # treated as anchored / "called from outside" — consumers we can't see
+  # reach those modules. Returns a MapSet of module atoms or empty when
+  # the project is not a library.
+  defp compute_library_public_modules(production_asts, paths) do
+    project_root =
+      case paths do
+        [path | _] -> path |> Path.expand() |> AST.find_mix_root()
+        _ -> AST.find_mix_root(File.cwd!())
+      end
+
+    case AST.library?(project_root) do
+      false ->
+        MapSet.new()
+
+      true ->
+        for {_file, ast} <- production_asts,
+            module = AST.extract_module_name(ast),
+            module != "Unknown",
+            not AST.internal_module?(ast),
+            atom = AST.safe_existing_atom(module),
+            not is_nil(atom),
+            into: MapSet.new(),
+            do: atom
+    end
   end
 
   defp build_compiled_graph(paths) do
