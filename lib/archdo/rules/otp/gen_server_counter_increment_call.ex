@@ -32,8 +32,10 @@ defmodule Archdo.Rules.OTP.GenServerCounterIncrementCall do
   defp counter_handle_call?({:def, _, [{:handle_call, _, _args}, [do: body]]}),
     do: counter_reply?(body)
 
-  defp counter_handle_call?({:def, _, [{:handle_call, _, _args}, [{{:__block__, _, [:do]}, body}]]}),
-    do: counter_reply?(body)
+  defp counter_handle_call?(
+         {:def, _, [{:handle_call, _, _args}, [{{:__block__, _, [:do]}, body}]]}
+       ),
+       do: counter_reply?(body)
 
   defp counter_handle_call?(_), do: false
 
@@ -85,8 +87,7 @@ defmodule Archdo.Rules.OTP.GenServerCounterIncrementCall do
               "def hit, do: :counters.add(:persistent_term.get(MyApp.Stats), 1, 1)\n\n" <>
               "# Read:\n" <>
               "def value, do: :counters.get(:persistent_term.get(MyApp.Stats), 1)",
-          applies_when:
-            "When the GenServer's only state is one or more integer counters."
+          applies_when: "When the GenServer's only state is one or more integer counters."
         ),
         Fix.new(
           summary: "Or use `:atomics` if you need compare-and-swap / wider arithmetic",

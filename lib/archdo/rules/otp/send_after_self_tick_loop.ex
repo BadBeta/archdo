@@ -56,8 +56,7 @@ defmodule Archdo.Rules.OTP.SendAfterSelfTickLoop do
 
   defp collect_rearm_targets(ast) do
     AST.find_all(ast, fn
-      {{:., _, [{:__aliases__, _, [:Process]}, :send_after]}, _,
-       [{:self, _, _}, _msg, delay]} ->
+      {{:., _, [{:__aliases__, _, [:Process]}, :send_after]}, _, [{:self, _, _}, _msg, delay]} ->
         constant_delay?(delay)
 
       _ ->
@@ -70,6 +69,7 @@ defmodule Archdo.Rules.OTP.SendAfterSelfTickLoop do
   # Excludes per-call computed values (variables, arithmetic on state).
   defp constant_delay?({:__block__, _, [d]}), do: constant_delay?(d)
   defp constant_delay?(d) when is_integer(d), do: true
+
   defp constant_delay?({:@, _, [{name, _, ctx}]}) when is_atom(name) and is_atom(ctx),
     do: true
 

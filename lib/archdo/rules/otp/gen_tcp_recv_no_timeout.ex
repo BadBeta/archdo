@@ -76,7 +76,8 @@ defmodule Archdo.Rules.OTP.GenTcpRecvNoTimeout do
               "  {:error, :timeout} -> retry_or_close(sock)\n" <>
               "  {:error, :closed} -> :ok\n" <>
               "end",
-          applies_when: "Always — there is no use case for an `:infinity` socket call in production."
+          applies_when:
+            "Always — there is no use case for an `:infinity` socket call in production."
         )
       ],
       references: [

@@ -16,9 +16,7 @@ defmodule Archdo.Rules.Module.EctoFragmentStringInterpolationTest do
       """
 
       diags =
-        assert_flagged(EctoFragmentStringInterpolation, code,
-          file: "lib/my_app/users.ex"
-        )
+        assert_flagged(EctoFragmentStringInterpolation, code, file: "lib/my_app/users.ex")
 
       assert hd(diags).rule_id == "6.92"
     end

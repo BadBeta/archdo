@@ -21,7 +21,9 @@ defmodule Archdo.Rules.Boundary.MissingTelemetryAuthPlugTest do
     end
     """
 
-    diags = assert_flagged(MissingTelemetryAuthPlug, code, file: "lib/my_app_web/plugs/auth_plug.ex")
+    diags =
+      assert_flagged(MissingTelemetryAuthPlug, code, file: "lib/my_app_web/plugs/auth_plug.ex")
+
     assert hd(diags).rule_id == "4.21"
     assert hd(diags).severity == :info
   end

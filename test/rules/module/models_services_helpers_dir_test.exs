@@ -66,9 +66,7 @@ defmodule Archdo.Rules.Module.ModelsServicesHelpersDirTest do
       end
       """
 
-      assert_clean(ModelsServicesHelpersDir, code,
-        file: "lib/my_app_web/helpers/nav_helper.ex"
-      )
+      assert_clean(ModelsServicesHelpersDir, code, file: "lib/my_app_web/helpers/nav_helper.ex")
     end
   end
 end

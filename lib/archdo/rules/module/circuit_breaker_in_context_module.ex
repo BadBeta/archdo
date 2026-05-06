@@ -60,8 +60,10 @@ defmodule Archdo.Rules.Module.CircuitBreakerInContextModule do
   defp line_of({_, meta, _}), do: AST.line(meta)
 
   defp name_of({{:., _, [:fuse, fun]}, _, _}), do: ":fuse.#{fun}"
+
   defp name_of({{:., _, [{:__aliases__, _, parts}, fun]}, _, _}),
     do: "#{Enum.join(parts, ".")}.#{fun}"
+
   defp name_of(_), do: "circuit-breaker call"
 
   defp build_diagnostic(file, line, call) do

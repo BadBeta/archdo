@@ -17,9 +17,7 @@ defmodule Archdo.Rules.Module.CircuitBreakerInContextModuleTest do
       """
 
       diags =
-        assert_flagged(CircuitBreakerInContextModule, code,
-          file: "lib/my_app/billing.ex"
-        )
+        assert_flagged(CircuitBreakerInContextModule, code, file: "lib/my_app/billing.ex")
 
       assert hd(diags).rule_id == "1.36"
     end

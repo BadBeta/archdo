@@ -35,9 +35,7 @@ defmodule Archdo.Rules.OTP.MissingTelemetryLiveViewMountTest do
     end
     """
 
-    assert_clean(MissingTelemetryLiveViewMount, code,
-      file: "lib/my_app_web/live/user_live.ex"
-    )
+    assert_clean(MissingTelemetryLiveViewMount, code, file: "lib/my_app_web/live/user_live.ex")
   end
 
   test "does NOT fire on a non-LV module that defines mount/3" do

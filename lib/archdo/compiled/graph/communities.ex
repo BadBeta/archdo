@@ -99,5 +99,4 @@ defmodule Archdo.Compiled.Graph.Communities do
         |> elem(0)
     end
   end
-
 end

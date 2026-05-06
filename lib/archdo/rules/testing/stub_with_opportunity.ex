@@ -43,8 +43,7 @@ defmodule Archdo.Rules.Testing.StubWithOpportunity do
     do: {mock, meta}
 
   defp extract_mock_and_meta(
-         {{:., _, [{:__aliases__, _, [:Mox]}, :stub]}, meta,
-          [{:__aliases__, _, parts}, _, _]}
+         {{:., _, [{:__aliases__, _, [:Mox]}, :stub]}, meta, [{:__aliases__, _, parts}, _, _]}
        ),
        do: {Module.concat(parts), meta}
 

@@ -397,5 +397,4 @@ defmodule Archdo.Compiled.Graph.Centrality do
       false -> iterate(new_rank, inbound, dangling, n, damping, iter_left - 1, epsilon)
     end
   end
-
 end

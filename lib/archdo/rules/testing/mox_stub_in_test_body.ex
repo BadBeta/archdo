@@ -57,7 +57,9 @@ defmodule Archdo.Rules.Testing.MoxStubInTestBody do
   defp stub_lines(body) do
     body
     |> AST.find_all(fn
-      {:stub, _, args} when is_list(args) and length(args) == 3 -> true
+      {:stub, _, args} when is_list(args) and length(args) == 3 ->
+        true
+
       {{:., _, [{:__aliases__, _, [:Mox]}, :stub]}, _, args}
       when is_list(args) and length(args) == 3 ->
         true

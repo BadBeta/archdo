@@ -59,9 +59,7 @@ defmodule Archdo.Rules.Module.CodeEvalStringOrQuotedTest do
       end
       """
 
-      assert_clean(CodeEvalStringOrQuoted, code,
-        file: "lib/mix/tasks/my_app.eval.ex"
-      )
+      assert_clean(CodeEvalStringOrQuoted, code, file: "lib/mix/tasks/my_app.eval.ex")
     end
   end
 end

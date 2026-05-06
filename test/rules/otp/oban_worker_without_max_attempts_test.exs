@@ -29,9 +29,7 @@ defmodule Archdo.Rules.OTP.ObanWorkerWithoutMaxAttemptsTest do
       end
       """
 
-      assert_clean(ObanWorkerWithoutMaxAttempts, code,
-        file: "lib/my_app/workers/send_email.ex"
-      )
+      assert_clean(ObanWorkerWithoutMaxAttempts, code, file: "lib/my_app/workers/send_email.ex")
     end
 
     test "ignores non-Oban modules" do
