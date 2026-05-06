@@ -383,7 +383,8 @@ defmodule Archdo.Rules do
     Archdo.Rules.CE.MissingDeletionPath,
     Archdo.Rules.CE.DeadRequirement,
     Archdo.Rules.Module.DuplicatedValidation,
-    Archdo.Rules.Module.SingleImplProtocol
+    Archdo.Rules.Module.SingleImplProtocol,
+    Archdo.Rules.OTP.InlineHttpInLiveViewEvent
   ]
 
   @project_file_path_rules [
