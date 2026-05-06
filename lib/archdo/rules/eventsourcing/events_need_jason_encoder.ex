@@ -13,10 +13,45 @@ defmodule Archdo.Rules.EventSourcing.EventsNeedJasonEncoder do
 
   @impl true
   def analyze(file, ast, _opts) do
-    case event_module?(ast) and not Helpers.upcaster_module?(ast) do
+    case event_module?(ast) and not Helpers.upcaster_module?(ast) and
+           not infrastructure_module?(ast) do
       false -> []
       true -> check_jason_encoder(file, ast)
     end
+  end
+
+  # Skip Commanded-infrastructure modules whose name contains "Event" but
+  # which are NOT event structs: GenServer-based handlers, supervisors,
+  # process managers, runtime context structs (FailureContext, ErrorContext),
+  # routers, applications.
+  @infrastructure_suffixes ~w(
+    Handler Subscriber ProcessManager Aggregate Router Application
+    Server Worker Dispatcher Supervisor Registry FailureContext
+    ErrorContext Telemetry Tracker
+  )
+
+  defp infrastructure_module?(ast) do
+    AST.contains?(ast, fn
+      {:defmodule, _, [{:__aliases__, _, aliases} | _]} ->
+        last = aliases |> List.last() |> Atom.to_string()
+        # Match BOTH exact suffix names AND compound names ending with them
+        # (e.g., `OrderProcessManager` ends with `ProcessManager`).
+        Enum.any?(@infrastructure_suffixes, fn s ->
+          last == s or String.ends_with?(last, s)
+        end)
+
+      {:use, _, [{:__aliases__, _, [:GenServer]} | _]} ->
+        true
+
+      {:use, _, [{:__aliases__, _, [:Supervisor]} | _]} ->
+        true
+
+      {:use, _, [{:__aliases__, _, [:Application]} | _]} ->
+        true
+
+      _ ->
+        false
+    end)
   end
 
   defp check_jason_encoder(file, ast) do
