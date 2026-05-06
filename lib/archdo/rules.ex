@@ -203,6 +203,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.NestedMapUpdateAsUpdateIn,
     Archdo.Rules.Module.StreamOverEnumOpportunity,
     Archdo.Rules.Module.ManualRecursionAsReduce,
+    Archdo.Rules.Module.BuilderPatternNotThreaded,
     Archdo.Rules.Boundary.DevDepInProd,
     Archdo.Rules.Boundary.UmbrellaDepConsistency,
     Archdo.Rules.Boundary.UnusedAlias,
