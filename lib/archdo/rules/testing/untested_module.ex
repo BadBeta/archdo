@@ -75,6 +75,26 @@ defmodule Archdo.Rules.Testing.UntestedModule do
     Enum.any?(candidates, &File.exists?/1)
   end
 
+  # Compute the canonical "expected" test path for a diagnostic message.
+  # `source_to_test_path/1` only handles relative paths; absolute paths fall
+  # back to `candidate_test_paths/3` which understands the project layout.
+  defp expected_test_path(file) do
+    case Path.type(file) do
+      :relative -> source_to_test_path(file)
+      _ -> first_candidate_or_fallback(file)
+    end
+  end
+
+  defp first_candidate_or_fallback(file) do
+    project_root = AST.find_mix_root(file)
+    test_paths = AST.test_paths_from_mix(project_root)
+
+    case candidate_test_paths(file, test_paths, project_root) do
+      [first | _] -> first
+      [] -> source_to_test_path(file)
+    end
+  end
+
   @doc """
   Convert a source file path to its expected test file path.
 
@@ -127,7 +147,7 @@ defmodule Archdo.Rules.Testing.UntestedModule do
 
   defp untested_diagnostic(file, ast) do
     module_name = AST.extract_module_name(ast)
-    expected_test = source_to_test_path(file)
+    expected_test = expected_test_path(file)
 
     Diagnostic.info("7.25",
       title: "Untested module",

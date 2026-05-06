@@ -144,6 +144,27 @@ end|)
       assert hd(diags).rule_id == "7.25"
     end
 
+    test "expected-test path uses test/, not lib/, on absolute source paths", %{root: root} do
+      File.write!(
+        Path.join(root, "lib/uncovered.ex"),
+        "defmodule Uncovered do\n  def x, do: :ok\nend"
+      )
+
+      [diag] =
+        assert_flagged(UntestedModule, File.read!(Path.join(root, "lib/uncovered.ex")),
+          file: Path.join(root, "lib/uncovered.ex")
+        )
+
+      # Bug: source_to_test_path/1 only handles paths starting with "lib/", so
+      # absolute paths leave the lib/ segment intact in the message.
+      refute diag.message =~ "lib/uncovered_test.exs",
+             "diagnostic message points at lib/ instead of test/: #{diag.message}"
+
+      assert diag.message =~ "test/uncovered_test.exs"
+      assert diag.context.expected_test_file =~ "test/uncovered_test.exs"
+      refute diag.context.expected_test_file =~ "lib/uncovered_test.exs"
+    end
+
     test "honors test_paths from mix.exs", %{root: root} do
       File.write!(Path.join(root, "mix.exs"), ~s|defmodule Foo.MixProject do
   use Mix.Project
