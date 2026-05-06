@@ -81,6 +81,8 @@ defmodule Archdo.Rules do
     Archdo.Rules.OTP.GenServerCounterIncrementCall,
     Archdo.Rules.OTP.SendAfterSelfTickLoop,
     Archdo.Rules.OTP.ApplicationGetEnvInCallback,
+    Archdo.Rules.OTP.GenTcpActiveTrue,
+    Archdo.Rules.OTP.GenTcpRecvNoTimeout,
     Archdo.Rules.OTP.AtomInHotPath,
     Archdo.Rules.OTP.EtsWithoutCleanup,
     Archdo.Rules.OTP.DetsOrderedSet,
@@ -248,6 +250,8 @@ defmodule Archdo.Rules do
     Archdo.Rules.Testing.ChangesetErrorsAccessInTest,
     Archdo.Rules.Testing.EqualsCompareTaggedTupleInTest,
     Archdo.Rules.Testing.StubWithOpportunity,
+    Archdo.Rules.Testing.TestTimeoutInfinity,
+    Archdo.Rules.Testing.AssertReceiveNoTimeout,
     # Composition rules
     Archdo.Rules.Composition.ShallowUse,
     Archdo.Rules.Composition.NamespaceDepth,
