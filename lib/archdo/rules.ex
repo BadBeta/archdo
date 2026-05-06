@@ -87,6 +87,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.OTP.EtsWithoutCleanup,
     Archdo.Rules.OTP.DetsOrderedSet,
     Archdo.Rules.OTP.DetsOwnershipLeak,
+    Archdo.Rules.OTP.InlineEffectInBuildingBlock,
     # Module quality rules
     Archdo.Rules.Module.MissingModuledoc,
     Archdo.Rules.Module.MissingSpec,
