@@ -158,6 +158,8 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.MapPutChainAsMerge,
     Archdo.Rules.Module.MapUpdateOpportunity,
     Archdo.Rules.Module.KeywordValidateOpportunity,
+    Archdo.Rules.Module.JasonDecodeWithAtomKeys,
+    Archdo.Rules.Module.NonLazyLoggerInspect,
     Archdo.Rules.Module.CollectionPerf,
     Archdo.Rules.Module.EagerEvaluation,
     Archdo.Rules.Module.SensitiveDataExposure,
