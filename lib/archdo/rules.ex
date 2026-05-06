@@ -196,6 +196,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.CodeEvalStringOrQuoted,
     Archdo.Rules.Module.HandRolledTokenCrypto,
     Archdo.Rules.Module.ShortCircuitOverAccumulating,
+    Archdo.Rules.Module.ResultMapOpportunity,
     Archdo.Rules.Boundary.DevDepInProd,
     Archdo.Rules.Boundary.UmbrellaDepConsistency,
     Archdo.Rules.Boundary.UnusedAlias,
