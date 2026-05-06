@@ -202,6 +202,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.PipeSubjectPosition,
     Archdo.Rules.Module.NestedMapUpdateAsUpdateIn,
     Archdo.Rules.Module.StreamOverEnumOpportunity,
+    Archdo.Rules.Module.ManualRecursionAsReduce,
     Archdo.Rules.Boundary.DevDepInProd,
     Archdo.Rules.Boundary.UmbrellaDepConsistency,
     Archdo.Rules.Boundary.UnusedAlias,
