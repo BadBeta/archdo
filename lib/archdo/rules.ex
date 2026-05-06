@@ -229,6 +229,10 @@ defmodule Archdo.Rules do
     Archdo.Rules.Testing.ProcessLeak,
     Archdo.Rules.Testing.AssertOnImplementation,
     Archdo.Rules.Testing.FlakyTestIndicators,
+    Archdo.Rules.Testing.MoxStubInTestBody,
+    Archdo.Rules.Testing.ChangesetErrorsAccessInTest,
+    Archdo.Rules.Testing.EqualsCompareTaggedTupleInTest,
+    Archdo.Rules.Testing.StubWithOpportunity,
     # Composition rules
     Archdo.Rules.Composition.ShallowUse,
     Archdo.Rules.Composition.NamespaceDepth,
