@@ -206,6 +206,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.ManualRecursionAsReduce,
     Archdo.Rules.Module.BuilderPatternNotThreaded,
     Archdo.Rules.Module.EncoderWithoutDecoder,
+    Archdo.Rules.Module.PhantomTypeOpportunity,
     Archdo.Rules.Boundary.DevDepInProd,
     Archdo.Rules.Boundary.UmbrellaDepConsistency,
     Archdo.Rules.Boundary.UnusedAlias,
