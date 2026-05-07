@@ -220,5 +220,95 @@ defmodule Archdo.Rules.Module.DeadPrivateFunctionTest do
 
       assert_clean(DeadPrivateFunction, code)
     end
+
+    # F4: `plug :atom` registers a PRIVATE function as a Plug callback.
+    # Plug invokes it via `apply(module, :atom, [conn, opts])` at runtime —
+    # the function IS called, but only via the plug pipeline. Static
+    # analysis sees `defp canonical_host` with no direct callsites and
+    # falsely flags it. Real-world: algora's endpoint.ex.
+
+    test "does not flag a private function registered as a Plug via `plug :atom`" do
+      code = ~S"""
+      defmodule MyAppWeb.Endpoint do
+        use Phoenix.Endpoint, otp_app: :my_app
+
+        plug :canonical_host
+
+        defp canonical_host(conn, _opts), do: conn
+      end
+      """
+
+      assert_clean(DeadPrivateFunction, code)
+    end
+
+    test "does not flag plug fn with options form `plug :name, opts`" do
+      code = ~S"""
+      defmodule MyAppWeb.Endpoint do
+        plug :require_auth, except: [:login, :register]
+
+        defp require_auth(conn, _opts), do: conn
+      end
+      """
+
+      assert_clean(DeadPrivateFunction, code)
+    end
+
+    test "does not flag plug fns inside a Phoenix.Router pipeline block" do
+      code = ~S"""
+      defmodule MyAppWeb.Router do
+        use Phoenix.Router
+
+        pipeline :api do
+          plug :put_format
+          plug :authenticate
+        end
+
+        defp put_format(conn, _opts), do: conn
+        defp authenticate(conn, _opts), do: conn
+      end
+      """
+
+      assert_clean(DeadPrivateFunction, code)
+    end
+
+    test "does not flag fn called via `|> name(args)` pipe-with-parens form" do
+      # F4: `|> validate_cron()` parses as `{:|>, _, [lhs, {:validate_cron, _, []}]}`.
+      # The bare-call clause records `validate_cron/0` but the actual arity
+      # called via pipe is `validate_cron/1`. Without the pipe-with-parens
+      # clause, the rule misses the call. Real-world: lightning's
+      # `Trigger.validate_cron/2` (default-arg form, called as `|> validate_cron()`).
+      code = ~S"""
+      defmodule MyApp.Trigger do
+        def changeset(cs, attrs) do
+          cs
+          |> Ecto.Changeset.cast(attrs, [:cron])
+          |> validate_cron()
+        end
+
+        defp validate_cron(changeset, _options \\ []) do
+          changeset
+        end
+      end
+      """
+
+      assert_clean(DeadPrivateFunction, code)
+    end
+
+    test "STILL flags a private function NOT registered as a plug" do
+      # Regression guard — adding plug-name capture must not blanket-suppress
+      # everything. A def that has no caller AND is not a plug-registered name
+      # still flags.
+      code = ~S"""
+      defmodule MyAppWeb.Endpoint do
+        plug :canonical_host
+
+        defp canonical_host(conn, _opts), do: conn
+        defp truly_dead(x), do: x + 1
+      end
+      """
+
+      [diag] = assert_flagged(DeadPrivateFunction, code)
+      assert diag.message =~ "truly_dead"
+    end
   end
 end

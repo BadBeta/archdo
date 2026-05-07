@@ -84,10 +84,45 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
     # (Phoenix idiom — function components or layouts compiled from disk).
     embedded_calls = collect_embed_template_calls(file, ast)
 
+    # `plug :atom` and `plug :atom, opts` register PRIVATE functions as
+    # Plug callbacks — Plug invokes them via `apply(module, atom, [conn, opts])`
+    # at runtime. Same for nested `pipeline :name do; plug :step; end`
+    # blocks. Without this, plug-registered private functions look dead.
+    plug_calls = collect_plug_registrations(ast)
+
     body_calls
     |> MapSet.union(heex_calls)
     |> MapSet.union(embedded_calls)
+    |> MapSet.union(plug_calls)
   end
+
+  # Walk the module AST collecting `{atom, 2}` pairs from every
+  # `plug :name` and `plug :name, opts` declaration. Plug callbacks
+  # always have arity 2 (`(conn, opts)`).
+  defp collect_plug_registrations(ast) do
+    {_, refs} = Macro.prewalk(ast, MapSet.new(), &collect_plug_ref/2)
+    refs
+  end
+
+  # Bare-atom form: `plug :atom` (no opts) — production parse_file/1 wraps
+  # the literal as `{:__block__, _, [:atom]}`; bare Code.string_to_quoted/1
+  # passes the atom directly. Match both.
+  defp collect_plug_ref({:plug, _, [arg]} = node, acc) do
+    {node, add_plug_atom(acc, arg)}
+  end
+
+  defp collect_plug_ref({:plug, _, [arg, _opts]} = node, acc) do
+    {node, add_plug_atom(acc, arg)}
+  end
+
+  defp collect_plug_ref(node, acc), do: {node, acc}
+
+  defp add_plug_atom(acc, atom) when is_atom(atom), do: MapSet.put(acc, {atom, 2})
+
+  defp add_plug_atom(acc, {:__block__, _, [atom]}) when is_atom(atom),
+    do: MapSet.put(acc, {atom, 2})
+
+  defp add_plug_atom(acc, _), do: acc
 
   # Phoenix's `embed_templates "<glob>"` compiles separate template files into
   # the module. Functions defined in the embedding module (often `defp`) are
@@ -244,6 +279,19 @@ defmodule Archdo.Rules.Module.DeadPrivateFunction do
           case keyword_or_special?(name) do
             true -> {node, call_acc}
             false -> {node, MapSet.put(call_acc, {name, 1})}
+          end
+
+        # Pipe RHS WITH parens: `x |> foo(a, b)` parses RHS as a call
+        # `{:foo, _, [a, b]}` — arity 2 in source, but the pipe prepends
+        # the LHS so the actual called arity is N+1. The bare-call
+        # clause below records the apparent arity; this clause adds the
+        # correct pipe-arity. (Symptom: `|> validate_cron()` recorded
+        # arity 0, but the called function is `validate_cron/1`.)
+        {:|>, _, [_lhs, {name, _, args}]} = node, call_acc
+        when is_atom(name) and is_list(args) ->
+          case keyword_or_special?(name) do
+            true -> {node, call_acc}
+            false -> {node, MapSet.put(call_acc, {name, length(args) + 1})}
           end
 
         # Bare function call: foo(a, b) => {:foo, meta, [a, b]}
