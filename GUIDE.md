@@ -8,17 +8,18 @@
 
 1. [What Archdo is and why](#1-what-archdo-is-and-why)
 2. [Install, update, uninstall](#2-install-update-uninstall)
-3. [What Archdo checks — broad coverage](#3-what-archdo-checks--broad-coverage)
-4. [The diagnostic shape](#4-the-diagnostic-shape)
-5. [Output formats](#5-output-formats)
-6. [CLI reference](#6-cli-reference)
-7. [Configuration (`.archdo.exs`)](#7-configuration-archdoexs)
-8. [Freeze / baseline workflow](#8-freeze--baseline-workflow)
-9. [MCP server (for LLM clients)](#9-mcp-server-for-llm-clients)
-10. [How Archdo works internally](#10-how-archdo-works-internally)
-11. [Guidance for LLM clients](#11-guidance-for-llm-clients)
-12. [Troubleshooting](#12-troubleshooting)
-13. [Where to read next](#13-where-to-read-next)
+3. [Quick start — using the CLI to check a project](#3-quick-start--using-the-cli-to-check-a-project)
+4. [What Archdo checks — broad coverage](#4-what-archdo-checks--broad-coverage)
+5. [The diagnostic shape](#5-the-diagnostic-shape)
+6. [Output formats](#6-output-formats)
+7. [CLI reference](#7-cli-reference)
+8. [Configuration (`.archdo.exs`)](#8-configuration-archdoexs)
+9. [Freeze / baseline workflow](#9-freeze--baseline-workflow)
+10. [MCP server (for LLM clients)](#10-mcp-server-for-llm-clients)
+11. [How Archdo works internally](#11-how-archdo-works-internally)
+12. [Guidance for LLM clients](#12-guidance-for-llm-clients)
+13. [Troubleshooting](#13-troubleshooting)
+14. [Where to read next](#14-where-to-read-next)
 
 ---
 
@@ -104,9 +105,88 @@ If you have a `.archdo.exs`, `.archdo_baseline.exs`, or `.mcp.json` referencing 
 - Phoenix and non-Phoenix projects
 - Umbrella projects (run from each child app's root)
 
+### Run Archdo without adding it to a project — the standalone form
+
+You can analyse a project from a clone of Archdo itself, without modifying the target project's `mix.exs`. Useful for one-off audits, third-party code review, or trying Archdo before committing to it:
+
+```bash
+git clone https://github.com/BadBeta/archdo.git
+cd archdo
+mix deps.get
+mix archdo --paths /absolute/path/to/some/elixir/project/lib
+```
+
+`--paths` takes an arbitrary directory or file list; the target doesn't need to know Archdo exists. Compiled-graph rules (`--compiled`) need `_build/` artefacts in the target project, so run `mix compile` over there first if you want those checks.
+
 ---
 
-## 3. What Archdo checks — broad coverage
+## 3. Quick start — using the CLI to check a project
+
+Once Archdo is installed (either as a project dependency or in its standalone form), the entire tool is one Mix task. Here are the four invocations that cover most use cases.
+
+### "Just check it" — the default
+
+```bash
+mix archdo
+```
+
+Defaults: scans `lib/`, includes boundary rules and function-graph analysis, runs the `core` pack, prints a markdown summary table grouped by rule, exits with code 0/1/2 depending on severity.
+
+### "Check everything" — every analysis mode + every opt-in pack
+
+```bash
+mix compile
+mix archdo \
+  --paths lib,test \
+  --tests \
+  --compiled \
+  --packs core,ce_compliance,ce_privacy,ce_composability \
+  --format text
+```
+
+What each switch turns on:
+
+| Switch | Effect |
+|---|---|
+| `--paths lib,test` | Scan both source and test trees |
+| `--tests` | Enable project-level test-architecture rules |
+| `--compiled` | Read BEAM artefacts for ground-truth dead-code, blast-radius, cycle, and API analysis |
+| `--packs core,ce_compliance,ce_privacy,ce_composability` | Turn on every pack, not just `core` |
+| `--format text` | Color-coded human-readable output with full `why` and fix options |
+
+Run `mix compile` first; `--compiled` needs the BEAM files. Boundaries (`--boundaries`) and function-graph (`--functions`) are already on by default, so they don't need to be repeated.
+
+### "Check my changed files" — for PR review
+
+```bash
+mix archdo --since main --format compact
+```
+
+Restricts the scan to files changed since the named git ref. `--format compact` produces one-line-per-finding output suitable for editor quickfix lists or CI logs.
+
+### "Tell me about one specific finding"
+
+```bash
+mix archdo --explain 6.50            # what does rule 6.50 mean?
+mix archdo --only 6.50 --paths lib   # show every instance of just that rule
+```
+
+### Inspect what's available
+
+```bash
+mix archdo --help               # full option list
+mix archdo --list-packs         # which rules belong to each pack
+mix archdo --building-blocks    # which modules/contexts pass the composability audit
+mix archdo --metrics            # Martin Ca/Ce/I/A/D table
+mix archdo --coverage           # test-coverage gap matrix
+mix archdo --diagram overview   # Mermaid architecture diagram (requires --compiled)
+```
+
+The full CLI reference (every flag) is in §7. Output formats are covered in §6.
+
+---
+
+## 4. What Archdo checks — broad coverage
 
 Archdo ships rules in two complementary layers, both backed by the same `%Diagnostic{}` shape and severity scheme:
 
@@ -243,11 +323,11 @@ This prints the modules and contexts that pass the audit (every public function 
 
 **The `ce_composability` pack** turns the scoring into rules — they fire when a function is structurally a building block but is missing something that would unlock the payoff (a property test, a guard on inputs, an extracted side effect). Each rule has its own `why` and ranked fix options; the canonical descriptions live in [`ARCHITECTURE_RULES.md`](ARCHITECTURE_RULES.md).
 
-**Marker:** if a module is intentionally not a building block (e.g., it carries opaque state or is a thin orchestration layer), declare that with the appropriate `@archdo_*` marker (see §3 above). Markers are the architectural-intent declaration; the scoring is the structural measurement.
+**Marker:** if a module is intentionally not a building block (e.g., it carries opaque state or is a thin orchestration layer), declare that with the appropriate `@archdo_*` marker (see "Suppression markers" earlier in this section). Markers are the architectural-intent declaration; the scoring is the structural measurement.
 
 ---
 
-## 4. The diagnostic shape
+## 5. The diagnostic shape
 
 Every Archdo finding is an `%Archdo.Diagnostic{}` struct. The shape is the contract — formatters and the MCP server serialize this directly. The fields are:
 
@@ -322,7 +402,7 @@ Every Archdo finding is an `%Archdo.Diagnostic{}` struct. The shape is the contr
 
 ---
 
-## 5. Output formats
+## 6. Output formats
 
 `mix archdo --format <format>` accepts seven formats. All are driven by `Archdo.Formatter` and consume the same `Diagnostic` struct.
 
@@ -348,7 +428,7 @@ This is so CI can use `mix archdo` directly without parsing output.
 
 ---
 
-## 6. CLI reference
+## 7. CLI reference
 
 ```
 mix archdo [options]
@@ -369,11 +449,11 @@ mix archdo [options]
 | `--tests`         | flag            | Project-level test architecture rules. Default: false.                                     |
 | `--functions`     | flag            | Function-level graph analysis. **Default: true.** Disable with `--no-functions`.           |
 | `--compiled`      | flag            | Read compiled beam files for ground-truth analysis (dead code, blast radius, cycles).       |
-| `--packs`         | comma-separated | Rule packs to enable. Default: `core`. See §3 for the pack list.                            |
+| `--packs`         | comma-separated | Rule packs to enable. Default: `core`. See §4 for the pack list.                            |
 | `--diagram`       | type            | Generate Mermaid/SVG architecture diagram: `overview`, `modules`, `api`, `context:Name`, `blast:Module`. |
 | `--coverage`      | flag            | Print test coverage gap matrix and exit.                                                   |
 | `--metrics`       | flag            | Print Martin package metrics (Ca/Ce/I/A/D) matrix and exit.                                |
-| `--building-blocks` | flag          | Print modules and contexts that pass the Blackbox audit (every public function ≥ 0.9). See §3. |
+| `--building-blocks` | flag          | Print modules and contexts that pass the Blackbox audit (every public function ≥ 0.9). See §4. |
 | `--list-packs`    | flag            | Print the rule-pack roster (which rules belong to each pack) and exit.                     |
 | `--freeze`        | flag            | Save current findings as the baseline.                                                     |
 | `--freeze-stats`  | flag            | Show baseline status (resolved, still present, new).                                       |
@@ -435,7 +515,7 @@ mix archdo --diagram blast:MyApp.Accounts            # Blast radius for a module
 
 ---
 
-## 7. Configuration (`.archdo.exs`)
+## 8. Configuration (`.archdo.exs`)
 
 Most projects work with **zero configuration** — Archdo detects Phoenix conventions from `mix.exs`. For non-Phoenix projects, umbrella apps, or custom layouts, drop a `.archdo.exs` file at the project root:
 
@@ -495,7 +575,7 @@ Most projects work with **zero configuration** — Archdo detects Phoenix conven
 
 ---
 
-## 8. Freeze / baseline workflow
+## 9. Freeze / baseline workflow
 
 Adopting Archdo on an existing codebase typically surfaces hundreds of pre-existing issues. The freeze workflow lets you accept them as a baseline so only **new** violations show up going forward.
 
@@ -523,7 +603,7 @@ The fingerprint is `{rule_id, file, line}` plus a content hash, so adding/removi
 
 ---
 
-## 9. MCP server (for LLM clients)
+## 10. MCP server (for LLM clients)
 
 Archdo ships an **MCP (Model Context Protocol) server** so LLM clients — Claude Code, Cursor, Cline, Zed, Codex — can call Archdo's analysis directly as a tool, no human intermediary needed.
 
@@ -628,7 +708,7 @@ The `structuredContent` field is the raw map; `content` is the same data seriali
 
 ---
 
-## 10. How Archdo works internally
+## 11. How Archdo works internally
 
 Archdo is a deterministic, single-process analyzer. There's no daemon, no language server, no compiler hook — a Mix task that walks the AST, and optionally reads compiled BEAM files for ground-truth analysis.
 
@@ -731,7 +811,7 @@ Graph rules implement `analyze_graph/2` instead and take a pre-built `%Archdo.Gr
 
 ---
 
-## 11. Guidance for LLM clients
+## 12. Guidance for LLM clients
 
 If you are an LLM agent and you have access to the Archdo MCP server, here is how to use it well.
 
@@ -808,7 +888,7 @@ When the user says "fix this finding":
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### "I see `key :suggestion not found` errors"
 
@@ -844,7 +924,7 @@ Archdo parses every file with `Code.string_to_quoted/2`, which can intern atoms.
 
 ---
 
-## 13. Where to read next
+## 14. Where to read next
 
 - [`ARCHITECTURE_RULES.md`](ARCHITECTURE_RULES.md) — every rule by category, with description, rationale, suppression markers, and worked examples. The canonical rule reference.
 - [`README.md`](README.md) — short orientation and quick-start.
