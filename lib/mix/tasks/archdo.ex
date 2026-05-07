@@ -23,7 +23,6 @@ defmodule Mix.Tasks.Archdo do
     * `--since` - Only analyze files changed since this git ref (e.g., `--since main`)
     * `--explain` - Explain a rule by ID (e.g., `--explain 6.50`)
     * `--init` - Generate a `.archdo.exs` config file with detected project defaults
-    * `--fix` - [EXPERIMENTAL] Auto-apply mechanical fixes. Use `--fix --dry-run` to preview first.
     * `--boundaries` - Cross-file boundary/graph rules (default: true). Disable with `--no-boundaries`.
     * `--tests` - Project-level test architecture checks (default: false).
     * `--functions` - Function-level graph analysis (default: true). Disable with `--no-functions`.
@@ -66,7 +65,7 @@ defmodule Mix.Tasks.Archdo do
 
   use Mix.Task
 
-  alias Archdo.{AST, Compare, Compiled, Formatter, Rule, Runner, Stats}
+  alias Archdo.{Compare, Compiled, Formatter, Rule, Runner, Stats}
 
   @impl Mix.Task
   def run(args) do
@@ -85,8 +84,6 @@ defmodule Mix.Tasks.Archdo do
           since: :string,
           explain: :string,
           init: :boolean,
-          fix: :boolean,
-          dry_run: :boolean,
           boundaries: :boolean,
           tests: :boolean,
           functions: :boolean,
@@ -134,7 +131,6 @@ defmodule Mix.Tasks.Archdo do
            | :freeze
            | :freeze_stats
            | :since
-           | :fix
            | :watch
            | :normal
 
@@ -179,7 +175,6 @@ defmodule Mix.Tasks.Archdo do
       Keyword.get(opts, :freeze, false) -> :freeze
       Keyword.get(opts, :freeze_stats, false) -> :freeze_stats
       Keyword.has_key?(opts, :since) -> :since
-      Keyword.get(opts, :fix, false) -> :fix
       Keyword.get(opts, :watch, false) -> :watch
       true -> :normal
     end
@@ -243,7 +238,6 @@ defmodule Mix.Tasks.Archdo do
   end
 
   defp invoke(:since, opts, paths), do: run_since(opts, paths)
-  defp invoke(:fix, opts, paths), do: run_fix(opts, paths)
   defp invoke(:watch, opts, paths), do: run_watch(opts, paths)
   defp invoke(:normal, opts, paths), do: run_normal(opts, paths)
 
@@ -623,180 +617,6 @@ defmodule Mix.Tasks.Archdo do
         IO.puts(:standard_error, "[archdo] #{reason}")
     end
   end
-
-  # --- --fix ---
-
-  defp run_fix(opts, paths) do
-    dry_run = Keyword.get(opts, :dry_run, true)
-
-    IO.puts(
-      :standard_error,
-      "[archdo] --fix is experimental. Use --fix --no-dry-run to apply changes."
-    )
-
-    run_opts = build_run_opts(opts)
-    files = Archdo.collect_files(paths)
-    diagnostics = Runner.analyze(files, run_opts)
-
-    fixable = Enum.filter(diagnostics, &auto_fixable?/1)
-    handle_fixable(fixable, dry_run)
-  end
-
-  # §§ elixir-implementing: §2.1 — multi-clause head dispatching
-  # first on whether there are any fixable findings, then on the
-  # dry-run boolean.
-  defp handle_fixable([], _dry_run) do
-    IO.puts("\nNo auto-fixable findings.\n")
-  end
-
-  defp handle_fixable(fixable, dry_run) do
-    IO.puts("\nArchdo — #{length(fixable)} auto-fixable findings\n")
-    run_fix_action(dry_run, fixable)
-  end
-
-  defp run_fix_action(true, fixable) do
-    Enum.each(fixable, fn d ->
-      IO.puts("  [#{d.rule_id}] #{AST.relative_path(d.file)}:#{d.line} — #{d.title}")
-    end)
-
-    IO.puts(
-      "\nDry run — #{length(fixable)} fixes would be applied. Use --fix without --dry-run to apply.\n"
-    )
-  end
-
-  defp run_fix_action(false, fixable) do
-    fixed_count =
-      fixable
-      |> Enum.group_by(& &1.file)
-      |> Enum.reduce(0, fn {file, file_diags}, count ->
-        count + apply_fixes(file, file_diags)
-      end)
-
-    IO.puts("Applied #{fixed_count} fixes. Run `mix format` to clean up formatting.\n")
-  end
-
-  @auto_fix_rules ["4.27", "6.33", "6.41"]
-
-  defp auto_fixable?(%{rule_id: rule_id}), do: rule_id in @auto_fix_rules
-
-  defp apply_fixes(file, diagnostics) do
-    case File.read(file) do
-      {:ok, content} ->
-        lines = String.split(content, "\n")
-
-        # Process from bottom to top so line numbers stay valid
-        sorted = Enum.sort_by(diagnostics, & &1.line, :desc)
-
-        {new_lines, count} =
-          Enum.reduce(sorted, {lines, 0}, fn diag, acc -> apply_one_or_skip(diag, acc) end)
-
-        write_if_fixed(count > 0, file, new_lines, count)
-
-        count
-
-      {:error, _} ->
-        0
-    end
-  end
-
-  # Remove unused alias lines
-  defp apply_single_fix(%{rule_id: "4.27", line: line}, lines) do
-    idx = line - 1
-    delete_alias_line(Enum.at(lines, idx), idx, lines)
-  end
-
-  # Rewrite inline single-with: "with {:ok, v} <- expr, do: body" → "case expr do ..."
-  defp apply_single_fix(%{rule_id: "6.41", line: line}, lines) do
-    idx = line - 1
-    rewrite_inline_with(Enum.at(lines, idx), idx, lines)
-  end
-
-  # Rewrite single pipe: "  x |> func(args)" → "  func(x, args)"
-  defp apply_single_fix(
-         %{rule_id: "6.33", title: "Code slop: single-step pipeline" <> _, line: line},
-         lines
-       ) do
-    idx = line - 1
-
-    case Enum.at(lines, idx) do
-      nil ->
-        :skip
-
-      original ->
-        indent = String.length(original) - String.length(String.trim_leading(original))
-        prefix = String.duplicate(" ", indent)
-        trimmed = String.trim(original)
-
-        case Archdo.PipeRewriter.rewrite_line(trimmed) do
-          nil -> :skip
-          ^trimmed -> :skip
-          fixed -> {:fixed, List.replace_at(lines, idx, prefix <> fixed)}
-        end
-    end
-  end
-
-  defp apply_single_fix(_, _), do: :skip
-
-  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
-  # the apply_single_fix result tag and on the line/alias content.
-  defp apply_one_or_skip(diag, {current_lines, fixed}) do
-    accumulate_fix(apply_single_fix(diag, current_lines), current_lines, fixed)
-  end
-
-  defp accumulate_fix({:fixed, updated}, _current_lines, fixed), do: {updated, fixed + 1}
-  defp accumulate_fix(:skip, current_lines, fixed), do: {current_lines, fixed}
-
-  defp write_if_fixed(false, _file, _lines, _count), do: :ok
-
-  defp write_if_fixed(true, file, lines, count) do
-    File.write!(file, Enum.join(lines, "\n"))
-    IO.puts("  #{Path.relative_to_cwd(file)}: #{count} fixes applied")
-  end
-
-  defp delete_alias_line(nil, _idx, _lines), do: :skip
-
-  defp delete_alias_line(line_content, idx, lines) do
-    delete_if_alias(String.contains?(line_content, "alias "), idx, lines)
-  end
-
-  defp delete_if_alias(false, _idx, _lines), do: :skip
-  defp delete_if_alias(true, idx, lines), do: {:fixed, List.delete_at(lines, idx)}
-
-  # §§ elixir-implementing: §2.1 — multi-clause head dispatching on
-  # nil-vs-line, then on regex-match-vs-no-match.
-  defp rewrite_inline_with(nil, _idx, _lines), do: :skip
-
-  defp rewrite_inline_with(original, idx, lines) do
-    indent = String.length(original) - String.length(String.trim_leading(original))
-    prefix = String.duplicate(" ", indent)
-    trimmed = String.trim(original)
-
-    rewrite_with_match(
-      Regex.run(~r/^with\s+(.+?)\s*<-\s*(.+?),\s*do:\s*(.+)$/, trimmed),
-      prefix,
-      idx,
-      lines
-    )
-  end
-
-  defp rewrite_with_match([_, pattern, expr, body], prefix, idx, lines) do
-    error_clause = error_clause_for(pattern)
-
-    replacement = [
-      "#{prefix}case #{expr} do",
-      "#{prefix}  #{pattern} -> #{body}",
-      "#{prefix}  #{error_clause}",
-      "#{prefix}end"
-    ]
-
-    {:fixed, List.replace_at(lines, idx, Enum.join(replacement, "\n"))}
-  end
-
-  defp rewrite_with_match(_no_match, _prefix, _idx, _lines), do: :skip
-
-  defp error_clause_for("{:ok" <> _), do: "{:error, _} = error -> error"
-  defp error_clause_for(":ok" <> _), do: "{:error, _} = error -> error"
-  defp error_clause_for(_), do: "other -> other"
 
   # --- --watch ---
 

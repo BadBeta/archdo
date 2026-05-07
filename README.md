@@ -81,7 +81,7 @@ For projects that want Archdo available as an MCP tool:
 }
 ```
 
-This exposes 12 tools: `archdo_analyze_paths`, `archdo_analyze_file`, `archdo_deep_review`, `archdo_list_rules`, `archdo_explain_rule`, `archdo_health`, `archdo_diff`, `archdo_diagram`, `archdo_perf_audit`, `archdo_suggest`, `archdo_explain_finding`, `archdo_fix`. Tool inputs are validated against their JSON Schema definitions using JSV.
+This exposes the analysis tools: `archdo_analyze_paths`, `archdo_analyze_file`, `archdo_deep_review`, `archdo_list_rules`, `archdo_explain_rule`, `archdo_health`, `archdo_diff`, `archdo_diagram`, `archdo_perf_audit`, `archdo_suggest`, `archdo_explain_finding`, `archdo_stats`. Tool inputs are validated against their JSON Schema definitions using JSV. Archdo focuses on detection and diagnosis — applying fixes is left to the user (or to LLMs with access to the elixir-implementing skill).
 
 ## Quick start
 
@@ -161,22 +161,11 @@ mix archdo                   # only new violations shown
 mix archdo --freeze-stats    # track progress
 ```
 
-## Auto-fix (experimental)
+## Detection and diagnosis only
 
-Archdo can auto-fix some mechanical findings. This feature is **experimental** — it defaults to dry-run mode to prevent accidental code breakage.
+Archdo is intentionally not a fix-applying tool. The job is to detect structural problems, explain *why* each one matters, and rank fix options. Applying those fixes is your decision — or, in an LLM-assisted workflow, the LLM's responsibility once it's loaded the appropriate Elixir skill (`elixir-implementing` for general fixes, `phoenix` / `phoenix-liveview` for framework files, `elixir-planning` for architecture-level redesigns).
 
-```bash
-mix archdo --fix                    # preview fixable findings (dry-run)
-mix archdo --fix --no-dry-run       # apply fixes (use with caution)
-```
-
-Currently auto-fixable:
-- **Unused aliases** (4.27) — removes the alias line
-- **Single-step pipelines** (6.33) — `list |> Enum.sort()` → `Enum.sort(list)` (safe patterns only)
-- **Single-clause with** (6.41) — inline `with` → `case` (inline form only)
-- **Enum.at(list, 0)** (6.50) → `hd(list)`
-
-The auto-fix skips complex expressions (assignments, keyword values, case clauses) to avoid semantic breakage. Always review changes and run tests after applying.
+This split keeps Archdo deterministic and auditable — every diff in your project is a human (or LLM) decision, not a tool's auto-edit.
 
 ## Documentation
 

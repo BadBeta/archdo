@@ -64,10 +64,6 @@ defmodule Mix.Tasks.ArchdoTest do
       assert :since = Archdo.pick_command(since: "main")
     end
 
-    test "fix picked when set" do
-      assert :fix = Archdo.pick_command(fix: true)
-    end
-
     test "watch picked when set" do
       assert :watch = Archdo.pick_command(watch: true)
     end

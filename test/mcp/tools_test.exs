@@ -7,7 +7,6 @@ defmodule Archdo.Mcp.ToolsTest do
     Diff,
     ExplainFinding,
     ExplainRule,
-    Fix,
     Health,
     ListRules,
     PerfAudit,
@@ -129,34 +128,6 @@ defmodule Archdo.Mcp.ToolsTest do
 
     test "returns error for missing file" do
       assert {:error, _} = ExplainFinding.call(%{"file" => "nonexistent.ex", "line" => 1})
-    end
-  end
-
-  describe "archdo_fix" do
-    test "generates fix suggestions for a file" do
-      {:ok, result} = Fix.call(%{"file" => "lib/archdo/ast.ex"})
-
-      assert is_integer(result.fixable_count)
-      assert is_integer(result.total_findings)
-      assert is_list(result.fixes)
-    end
-
-    test "returns error for missing file" do
-      assert {:error, _} = Fix.call(%{"file" => "nonexistent.ex"})
-    end
-
-    test "generates fixes for specific rule" do
-      {:ok, result} =
-        Fix.call(%{
-          "file" => "lib/archdo/ast.ex",
-          "rule_id" => "4.27"
-        })
-
-      assert is_list(result.fixes)
-
-      Enum.each(result.fixes, fn fix ->
-        assert fix.rule_id == "4.27"
-      end)
     end
   end
 

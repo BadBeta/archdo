@@ -159,7 +159,6 @@ defmodule Archdo.CLI do
       --tests                    Enable project-level test architecture rules
       --compiled                 Read BEAM artefacts (requires `mix compile` in target)
       --freeze / --freeze-stats / --show-all
-      --fix [--dry-run]          Auto-apply mechanical fixes
       --watch                    Re-run on file changes
       --version, -v              Print version and exit
       --help, -h                 Show this message

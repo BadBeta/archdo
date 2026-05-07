@@ -550,7 +550,6 @@ The two forms accept the same options and produce identical output. The escript 
 | `--since`         | git ref         | Only analyze files changed since this ref: `--since main`, `--since HEAD~3`                |
 | `--explain`       | rule id         | Print rule description and category: `--explain 6.50`                                      |
 | `--init`          | flag            | Generate a `.archdo.exs` config file with detected project defaults                        |
-| `--fix`           | flag            | Auto-apply mechanical fixes (currently: unused alias removal)                              |
 | `--watch`         | flag            | Re-run analysis on file changes (2s poll). Ctrl+C to stop.                                 |
 | `--boundaries`    | flag            | Cross-file boundary/graph rules. **Default: true.** Disable with `--no-boundaries`.        |
 | `--tests`         | flag            | Project-level test architecture rules. Default: false.                                     |
@@ -586,9 +585,6 @@ mix archdo --only 8.2 --paths lib
 
 # Skip noise
 mix archdo --ignore 6.1,6.4,7.25
-
-# Auto-fix what's mechanical
-mix archdo --fix
 
 # Watch mode (re-runs on save)
 mix archdo --watch
@@ -735,9 +731,10 @@ The server speaks **newline-delimited JSON-RPC 2.0** over stdin/stdout (logs go 
 | `archdo_perf_audit`    | Performance-only scan grouped by impact level                                 | `{total, by_impact, summary}`                          |
 | `archdo_suggest`       | File-type-aware proactive suggestions (GenServer→OTP, LiveView→boundary)      | `{file_type, findings, suggestions}`                   |
 | `archdo_explain_finding` | Given file:line, return finding with code context                           | `{finding, code_context}`                              |
-| `archdo_fix`           | Generate executable edit suggestions for mechanical rules                     | `{fixable_count, fixes: [...]}`                        |
 
 Per-tool input schemas are exposed via the MCP `tools/list` request and validated server-side using JSV. Use the standard MCP client to discover them.
+
+Archdo deliberately does not ship a fix-application tool. Stage 1 (Archdo) detects and diagnoses; the `alternatives` field on every diagnostic ranks the fix options. Applying those fixes is Stage 2 — the user's responsibility, or an LLM with access to `elixir-implementing` (and `phoenix` / `phoenix-liveview` for framework files).
 
 ### `archdo_deep_review` — the two-layer tool
 
@@ -965,7 +962,7 @@ Archdo deliberately covers Stage 1 (deterministic structural analysis) and leave
 | "Any performance issues?" | `archdo_perf_audit` |
 | "I'm editing this file, what should I watch for?" | `archdo_suggest` |
 | "What's wrong at this line?" | `archdo_explain_finding` |
-| "Fix these findings for me" | `archdo_fix` |
+| "Fix these findings for me" | Read the diagnostic's `alternatives`, load `elixir-implementing` (and `phoenix` / `phoenix-liveview` if applicable), apply the fix yourself — Archdo does not modify code |
 | "What rules exist?" | `archdo_list_rules` |
 | "Explain rule X" | `archdo_explain_rule` |
 
@@ -991,7 +988,7 @@ When the user says "fix this finding":
    - The user has explicit backups (a snapshot, a clean branch, an editor history they trust).
    - You created a tmp backup yourself: `cp path/to/file.ex /tmp/<file>.ex.archdo-backup-<timestamp>` — name it specifically so the user can find and remove it after, and tell the user where you put it.
 
-   Auto-fixers (Archdo's `--fix`, the `archdo_fix` tool, your direct edits) are confident but not infallible. The reversal path is what makes "if the diff looks wrong, undo and try a different alternative" cheap. Without it, the user has no clean rollback.
+   LLM edits are confident but not infallible. The reversal path is what makes "if the diff looks wrong, undo and try a different alternative" cheap. Without it, the user has no clean rollback. Note: Archdo itself does not modify code — it detects and diagnoses. Every code change going into the project is your edit (or a human's), so the safety net matters.
 2. **Load `elixir-implementing` if available** — it covers idiomatic fix shapes (`with` chains, multi-clause heads, OTP callback templates, changeset patterns) so the diff matches house style. For Phoenix-touching fixes, also load `phoenix` (and `phoenix-liveview` if the file is a LiveView).
 3. Pick the alternative whose `applies_when` matches the user's situation. If you can't tell, ask.
 4. Read the file at `diagnostic.file` to get the surrounding code.
@@ -1002,7 +999,7 @@ When the user says "fix this finding":
 
 **For multi-module / architecture-level fixes** (a finding signals "this context should be split", "this supervision tree should restart cascade", "this should be event-sourced"): load `elixir-planning` first. Don't apply structural changes from a single static finding without checking that the larger redesign actually fits.
 
-**Tip — propose-then-apply for non-trivial fixes:** if a fix touches more than one file or rewrites a function body, show the user the proposed change first and wait for confirmation. The reversibility check above is the safety net; an explicit confirmation is the prevention. Auto-apply is fine for mechanical rules (unused alias removal, single-step pipeline collapse, format-only fixes) where the change is local and obvious.
+**Tip — propose-then-apply for non-trivial fixes:** if a fix touches more than one file or rewrites a function body, show the user the proposed change first and wait for confirmation. The reversibility check above is the safety net; an explicit confirmation is the prevention. For mechanical, single-line changes (e.g. removing an unused alias, collapsing a single-step pipeline) you can apply directly — but still observe the reversibility step.
 
 ### Severity → action policy
 
@@ -1010,7 +1007,7 @@ When the user says "fix this finding":
 |------------|--------------------------------------------------------------------------------------|
 | `:error`   | Treat as a blocker. Fix it now or call out that it needs human attention immediately. |
 | `:warning` | Default to fixing. If a user says "ignore this", explain the trade-off briefly.       |
-| `:info`    | Surface but don't auto-fix. These are judgment calls. Walk the user through the alternatives. |
+| `:info`    | Surface but don't fix without discussion. These are judgment calls. Walk the user through the alternatives. |
 
 ### Things not to do
 

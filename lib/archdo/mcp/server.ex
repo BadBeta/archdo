@@ -20,7 +20,6 @@ defmodule Archdo.Mcp.Server do
     Diff,
     ExplainFinding,
     ExplainRule,
-    Fix,
     Health,
     ListRules,
     PerfAudit,
@@ -44,7 +43,6 @@ defmodule Archdo.Mcp.Server do
     PerfAudit,
     Suggest,
     ExplainFinding,
-    Fix,
     Stats
   ]
 

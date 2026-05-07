@@ -26,8 +26,11 @@ defmodule Archdo do
       why+fixes), `brief` (warns/errors with fixes, info elided), `compact`
       (one-line per finding), `json`, `llm` (NDJSON for tooling), `sarif`
       (GitHub Code Scanning), `html`.
-    * **MCP server** (`mix archdo.mcp`) exposing 13 JSON-RPC 2.0 tools so
-      LLMs can analyze, explain, diagram, and (experimentally) auto-fix.
+    * **MCP server** (`mix archdo.mcp`) exposing JSON-RPC 2.0 tools so
+      LLMs can analyze, explain, diagram, and run targeted reviews.
+      Archdo focuses on detection and diagnosis — applying fixes is left
+      to the user (or to LLM clients with access to elixir-implementing
+      and the rule's pre-ranked `alternatives`).
     * **Baseline / freeze workflow** for adopting Archdo on a legacy
       codebase: `mix archdo --freeze` captures current violations as a
       baseline; subsequent runs report only NEW violations.
