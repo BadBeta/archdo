@@ -2,27 +2,26 @@
 
 Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, boundary enforcement, and some LLM code slop.
 
-**262 rules** across 13 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+**329 rules** across 12 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
 
 ## What it checks
 
 | Category | Rules | Examples |
 |----------|-------|----------|
-| **Boundaries & Architecture** | 34 | Dependency direction, context encapsulation, boundary leak detection (internal modules called from outside, schemas/processes/config crossing contexts), circular deps, chatty boundaries, unvalidated params, reverse dependencies, query in interface, shared DB/ETS tables, LiveView logic, N+1 preload, dev dep hygiene, compiled: cross-boundary calls, blast radius, orphan modules |
+| **Boundaries & Architecture** | 33 | Dependency direction, context encapsulation, boundary leak detection (internal modules called from outside, schemas/processes/config crossing contexts), circular deps, chatty boundaries, unvalidated params, reverse dependencies, query in interface, shared DB/ETS tables, LiveView logic, N+1 preload, dev dep hygiene, compiled: cross-boundary calls, blast radius, orphan modules |
 | **Public API & Documentation** | 3 | Missing module/function docs, missing typespecs, external calls into private modules, contract density on schemas and supervisors, typed structs at boundaries, primitive obsession |
 | **Single Source of Truth** | 6 | Type-2/3 clones, scattered config, reinvented enumerable |
-| **Coupling & Abstraction** | 30 | Behaviour size, broad imports, unused deps/aliases, mockability, feature envy, speculative generality, missing telemetry, N+1 queries, compiled: unused imports, weak deps, phantom deps |
+| **Coupling & Abstraction** | 29 | Behaviour size, broad imports, unused deps/aliases, mockability, feature envy, speculative generality, missing telemetry, N+1 queries, compiled: unused imports, weak deps, phantom deps |
 | **Change Economy** | 32 | Building-block quadrant policy, hidden coupling, churn hotspots, abstraction leakage, change amplifiers |
-| **OTP discipline** | 51 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock, callback sprawl, atom exhaustion, ETS/DETS cleanup, sequential-where-parallel |
-| **Module quality** | 54 | Complexity, recursion (4 rules), LLM slop detection (5 sub-checks), dead functions, performance traps (8 rules: string concat, list ops, collection waste, regex, keyword lookup), nested control flow, boolean blindness, stub detection, shadowed clauses, over-eager evaluation (6 sub-checks), sensitive data exposure (6 sub-checks) |
-| **Error Handling** *(cross-cutting)* | 17 | Bare rescues swallowing errors, raise vs ok/error tuples, inconsistent error shapes, rescue-for-expected-failure, exception laundering, defensive nil returns, missing public-API catch-all, error-atom drift across modules, error paths without logging, stacktrace leakage in responses |
-| **Testing** | 27 | Coverage gaps, over-mocking, empty describe, missing error paths, untested modules, process leaks, flaky indicators, assert on implementation, compiled: test-only public |
-| **Event sourcing** | 9 | Aggregate purity, projection isolation, event immutability, command/event naming |
-| **State machines** | 6 | Unreachable states, terminal state integrity, implicit boolean state |
+| **OTP Process Architecture** | 71 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock, callback sprawl, atom exhaustion, ETS/DETS cleanup, sequential-where-parallel |
+| **Module Quality** | 99 | Complexity, recursion (4 rules), LLM slop detection (5 sub-checks), dead functions, performance traps (8 rules: string concat, list ops, collection waste, regex, keyword lookup), nested control flow, boolean blindness, stub detection, shadowed clauses, over-eager evaluation (6 sub-checks), sensitive data exposure (6 sub-checks), error-handling sub-rules (bare rescues, raise vs ok/error tuples, inconsistent error shapes, exception laundering, defensive nil returns, error-atom drift, stacktrace leakage) |
+| **Test Architecture** | 31 | Coverage gaps, over-mocking, empty describe, missing error paths, untested modules, process leaks, flaky indicators, assert on implementation, compiled: test-only public |
+| **Event Sourcing** | 9 | Aggregate purity, projection isolation, event immutability, command/event naming |
+| **State Machines** | 6 | Unreachable states, terminal state integrity, implicit boolean state |
 | **Composition & Composability** | 6 + verdicts | Deep `use` chains, excessive namespace depth, pipeline order flips, side-effect terminators, cross-module shape mismatches, ordered-middleware-chain constraints, per-module and per-context building-block verdicts scoring each public function on six composability axes (input closure, determinism, output completeness, totality, side-effect freedom, errors-as-values) |
-| **NIF safety** | 4 | Panic-inducing Rust patterns, scheduler misuse, missing behaviour wrapping |
+| **NIF Safety** | 4 | Panic-inducing Rust patterns, scheduler misuse, missing behaviour wrapping |
 
-*Error Handling and the building-block axes are cross-cutting — their rules also appear under Module Quality, Boundaries, and Change Economy. Total unique rules: 258.*
+*Total unique rule IDs: 329. Some categories thematically overlap (error handling rules are catalogued under Module Quality but also relevant to Boundaries; building-block axes relate to Composition and Change Economy) — the table counts each rule under its primary category only, no double-counting.*
 
 ### Building-block tests
 
@@ -182,7 +181,7 @@ The auto-fix skips complex expressions (assignments, keyword values, case clause
 ## Documentation
 
 - **[GUIDE.md](GUIDE.md)** — comprehensive user guide
-- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 262 rules documented
+- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 329 rules documented
 
 ## License
 

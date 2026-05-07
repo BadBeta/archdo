@@ -1,6 +1,6 @@
 # Archdo — Architectural Quality Rules for Elixir
 
-> 258 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, **test quality**, and **compiled beam analysis** — the gap none of them cover.
+> 329 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, **test quality**, and **compiled beam analysis** — the gap none of them cover.
 
 ## Contents
 
@@ -2480,21 +2480,23 @@ A near-building-block function whose public signature accepts unguarded input �
 
 ## Rule Summary
 
-| Category | Count | Rule IDs |
-|----------|-------|----------|
-| Boundaries | 34 | 1.1–1.33, 1.1b |
-| Public API | 3 | 2.1–2.3 |
-| Single Source of Truth | 6 | 3.1–3.6 |
-| Coupling & Abstraction | 30 | 4.1–4.30 |
-| OTP Process Architecture | 51 | 5.1–5.47, 5.50–5.55 |
-| Module Quality | 54 | 6.1–6.56 |
-| Test Architecture | 27 | 7.1–7.29 |
-| Event Sourcing | 9 | 8.1–8.9 |
-| State Machine | 6 | 9.1–9.3, SM-A/D/F |
-| Composition | 6 | 10.1–10.6 |
-| Native Interop | 4 | 11.1–11.4 |
-| Change Economy | 32 | CE-1, CE-2/CE-3, CE-4, CE-11, CE-12, CE-15, CE-17, CE-21, CE-23–CE-35, CE-47–CE-57 |
-| **Total** | **262** | |
+| Category | Count |
+|----------|-------|
+| Boundaries | 33 |
+| Public API | 3 |
+| Single Source of Truth | 6 |
+| Coupling & Abstraction | 29 |
+| OTP Process Architecture | 71 |
+| Module Quality | 99 |
+| Test Architecture | 31 |
+| Event Sourcing | 9 |
+| State Machine | 6 |
+| Composition | 6 |
+| Native Interop | 4 |
+| Change Economy | 32 |
+| **Total** | **329** |
+
+Counts are derived from the rule registries (`Archdo.Rules.phase1_rules/0`, `graph_rules/0`, `project_rules/0`, `compiled_rules/0`); each rule is counted under its primary category only.
 
 Rules marked *(compiled)* require the `--compiled` flag and work by analyzing beam files after `mix compile`. They see ground-truth dependencies after macro expansion — no AST guessing.
 

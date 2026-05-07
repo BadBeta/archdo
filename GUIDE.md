@@ -11,15 +11,16 @@
 3. [Quick start — using the CLI to check a project](#3-quick-start--using-the-cli-to-check-a-project)
 4. [What Archdo checks — broad coverage](#4-what-archdo-checks--broad-coverage)
 5. [The diagnostic shape](#5-the-diagnostic-shape)
-6. [Output formats](#6-output-formats)
-7. [CLI reference](#7-cli-reference)
-8. [Configuration (`.archdo.exs`)](#8-configuration-archdoexs)
-9. [Freeze / baseline workflow](#9-freeze--baseline-workflow)
-10. [MCP server (for LLM clients)](#10-mcp-server-for-llm-clients)
-11. [How Archdo works internally](#11-how-archdo-works-internally)
-12. [Guidance for LLM clients](#12-guidance-for-llm-clients)
-13. [Troubleshooting](#13-troubleshooting)
-14. [Where to read next](#14-where-to-read-next)
+6. [Stage 2 — interpreting findings with the elixir-phase-skills](#6-stage-2--interpreting-findings-with-the-elixir-phase-skills)
+7. [Output formats](#7-output-formats)
+8. [CLI reference](#8-cli-reference)
+9. [Configuration (`.archdo.exs`)](#9-configuration-archdoexs)
+10. [Freeze / baseline workflow](#10-freeze--baseline-workflow)
+11. [MCP server (for LLM clients)](#11-mcp-server-for-llm-clients)
+12. [How Archdo works internally](#12-how-archdo-works-internally)
+13. [Guidance for LLM clients](#13-guidance-for-llm-clients)
+14. [Troubleshooting](#14-troubleshooting)
+15. [Where to read next](#15-where-to-read-next)
 
 ---
 
@@ -232,7 +233,7 @@ archdo --coverage           # test-coverage gap matrix
 archdo --diagram overview   # Mermaid architecture diagram (requires --compiled)
 ```
 
-The full CLI reference (every flag) is in §7. Output formats are covered in §6.
+The full CLI reference (every flag) is in §8. Output formats are covered in §7.
 
 ---
 
@@ -452,7 +453,60 @@ Every Archdo finding is an `%Archdo.Diagnostic{}` struct. The shape is the contr
 
 ---
 
-## 6. Output formats
+## 6. Stage 2 — interpreting findings with the elixir-phase-skills
+
+Archdo is **Stage 1**: static analysis. It deterministically produces findings — the same input always produces the same output. What Archdo cannot do is decide whether a given finding is a real problem in your codebase, a false positive on an idiomatic pattern, an acceptable trade-off, or the most-impactful thing to fix first. That judgment requires Elixir domain knowledge and is **Stage 2**.
+
+The [`elixir-phase-skills`](https://github.com/BadBeta/Elixir_skill) — `elixir-planning`, `elixir-implementing`, `elixir-reviewing` — provide that domain knowledge for both human reviewers and LLM agents. They are coordinated with Archdo: each rule category has corresponding depth in the skills, and the skills' anti-pattern catalogues use the same rule IDs.
+
+```mermaid
+flowchart LR
+    Code[Elixir code] --> S1[Stage 1: Archdo]
+    S1 --> Findings[Diagnostics + why + ranked fix options]
+    Findings --> S2[Stage 2: elixir-reviewing skill]
+    S2 --> Triage[Triaged result: real issues, false positives, intentional trade-offs]
+    Triage --> Action[Apply fixes / freeze / accept]
+```
+
+### When to load `elixir-reviewing`
+
+Reach for it when you want to:
+
+- **Sort findings by severity in context** — `:info` rules are judgment calls; the skill's category tables tell you which info-level findings typically matter and which are usually noise.
+- **Distinguish false positives from real issues** — every category of rule has known FP-prone shapes; the skill catalogues those alongside the correct trigger patterns.
+- **Pick the right fix from a ranked list** — when a diagnostic has 2-3 `alternatives`, the skill's per-category guidance helps choose the one that matches your situation.
+- **Decide whether to fix, mark intentional, or freeze** — markers (`@archdo_*`), baselines, and ignore lists each have a place; the skill tells you which fits.
+
+### Two-layer workflow
+
+```bash
+# Stage 1 — produce findings
+archdo --paths lib --format compact > findings.txt
+
+# Stage 2 — load the reviewing skill (in Claude Code, Cursor, etc.) and ask:
+# "Walk me through these findings. Sort by severity-in-context, flag false
+#  positives, and recommend the order to fix them in."
+```
+
+For LLM agents using Claude Code, the convention is one slash invocation:
+
+```
+/elixir-reviewing
+```
+
+The skill's `SKILL.md` cross-references Archdo rule IDs throughout, so an LLM can move from a finding's `rule_id` straight to the relevant section of the skill. Each Elixir family member has a different focus:
+
+| Skill | Use for |
+|---|---|
+| `elixir-reviewing` | Triaging existing Archdo findings, audit walkthroughs, severity-in-context judgment |
+| `elixir-implementing` | Applying fixes idiomatically once you've decided what to change |
+| `elixir-planning` | Architecture-level redesign when a finding signals a structural problem (e.g. context split, supervision restructure) |
+
+§13 (Guidance for LLM clients) goes deeper into the LLM-specific tool-call patterns. This section is the framing both humans and LLMs need to understand *why* there are two layers in the first place.
+
+---
+
+## 7. Output formats
 
 `mix archdo --format <format>` accepts seven formats. All are driven by `Archdo.Formatter` and consume the same `Diagnostic` struct.
 
@@ -478,7 +532,7 @@ This is so CI can use `mix archdo` directly without parsing output.
 
 ---
 
-## 7. CLI reference
+## 8. CLI reference
 
 ```
 archdo [options]        # standalone escript
@@ -568,7 +622,7 @@ mix archdo --diagram blast:MyApp.Accounts            # Blast radius for a module
 
 ---
 
-## 8. Configuration (`.archdo.exs`)
+## 9. Configuration (`.archdo.exs`)
 
 Most projects work with **zero configuration** — Archdo detects Phoenix conventions from `mix.exs`. For non-Phoenix projects, umbrella apps, or custom layouts, drop a `.archdo.exs` file at the project root:
 
@@ -628,7 +682,7 @@ Most projects work with **zero configuration** — Archdo detects Phoenix conven
 
 ---
 
-## 9. Freeze / baseline workflow
+## 10. Freeze / baseline workflow
 
 Adopting Archdo on an existing codebase typically surfaces hundreds of pre-existing issues. The freeze workflow lets you accept them as a baseline so only **new** violations show up going forward.
 
@@ -656,7 +710,7 @@ The fingerprint is `{rule_id, file, line}` plus a content hash, so adding/removi
 
 ---
 
-## 10. MCP server (for LLM clients)
+## 11. MCP server (for LLM clients)
 
 Archdo ships an **MCP (Model Context Protocol) server** so LLM clients — Claude Code, Cursor, Cline, Zed, Codex — can call Archdo's analysis directly as a tool, no human intermediary needed.
 
@@ -761,7 +815,7 @@ The `structuredContent` field is the raw map; `content` is the same data seriali
 
 ---
 
-## 11. How Archdo works internally
+## 12. How Archdo works internally
 
 Archdo is a deterministic, single-process analyzer. There's no daemon, no language server, no compiler hook — a Mix task that walks the AST, and optionally reads compiled BEAM files for ground-truth analysis.
 
@@ -864,7 +918,7 @@ Graph rules implement `analyze_graph/2` instead and take a pre-built `%Archdo.Gr
 
 ---
 
-## 12. Guidance for LLM clients
+## 13. Guidance for LLM clients
 
 If you are an LLM agent and you have access to the Archdo MCP server, here is how to use it well.
 
@@ -941,7 +995,7 @@ When the user says "fix this finding":
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 ### "I see `key :suggestion not found` errors"
 
@@ -977,7 +1031,7 @@ Archdo parses every file with `Code.string_to_quoted/2`, which can intern atoms.
 
 ---
 
-## 14. Where to read next
+## 15. Where to read next
 
 - [`ARCHITECTURE_RULES.md`](ARCHITECTURE_RULES.md) — every rule by category, with description, rationale, suppression markers, and worked examples. The canonical rule reference.
 - [`README.md`](README.md) — short orientation and quick-start.
