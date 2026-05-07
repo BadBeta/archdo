@@ -533,13 +533,26 @@ defmodule Archdo.Blackbox do
 
   def value(body, name, phoenix_layer) do
     raw =
-      case orchestrator_name?(name) do
-        true -> 0.0
-        false -> substance_score(body) + layer_boost(phoenix_layer)
+      cond do
+        orchestrator_layer?(phoenix_layer) -> 0.0
+        orchestrator_name?(name) -> 0.0
+        true -> substance_score(body) + layer_boost(phoenix_layer)
       end
 
     min(raw, 1.0)
   end
+
+  # Phoenix interface layers are framework-dispatched orchestrators by
+  # idiom — they translate a request into context calls and shape the
+  # response. Phoenix's contexts-vs-interfaces separation IS the
+  # building-block boundary; flagging an interface as "could become a
+  # building block" misapplies the framework. The CONTEXT module's
+  # functions are the building-block candidates.
+  defp orchestrator_layer?(layer)
+       when layer in [:controller, :view, :router, :channel, :live_view, :component],
+       do: true
+
+  defp orchestrator_layer?(_), do: false
 
   @doc """
   Score a function on the value axis with the function's CONTEXT —

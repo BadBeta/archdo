@@ -557,6 +557,33 @@ defmodule Archdo.BlackboxTest do
       # Still :low band — won't fire CE-54.
       assert Blackbox.value_class(v) == :low
     end
+
+    # F11: Phoenix interface layers (controller, view, router, channel,
+    # live_view, component) are framework-dispatched orchestrators by
+    # idiom — they translate a request into context calls and shape the
+    # response. Phoenix's contexts-vs-controllers separation IS the
+    # building-block boundary; the controller is not a building-block
+    # candidate. Without this, every controller action got flagged as
+    # "could become a building block" — wrong layer of analysis.
+    test "controller-layer function returns 0.0 — controllers are orchestrators by idiom" do
+      v = Blackbox.value_for_function(substantial_body(), :show, 2, :controller, MapSet.new())
+      assert v == 0.0, "controllers are orchestrators in Phoenix; got value #{v}"
+    end
+
+    test "view-layer function returns 0.0 — views render, dispatched by Phoenix" do
+      v = Blackbox.value_for_function(substantial_body(), :embed_url, 1, :view, MapSet.new())
+      assert v == 0.0
+    end
+
+    test "router-layer function returns 0.0" do
+      v = Blackbox.value_for_function(substantial_body(), :pipeline, 1, :router, MapSet.new())
+      assert v == 0.0
+    end
+
+    test "channel-layer function returns 0.0 — channels are framework-dispatched" do
+      v = Blackbox.value_for_function(substantial_body(), :join, 3, :channel, MapSet.new())
+      assert v == 0.0
+    end
   end
 
   describe "composability_density/2" do
