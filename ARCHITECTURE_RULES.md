@@ -2,20 +2,48 @@
 
 > 329 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, **test quality**, and **compiled beam analysis** — the gap none of them cover.
 
+<!--
+  ENTRY TEMPLATE — every rule MUST follow this shape so the reference
+  document stays scannable. Exceptions for genuinely complex rules are
+  fine; they should be the minority.
+
+      ### N.M Title
+
+      One-line summary describing what the rule detects.
+
+      - **Why:** Architectural rationale (1–3 sentences). Concept tags
+        in parens at the end: (SOLID-D, Hexagonal, Performance, etc.)
+      - **Check:** What the analyzer actually does (AST shape, graph
+        query, registry lookup). One short paragraph.
+      - **Tolerate:** Exceptions / suppression markers / common
+        legitimate patterns the rule must not flag.
+      - **Severity:** `error` / `warning` / `info`
+
+  Optional extras (use sparingly, only when they add clarity):
+    - ASCII diagram (1.1 has the canonical example)
+    - BAD/GOOD code blocks for non-obvious patterns
+    - Sub-check enumeration when one rule covers multiple shapes (6.50)
+
+  Coverage check: `mix archdo.audit_doc_coverage` — fails CI when a new
+  rule lands without an entry here. Baselines:
+    - priv/doc_coverage_baseline.txt        (acknowledged-missing rules)
+    - priv/doc_coverage_stale_baseline.txt  (acknowledged-stale entries)
+-->
+
 ## Contents
 
-1. [Boundary Integrity](#1-boundary-integrity) — 34 rules (1.1–1.33, 1.1b)
+1. [Boundary Integrity](#1-boundary-integrity) — 33 rules (1.1–1.36, 1.1b)
 2. [Public API Quality](#2-public-api-quality) — 3 rules (2.1–2.3)
 3. [Single Source of Truth](#3-single-source-of-truth) — 6 rules (3.1–3.6)
-4. [Coupling & Abstraction](#4-coupling--abstraction) — 30 rules (4.1–4.30)
-5. [OTP Process Architecture](#5-otp-process-architecture) — 51 rules (5.1–5.47, 5.50–5.55)
-6. [Module Quality](#6-module-quality) — 54 rules (6.1–6.56)
-7. [Test Architecture](#7-test-architecture) — 27 rules (7.1–7.29)
+4. [Coupling & Abstraction](#4-coupling--abstraction) — 29 rules
+5. [OTP Process Architecture](#5-otp-process-architecture) — 71 rules (5.1–5.76)
+6. [Module Quality](#6-module-quality) — 99 rules (6.1–6.103)
+7. [Test Architecture](#7-test-architecture) — 31 rules (7.1–7.35)
 8. [Event Sourcing](#8-event-sourcing-architecture) — 9 rules (8.1–8.9)
 9. [State Machine](#9-state-machine-architecture) — 6 rules (9.1–9.3, SM-A/D/F)
 10. [Composition](#10-composition-and-extensibility) — 6 rules (10.1–10.6)
 11. [Native Interop](#11-native-interop-nifs-ports-rustler) — 4 rules (11.1–11.4)
-12. [Change Economy](#12-change-economy) — 28 rules (CE-1 … CE-57)
+12. [Change Economy](#12-change-economy) — 32 rules (CE-1 … CE-57)
 
 ## Design Philosophy
 
