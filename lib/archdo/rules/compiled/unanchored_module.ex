@@ -54,7 +54,7 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
 
     for mod <- find_unanchored(deps, anchors),
         not excluded?(mod, graph),
-        do: build_diagnostic(mod, graph)
+        do: build_diagnostic(mod)
   end
 
   # §§ elixir-implementing: §5.5 — pure recursive helpers; the rule's
@@ -150,54 +150,73 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
     String.contains?(name, ".Support.") or String.contains?(name, "TestHelpers")
   end
 
-  defp build_diagnostic(module, _graph) do
+  @doc """
+  Builds the `:info`-severity Diagnostic for an unanchored module.
+
+  Public for direct testing — production callers go through
+  `analyze_compiled/2`.
+  """
+  @spec build_diagnostic(module()) :: Diagnostic.t()
+  def build_diagnostic(module) do
     Diagnostic.info("1.26",
       title: "Module not anchor-reachable in compiled call graph",
       message:
         "Module #{inspect(module)} is not transitively reachable from any anchor " <>
           "(Phoenix route, Mix task, supervised process, public API, @archdo_anchor) " <>
-          "even after macros expanded. The compiled call graph captures all macro-" <>
+          "even after macros expanded. The compiled call graph captures most macro-" <>
           "injected edges (use, defmacro, Phoenix.Router, Ecto.Schema, Plug.Builder), " <>
-          "so a module appearing here is NOT a macro false positive — both AST and " <>
-          "compiled walks agree the module is orphan.",
+          "but it cannot see calls a library's macros emit into the CONSUMER's " <>
+          "compiled module — the library's BEAM has zero edges, the consumer's BEAM " <>
+          "has the call. Strong signal, not absolute: combine with grep before deleting.",
       why:
         "Sister rule to CE-30 (AST anchor reachability) and 1.25 (zero in/out edges). " <>
           "1.26 is stricter than CE-30 (uses post-expansion graph) and looser than " <>
           "1.25 (anchor-reachability vs total isolation). When 1.26 fires, the module " <>
-          "is genuinely unwired: no anchor reaches it, no macro injection wires it. " <>
-          "Strongest deletion signal of the three.\n\n" <>
-          "Severity stays :info — runtime-only paths (`apply/3` from external input, " <>
-          "`:erpc` from peer nodes, `Code.ensure_loaded/1`) remain invisible to static " <>
-          "analysis even at the compiled level. Mark such entry points with " <>
-          "`@archdo_anchor`.",
+          "is unwired AS SCANNED: no anchor reaches it, no macro injection inside the " <>
+          "scanned source wires it. Still the strongest deletion signal of the three, " <>
+          "but flagged as `:info` because two FP classes remain:\n\n" <>
+          "  1. Runtime-only paths — `apply/3` from external input, `:erpc` from peer " <>
+          "nodes, `Code.ensure_loaded/1`, Mix.Task auto-discovery in a custom DSL.\n" <>
+          "  2. Macros that emit dispatch logic into the CONSUMER's compiled module " <>
+          "(e.g. `Commanded.Commands.Router`'s `dispatch_to_aggregate/3` quotes a call " <>
+          "to `Commanded.Commands.Dispatcher` — the library's own BEAM has no edge).\n\n" <>
+          "Mark such entry points with `@archdo_anchor`.",
       alternatives: [
         Fix.new(
           summary: "Delete the module",
           detail:
             "1.26 firing is the strongest static signal that the module is unused. " <>
               "Verify by grepping for the module name across the project (a `:erpc` " <>
-              "callsite or runtime config that the analyzer can't see is the only " <>
-              "remaining hiding place). If grep is also empty, delete.",
+              "callsite, runtime config, or library-scope macro emitting calls into " <>
+              "consumer modules is the only remaining hiding place). If grep is also " <>
+              "empty, delete.",
           applies_when:
             "1.25 (orphan_module) and CE-30 (AST anchor) also fire, AND grep finds no references."
         ),
         Fix.new(
           summary: "Mark with @archdo_anchor when the entry path is dynamic",
           detail:
-            "Some modules are reached only via runtime mechanisms — `apply/3` from " <>
-              "config, `:erpc` from another node, Mix.Task auto-discovery in a custom " <>
-              "DSL. Add `@archdo_anchor \"<reason>\"` to the module so the closure " <>
-              "walk treats it as anchored.",
+            "Some modules are reached only via paths static analysis can't trace:\n" <>
+              "  • `apply/3` from runtime config or external input\n" <>
+              "  • `:erpc` / `:rpc` calls from another node\n" <>
+              "  • `Code.ensure_loaded/1` + `apply/3` plugin discovery\n" <>
+              "  • Mix.Task auto-discovery in a custom DSL\n" <>
+              "  • Macros in a LIBRARY that quote calls to a sibling module — the " <>
+              "compiled call edge materializes inside the consumer's BEAM, not the " <>
+              "library's. Example: `Commanded.Commands.Router`'s `dispatch_to_aggregate/3` " <>
+              "macro emits a call to `Commanded.Commands.Dispatcher` into the user's " <>
+              "router module; scanning the Commanded library in isolation, Dispatcher " <>
+              "appears unreachable.\n\n" <>
+              "Add `@archdo_anchor \"<reason>\"` to the module so the closure walk " <>
+              "treats it as anchored.",
           applies_when:
-            "The module IS used but only via a runtime path no static analyzer can detect."
+            "The module IS used but only via a runtime path or macro-emitted-into-consumer call no static analyzer scanning the library in isolation can detect."
         )
       ],
       references: ["ARCHITECTURE_RULES.md#1.26"],
       context: %{module: module},
-      file: source_file(module, _graph_unused = nil),
+      file: "(compiled)",
       line: 1
     )
   end
-
-  defp source_file(_module, _graph), do: "(compiled)"
 end

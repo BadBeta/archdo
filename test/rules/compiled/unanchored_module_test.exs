@@ -140,6 +140,44 @@ defmodule Archdo.Rules.Compiled.UnanchoredModuleTest do
     end
   end
 
+  describe "build_diagnostic/1 — fix-text guidance" do
+    # M-fp-E2: macro-edge audit on Commanded showed that
+    # `Commanded.Commands.Router`'s `dispatch_to_aggregate/3` macro emits
+    # the call to `Commanded.Commands.Dispatcher` into the CONSUMER's
+    # compiled module — the library's own BEAM has zero edges to Dispatcher
+    # (`:beam_lib.chunks/2` confirms). When 1.26 is run on a library scanned
+    # in isolation, that macro pattern manifests as an unreachable
+    # `@moduledoc false` module. The @archdo_anchor Fix MUST surface this
+    # specific failure mode in its detail text — generic "apply/3 from
+    # config" / ":erpc" guidance doesn't lead a user toward the fix.
+    test "@archdo_anchor Fix.detail explicitly mentions macro-dispatch into consumer modules" do
+      diag = UnanchoredModule.build_diagnostic(MyApp.OrphanMod)
+
+      marker_fix =
+        Enum.find(diag.alternatives, fn fix ->
+          fix.summary =~ "@archdo_anchor"
+        end)
+
+      assert marker_fix, "expected an @archdo_anchor alternative fix"
+
+      assert marker_fix.detail =~ "macro",
+             "fix detail should call out the macro-dispatch pattern; got: #{marker_fix.detail}"
+    end
+
+    test "diagnostic message acknowledges the macro-edge gap honestly" do
+      # The pre-E2 message claimed "the compiled call graph captures all
+      # macro-injected edges, so a module appearing here is NOT a macro
+      # false positive". The Commanded audit disproves this: macros that
+      # emit calls into the CONSUMER's compiled module are invisible to
+      # library-scope compiled analysis. Soften the claim to "strong
+      # signal but not absolute" — and direct readers to @archdo_anchor.
+      diag = UnanchoredModule.build_diagnostic(MyApp.OrphanMod)
+
+      refute diag.message =~ "NOT a macro false positive",
+             "message should not assert macro-FP-immunity; got: #{diag.message}"
+    end
+  end
+
   describe "behaviour-implementor anchoring (M-fp-D10)" do
     # A module that declares `@behaviour SomeBehaviour` is reached via
     # behaviour-callback dispatch by the parent library/framework. Without
