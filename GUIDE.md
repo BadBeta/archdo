@@ -986,15 +986,23 @@ Each `Diagnostic` has the following intent:
 
 When the user says "fix this finding":
 
-1. **Load `elixir-implementing` if available** — it covers idiomatic fix shapes (`with` chains, multi-clause heads, OTP callback templates, changeset patterns) so the diff matches house style. For Phoenix-touching fixes, also load `phoenix` (and `phoenix-liveview` if the file is a LiveView).
-2. Pick the alternative whose `applies_when` matches the user's situation. If you can't tell, ask.
-3. Read the file at `diagnostic.file` to get the surrounding code.
-4. Apply the fix in-place, mirroring the structure of the `example` if one is provided.
-5. If the rule is one of the false-positive-prone ones, the first alternative is usually "verify this is real" — actually verify before changing code. `elixir-reviewing` catalogues the FP-prone shapes by category.
-6. After applying the fix, re-run `archdo_analyze_file` (or `archdo_analyze_paths` for the touched file) to confirm the diagnostic is gone.
-7. If new diagnostics appeared, surface them — don't paper over them.
+1. **Make sure the change is reversible** before you touch any file. Verify ONE of these is true; if none is, set one up:
+   - The working tree is clean (or the relevant file is committed) so `git restore <file>` recovers the prior state. Run `git status` to confirm.
+   - The user has explicit backups (a snapshot, a clean branch, an editor history they trust).
+   - You created a tmp backup yourself: `cp path/to/file.ex /tmp/<file>.ex.archdo-backup-<timestamp>` — name it specifically so the user can find and remove it after, and tell the user where you put it.
+
+   Auto-fixers (Archdo's `--fix`, the `archdo_fix` tool, your direct edits) are confident but not infallible. The reversal path is what makes "if the diff looks wrong, undo and try a different alternative" cheap. Without it, the user has no clean rollback.
+2. **Load `elixir-implementing` if available** — it covers idiomatic fix shapes (`with` chains, multi-clause heads, OTP callback templates, changeset patterns) so the diff matches house style. For Phoenix-touching fixes, also load `phoenix` (and `phoenix-liveview` if the file is a LiveView).
+3. Pick the alternative whose `applies_when` matches the user's situation. If you can't tell, ask.
+4. Read the file at `diagnostic.file` to get the surrounding code.
+5. Apply the fix in-place, mirroring the structure of the `example` if one is provided.
+6. If the rule is one of the false-positive-prone ones, the first alternative is usually "verify this is real" — actually verify before changing code. `elixir-reviewing` catalogues the FP-prone shapes by category.
+7. After applying the fix, re-run `archdo_analyze_file` (or `archdo_analyze_paths` for the touched file) to confirm the diagnostic is gone.
+8. If new diagnostics appeared, surface them — don't paper over them.
 
 **For multi-module / architecture-level fixes** (a finding signals "this context should be split", "this supervision tree should restart cascade", "this should be event-sourced"): load `elixir-planning` first. Don't apply structural changes from a single static finding without checking that the larger redesign actually fits.
+
+**Tip — propose-then-apply for non-trivial fixes:** if a fix touches more than one file or rewrites a function body, show the user the proposed change first and wait for confirmation. The reversibility check above is the safety net; an explicit confirmation is the prevention. Auto-apply is fine for mechanical rules (unused alias removal, single-step pipeline collapse, format-only fixes) where the change is local and obvious.
 
 ### Severity → action policy
 
