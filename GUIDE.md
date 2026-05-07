@@ -922,6 +922,22 @@ Graph rules implement `analyze_graph/2` instead and take a pre-built `%Archdo.Gr
 
 If you are an LLM agent and you have access to the Archdo MCP server, here is how to use it well.
 
+### Companion skills — load them when available
+
+Archdo deliberately covers Stage 1 (deterministic structural analysis) and leaves Stage 2 (severity-in-context judgment, false-positive triage, idiomatic fixes, framework-specific patterns) to a coordinated set of skills. **If your environment exposes any of the skills below, load them.** They cross-reference Archdo rule IDs throughout, so you can move from a finding to its idiomatic resolution without re-reading the rule documentation.
+
+| Skill | Phase | Load when |
+|---|---|---|
+| `elixir-reviewing` | Interpreting findings | The user asks you to review/audit an Elixir project, or you've just received Archdo diagnostics and need to triage them. Use this for severity-in-context, false-positive detection, fix selection, and the fix-vs-mark-vs-freeze decision. **This is the primary Stage 2 skill.** |
+| `elixir-implementing` | Applying fixes | You've decided what to change and need to write the fix idiomatically — pattern-match dispatch, `with` chains, OTP callbacks, ok/error tuples, schema/changeset shapes. |
+| `elixir-planning` | Architecture-level redesign | A finding signals a structural problem (context split, supervision restructure, missing boundary, missing event sourcing) — load this before suggesting refactors that span multiple modules. |
+| `phoenix` | Phoenix projects | The project has Phoenix in `mix.exs`. Covers controllers, plugs, contexts at the framework boundary, channels, presence, router conventions. |
+| `phoenix-liveview` | Phoenix projects with LiveView | The project uses LiveView. Covers `mount`/`handle_event`/`handle_info` lifecycle, streams, uploads, hooks, async assigns. |
+
+**Detection:** check whether the slash invocation works (`/elixir-reviewing`, `/phoenix`) or whether the skill is listed in your environment's available-skills set. If a skill isn't available, fall back to your general Elixir knowledge — but flag to the user that loading the skill would yield better-grounded recommendations.
+
+**Reference:** [`ARCHITECTURE_RULES.md`](ARCHITECTURE_RULES.md) is the canonical per-rule manual. When a finding's `why` field doesn't give enough context, fetch the corresponding `ARCHITECTURE_RULES.md#X.Y` anchor (referenced in `diagnostic.references`) for the full rationale, the trigger pattern, and tolerance/suppression guidance. Use this for any rule-specific question; it's cheaper than calling `archdo_explain_rule` repeatedly.
+
 ### When to call Archdo
 
 **Always call it when:**
@@ -970,12 +986,15 @@ Each `Diagnostic` has the following intent:
 
 When the user says "fix this finding":
 
-1. Pick the alternative whose `applies_when` matches the user's situation. If you can't tell, ask.
-2. Read the file at `diagnostic.file` to get the surrounding code.
-3. Apply the fix in-place, mirroring the structure of the `example` if one is provided.
-4. If the rule is one of the false-positive-prone ones, the first alternative is usually "verify this is real" — actually verify before changing code.
-5. After applying the fix, re-run `archdo_analyze_file` (or `archdo_analyze_paths` for the touched file) to confirm the diagnostic is gone.
-6. If new diagnostics appeared, surface them — don't paper over them.
+1. **Load `elixir-implementing` if available** — it covers idiomatic fix shapes (`with` chains, multi-clause heads, OTP callback templates, changeset patterns) so the diff matches house style. For Phoenix-touching fixes, also load `phoenix` (and `phoenix-liveview` if the file is a LiveView).
+2. Pick the alternative whose `applies_when` matches the user's situation. If you can't tell, ask.
+3. Read the file at `diagnostic.file` to get the surrounding code.
+4. Apply the fix in-place, mirroring the structure of the `example` if one is provided.
+5. If the rule is one of the false-positive-prone ones, the first alternative is usually "verify this is real" — actually verify before changing code. `elixir-reviewing` catalogues the FP-prone shapes by category.
+6. After applying the fix, re-run `archdo_analyze_file` (or `archdo_analyze_paths` for the touched file) to confirm the diagnostic is gone.
+7. If new diagnostics appeared, surface them — don't paper over them.
+
+**For multi-module / architecture-level fixes** (a finding signals "this context should be split", "this supervision tree should restart cascade", "this should be event-sourced"): load `elixir-planning` first. Don't apply structural changes from a single static finding without checking that the larger redesign actually fits.
 
 ### Severity → action policy
 
