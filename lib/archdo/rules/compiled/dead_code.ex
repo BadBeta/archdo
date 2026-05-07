@@ -20,18 +20,81 @@ defmodule Archdo.Rules.Compiled.DeadCode do
 
   @spec analyze_compiled(Compiled.t(), keyword()) :: [Diagnostic.t()]
   def analyze_compiled(graph, opts) do
-    library_publics = Keyword.get(opts, :library_public_modules, MapSet.new())
-    impl_annotated = Keyword.get(opts, :impl_annotated_functions, %{})
-    project_callback_fns = build_callback_fn_set(graph)
-    app_entry_fns = MapSet.new([{:start, 2}, {:stop, 1}])
+    filters = build_filters(graph, opts)
 
     graph
     |> Compiled.dead_functions()
-    |> Enum.reject(&function_in_public_library_module?(&1, library_publics))
-    |> Enum.reject(&behaviour_callback_impl?(&1, project_callback_fns))
-    |> Enum.reject(&impl_annotated_function?(&1, impl_annotated))
-    |> Enum.reject(&application_entry_function?(&1, app_entry_fns))
+    |> Enum.reject(&suppress?(&1, filters))
     |> Enum.map(&build_diagnostic/1)
+  end
+
+  defp build_filters(graph, opts) do
+    %{
+      library_publics: Keyword.get(opts, :library_public_modules, MapSet.new()),
+      impl_annotated: Keyword.get(opts, :impl_annotated_functions, %{}),
+      source_defs: Keyword.get(opts, :source_defined_functions, %{}),
+      behaviour_implementors: behaviour_implementor_set(graph),
+      project_callback_fns: build_callback_fn_set(graph),
+      app_entry_fns: MapSet.new([{:start, 2}, {:stop, 1}])
+    }
+  end
+
+  defp suppress?(finding, filters) do
+    function_in_public_library_module?(finding, filters.library_publics) or
+      behaviour_callback_impl?(finding, filters.project_callback_fns) or
+      impl_annotated_function?(finding, filters.impl_annotated) or
+      macro_injected_callback_default?(
+        finding,
+        filters.source_defs,
+        filters.behaviour_implementors
+      ) or
+      application_entry_function?(finding, filters.app_entry_fns)
+  end
+
+  @doc """
+  Checks whether a dead-function finding should be suppressed because it's a
+  macro-injected callback default.
+
+  A finding qualifies for suppression when ALL of:
+  1. The module declares one or more `@behaviour Mod` (so it's reached via
+     callback dispatch from the framework that owns the behaviour).
+  2. The function `{name, arity}` is NOT in the module's source-defined
+     function set — meaning the function exists in the compiled BEAM but
+     not in any `def` / `defp` in the source AST.
+
+  This catches the common case of `use SomeBehaviour` macros that inject
+  default callback implementations: the BEAM has them as exports but no
+  source-level `def` annotates them with `@impl`.
+
+  Public for direct testing.
+  """
+  @spec macro_injected_callback_default?(
+          %{module: module(), function: atom(), arity: arity()},
+          %{module() => MapSet.t({atom(), arity()})},
+          MapSet.t(module())
+        ) :: boolean()
+  def macro_injected_callback_default?(
+        %{module: module, function: fun, arity: arity},
+        source_defs,
+        behaviour_implementor_modules
+      ) do
+    in_behaviour_module? = MapSet.member?(behaviour_implementor_modules, module)
+
+    in_source? =
+      case Map.get(source_defs, module) do
+        nil -> false
+        defs -> MapSet.member?(defs, {fun, arity})
+      end
+
+    in_behaviour_module? and not in_source?
+  end
+
+  # Build the set of modules that declare any `@behaviour Mod` based on the
+  # compiled graph's `:behaviours` field per module.
+  defp behaviour_implementor_set(graph) do
+    for {mod, %{behaviours: [_ | _]}} <- Compiled.modules(graph),
+        into: MapSet.new(),
+        do: mod
   end
 
   # Library mode: a "dead" public function in a public-API module is almost
@@ -88,29 +151,25 @@ defmodule Archdo.Rules.Compiled.DeadCode do
   defp build_callback_fn_set(graph) do
     modules = Compiled.modules(graph)
 
-    Enum.reduce(modules, %{}, fn {mod, info}, acc ->
-      case Map.get(info, :behaviours, []) do
-        [] ->
-          acc
+    for {mod, %{behaviours: [_ | _] = behaviours}} <- modules,
+        callbacks = collect_callbacks(behaviours, modules),
+        MapSet.size(callbacks) > 0,
+        into: %{},
+        do: {mod, callbacks}
+  end
 
-        behaviours ->
-          callbacks =
-            Enum.reduce(behaviours, MapSet.new(), fn behaviour, set ->
-              case Map.get(modules, behaviour) do
-                %{callback_fns: cbs} when is_list(cbs) ->
-                  Enum.reduce(cbs, set, fn cb, s -> MapSet.put(s, callback_to_arity(cb)) end)
+  defp collect_callbacks(behaviours, modules) do
+    behaviours
+    |> Enum.flat_map(&behaviour_callbacks(&1, modules))
+    |> Enum.map(&callback_to_arity/1)
+    |> MapSet.new()
+  end
 
-                _ ->
-                  set
-              end
-            end)
-
-          case MapSet.size(callbacks) do
-            0 -> acc
-            _ -> Map.put(acc, mod, callbacks)
-          end
-      end
-    end)
+  defp behaviour_callbacks(behaviour, modules) do
+    case Map.get(modules, behaviour) do
+      %{callback_fns: cbs} when is_list(cbs) -> cbs
+      _ -> []
+    end
   end
 
   defp callback_to_arity({_name, _arity} = pair), do: pair

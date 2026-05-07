@@ -159,7 +159,7 @@ defmodule Archdo do
           {:ok, graph} ->
             reached = compute_reached_modules(graph)
 
-            {anchors, ast_graph, library_publics, impl_annotated} =
+            {anchors, ast_graph, library_publics, impl_annotated, source_defs} =
               compute_ast_anchors_and_graph(paths)
 
             new_opts =
@@ -170,6 +170,7 @@ defmodule Archdo do
               |> Keyword.put(:ast_graph, ast_graph)
               |> Keyword.put(:library_public_modules, library_publics)
               |> Keyword.put(:impl_annotated_functions, impl_annotated)
+              |> Keyword.put(:source_defined_functions, source_defs)
 
             {new_opts, graph}
 
@@ -199,8 +200,33 @@ defmodule Archdo do
     ast_graph = Graph.build(production)
     library_publics = compute_library_public_modules(production, paths)
     impl_annotated = compute_impl_annotated_functions(production)
+    source_defs = compute_source_defined_functions(production)
 
-    {anchors, ast_graph, library_publics, impl_annotated}
+    {anchors, ast_graph, library_publics, impl_annotated, source_defs}
+  end
+
+  # Build `module_atom => MapSet({fn, arity})` of every `def`/`defp` defined
+  # in source AST. Compiled-rule 6.24 (DeadCode) consumes this to detect
+  # macro-injected callback defaults — functions that exist in the compiled
+  # BEAM but not in source. Combined with `behaviour_implementor?`, those
+  # are flagged as macro-injected and skipped from dead-code findings.
+  defp compute_source_defined_functions(production_asts) do
+    for {_file, ast} <- production_asts,
+        module = AST.extract_module_name(ast),
+        module != "Unknown",
+        atom = AST.safe_existing_atom(module),
+        not is_nil(atom),
+        defs = collect_module_defs(ast),
+        into: %{},
+        do: {atom, defs}
+  end
+
+  defp collect_module_defs(ast) do
+    ast
+    |> AST.extract_functions(:all)
+    |> Enum.reduce(MapSet.new(), fn {name, arity, _meta, _args, _body}, acc ->
+      MapSet.put(acc, {name, arity})
+    end)
   end
 
   # Build `module_atom => MapSet({fn, arity})` map of every function
