@@ -1494,15 +1494,6 @@ Module has independent function clusters suggesting multiple responsibilities.
 - **Tolerate:** Small modules with few functions, thin facade modules.
 - **Severity:** `info`
 
-### 6.13 Unbounded Mailbox Pressure
-
-Module sends messages to a GenServer in a loop without backpressure — can overwhelm the mailbox.
-
-- **Why:** Sending messages to a GenServer in a tight loop without waiting for confirmation or applying backpressure fills the receiver's mailbox faster than it can drain. The mailbox grows unboundedly, consuming memory until the scheduler degrades or the node runs out of memory. Backpressure patterns (call instead of cast, demand-driven flow, bounded buffer) keep the system stable under load. (Backpressure, Memory Safety, Mailbox Bounds)
-- **Check:** Flag patterns where a GenServer.cast or send is called inside a loop body (Enum, for, recursive function) without a corresponding GenServer.call acknowledgment or rate-limiting mechanism in the same function.
-- **Tolerate:** Low-volume message sends, systems with explicit flow control at the supervisor level (Broadway, GenStage with demand).
-- **Severity:** `info`
-
 ### 6B. Naming & Design
 
 ### 6.6 Boolean Flag Arguments
@@ -1779,15 +1770,6 @@ Function body re-checks a type that's already guaranteed by the pattern match or
 - **Why:** When a function head matches `%{} = x`, calling `is_map(x)` in the body is redundant — the pattern already guarantees the type. (Dead Code, Clarity)
 - **Check:** Extract type guarantees from patterns (`%{}` → map, `[_ | _]` → list, `<<>>` → binary) and guards (`when is_map(x)`), then walk body for redundant `is_*` checks on guaranteed variables.
 - **Tolerate:** Guards on struct fields that add narrower constraints.
-- **Severity:** `info`
-
-### 6.37 Missing Observability at Error Path
-
-Error branches (rescue, `{:error, _}` clauses, catch) that silently swallow failures without emitting a log line or telemetry event.
-
-- **Why:** Silent error paths are the leading cause of invisible production failures. When an error branch returns a fallback value without logging, the failure is indistinguishable from a successful result. Correlation between user-reported issues and root cause becomes impossible. Every error path that doesn't crash the process needs at minimum a `Logger.warning` so the event appears in logs. (Observability, Debuggability)
-- **Check:** Flag rescue/catch blocks and `{:error, _}` clauses in public functions that return a non-error result without calling Logger or :telemetry.execute.
-- **Tolerate:** Error branches that reraise or return `{:error, _}` (the caller handles observability). Test files. Boundary modules that log at a higher level.
 - **Severity:** `info`
 
 ### 6.38 Identity Transformation
@@ -2441,24 +2423,6 @@ Test files should declare `async: true` when eligible.
 - **Tolerate:** None — `assert_receive`, polling with `eventually`, or explicit synchronization is always better.
 - **Severity:** `warning`
 
-### 7.6 Test File Without async Declaration
-
-Test file uses `ExUnit.Case` but has neither `async: true` nor a documented reason for synchronous execution.
-
-- **Why:** Tests that don't explicitly set `async: true` or `async: false` default to synchronous. A missing declaration is ambiguous — it may be intentional (the test truly needs isolation) or simply forgotten. Explicit declarations make the intent visible and reviewable. Missing `async: true` where it would be safe unnecessarily serializes CI runs. (Test Performance, Explicitness)
-- **Check:** Flag test files using `ExUnit.Case` without an `async:` option in the `use` call.
-- **Tolerate:** Test support modules that don't define test cases. Files that set `async: false` explicitly with a comment.
-- **Severity:** `info`
-
-### 7.7 Test Without Context Tag
-
-Test `describe` block has no `@moduletag` and no `@tag` — cannot be selectively run.
-
-- **Why:** ExUnit tags enable selective test execution (`mix test --only slow`, `mix test --only integration`). Without tags, all tests run on every CI pipeline stage. Tags allow fast/slow, unit/integration, and wip/stable splits. A test suite without any tags becomes an all-or-nothing run as it grows. (Test Organization, CI Performance)
-- **Check:** Flag test files that define `describe` blocks but have no `@moduletag` or `@tag` declarations anywhere in the file.
-- **Tolerate:** Very small test files with only 1-2 test cases. Test support and helper files.
-- **Severity:** `info`
-
 ### 7.8 Test Naming
 
 Test modules should be named `*Test` in `*_test.exs` files.
@@ -2826,6 +2790,33 @@ Schemas with 3+ state-suggesting boolean fields (is_active, is_verified, is_susp
 - **Check:** Count boolean fields with state-suggesting names (`is_*`, `has_*`, `was_*`, `*_active`, `*_enabled`, `*_verified`, `*_completed`, `*_confirmed`, etc.) in Ecto schema modules. Flag schemas with 3+ such fields.
 - **Tolerate:** Independently meaningful booleans (`can_email`, `can_sms`, `can_push` — capabilities, not states) where every combination is valid.
 - **Severity:** `info`
+
+### SM-A Transition Target State Not in `@states`
+
+A `{:next_state, target, ...}` transition where `target` isn't in the module's declared `@states` set.
+
+- **Why:** An undeclared `:next_state` target is a guaranteed runtime crash — the state machine will receive an event it has no callback for. Pattern-matching makes this invisible at compile time in `handle_event_function` mode and in hand-rolled machines. Declaring states up front and verifying transitions stay inside that set catches the bug at lint time. (Correctness, State Machines)
+- **Check:** Per-module: extract `@states [:a, :b, :c, ...]`. Walk the AST for `{:next_state, target, ...}` returns. Flag when `target` is a literal atom not in `@states`.
+- **Tolerate:** Modules without an `@states` declaration (the rule has no anchor); transitions whose target is computed at runtime (variable rather than literal); documented case where the target is intentionally outside the declared set.
+- **Severity:** `warning`
+
+### SM-D State Assignment Outside Declared `@states`
+
+An assignment `state: <literal-atom>` where the atom isn't in the module's `@states` set.
+
+- **Why:** Assigns a state value the rest of the module doesn't know how to handle, leading to `FunctionClauseError` or silent misbehaviour the next time the state is dispatched on. The check forces the state vocabulary to remain a closed set documented in one place. (Correctness, State Machines)
+- **Check:** Per-module: extract `@states`. Walk `state: value` keyword assignments and `%{state: value}` map updates; flag when `value` is a literal atom not in `@states`.
+- **Tolerate:** Modules without `@states`; computed (non-literal) state values; intentional out-of-set values documented inline.
+- **Severity:** `warning`
+
+### SM-F Incomplete State Match — Declared States Not Handled
+
+A `case` (or function-head pattern set) on the state value that omits states declared in `@states` and lacks a catch-all clause.
+
+- **Why:** The state declaration says these states exist; the consumer needs to handle each one or explicitly fall through with `_`. A missing state crashes with `CaseClauseError` the next time the state is set legitimately and reaches this consumer. (Correctness, State Machines)
+- **Check:** Per-module: extract `@states`. Find `case state` (and similar) sites; collect the literal-atom clauses; flag when declared states are missing AND no catch-all clause exists.
+- **Tolerate:** Catch-all `_` clause covering remaining states; intentional partial handling documented inline (rare); modules without `@states`.
+- **Severity:** `warning`
 
 ---
 

@@ -24,18 +24,78 @@ defmodule Archdo.DocCoverage do
 
   @doc """
   Lists every unique rule id from the rule registries.
+
+  Discovery is two-track: (1) the named registries in `Archdo.Rules`
+  (`phase1_rules/0`, `graph_rules/0`, `project_rules/0`,
+  `compiled_rules/0`), and (2) every loaded module under `:archdo`
+  that declares `@behaviour Archdo.Rule` and exports `id/0` —
+  catches function-graph rules invoked via `defdelegate` that
+  aren't in any named registry.
+
+  A rule that returns a slash-separated id like `"CE-2/CE-3"` is
+  expanded into its constituent ids — the rule emits diagnostics
+  with each individual `rule_id`, so doc coverage tracks them
+  separately.
   """
   @spec registered_rule_ids() :: [String.t()]
   def registered_rule_ids do
-    phase1 = safe_call(Archdo.Rules, :phase1_rules, [])
-    graph = safe_call(Archdo.Rules, :graph_rules, [])
-    project = safe_call(Archdo.Rules, :project_rules, [])
-    compiled = safe_call(Archdo.Rules, :compiled_rules, [])
+    from_registries = registry_modules() |> Enum.uniq()
+    from_behaviour = behaviour_modules()
 
-    (phase1 ++ graph ++ project ++ compiled)
+    (from_registries ++ from_behaviour)
     |> Enum.uniq()
-    |> Enum.map(& &1.id())
+    |> Enum.flat_map(&extract_ids/1)
     |> Enum.uniq()
+  end
+
+  defp registry_modules do
+    safe_call(Archdo.Rules, :phase1_rules, []) ++
+      safe_call(Archdo.Rules, :graph_rules, []) ++
+      safe_call(Archdo.Rules, :project_rules, []) ++
+      safe_call(Archdo.Rules, :compiled_rules, [])
+  end
+
+  # Walk every module of the :archdo application; keep those that
+  # implement Archdo.Rule. Picks up function-graph and other rules
+  # that aren't in a named registry list but ARE loaded and emit
+  # diagnostics.
+  defp behaviour_modules do
+    _ = Application.ensure_all_started(:archdo)
+
+    case :application.get_key(:archdo, :modules) do
+      {:ok, modules} -> Enum.filter(modules, &archdo_rule?/1)
+      _ -> []
+    end
+  end
+
+  defp archdo_rule?(mod) do
+    not test_support_module?(mod) and
+      Code.ensure_loaded?(mod) and
+      function_exported?(mod, :id, 0) and
+      Archdo.Rule in (mod.module_info(:attributes)
+                      |> Keyword.get_values(:behaviour)
+                      |> List.flatten())
+  rescue
+    _ -> false
+  end
+
+  # Test-only rule fixtures (under `test/support/`) are loaded with the
+  # app in `:test` env but must not count toward production rule
+  # coverage. Filenames there get compiled into modules with names like
+  # `Archdo.QuadrantTestRule` — anything whose name ends in
+  # `TestRule` / `TestSupport` is excluded.
+  defp test_support_module?(mod) do
+    name = Atom.to_string(mod)
+    String.ends_with?(name, "TestRule") or String.ends_with?(name, "TestSupport")
+  end
+
+  defp extract_ids(mod) do
+    case mod.id() do
+      id when is_binary(id) -> String.split(id, "/", trim: true)
+      _ -> []
+    end
+  rescue
+    _ -> []
   end
 
   @doc """

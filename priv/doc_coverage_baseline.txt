@@ -5,7 +5,3 @@
 # from this file. Empty file = full coverage.
 #
 # Lines starting with # are comments. Blank lines are ignored.
-CE-2/CE-3
-SM-A
-SM-D
-SM-F
