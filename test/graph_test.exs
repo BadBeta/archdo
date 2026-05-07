@@ -192,4 +192,100 @@ defmodule Archdo.GraphTest do
       refute Enum.any?(targets, fn t -> String.starts_with?(t, "Authent") end)
     end
   end
+
+  describe "suffix-resolution for macro-injected aliases" do
+    # `use ChangelogWeb, :controller` (a project-defined helper)
+    # expands to `quote do alias Changelog.Policies; ... end`. Archdo
+    # cannot see the expansion. Then the controller has
+    # `plug Authorize, [Policies.Admin.Episode, :podcast]`.
+    # The `Policies` short-form is unresolvable to a full module name
+    # via the file's alias_table (which has no `Policies` entry).
+    # Result: edge target is "Policies.Admin.Episode" — a phantom
+    # name that doesn't match any defined module.
+    #
+    # Heuristic: when ALL files have been parsed, post-process the
+    # graph to resolve dangling short-name targets against the set of
+    # defined modules. If exactly one defined module ends with
+    # `<Phantom>` segments, substitute. If multiple modules suffix-
+    # match (ambiguous), leave the dangling edge in place.
+
+    defp parse(code, file) do
+      {:ok, ast} =
+        Code.string_to_quoted(code,
+          file: file,
+          columns: true,
+          token_metadata: true,
+          literal_encoder: &{:ok, {:__block__, &2, [&1]}}
+        )
+
+      {file, ast}
+    end
+
+    test "dangling short-name target resolves to suffix-matching defined module" do
+      controller =
+        parse(
+          """
+          defmodule MyAppWeb.EpisodeController do
+            plug Authorize, [Policies.Admin.Episode, :podcast]
+          end
+          """,
+          "lib/my_app_web/controllers/episode_controller.ex"
+        )
+
+      policy =
+        parse(
+          """
+          defmodule MyApp.Policies.Admin.Episode do
+            def show(_actor, _resource), do: true
+          end
+          """,
+          "lib/my_app/policies/admin/episode.ex"
+        )
+
+      graph = Graph.build([controller, policy])
+      targets = Graph.dependencies(graph, "MyAppWeb.EpisodeController") |> Enum.map(& &1.target)
+
+      assert "MyApp.Policies.Admin.Episode" in targets,
+             "suffix resolution must promote `Policies.Admin.Episode` to the unique matching defined module"
+    end
+
+    test "ambiguous suffix match — multiple modules end with same segments — does NOT resolve (safe)" do
+      controller =
+        parse(
+          """
+          defmodule MyAppWeb.Controller do
+            plug Authorize, [Policies.X, :res]
+          end
+          """,
+          "lib/my_app_web/controller.ex"
+        )
+
+      a =
+        parse(
+          """
+          defmodule MyApp.A.Policies.X do
+            def go, do: :ok
+          end
+          """,
+          "lib/my_app/a/policies/x.ex"
+        )
+
+      b =
+        parse(
+          """
+          defmodule MyApp.B.Policies.X do
+            def go, do: :ok
+          end
+          """,
+          "lib/my_app/b/policies/x.ex"
+        )
+
+      graph = Graph.build([controller, a, b])
+      targets = Graph.dependencies(graph, "MyAppWeb.Controller") |> Enum.map(& &1.target)
+
+      # Ambiguous — neither full-form is anchored; the short form stays.
+      refute "MyApp.A.Policies.X" in targets
+      refute "MyApp.B.Policies.X" in targets
+    end
+  end
 end

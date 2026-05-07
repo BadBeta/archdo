@@ -27,6 +27,7 @@ defmodule Archdo.AnchorSet do
     {[:Phoenix, :LiveView], "Phoenix LiveView (route-mounted)"},
     {[:Oban, :Worker], "Oban worker (queue-driven)"},
     {[:Phoenix, :Channel], "Phoenix channel (websocket route)"},
+    {[:Phoenix, :Socket], "Phoenix socket handler (registered in endpoint via socket/3)"},
     # M-Plan8b: nested supervisors are themselves anchors. Their
     # children are extracted via add_supervisor_children/2.
     {[:Supervisor], "Supervisor (nested under app supervision tree)"},
@@ -37,7 +38,7 @@ defmodule Archdo.AnchorSet do
   Compute the set of anchored module names from a list of `{file, ast}`
   tuples. Returns a `MapSet` of module names (strings).
   """
-  @anchor_layers ~w(application_root controller live_view component router operational migration)a
+  @anchor_layers ~w(application_root controller live_view component router view operational migration)a
 
   @spec compute([{String.t(), Macro.t()}]) :: MapSet.t(String.t())
   def compute(file_asts) do

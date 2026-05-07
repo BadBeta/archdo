@@ -136,6 +136,45 @@ defmodule Archdo.AnchorSetTest do
       assert AnchorSet.compute(file_asts) |> MapSet.member?("MyAppWeb.PageLive")
     end
 
+    test "detects `use Phoenix.View` modules" do
+      # Phoenix views are dispatched by Phoenix's render pipeline at
+      # runtime via apply/3 — `MyController` renders `MyView` by naming
+      # convention. Every view is by definition framework-anchored.
+      file_asts = [
+        parse(
+          """
+          defmodule MyAppWeb.EpisodeView do
+            use Phoenix.View, root: "lib/my_app_web/templates"
+          end
+          """,
+          "lib/my_app_web/views/episode_view.ex"
+        )
+      ]
+
+      assert AnchorSet.compute(file_asts) |> MapSet.member?("MyAppWeb.EpisodeView")
+    end
+
+    test "detects `use AppWeb, :view` (project-helper view convention)" do
+      # Modern Phoenix apps define `MyAppWeb.__using__(:view)` that
+      # in turn calls `use Phoenix.View`. Archdo can't expand the
+      # macro — it sees only the outer `use AppWeb, :view`. Detect
+      # via the second-arg atom matching `:view` (and other view-shape
+      # atoms like `:admin_view`, `:html_view` that follow the same
+      # framework-dispatched-by-naming-convention pattern).
+      file_asts = [
+        parse(
+          """
+          defmodule MyAppWeb.Admin.EpisodeView do
+            use MyAppWeb, :admin_view
+          end
+          """,
+          "lib/my_app_web/views/admin/episode_view.ex"
+        )
+      ]
+
+      assert AnchorSet.compute(file_asts) |> MapSet.member?("MyAppWeb.Admin.EpisodeView")
+    end
+
     test "M-Plan8b: detects child in nested `use Supervisor` init/1" do
       # Nested sub-supervisor (NOT use Application) — its children
       # were previously invisible to AnchorSet. They're real anchor

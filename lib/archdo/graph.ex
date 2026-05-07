@@ -48,9 +48,70 @@ defmodule Archdo.Graph do
   """
   @spec build([{String.t(), Macro.t()}]) :: t()
   def build(file_asts) do
-    Enum.reduce(file_asts, %__MODULE__{}, fn {file, ast}, graph ->
+    file_asts
+    |> Enum.reduce(%__MODULE__{}, fn {file, ast}, graph ->
       analyze_file(graph, file, ast)
     end)
+    |> resolve_macro_alias_suffixes()
+  end
+
+  # Project-wide post-processing: macro-injected aliases (e.g. from
+  # `use AppWeb, :controller` expanding to `quote do alias App.Policies
+  # ... end`) are invisible to the per-file alias_table. Source like
+  # `plug Authorize, [Policies.Admin.Episode, :podcast]` therefore
+  # produces an edge to `"Policies.Admin.Episode"` — a phantom name
+  # not matching any defined module.
+  #
+  # Heuristic: for any edge whose target is NOT a defined module,
+  # check whether EXACTLY ONE defined module ends with the target's
+  # dot-segments. If so, substitute. If zero or multiple match,
+  # leave as-is (ambiguous → safe to skip).
+  defp resolve_macro_alias_suffixes(%__MODULE__{} = graph) do
+    defined = MapSet.new(graph.modules)
+
+    suffix_index =
+      graph.modules
+      |> MapSet.to_list()
+      |> Enum.reduce(%{}, fn full_name, acc ->
+        full_name
+        |> String.split(".")
+        |> tail_suffixes()
+        |> Enum.reduce(acc, fn suffix, inner ->
+          Map.update(inner, suffix, [full_name], &[full_name | &1])
+        end)
+      end)
+
+    rewritten_edges =
+      Enum.map(graph.edges, fn edge -> rewrite_edge(edge, defined, suffix_index) end)
+
+    new_by_source =
+      Enum.reduce(rewritten_edges, %{}, fn edge, acc ->
+        Map.update(acc, edge.source, [edge], &[edge | &1])
+      end)
+
+    %{graph | edges: rewritten_edges, edges_by_source: new_by_source}
+  end
+
+  # Yield "Foo.Bar.Baz", "Bar.Baz", "Baz" — every dot-segment suffix
+  # except the empty one. Used to index modules by every short-form
+  # they could be referenced as.
+  defp tail_suffixes(parts) when is_list(parts) and length(parts) >= 1 do
+    1..length(parts)
+    |> Enum.map(fn drop_n -> parts |> Enum.drop(drop_n - 1) |> Enum.join(".") end)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp rewrite_edge(edge, defined, suffix_index) do
+    case MapSet.member?(defined, edge.target) do
+      true ->
+        edge
+
+      false ->
+        case Map.get(suffix_index, edge.target, []) do
+          [single] -> %{edge | target: single}
+          _ -> edge
+        end
+    end
   end
 
   @doc """

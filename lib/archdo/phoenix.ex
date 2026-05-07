@@ -136,8 +136,43 @@ defmodule Archdo.Phoenix do
       uses_role?(uses, [Phoenix.LiveView], [:live_view]) -> :live_view
       uses_role?(uses, [Phoenix.Component], [:live_component, :html, :component]) -> :component
       uses_role?(uses, [Phoenix.Controller], [:controller]) -> :controller
+      uses_phoenix_view?(uses) -> :view
+      view_only_via_app_helper?(uses) -> :view
       true -> nil
     end
+  end
+
+  defp uses_phoenix_view?(uses) do
+    case Map.get(uses, Phoenix.View) do
+      nil -> false
+      _ -> true
+    end
+  end
+
+  # Atoms passed to `use AppWeb, :atom` that name a view-shape role.
+  # Phoenix's framework dispatches to these modules by naming convention
+  # (apply(MyView, :template_name, [assigns])) — the AST never sees a
+  # call. Modules with these roles are framework-anchored.
+  #
+  # Project-defined helper variants are common: `:public_view`,
+  # `:admin_view`, `:html_view`, etc. The robust signal is any atom
+  # that's exactly `:view` OR ends in `_view`.
+  defp view_role_atom?(:view), do: true
+
+  defp view_role_atom?(atom) when is_atom(atom) do
+    atom |> Atom.to_string() |> String.ends_with?("_view")
+  end
+
+  defp view_role_atom?(_), do: false
+
+  # `use AppWeb, :view` (or `:admin_view`, `:public_view`, etc.) where
+  # AppWeb is the project's web-helper module. The macro expands to
+  # `use Phoenix.View` internally; we can't see the expansion but the
+  # second-arg atom is a strong signal.
+  defp view_only_via_app_helper?(uses) do
+    Enum.any?(uses, fn {_mod, args_list} ->
+      Enum.any?(args_list, &view_role_atom?/1)
+    end)
   end
 
   defp detect_ecto_layer(uses) do
