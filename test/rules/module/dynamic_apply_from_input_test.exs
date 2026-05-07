@@ -264,6 +264,63 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInputTest do
     end
   end
 
+  describe "user-defined function NAMED `apply` — head, not call" do
+    # When a module defines `def apply(...)` (an operator-application
+    # function on a struct, e.g. a binary or unary operator dispatcher),
+    # the AST node `{:apply, meta, [args]}` appears as the function HEAD
+    # — it is the function being defined, not a call to Kernel.apply.
+    # The rule must distinguish definitions from invocations.
+
+    test "does NOT flag `def apply(struct, a, b)` head" do
+      code = ~S"""
+      defmodule MyApp.Op do
+        defstruct [:function]
+
+        @spec apply(atom() | t(), term(), term()) :: term()
+        def apply(%__MODULE__{function: fun}, a, b), do: fun.(a, b)
+        def apply(name, a, b) when is_atom(name), do: fn_for(name).(a, b)
+
+        defp fn_for(:plus), do: &Kernel.+/2
+      end
+      """
+
+      assert_clean(DynamicApplyFromInput, code, file: "lib/my_app/op.ex")
+    end
+
+    test "does NOT flag `def apply(struct, a)` 2-arity head" do
+      code = ~S"""
+      defmodule MyApp.UnaryOp do
+        defstruct [:function]
+
+        @spec apply(atom() | t(), term()) :: term()
+        def apply(%__MODULE__{function: fun}, a), do: fun.(a)
+        def apply(name, a) when is_atom(name), do: fn_for(name).(a)
+
+        defp fn_for(:identity), do: & &1
+      end
+      """
+
+      assert_clean(DynamicApplyFromInput, code, file: "lib/my_app/unary_op.ex")
+    end
+
+    test "STILL flags `apply(mod, fun, args)` call when same module also defines `def apply`" do
+      # Regression: defining `def apply/3` must NOT mask actual Kernel.apply
+      # CALLS elsewhere in the module.
+      code = ~S"""
+      defmodule MyApp.Mixed do
+        def apply(%{f: f}, a, b), do: f.(a, b)
+
+        def dispatch(mod, fun_name, args) do
+          apply(mod, fun_name, args)
+        end
+      end
+      """
+
+      diags = analyze(DynamicApplyFromInput, code, file: "lib/my_app/mixed.ex")
+      assert length(diags) >= 1
+    end
+  end
+
   describe "id/0 and description/0" do
     test "rule id is stable" do
       assert DynamicApplyFromInput.id() == "5.51"

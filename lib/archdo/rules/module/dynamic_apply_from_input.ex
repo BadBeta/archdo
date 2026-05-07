@@ -21,7 +21,7 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
         []
 
       false ->
-        # Pre-pass: collect every 3-tuple variable-destructure
+        # Pre-pass 1: collect every 3-tuple variable-destructure
         # pattern in the file. `{m, f, a}` patterns are the OTP
         # MFA-tuple convention (Supervisor child specs, GenServer
         # start_link, every DSL accepting "call this MFA"). When
@@ -30,11 +30,51 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
         # config/DSL — not user input. Suppress the diagnostic.
         mfa_triples = collect_mfa_destructures(ast)
 
+        # Pre-pass 2: collect line numbers where `apply/N` appears as
+        # the HEAD of a def/defp/defmacro/defmacrop or under @spec /
+        # @callback. The AST node `{:apply, meta, [args]}` has the
+        # same shape whether it's a call or a function-head, so we
+        # disambiguate structurally during a pre-pass and suppress
+        # findings at those line numbers. Real-world: linear-algebra
+        # operator modules define `def apply(op, a, b)` to apply an
+        # operator struct to arguments — the function head is named
+        # `apply`, not a call to Kernel.apply.
+        def_apply_lines = collect_def_apply_lines(ast)
+
         {_, hits} =
-          Macro.prewalk(ast, [], fn node, acc -> collect(node, acc, file, mfa_triples) end)
+          Macro.prewalk(ast, [], fn node, acc ->
+            collect(node, acc, file, mfa_triples, def_apply_lines)
+          end)
 
         Enum.reverse(hits)
     end
+  end
+
+  # Pre-pass 2 — line numbers where `apply/N` is a def/defp head OR
+  # appears under @spec / @callback. Suppress findings at those lines.
+  defp collect_def_apply_lines(ast) do
+    {_, lines} =
+      Macro.prewalk(ast, MapSet.new(), fn
+        # def apply(...) / defp apply(...) / defmacro apply(...) — possibly with body
+        {kind, _, [{:apply, head_meta, args} | _]} = node, acc
+        when kind in [:def, :defp, :defmacro, :defmacrop] and is_list(args) ->
+          {node, MapSet.put(acc, AST.line(head_meta))}
+
+        # def apply(...) when guard
+        {kind, _, [{:when, _, [{:apply, head_meta, args} | _]} | _]} = node, acc
+        when kind in [:def, :defp, :defmacro, :defmacrop] and is_list(args) ->
+          {node, MapSet.put(acc, AST.line(head_meta))}
+
+        # @spec apply(...) :: ret  /  @callback apply(...) :: ret
+        {:@, _, [{attr, _, [{:"::", _, [{:apply, head_meta, args}, _]}]}]} = node, acc
+        when attr in [:spec, :callback] and is_list(args) ->
+          {node, MapSet.put(acc, AST.line(head_meta))}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    lines
   end
 
   # Walk the AST collecting every 3-element variable-only tuple
@@ -62,30 +102,38 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
 
   # §§ elixir-implementing: §5.2, §7.6 — multi-clause head dispatch on AST shape.
 
-  # Kernel.apply/3 — alias form
+  # Kernel.apply/3 — alias form. The `Kernel.` prefix disambiguates a call
+  # from a `def apply` head, so no line-skip needed here.
   defp collect(
          {{:., _, [{:__aliases__, _, [:Kernel]}, :apply]}, meta, [mod, fun, args]} = node,
          acc,
          file,
-         mfa
+         mfa,
+         _def_lines
        ) do
     classify_apply3(node, acc, file, meta, mod, fun, args, mfa)
   end
 
-  # apply/3 — auto-imported Kernel form
-  defp collect({:apply, meta, [mod, fun, args]} = node, acc, file, mfa) do
-    classify_apply3(node, acc, file, meta, mod, fun, args, mfa)
-  end
-
-  # apply/2 — function form
-  defp collect({:apply, meta, [fun, _args]} = node, acc, file, _mfa) when not is_nil(meta) do
-    case literal_fun_ref?(fun) do
+  # apply/3 — auto-imported Kernel form. AST shape `{:apply, _, [a,b,c]}`
+  # is also produced by `def apply(a, b, c)` heads — skip those.
+  defp collect({:apply, meta, [mod, fun, args]} = node, acc, file, mfa, def_lines) do
+    case MapSet.member?(def_lines, AST.line(meta)) do
       true -> {node, acc}
-      false -> {node, [diag_apply2(file, meta) | acc]}
+      false -> classify_apply3(node, acc, file, meta, mod, fun, args, mfa)
     end
   end
 
-  defp collect(node, acc, _file, _mfa), do: {node, acc}
+  # apply/2 — function form. Same head-vs-call ambiguity.
+  defp collect({:apply, meta, [fun, _args]} = node, acc, file, _mfa, def_lines)
+       when not is_nil(meta) do
+    cond do
+      MapSet.member?(def_lines, AST.line(meta)) -> {node, acc}
+      literal_fun_ref?(fun) -> {node, acc}
+      true -> {node, [diag_apply2(file, meta) | acc]}
+    end
+  end
+
+  defp collect(node, acc, _file, _mfa, _def_lines), do: {node, acc}
 
   defp classify_apply3(node, acc, file, meta, mod, fun, args, mfa) do
     cond do
