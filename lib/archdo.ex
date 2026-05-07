@@ -159,7 +159,7 @@ defmodule Archdo do
           {:ok, graph} ->
             reached = compute_reached_modules(graph)
 
-            {anchors, ast_graph, library_publics, impl_annotated, source_defs} =
+            {anchors, ast_graph, library_publics, impl_annotated, source_defs, macro_emit_edges} =
               compute_ast_anchors_and_graph(paths)
 
             new_opts =
@@ -171,6 +171,7 @@ defmodule Archdo do
               |> Keyword.put(:library_public_modules, library_publics)
               |> Keyword.put(:impl_annotated_functions, impl_annotated)
               |> Keyword.put(:source_defined_functions, source_defs)
+              |> Keyword.put(:macro_emit_edges, macro_emit_edges)
 
             {new_opts, graph}
 
@@ -201,8 +202,29 @@ defmodule Archdo do
     library_publics = compute_library_public_modules(production, paths)
     impl_annotated = compute_impl_annotated_functions(production)
     source_defs = compute_source_defined_functions(production)
+    macro_emit_edges = compute_macro_emit_edges(production)
 
-    {anchors, ast_graph, library_publics, impl_annotated, source_defs}
+    {anchors, ast_graph, library_publics, impl_annotated, source_defs, macro_emit_edges}
+  end
+
+  # Build `module_atom => [module_atom]` of virtual call edges from
+  # `defmacro` bodies. Compiled-rule 1.26 consumes this to reach modules
+  # that are referenced ONLY inside library macros (the call materializes
+  # in the consumer's compiled module, never the library's). Source
+  # modules whose macros emit no recognised references contribute nothing.
+  defp compute_macro_emit_edges(production_asts) do
+    for {_file, ast} <- production_asts,
+        {source_str, target_strs} <- Archdo.AST.MacroEdges.extract(ast),
+        source_atom = AST.safe_existing_atom(source_str),
+        not is_nil(source_atom),
+        target_atoms =
+          target_strs
+          |> Enum.map(&AST.safe_existing_atom/1)
+          |> Enum.reject(&is_nil/1),
+        target_atoms != [],
+        reduce: %{} do
+      acc -> Map.update(acc, source_atom, target_atoms, &Enum.uniq(&1 ++ target_atoms))
+    end
   end
 
   # Build `module_atom => MapSet({fn, arity})` of every `def`/`defp` defined

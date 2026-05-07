@@ -140,6 +140,80 @@ defmodule Archdo.Rules.Compiled.UnanchoredModuleTest do
     end
   end
 
+  describe "merge_macro_emit_edges/2 — M-fp-F1 wiring" do
+    # M-fp-F1: virtual edges reconstructed from `defmacro` bodies. A library
+    # macro that quotes a sibling module reference (Commanded.Commands.Router
+    # → Commanded.Commands.Dispatcher pattern) gets a virtual edge here so
+    # the closure walk can reach the otherwise-orphan module.
+
+    test "merges macro-emit targets into existing deps map" do
+      base = %{
+        Mod.A => [Mod.B],
+        Mod.B => []
+      }
+
+      macro_edges = %{
+        Mod.A => [Mod.C, Mod.D]
+      }
+
+      merged = UnanchoredModule.merge_macro_emit_edges(base, macro_edges)
+      assert Enum.sort(merged[Mod.A]) == [Mod.B, Mod.C, Mod.D]
+      assert merged[Mod.B] == []
+    end
+
+    test "macro-emit edges to modules not in base map are still added" do
+      # Source module IS in base; targets may or may not be — both work.
+      base = %{Mod.A => []}
+      macro_edges = %{Mod.A => [Mod.NewTarget]}
+
+      merged = UnanchoredModule.merge_macro_emit_edges(base, macro_edges)
+      assert Mod.NewTarget in merged[Mod.A]
+    end
+
+    test "deduplicates when macro-emit overlaps with base edges" do
+      base = %{Mod.A => [Mod.Shared]}
+      macro_edges = %{Mod.A => [Mod.Shared, Mod.Other]}
+
+      merged = UnanchoredModule.merge_macro_emit_edges(base, macro_edges)
+      assert Enum.count(merged[Mod.A], &(&1 == Mod.Shared)) == 1
+      assert Mod.Other in merged[Mod.A]
+    end
+
+    test "modules with no macro-emit edges are unchanged" do
+      base = %{Mod.A => [], Mod.B => [Mod.C]}
+      macro_edges = %{}
+
+      merged = UnanchoredModule.merge_macro_emit_edges(base, macro_edges)
+      assert merged == base
+    end
+
+    test "macro-emit edges anchor an otherwise-orphan module via the closure" do
+      # Integration: Commanded shape — Router declares the macro, Dispatcher
+      # is the emit-target. Without macro-emit edges, Dispatcher is orphan;
+      # with them, Router → Dispatcher and the closure reaches Dispatcher.
+      base = %{
+        Commanded.Commands.Router => [],
+        Commanded.Commands.Dispatcher => [],
+        Commanded.OrphanReally => []
+      }
+
+      macro_edges = %{
+        Commanded.Commands.Router => [Commanded.Commands.Dispatcher]
+      }
+
+      merged = UnanchoredModule.merge_macro_emit_edges(base, macro_edges)
+      anchors = MapSet.new([Commanded.Commands.Router])
+
+      # Without merge: Dispatcher would appear as unanchored
+      assert UnanchoredModule.find_unanchored(base, anchors) ==
+               [Commanded.Commands.Dispatcher, Commanded.OrphanReally]
+
+      # With merge: Dispatcher is reached; OrphanReally still flags.
+      assert UnanchoredModule.find_unanchored(merged, anchors) ==
+               [Commanded.OrphanReally]
+    end
+  end
+
   describe "build_diagnostic/1 — fix-text guidance" do
     # M-fp-E2: macro-edge audit on Commanded showed that
     # `Commanded.Commands.Router`'s `dispatch_to_aggregate/3` macro emits

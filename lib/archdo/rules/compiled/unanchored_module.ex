@@ -100,11 +100,16 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
     |> Enum.sort()
   end
 
-  # Union compiled-graph function-call edges with AST `:registry` edges
-  # (attribute-list module references like `@phase1_rules [Mod.A, Mod.B]`,
-  # which xref doesn't see as call edges). The compiled graph captures
-  # macro-expanded edges; the AST registry edges capture attribute-list
-  # dispatch. Only the union gives an honest reachability picture.
+  # Union compiled-graph function-call edges with three AST-side virtual
+  # edge types:
+  #   - `:registry` edges (attribute-list module references like
+  #     `@phase1_rules [Mod.A, Mod.B]`), invisible to xref
+  #   - macro-emit edges from `defmacro` bodies that quote calls to
+  #     sibling modules (M-fp-F1; the Commanded.Commands.Router →
+  #     Dispatcher pattern). The library's compiled BEAM has zero edges
+  #     because the call materializes inside the consumer's module.
+  #
+  # Only the union gives an honest reachability picture.
   defp build_deps_map(graph, opts) do
     base =
       graph
@@ -112,16 +117,37 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
       |> Map.keys()
       |> Map.new(fn mod -> {mod, Compiled.module_dependencies(graph, mod)} end)
 
-    case Keyword.get(opts, :ast_graph) do
-      nil -> base
-      ast_graph -> merge_registry_edges(base, ast_graph)
-    end
+    base
+    |> maybe_merge_registry_edges(Keyword.get(opts, :ast_graph))
+    |> merge_macro_emit_edges(Keyword.get(opts, :macro_emit_edges, %{}))
   end
+
+  defp maybe_merge_registry_edges(base, nil), do: base
+  defp maybe_merge_registry_edges(base, ast_graph), do: merge_registry_edges(base, ast_graph)
 
   defp merge_registry_edges(base, ast_graph) do
     Enum.reduce(base, base, fn {source_atom, _existing}, acc ->
       registry_targets = registry_edges_for(ast_graph, source_atom)
       Map.update(acc, source_atom, registry_targets, &Enum.uniq(&1 ++ registry_targets))
+    end)
+  end
+
+  @doc """
+  Pure: union an existing deps map with macro-emit virtual edges.
+
+  `macro_edges` is `%{module_atom => [module_atom]}` — typically the
+  output of `Archdo.AST.MacroEdges.extract/1` per file, then atom-converted
+  and merged across the project. Source modules absent from `macro_edges`
+  are unchanged.
+
+  Public for direct testing — production callers go through
+  `analyze_compiled/2`.
+  """
+  @spec merge_macro_emit_edges(%{module() => [module()]}, %{module() => [module()]}) ::
+          %{module() => [module()]}
+  def merge_macro_emit_edges(base, macro_edges) when is_map(base) and is_map(macro_edges) do
+    Enum.reduce(macro_edges, base, fn {source, targets}, acc ->
+      Map.update(acc, source, targets, &Enum.uniq(&1 ++ targets))
     end)
   end
 
