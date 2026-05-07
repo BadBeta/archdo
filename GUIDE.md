@@ -206,6 +206,45 @@ mix archdo --paths lib --packs core,ce_privacy
 mix archdo --list-packs
 ```
 
+### Building-blocks evaluation
+
+A **building block** in Archdo is a public function that scores high on six structural properties at once: it's safe to property-test, memoize, lift into a shared module, or call from concurrent code without surprises. Archdo computes a per-function 0.0–1.0 composability score and classifies modules and contexts based on whether *every* public function clears the bar.
+
+Six axes contribute to the score (each rule that uses the score documents which axes it weights):
+
+```mermaid
+flowchart LR
+    Fn[Public function] --> A1[Input closure - no hidden state reads]
+    Fn --> A2[Determinism - same input, same output]
+    Fn --> A3[Output completeness - total over its domain]
+    Fn --> A4[Totality - no partial pattern crashes]
+    Fn --> A5[Side-effect freedom - no Logger/Repo/PubSub]
+    Fn --> A6[Errors as values - no raise on expected paths]
+    A1 --> Score[Composability score 0.0 to 1.0]
+    A2 --> Score
+    A3 --> Score
+    A4 --> Score
+    A5 --> Score
+    A6 --> Score
+    Score --> Class{Classify}
+    Class -->|>= 0.9| BB[building_block]
+    Class -->|>= 0.7| NB[near_block]
+    Class -->|>= 0.4| MX[mixed]
+    Class -->|< 0.4| BD[boundary]
+```
+
+**How to read your project at a glance:**
+
+```bash
+mix archdo --paths lib --building-blocks
+```
+
+This prints the modules and contexts that pass the audit (every public function scores ≥ 0.9). It tells you what's safely reusable, what's a `:near_block` waiting on one extracted side effect, and what's structurally a boundary. Use it during refactors to track which parts of your codebase are gaining or losing composability.
+
+**The `ce_composability` pack** turns the scoring into rules — they fire when a function is structurally a building block but is missing something that would unlock the payoff (a property test, a guard on inputs, an extracted side effect). Each rule has its own `why` and ranked fix options; the canonical descriptions live in [`ARCHITECTURE_RULES.md`](ARCHITECTURE_RULES.md).
+
+**Marker:** if a module is intentionally not a building block (e.g., it carries opaque state or is a thin orchestration layer), declare that with the appropriate `@archdo_*` marker (see §3 above). Markers are the architectural-intent declaration; the scoring is the structural measurement.
+
 ---
 
 ## 4. The diagnostic shape
@@ -334,6 +373,8 @@ mix archdo [options]
 | `--diagram`       | type            | Generate Mermaid/SVG architecture diagram: `overview`, `modules`, `api`, `context:Name`, `blast:Module`. |
 | `--coverage`      | flag            | Print test coverage gap matrix and exit.                                                   |
 | `--metrics`       | flag            | Print Martin package metrics (Ca/Ce/I/A/D) matrix and exit.                                |
+| `--building-blocks` | flag          | Print modules and contexts that pass the Blackbox audit (every public function ≥ 0.9). See §3. |
+| `--list-packs`    | flag            | Print the rule-pack roster (which rules belong to each pack) and exit.                     |
 | `--freeze`        | flag            | Save current findings as the baseline.                                                     |
 | `--freeze-stats`  | flag            | Show baseline status (resolved, still present, new).                                       |
 | `--show-all`      | flag            | Bypass the baseline filter and show every finding.                                         |
