@@ -139,4 +139,32 @@ defmodule Archdo.Rules.Compiled.UnanchoredModuleTest do
                [MyApp.Other, MyApp.PublicAPI]
     end
   end
+
+  describe "behaviour-implementor anchoring (M-fp-D10)" do
+    # A module that declares `@behaviour SomeBehaviour` is reached via
+    # behaviour-callback dispatch by the parent library/framework. Without
+    # this, modules like Bandit.Adapter (impl Plug.Conn.Adapter) flag as
+    # "unreachable" because their callers reach via apply(mod, callback, ...)
+    # which static analysis can't track.
+    test "behaviour-implementor anchors merge into closure same as library publics" do
+      deps = %{
+        MyApp.Internal => [],
+        MyApp.PlugAdapter => [],
+        MyApp.GenServerImpl => [],
+        MyApp.TrulyOrphan => []
+      }
+
+      ast_anchors = MapSet.new()
+      library_publics = MapSet.new()
+      behaviour_implementors = MapSet.new([MyApp.PlugAdapter, MyApp.GenServerImpl])
+
+      combined =
+        ast_anchors
+        |> MapSet.union(library_publics)
+        |> MapSet.union(behaviour_implementors)
+
+      assert UnanchoredModule.find_unanchored(deps, combined) ==
+               [MyApp.Internal, MyApp.TrulyOrphan]
+    end
+  end
 end

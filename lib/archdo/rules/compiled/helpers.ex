@@ -98,4 +98,23 @@ defmodule Archdo.Rules.Compiled.Helpers do
     name = Atom.to_string(mod)
     String.ends_with?(name, ".Application") or String.ends_with?(name, ".MixProject")
   end
+
+  @doc """
+  Returns true if the module IMPLEMENTS one or more behaviours
+  (declares `@behaviour Mod`). Such modules are reached via
+  callback dispatch — `apply(mod, :callback_name, args)` from the
+  framework or library that owns the behaviour. The static call
+  graph cannot see those edges, so behaviour-implementor modules
+  appear orphan to graph-walking rules.
+
+  Distinct from `behaviour_definition?/2` which checks whether the
+  module DEFINES a behaviour (has `@callback` declarations).
+  """
+  @spec behaviour_implementor?(module(), Archdo.Compiled.t()) :: boolean()
+  def behaviour_implementor?(mod, graph) do
+    case Map.get(Archdo.Compiled.modules(graph), mod) do
+      %{behaviours: [_ | _]} -> true
+      _ -> false
+    end
+  end
 end

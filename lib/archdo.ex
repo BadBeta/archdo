@@ -158,7 +158,9 @@ defmodule Archdo do
         case build_compiled_graph(paths) do
           {:ok, graph} ->
             reached = compute_reached_modules(graph)
-            {anchors, ast_graph, library_publics} = compute_ast_anchors_and_graph(paths)
+
+            {anchors, ast_graph, library_publics, impl_annotated} =
+              compute_ast_anchors_and_graph(paths)
 
             new_opts =
               opts
@@ -167,6 +169,7 @@ defmodule Archdo do
               |> Keyword.put(:ast_anchor_modules, anchors)
               |> Keyword.put(:ast_graph, ast_graph)
               |> Keyword.put(:library_public_modules, library_publics)
+              |> Keyword.put(:impl_annotated_functions, impl_annotated)
 
             {new_opts, graph}
 
@@ -195,8 +198,28 @@ defmodule Archdo do
 
     ast_graph = Graph.build(production)
     library_publics = compute_library_public_modules(production, paths)
+    impl_annotated = compute_impl_annotated_functions(production)
 
-    {anchors, ast_graph, library_publics}
+    {anchors, ast_graph, library_publics, impl_annotated}
+  end
+
+  # Build `module_atom => MapSet({fn, arity})` map of every function
+  # annotated with `@impl ...` in source. These are behaviour-callback
+  # implementations reached via the framework's dispatch (e.g. `apply/3`
+  # from Plug, ThousandIsland, GenServer) — invisible to static call-graph
+  # analysis. Compiled-rule 6.24 (DeadCode) consumes this to skip
+  # callback-impl findings; module-level rule 1.26 already covers the
+  # module-level case via `Helpers.behaviour_implementor?`.
+  defp compute_impl_annotated_functions(production_asts) do
+    for {_file, ast} <- production_asts,
+        module = AST.extract_module_name(ast),
+        module != "Unknown",
+        atom = AST.safe_existing_atom(module),
+        not is_nil(atom),
+        callbacks = AST.impl_callbacks(ast),
+        MapSet.size(callbacks) > 0,
+        into: %{},
+        do: {atom, callbacks}
   end
 
   # Library carve-out: when mix.exs declares package/0 (Hex package), every

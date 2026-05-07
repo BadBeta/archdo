@@ -140,6 +140,7 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
   # agree on what counts as an "intentional" zero-edge module.
   defp excluded?(mod, graph) do
     Helpers.behaviour_definition?(mod, graph) or
+      Helpers.behaviour_implementor?(mod, graph) or
       Helpers.application_entry_point?(mod) or
       test_support_module?(mod)
   end
