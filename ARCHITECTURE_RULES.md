@@ -1209,6 +1209,231 @@ A GenServer that calls `:dets.open_file` in `init/1` (or elsewhere) without a `t
 - **Tolerate:** `:erlang.binary_to_term(data, [:safe])` — safe mode only allows already-existing atoms. `keys: :atoms!` raises on unknown keys (bounded set). Internal process communication over trusted channels.
 - **Severity:** `error`
 
+### 5.51 Dynamic Apply From Input
+
+`apply/2,3` calls where the module or function is a non-literal value that may flow from external input.
+
+- **Why:** Dynamic dispatch on a module/function name reachable by request input (controller params, channel messages, Oban args) is an RCE vector — the BEAM can invoke any loaded module/function, and `String.to_existing_atom/1` plus a registry lookup is a complete RCE primitive even against partially-validated input. (Security, RCE)
+- **Check:** AST scan for `apply/2,3`. Pre-passes collect MFA-tuple destructure patterns (`{m, f, a} = ...`) and `def apply/N` heads to suppress false positives. Flags applies where the module isn't a literal `__aliases__`/`:atom` or the function isn't a literal atom.
+- **Tolerate:** Variables matching the OTP MFA-tuple convention (Supervisor child specs, GenServer start_link); `Phoenix.Controller.action_name/1` injection; `apply(__MODULE__, unquote(:foo), args)` inside a macro; literal captures `&Mod.fun/N`; `def apply/N` heads.
+- **Severity:** `error`
+
+### 5.52 Stacktrace in Response
+
+`__STACKTRACE__` reaches a response boundary (controller render, channel reply, GraphQL resolver, JSON view, LiveView flash).
+
+- **Why:** Stacktraces leak internal module structure, line numbers, library versions, and call paths — a roadmap for an attacker. They belong in `Logger` / `:telemetry.execute`, never in the response body. Boundary modules sanitize errors into bounded codes the caller can read. (Security, Information Disclosure)
+- **Check:** Scan files classified as boundary layers (`*_controller.ex`, `*_channel.ex`, `*_live.ex`, `*_view.ex`, `*_json.ex`, resolvers). Walk the AST and flag `__STACKTRACE__` references that aren't inside `Logger.*` or `:telemetry.execute/3` calls.
+- **Tolerate:** `Logger.error(Exception.format(:error, e, __STACKTRACE__))`; `:telemetry.execute(_, _, %{stack: __STACKTRACE__})`; explicit drain in a custom error reporter.
+- **Severity:** `error`
+
+### 5.53 IO.inspect / dbg in `lib/`
+
+`IO.inspect/1,2` or `Kernel.dbg/0,1` left in production code under `lib/`.
+
+- **Why:** These are debug-print primitives — they bypass structured logging, dump unredacted internal state to stdout, and almost always indicate forgotten debug code. Production lib code logs through `Logger` with structured metadata. (Slop, Observability)
+- **Check:** Walks AST in `lib/` files (excluding `priv/`, `scripts/`, `mix.exs`, tests). Flags `IO.inspect` calls (alias or fully qualified) and `dbg` calls.
+- **Tolerate:** Calls in test files; calls under `priv/` or `scripts/`; a `# RULE-EXCEPTION: 5.53 — <reason>` comment within 2 lines of the call (e.g., a CLI tool whose output IS the user's screen).
+- **Severity:** `warning`
+
+### 5.54 Secret-bearing Struct Without Inspect Override
+
+A `defstruct` includes secret-shaped fields (`:token`, `:password`, `:api_key`, etc.) without `@derive {Inspect, only/except: ...}` or a `defimpl Inspect` body.
+
+- **Why:** Crash dumps include process state in SASL reports, observer, and remote shells. Without an Inspect override, every secret field is printed verbatim — and crash dumps often end up in monitoring systems and incident channels. (Security, Information Disclosure)
+- **Check:** Per-module: detect `defstruct` definitions, match field names against a sensitive-field allowlist (`:token`, `:auth_token`, `:secret`, `:api_key`, `:password`, `:password_hash`, etc.). Verify the module also has `@derive {Inspect, ...}` or `defimpl Inspect`.
+- **Tolerate:** `@derive {Inspect, only: [...]}` listing only safe fields; `@derive {Inspect, except: [sensitive...]}`; `defimpl Inspect, for: __MODULE__`. Reference: `Plug.Conn`'s `defimpl Inspect` replaces `:secret_key_base` with `:...`.
+- **Severity:** `warning`
+
+### 5.55 Async Closure Drops `Logger.metadata`
+
+`Task.async`, `Task.Supervisor.start_child`, `Task.async_stream`, etc. spawn a closure that logs or emits telemetry without restoring `Logger.metadata`.
+
+- **Why:** `Logger.metadata` is per-process. The spawned task starts with empty metadata — every log line and `:telemetry.execute/3` it emits is missing the parent's `request_id` / `trace_id` / `tenant_id`, becoming an orphan in log search. Capture metadata before the spawn, restore it inside the closure. (Observability, Correlation)
+- **Check:** Find async entry points (`Task.async/1,2`, `Task.async_stream/3,5`, `Task.Supervisor.start_child/2`, `Task.Supervisor.async_nolink/3`). Walk each closure body for `Logger.*` or `:telemetry.execute/3` calls without an in-scope `Logger.metadata(captured)` restore.
+- **Tolerate:** `parent = Logger.metadata(); Task.async(fn -> Logger.metadata(parent); ... end)`; explicit `TraceContext` struct passed into the closure as a parameter; closure that emits no observability calls.
+- **Severity:** `warning`
+
+### 5.56 Oban Worker Without Telemetry / Logger
+
+A module declaring `use Oban.Worker` whose `perform/1` body emits no `:telemetry.*` or `Logger.*` calls.
+
+- **Why:** Oban workers run async and out-of-band. Without telemetry or logging, you cannot tell whether a job ran, how long it took, whether it errored, or which job processed which payload. Background-work observability has to be intentional. (Observability)
+- **Check:** Find `use Oban.Worker`. Extract every `def perform/1` clause. Flag if no clause calls `Logger.*` or `:telemetry.execute/3` (or `:telemetry.span/3`).
+- **Tolerate:** `@archdo_no_observability` marker (declarative opt-out); presence of `Logger.*` or `:telemetry.*` in any `perform/1` clause; trivial workers documented as pure-pass-through with no behaviour worth measuring.
+- **Severity:** `info`
+
+### 5.57 LiveView Async Without `handle_async/3`
+
+A LiveView calls `start_async/3` or `assign_async/3` but doesn't define `handle_async/3` to receive the result.
+
+- **Why:** `start_async` schedules work and routes the result to `handle_async/3`. Without that callback, the result message is unhandled and the assign stays at its initial value forever — the user sees a blank or loading state indefinitely. (Correctness)
+- **Check:** Per-file: classify as LiveView (path or `use Phoenix.LiveView`). Find `start_async/3` or `assign_async/3` calls. Verify a matching `def handle_async/3` exists.
+- **Tolerate:** Async results explicitly ignored (with a comment); the async wrapped in a try/rescue at the caller; multiple async keys handled in a single `handle_async/3` clause.
+- **Severity:** `warning`
+
+### 5.58 LiveView `mount/3` Without Telemetry / Logger
+
+A LiveView's `mount/3` body has no `:telemetry.*` or `Logger.*` call, leaving page-load events untracked.
+
+- **Why:** `mount/3` is the LiveView equivalent of a page render. Without instrumentation, you can't measure mount latency, see which pages users visit, or correlate failures with specific routes. The Phoenix telemetry ecosystem expects mount events. (Observability)
+- **Check:** Per-file: classify as LiveView. Extract every `def mount/3` body. Flag if none contain `Logger.*`, `:telemetry.execute/3`, or `:telemetry.span/3`.
+- **Tolerate:** `@archdo_no_observability` marker; instrumentation in a shared `on_mount` hook that this LiveView uses; trivial LiveView with no useful mount telemetry to emit.
+- **Severity:** `info`
+
+### 5.60 `GenServer.call` Without `catch :exit`
+
+`GenServer.call/2,3` to a registered name without a surrounding `try` / `catch :exit, _`.
+
+- **Why:** `GenServer.call`'s failure mode is `:exit`, not a regular exception — `rescue` doesn't catch it; only `catch :exit, _` does. When the callee process is down or restarting, the caller's `call` exits, and an unguarded call propagates that exit upward. Cross-supervisor calls should survive the callee's crash. (Resilience)
+- **Check:** Find `GenServer.call(name, ...)` where `name` is an alias, atom, or via-tuple (not a pid). Walk the enclosing AST: flag if not inside a `try ... catch :exit, _ ...` block or guarded by a `Process.whereis` check.
+- **Tolerate:** Calls inside `try ... catch :exit, _ -> ...`; `Process.whereis(name)` with nil-check before the call; intra-supervisor calls where caller and callee crash together by design (`:one_for_all`).
+- **Severity:** `info`
+
+### 5.61 Behaviour Callback Missing `@impl true`
+
+A behaviour callback (GenServer / Supervisor / Plug / LiveView / Oban.Worker / etc.) is defined without `@impl true` (or `@impl Module`).
+
+- **Why:** `@impl true` is the compiler's correctness check. Without it, a typo (`hanle_call` vs `handle_call`) silently becomes a regular helper — the framework never invokes it, and the bug surfaces only at runtime when the missing callback would have been needed. (Correctness)
+- **Check:** Walk the module body. Collect behaviours in scope via `use` and `@behaviour`. Resolve each to its callback-name set. Walk statements sequentially tracking the most recent `@impl` flag; flag any callback-named `def` not preceded by `@impl true` (or `@impl SomeBehaviour`).
+- **Tolerate:** `@impl true` immediately above the def; `@impl ModuleName` when disambiguating multiple behaviours; user-defined helpers that happen to share the name (mark with `@archdo_not_a_callback` or rename).
+- **Severity:** `warning`
+
+### 5.62 `handle_continue` Opportunity in `init/1`
+
+A GenServer's `init/1` does heavy synchronous work (`Repo.*`, HTTP client, `File.*`, `Process.send_after`) instead of returning `{:ok, state, {:continue, _}}`.
+
+- **Why:** Supervisor children start sequentially. While `init/1` runs, every sibling waits — heavy I/O during init delays application boot and can timeout the supervisor. `handle_continue/2` defers the work to AFTER init returns, preserving single-threaded guarantees without blocking startup. (Performance, Boot Reliability)
+- **Check:** Per-file: classify as GenServer. Walk every `def init/1` body for calls into `Repo`, `HTTPoison`, `Req`, `Tesla`, `Finch`, `File`, `Process` (heavy work). Verify the return shape is `{:ok, state, {:continue, _}}`.
+- **Tolerate:** `init/1` returning `{:ok, state, {:continue, term}}` with a matching `handle_continue/2`; trivially-fast init (constant-time setup); explicit comment justifying synchronous I/O at boot.
+- **Severity:** `info`
+
+### 5.63 Sensitive State Without `format_status/1,2`
+
+A GenServer with sensitive-named state fields lacks a `format_status` callback that redacts them before display.
+
+- **Why:** When a GenServer crashes, OTP logs the full state. `:sys.get_state/1` exposes it on demand; `:observer` and remote IEx show it interactively. Without `format_status`, secrets appear in production logs and operator debug sessions. (Security, Information Disclosure)
+- **Check:** Per-file: classify as GenServer. Extract `defstruct` fields, filter against sensitive keywords (`:password`, `:token`, `:secret`, `:api_key`, `:apikey`, `:private_key`, `:session_id`, `:auth`, `:hmac`, `:credential`). Verify the module defines `format_status/1` or `format_status/2`.
+- **Tolerate:** `format_status/1,2` redacting the fields; struct-level `@derive {Inspect, except: [...]}` or `defimpl Inspect`; no sensitive-shaped fields in the state.
+- **Severity:** `warning`
+
+### 5.64 Manual `Task.async` + `Task.await` List
+
+`Enum.map(coll, &Task.async/1) |> Enum.map(&Task.await/1)` — replacing the convenience of `Task.async_stream/3,5`.
+
+- **Why:** The manual pattern starts every task at once — no concurrency limit, no per-task timeout, no graceful crash handling. `Task.async_stream` adds `:max_concurrency`, `:timeout`, `:on_timeout`, and `:ordered` out of the box. (Performance, Resilience)
+- **Check:** Walk AST for pipe chains. Detect `Enum.map(_, &Task.async/1)` followed by `Enum.map(_, &Task.await/1)`.
+- **Tolerate:** `Task.async_stream/3,5` already in use; documented justification when a manual pattern is required for custom control flow not expressible via async_stream options.
+- **Severity:** `info`
+
+### 5.65 `Task.async` Inside a GenServer
+
+`Task.async/1,2` is invoked inside a GenServer module — its link propagates a task crash to the GenServer process itself.
+
+- **Why:** `Task.async` returns a task linked to the caller. If the task crashes, the GenServer crashes with it — turning a single failed external call into a full-state-loss restart. The fix is `Task.Supervisor.async_nolink/3` plus `:DOWN` handling in `handle_info/2`. (Resilience)
+- **Check:** Per-file: classify as GenServer. Walk AST for `Task.async/1,2` calls (qualified or aliased). Flag any occurrence inside a GenServer module body.
+- **Tolerate:** `Task.Supervisor.async_nolink/3` with a corresponding `handle_info({:DOWN, ref, ...}, state)` clause; documented justification when crash-cascade is the desired behaviour (the task and GenServer represent one logical unit).
+- **Severity:** `warning`
+
+### 5.66 Registry + DynamicSupervisor under `:one_for_one`
+
+A supervisor's child list contains both a `Registry` and a `DynamicSupervisor` under `strategy: :one_for_one`.
+
+- **Why:** `:one_for_one` restarts only the crashed child. When `Registry` crashes and restarts (now empty), the `DynamicSupervisor`'s children still hold stale via-tuples — lookups fail, and new children can't register because of name collisions. The system enters a half-broken state until restarted manually. (Resilience)
+- **Check:** Walk supervisor `init` callbacks for `Supervisor.init(_, strategy: :one_for_one)` (or `Supervisor.start_link(_, strategy: :one_for_one)`). Verify the children list contains both a `Registry` child spec and a `DynamicSupervisor` child spec.
+- **Tolerate:** `strategy: :rest_for_one` with `Registry` listed before `DynamicSupervisor`; `strategy: :one_for_all`; `Registry` and `DynamicSupervisor` in separate sub-supervisors with `:one_for_all`.
+- **Severity:** `warning`
+
+### 5.67 `Oban.Worker` Without `unique:`
+
+`use Oban.Worker, ...` without a `unique:` option, allowing duplicate enqueues to execute as separate jobs.
+
+- **Why:** Oban automatically retries jobs and producers may retry on transient failure. Without `unique:`, a producer-side retry (network blip, request retry, double-click) becomes a duplicated job execution. With `unique:` plus an idempotent `perform/1`, the system gets at-least-once delivery that behaves like exactly-once. (Resilience, Correctness)
+- **Check:** Find `use Oban.Worker, opts`. Inspect the keyword list for a `unique:` key.
+- **Tolerate:** `unique: [period: ..., fields: [...]]` set to a sensible value; documented justification when the worker is genuinely safe to run multiple times in parallel (idempotent upsert with a content-addressed primary key).
+- **Severity:** `info`
+
+### 5.68 `Oban.Worker` Without `max_attempts:`
+
+`use Oban.Worker, ...` without a `max_attempts:` option, relying on a global default.
+
+- **Why:** Retry policy is part of the worker's contract. Leaving `max_attempts` implicit means the policy is set far from the worker's design — idempotent webhook delivery may want 20+ retries; non-idempotent payment should be 1. Tuning the global default necessarily affects every other worker. (Correctness)
+- **Check:** Find `use Oban.Worker, opts`. Inspect the keyword list for `max_attempts:`.
+- **Tolerate:** Explicit `max_attempts: N` per worker; documented decision to rely on global default for a class of trivial workers.
+- **Severity:** `info`
+
+### 5.69 GenServer-wrapped Counter Increment
+
+A GenServer `handle_call/3` whose only effect is `state.field + 1` (or similar pure increment) is ~100× slower than `:counters` / `:atomics`.
+
+- **Why:** `:counters` and `:atomics` are lock-free, live outside any process, and are designed for this. Every caller updates them without sending a message. A GenServer-wrapped counter is also a single-process bottleneck under load; `:counters` scales with cores. (Performance)
+- **Check:** Per-file: classify as GenServer. Find `def handle_call/3` whose body is purely `{:reply, _, <state-with-incremented-field>}`. Detect `state + N`, `%{state | field: state.field + 1}`, or arithmetic-only state updates.
+- **Tolerate:** `:counters.new/:atomics.new` already in use; `:persistent_term` for read-mostly counters; documented case where the GenServer holds counter PLUS other state that genuinely needs serialization.
+- **Severity:** `info`
+
+### 5.70 `Process.send_after(self(), :tick, T)` Loop With Constant T
+
+A `handle_info(:tick, _)` re-arms via `Process.send_after(self(), :tick, T)` where T is a compile-time constant.
+
+- **Why:** `:timer.send_interval(N, msg)` schedules a recurring message at fixed intervals from BEAM's `:timer` server — non-drifting. The send_after-rearm idiom drifts: each tick measures from when the previous `handle_info` ran, not from the previous tick's scheduled time. For constant cadence, `:timer.send_interval` is simpler and more accurate. (Correctness)
+- **Check:** Per-module: collect every `handle_info` message atom. Collect `Process.send_after(self(), msg, constant)` calls. Match them up — flag the rearming pattern with constant delay.
+- **Tolerate:** Variable delays (exponential backoff, jitter); cancellable timers (one-shot ticks where you need the timer reference); `:timer.send_interval` already in use; Oban.Cron for long intervals.
+- **Severity:** `info`
+
+### 5.71 `Application.get_env` in GenServer Callback
+
+`Application.get_env/2,3` (or `fetch_env/2`, `fetch_env!/2`) inside `handle_call/3`, `handle_cast/2`, `handle_info/2`, or `handle_continue/2`.
+
+- **Why:** Application env lookup is fast but on hot paths (every message) the value can be cached. Capture the value in `init/1` and store it in state, OR use `:persistent_term` for runtime-changing values. Repeated lookups reduce throughput and signal an unintentional config dependency. (Performance, Hot Path)
+- **Check:** Walk `def handle_call`/`handle_cast`/`handle_info`/`handle_continue` bodies for `Application.get_env`, `Application.fetch_env`, `Application.fetch_env!` calls.
+- **Tolerate:** Config captured in `init/1` and stored in state; `:persistent_term.put` at boot read in callbacks; rare-path fallback (e.g. one specific message kind) where the lookup overhead is genuinely irrelevant.
+- **Severity:** `info`
+
+### 5.72 `:gen_tcp` / `:gen_udp` / `:ssl` Socket With `active: true`
+
+A socket is opened with `active: true`, delivering all incoming data to the owning process's mailbox without backpressure.
+
+- **Why:** `active: true` sends every received packet to the owner's mailbox as fast as the network delivers — a fast or hostile peer can fill the mailbox unboundedly, exhausting memory and crashing the node. `active: :once` (the default) and `active: N` give backpressure: receive a frame, process it, re-arm. (Resilience, DoS Protection)
+- **Check:** Find `:gen_tcp.listen/connect/accept`, `:gen_udp.open`, `:ssl.listen/connect` calls. Inspect their option lists for `active: true`.
+- **Tolerate:** `active: :once`; `active: N` for batched protocols; `active: false` (passive `recv`); documented case where `active: true` is genuinely safe for a known-rate trusted peer.
+- **Severity:** `warning`
+
+### 5.73 `:gen_tcp.recv/2` / `:ssl.recv/2` Without Timeout
+
+A receive call (or `connect`) is invoked without an explicit timeout, defaulting to `:infinity`.
+
+- **Why:** The network's primary failure mode is silence — load balancers black-hole, peers half-close, servers slow to a crawl. An explicit timeout converts indefinite blocking into `{:error, :timeout}` that the caller can handle (retry, fall back, surface incident). `:infinity` produces a process that wedges forever and can't be diagnosed. (Resilience)
+- **Check:** Find `:gen_tcp.recv/2`, `:gen_tcp.connect/3`, `:ssl.recv/2`, `:ssl.connect/3` calls. Verify the timeout argument is provided.
+- **Tolerate:** Explicit timeout argument tied to the protocol's SLO; documented case where `:infinity` is acceptable (test code, trusted internal-only channel).
+- **Severity:** `info`
+
+### 5.74 Inline Effect in a Building-Block Module
+
+A module whose `@moduledoc` advertises building-block status performs side effects (`Logger`, `Phoenix.PubSub`, `Repo`, `:telemetry.execute`, ETS or `:persistent_term` writes) inside function bodies.
+
+- **Why:** Building-block functions must be pure (same input → same output) so Archdo's Blackbox analyzer can score them, callers can trust them, and property-based tests cover them. Side effects belong in the orchestrator that calls the building block, not inside it. (Composability, Purity)
+- **Check:** Per-file: classify as building-block-claimed by checking the `@moduledoc` for "building block" / "building-block". Walk all function bodies for `Logger.*`, `Phoenix.PubSub.broadcast`, `Repo.*` writes, `:telemetry.execute/3`, `:ets.insert/update/delete`, `:persistent_term.put`.
+- **Tolerate:** Drop the building-block claim from the `@moduledoc` (the module is an orchestrator); move the effects to a wrapping orchestrator and keep the building block pure; `Logger.debug` strictly inside `if Mix.env() == :dev`.
+- **Severity:** `info`
+
+### 5.75 Memoize Opportunity in Building-Block Function
+
+A building-block function calls an expensive constructor (`Regex.compile`, `Jason.decode`, `:crypto.hash`, `DateTime.from_iso8601`, etc.) on a literal argument every invocation.
+
+- **Why:** Compiling a regex, parsing JSON, or hashing a constant produces the same result every call. Hoisting to a module attribute or `:persistent_term` (set at boot) avoids wasted CPU on hot paths. Building-blocks frequently sit inside loops and request handlers. (Performance)
+- **Check:** Per-file: classify as building-block. Walk function bodies for `Regex.compile*`, `Jason.decode*`, `:crypto.hash`, `DateTime.from_iso8601*`, `NaiveDateTime.from_iso8601*` whose first argument is a string literal or compile-time-known atom.
+- **Tolerate:** `@compiled_regex Regex.compile!("...")` at module top-level; `:persistent_term.put` at boot; documented case where recompilation is necessary (e.g., the literal may change at hot-reload time).
+- **Severity:** `info`
+
+### 5.76 Inline HTTP in LiveView `handle_event/3`
+
+A LiveView's `handle_event/3` calls a blocking HTTP client (`Tesla`, `Req`, `HTTPoison`, `Finch`, `:httpc`) directly, freezing the LiveView process for all other events while the request is in flight.
+
+- **Why:** A LiveView is a single GenServer per user session. While `handle_event/3` runs, no other event is processed — clicks queue up, the UI feels frozen, and a single slow API call hangs the entire session. Wrap the HTTP call in `start_async/3` or `assign_async/3`. (Performance, User Experience)
+- **Check:** Per-file: classify as LiveView. Find `def handle_event/3` and walk its body, skipping the children of async wrappers (`start_async`, `assign_async`, `Task.async*`). Flag direct HTTP-client calls. Project-level: build a transitive taint set via the function graph (depth ≤ 5) to catch indirect HTTP wrappers.
+- **Tolerate:** HTTP calls inside `start_async/3`, `assign_async/3`, `Task.async/1,2`, or `Task.async_stream` lambdas; HTTP calls in an orchestrator module that the LiveView dispatches to via `start_async`; documented case for synchronous HTTP (extremely rare, e.g., transactional rollback).
+- **Severity:** `warning`
+
 ---
 
 ## 6. Module Quality

@@ -5,31 +5,6 @@
 # from this file. Empty file = full coverage.
 #
 # Lines starting with # are comments. Blank lines are ignored.
-5.51
-5.52
-5.53
-5.54
-5.55
-5.56
-5.57
-5.58
-5.60
-5.61
-5.62
-5.63
-5.64
-5.65
-5.66
-5.67
-5.68
-5.69
-5.70
-5.71
-5.72
-5.73
-5.74
-5.75
-5.76
 6.100
 6.101
 6.102
