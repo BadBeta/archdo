@@ -105,17 +105,38 @@ Archdo needs `Jason` (JSON encoding) and `JSV` (JSON Schema validation for MCP t
 
 ### Update
 
-```bash
-# Standalone form
-mix escript.install --force hex archdo
-# or
-mix escript.install --force github BadBeta/archdo
+The standard Linux update conventions apply:
 
-# Project-dep form
+| Convention | Examples | How Archdo follows it |
+|---|---|---|
+| Package manager replaces atomically; user state in XDG dirs is untouched | `apt upgrade`, `dnf update`, `pacman -Syu` | `--force` reinstall replaces the escript binary atomically; project-local config (`.archdo.exs`, `.archdo_baseline.exs`, `.mcp.json`) is never touched |
+| Self-update subcommand on the tool itself | `rustup self update`, `gh extension upgrade`, `fly version update`, `deno upgrade` | `archdo update` |
+
+**Standalone form (recommended):**
+
+```bash
+archdo update                              # latest from github BadBeta/archdo (default)
+archdo update --source hex archdo          # update from Hex (after Hex publication)
+archdo update --source github OWNER/REPO   # update from a fork
+archdo update --source git URL             # update from an arbitrary git repository
+```
+
+`archdo update` shells out to `mix escript.install --force <source>`. The `--force` is what makes the operation safe: it skips the confirmation prompt and replaces the escript at `~/.mix/escripts/archdo` atomically — there's no window where the old binary is gone but the new one isn't installed yet. You can still run the underlying mix command directly if you prefer:
+
+```bash
+mix escript.install --force github BadBeta/archdo
+mix escript.install --force hex archdo
+```
+
+Archdo has no user-home state — every persistent setting (`.archdo.exs`, `.archdo_baseline.exs`, `.mcp.json`) lives inside the project tree it relates to, so updating the binary preserves all configuration automatically.
+
+**Project-dep form:**
+
+```bash
 mix deps.update archdo
 ```
 
-For the project-dep form: if you pinned a specific version in `mix.exs`, bump it first; `mix deps.update` respects the version constraint.
+If you pinned a specific version in `mix.exs`, bump it first; `mix deps.update` respects the version constraint.
 
 ### Uninstall
 
