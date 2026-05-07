@@ -24,7 +24,16 @@ defmodule Archdo.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       description:
         "Architectural quality checker for Elixir — checks OTP patterns, boundaries, and test architecture",
-      package: package()
+      package: package(),
+      escript: escript()
+    ]
+  end
+
+  defp escript do
+    [
+      main_module: Archdo.CLI,
+      name: "archdo",
+      app: nil
     ]
   end
 

@@ -58,9 +58,33 @@ flowchart LR
 
 ## 2. Install, update, uninstall
 
-### Install
+Archdo can be installed two ways. They are independent — you can use either, neither, or both.
 
-Add Archdo to your project's `mix.exs`:
+| Form | Installs | Invocation | Best for |
+|---|---|---|---|
+| **Standalone CLI (escript)** | A self-contained executable, globally | `archdo ...` (no `mix`) | Audits, third-party code review, ad-hoc checks, environments without project deps |
+| **Project dependency** | Archdo as a dev/test dep of your project | `mix archdo ...` | CI pipelines, version-pinning per project, MCP server inside the project |
+
+### Install — standalone CLI (recommended for ad-hoc use)
+
+```bash
+mix escript.install hex archdo
+# or, from GitHub directly (no Hex publication needed):
+mix escript.install github BadBeta/archdo
+```
+
+This places an `archdo` executable under `~/.mix/escripts/`. Add that directory to your `PATH` (the installer prints the line to add). Then from anywhere:
+
+```bash
+archdo --help
+archdo --paths /path/to/some/project/lib --format text
+```
+
+The escript needs no `mix.exs` modification in the target project, no `mix deps.get`, no project context. Compiled-graph rules (`--compiled`) still need `_build/` artefacts to exist in the target project, so run `mix compile` in the target first if you want those checks.
+
+### Install — project dependency
+
+For CI integration or version-pinning per project, add Archdo to `mix.exs`:
 
 ```elixir
 def deps do
@@ -70,11 +94,11 @@ def deps do
 end
 ```
 
-Then:
+Then run from inside that project:
 
 ```bash
 mix deps.get
-mix archdo --help     # confirm install
+mix archdo --help
 ```
 
 Archdo needs `Jason` (JSON encoding) and `JSV` (JSON Schema validation for MCP tool inputs) at runtime. It does not start an OTP application, does not modify your supervision tree, and does not depend on Phoenix or Ecto — those are detected if present.
@@ -82,16 +106,26 @@ Archdo needs `Jason` (JSON encoding) and `JSV` (JSON Schema validation for MCP t
 ### Update
 
 ```bash
+# Standalone form
+mix escript.install --force hex archdo
+# or
+mix escript.install --force github BadBeta/archdo
+
+# Project-dep form
 mix deps.update archdo
 ```
 
-If you pinned a specific version in `mix.exs`, bump it first; `mix deps.update` respects the version constraint.
+For the project-dep form: if you pinned a specific version in `mix.exs`, bump it first; `mix deps.update` respects the version constraint.
 
 ### Uninstall
 
-Remove the dependency line from `mix.exs` and run:
-
 ```bash
+# Standalone form
+mix escript.uninstall archdo
+
+# Project-dep form
+# 1) Remove the {:archdo, ...} line from mix.exs
+# 2) Then:
 mix deps.unlock archdo
 mix deps.clean archdo
 ```
@@ -105,29 +139,16 @@ If you have a `.archdo.exs`, `.archdo_baseline.exs`, or `.mcp.json` referencing 
 - Phoenix and non-Phoenix projects
 - Umbrella projects (run from each child app's root)
 
-### Run Archdo without adding it to a project — the standalone form
-
-You can analyse a project from a clone of Archdo itself, without modifying the target project's `mix.exs`. Useful for one-off audits, third-party code review, or trying Archdo before committing to it:
-
-```bash
-git clone https://github.com/BadBeta/archdo.git
-cd archdo
-mix deps.get
-mix archdo --paths /absolute/path/to/some/elixir/project/lib
-```
-
-`--paths` takes an arbitrary directory or file list; the target doesn't need to know Archdo exists. Compiled-graph rules (`--compiled`) need `_build/` artefacts in the target project, so run `mix compile` over there first if you want those checks.
-
 ---
 
 ## 3. Quick start — using the CLI to check a project
 
-Once Archdo is installed (either as a project dependency or in its standalone form), the entire tool is one Mix task. Here are the four invocations that cover most use cases.
+The examples below use `archdo` (the standalone escript). If you installed Archdo as a project dependency, replace `archdo` with `mix archdo` — the flags and behaviour are identical.
 
 ### "Just check it" — the default
 
 ```bash
-mix archdo
+archdo
 ```
 
 Defaults: scans `lib/`, includes boundary rules and function-graph analysis, runs the `core` pack, prints a markdown summary table grouped by rule, exits with code 0/1/2 depending on severity.
@@ -135,8 +156,8 @@ Defaults: scans `lib/`, includes boundary rules and function-graph analysis, run
 ### "Check everything" — every analysis mode + every opt-in pack
 
 ```bash
-mix compile
-mix archdo \
+# Run `mix compile` in the target project first if you want --compiled checks.
+archdo \
   --paths lib,test \
   --tests \
   --compiled \
@@ -154,12 +175,20 @@ What each switch turns on:
 | `--packs core,ce_compliance,ce_privacy,ce_composability` | Turn on every pack, not just `core` |
 | `--format text` | Color-coded human-readable output with full `why` and fix options |
 
-Run `mix compile` first; `--compiled` needs the BEAM files. Boundaries (`--boundaries`) and function-graph (`--functions`) are already on by default, so they don't need to be repeated.
+`--compiled` needs `_build/` to exist in the target project — compile the target first. Boundaries (`--boundaries`) and function-graph (`--functions`) are already on by default, so they don't need to be repeated.
+
+### "Check a project I'm not inside" — point at any path
+
+```bash
+archdo --paths /path/to/some/project/lib --format text
+```
+
+`--paths` accepts arbitrary directories or files. The target project doesn't need to know Archdo exists — no `mix.exs` change, no installation in the target tree.
 
 ### "Check my changed files" — for PR review
 
 ```bash
-mix archdo --since main --format compact
+archdo --since main --format compact
 ```
 
 Restricts the scan to files changed since the named git ref. `--format compact` produces one-line-per-finding output suitable for editor quickfix lists or CI logs.
@@ -167,19 +196,19 @@ Restricts the scan to files changed since the named git ref. `--format compact` 
 ### "Tell me about one specific finding"
 
 ```bash
-mix archdo --explain 6.50            # what does rule 6.50 mean?
-mix archdo --only 6.50 --paths lib   # show every instance of just that rule
+archdo --explain 6.50            # what does rule 6.50 mean?
+archdo --only 6.50 --paths lib   # show every instance of just that rule
 ```
 
 ### Inspect what's available
 
 ```bash
-mix archdo --help               # full option list
-mix archdo --list-packs         # which rules belong to each pack
-mix archdo --building-blocks    # which modules/contexts pass the composability audit
-mix archdo --metrics            # Martin Ca/Ce/I/A/D table
-mix archdo --coverage           # test-coverage gap matrix
-mix archdo --diagram overview   # Mermaid architecture diagram (requires --compiled)
+archdo --help               # full option list
+archdo --list-packs         # which rules belong to each pack
+archdo --building-blocks    # which modules/contexts pass the composability audit
+archdo --metrics            # Martin Ca/Ce/I/A/D table
+archdo --coverage           # test-coverage gap matrix
+archdo --diagram overview   # Mermaid architecture diagram (requires --compiled)
 ```
 
 The full CLI reference (every flag) is in §7. Output formats are covered in §6.
@@ -431,8 +460,11 @@ This is so CI can use `mix archdo` directly without parsing output.
 ## 7. CLI reference
 
 ```
-mix archdo [options]
+archdo [options]        # standalone escript
+mix archdo [options]    # if Archdo is a project dependency
 ```
+
+The two forms accept the same options and produce identical output. The escript additionally handles `--help` / `-h` and `--version` / `-v` directly (the Mix-task form delegates `--help` to `mix help archdo`).
 
 | Option            | Type            | Description                                                                                |
 |-------------------|-----------------|--------------------------------------------------------------------------------------------|
