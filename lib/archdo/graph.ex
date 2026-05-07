@@ -501,7 +501,61 @@ defmodule Archdo.Graph do
     end
   end
 
+  # Phoenix plug pipeline: `plug Module` and `plug Module, opts`.
+  # Plug invokes Module.init/1 and Module.call/2 at runtime; opts
+  # may contain additional module references that the plug
+  # dispatches to (e.g. `plug Authorize, [Policies.Episode, :podcast]`).
+  # Without this carve-out, every plug-only-referenced module
+  # appears orphan to CE-30 even though it's called every request.
+  defp visit_post(
+         {:plug, meta, [{:__aliases__, _, parts} | rest]} = node,
+         {state, edges},
+         file
+       )
+       when is_list(parts) and is_atom(hd(parts)) do
+    {_, {_, edges_with_plug}} =
+      handle_resolved_edge(parts, :registry, state, edges, node, file, meta)
+
+    edges_with_opts = collect_alias_refs_in_args(rest, state, edges_with_plug, file, meta)
+    {node, {state, edges_with_opts}}
+  end
+
   defp visit_post(node, acc, _file), do: {node, acc}
+
+  # Walk a value (typically a `plug` opts list / kw-list) collecting
+  # every `{:__aliases__, _, parts}` reference and emitting a
+  # `:registry`-typed edge from the current module to each. Recursive
+  # — handles nested lists / tuples / maps.
+  defp collect_alias_refs_in_args(value, state, edges, file, meta) do
+    {_, refs} = Macro.prewalk(value, [], &collect_alias_node/2)
+
+    Enum.reduce(refs, edges, fn parts, acc_edges ->
+      case resolve_alias(parts, state) do
+        nil ->
+          acc_edges
+
+        target ->
+          edge = %{
+            source: current_module(state),
+            target: target,
+            type: :registry,
+            file: file,
+            line: AST.line(meta)
+          }
+
+          [edge | acc_edges]
+      end
+    end)
+  end
+
+  defp collect_alias_node({:__aliases__, _, parts} = node, acc) when is_list(parts) do
+    case Enum.all?(parts, &is_atom/1) do
+      true -> {node, [parts | acc]}
+      false -> {node, acc}
+    end
+  end
+
+  defp collect_alias_node(node, acc), do: {node, acc}
 
   defp handle_simple_alias(parts, as_name, state, edges, node, file, meta) do
     case safe_concat(parts) do

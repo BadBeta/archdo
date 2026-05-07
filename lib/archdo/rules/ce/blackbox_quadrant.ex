@@ -58,7 +58,19 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
   @impl Archdo.Quadrant
   def axes(file, ast, opts) do
     layer = phoenix_layer(file, ast, opts)
-    scores = Blackbox.score_module(ast)
+
+    # `score_module/1` does `Enum.group_by |> Enum.map`, which iterates
+    # the resulting Map in unspecified (~alphabetical) order — NOT
+    # source order. `extract_functions(:public)` preserves source
+    # order. Zipping the two silently mismatched: a pure changeset/2
+    # would be flagged under its own name with another function's
+    # failed components. Look up scores by `{name, arity}` instead.
+    scores_by_key =
+      ast
+      |> Blackbox.score_module()
+      |> Map.new(fn {n, a, possibility, components} ->
+        {{n, a}, {possibility, components}}
+      end)
 
     # Combine two impl-detection sources:
     #   1. Explicit `@impl true` markers on individual functions.
@@ -76,38 +88,47 @@ defmodule Archdo.Rules.CE.BlackboxQuadrant do
 
     ast
     |> AST.extract_functions(:public)
-    |> Enum.zip(scores)
-    |> Enum.flat_map(fn {{name, arity, meta, _args, body}, {_n, _a, _possibility, components}} ->
-      # value_for_function/5 corrects the value heuristic for shapes
-      # that have intrinsically low building-block value: bang
-      # functions (`fn!/n`) and behaviour-callback implementations.
-      # Both have their signature/semantics dictated by an external
-      # contract, so flagging them as "wants to be a building block
-      # but isn't" is the wrong layer of analysis. The cell shifts
-      # to {:low, :low} for these — no fire.
-      value = Blackbox.value_for_function(body, name, arity, layer, impls)
-      structural = structural_possibility(components)
-      failures = structural_failures(components)
-
-      case failures do
-        [] ->
+    |> Enum.flat_map(fn {name, arity, meta, _args, body} ->
+      case Map.fetch(scores_by_key, {name, arity}) do
+        :error ->
           []
 
-        [_ | _] ->
-          cell = {possibility_class(structural), Blackbox.value_class(value)}
-
-          evidence = %{
-            name: name,
-            arity: arity,
-            meta: meta,
-            possibility: structural,
-            value: value,
-            components: components
-          }
-
-          [{cell, evidence}]
+        {:ok, {_possibility, components}} ->
+          axes_for_function(name, arity, meta, body, components, layer, impls)
       end
     end)
+  end
+
+  defp axes_for_function(name, arity, meta, body, components, layer, impls) do
+    # value_for_function/5 corrects the value heuristic for shapes
+    # that have intrinsically low building-block value: bang
+    # functions (`fn!/n`) and behaviour-callback implementations.
+    # Both have their signature/semantics dictated by an external
+    # contract, so flagging them as "wants to be a building block
+    # but isn't" is the wrong layer of analysis. The cell shifts
+    # to {:low, :low} for these — no fire.
+    value = Blackbox.value_for_function(body, name, arity, layer, impls)
+    structural = structural_possibility(components)
+    failures = structural_failures(components)
+
+    case failures do
+      [] ->
+        []
+
+      [_ | _] ->
+        cell = {possibility_class(structural), Blackbox.value_class(value)}
+
+        evidence = %{
+          name: name,
+          arity: arity,
+          meta: meta,
+          possibility: structural,
+          value: value,
+          components: components
+        }
+
+        [{cell, evidence}]
+    end
   end
 
   @impl Archdo.Quadrant

@@ -101,4 +101,95 @@ defmodule Archdo.GraphTest do
       assert "MyApp.Helper" in targets
     end
   end
+
+  describe "plug-module references — Phoenix runtime dispatch" do
+    # `plug Authorize, [Policies.Episode, :podcast]` is the Phoenix
+    # plug-pipeline pattern — Authorize's `init/1` and `call/2` are
+    # invoked by the Plug pipeline at runtime, AND Authorize's `init/1`
+    # may itself reference modules from its options list (`Policies.Episode`)
+    # to dispatch authorization at runtime via apply/3.
+    #
+    # Without recognising this shape, the AST graph captures zero edges
+    # to the plug or its referenced modules. CE-30 then flags every
+    # plug-only-referenced module (Authorize, Policies.Episode, etc.)
+    # as orphan even though they're called every request.
+
+    defp parse(code, file) do
+      {:ok, ast} =
+        Code.string_to_quoted(code,
+          file: file,
+          columns: true,
+          token_metadata: true,
+          literal_encoder: &{:ok, {:__block__, &2, [&1]}}
+        )
+
+      {file, ast}
+    end
+
+    test "`plug Module` (1-arg) emits an edge to Module" do
+      code = ~S"""
+      defmodule MyAppWeb.Controller do
+        plug MyApp.Authenticate
+      end
+      """
+
+      graph = Graph.build([parse(code, "lib/my_app_web/controller.ex")])
+      targets = Graph.dependencies(graph, "MyAppWeb.Controller") |> Enum.map(& &1.target)
+
+      assert "MyApp.Authenticate" in targets
+    end
+
+    test "`plug Module, opts` emits an edge to Module" do
+      code = ~S"""
+      defmodule MyAppWeb.Controller do
+        plug MyApp.Authorize, role: :admin
+      end
+      """
+
+      graph = Graph.build([parse(code, "lib/my_app_web/controller.ex")])
+      targets = Graph.dependencies(graph, "MyAppWeb.Controller") |> Enum.map(& &1.target)
+
+      assert "MyApp.Authorize" in targets
+    end
+
+    test "`plug Authorize, [PolicyModule, :resource]` emits edges to BOTH the plug AND the policy" do
+      # The plug's init/1 / call/2 receive the opts list including
+      # PolicyModule, then dispatch to it via apply/3. PolicyModule
+      # is therefore reachable through the plug-pipeline but invisible
+      # to the AST call walker without this carve-out.
+      code = ~S"""
+      defmodule MyAppWeb.EpisodeController do
+        plug MyApp.Authorize, [MyApp.Policies.Episode, :podcast]
+      end
+      """
+
+      graph = Graph.build([parse(code, "lib/my_app_web/episode_controller.ex")])
+
+      targets =
+        Graph.dependencies(graph, "MyAppWeb.EpisodeController")
+        |> Enum.map(& &1.target)
+        |> Enum.uniq()
+
+      assert "MyApp.Authorize" in targets
+      assert "MyApp.Policies.Episode" in targets
+    end
+
+    test "`plug :atom_function` does NOT emit a module edge (it's a private fn)" do
+      # `plug :authenticate` registers a private function on the
+      # current module — already handled by dead_private_function's
+      # plug recognition. No edge to a module needed here.
+      code = ~S"""
+      defmodule MyAppWeb.Controller do
+        plug :authenticate
+        defp authenticate(conn, _opts), do: conn
+      end
+      """
+
+      graph = Graph.build([parse(code, "lib/my_app_web/controller.ex")])
+      targets = Graph.dependencies(graph, "MyAppWeb.Controller") |> Enum.map(& &1.target)
+
+      # No module edges from `plug :authenticate` itself.
+      refute Enum.any?(targets, fn t -> String.starts_with?(t, "Authent") end)
+    end
+  end
 end
