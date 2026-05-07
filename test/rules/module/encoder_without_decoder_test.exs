@@ -349,4 +349,139 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoderTest do
       assert_clean(EncoderWithoutDecoder, code)
     end
   end
+
+  describe "M-fp-E3: AST-shape projection detection" do
+    # FP class 7 — body-shape projection. A `to_X/1` whose top-level body is
+    # a map literal `%{...}` or struct literal `%Mod{...}` is structurally a
+    # projection. Round-trip is rarely meaningful — the literal drops fields
+    # by design. Catches domain-specific names not in the curated lists
+    # (logflare's `to_dialect`/`to_typemap`, sequin's `to_external`, etc.)
+    # without growing those lists indefinitely.
+
+    test "does not flag `to_dialect/1` whose body is a map literal (logflare pattern)" do
+      code = ~S"""
+      defmodule Logflare.Backends.SqlDialect do
+        def to_dialect(:postgres) do
+          %{prefix: "postgres", boolean: :native, jsonb: :native}
+        end
+
+        def to_dialect(:bigquery) do
+          %{prefix: "bigquery", boolean: :int, jsonb: :string}
+        end
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_typemap/1` whose body is a map literal" do
+      code = ~S"""
+      defmodule Logflare.Schema.Types do
+        def to_typemap(_types) do
+          %{int: :integer, str: :string, bool: :boolean}
+        end
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_external/1` whose body is a struct literal" do
+      code = ~S"""
+      defmodule Sequin.Sources.Endpoint do
+        defstruct [:id, :host, :port]
+
+        def to_external(endpoint) do
+          %ExternalEndpoint{id: endpoint.id, host: endpoint.host}
+        end
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "STILL flags `to_querystring/1` whose body is a pipeline (real serializer)" do
+      # Pipeline ending in a function call is NOT a literal projection —
+      # it's a real serialization step. Body-shape filter must not suppress.
+      code = ~S"""
+      defmodule MyApp.Filter do
+        def to_querystring(filter) do
+          filter
+          |> Enum.map(fn {k, v} -> "#{k}=#{v}" end)
+          |> Enum.join("&")
+        end
+      end
+      """
+
+      [diag] = assert_flagged(EncoderWithoutDecoder, code)
+      assert diag.rule_id == "6.102"
+      assert diag.message =~ "to_querystring"
+    end
+
+    test "STILL flags `to_xml/1` whose body is binary concat (real encoder)" do
+      # Binary concat is genuine encoding — NOT a literal projection.
+      # Regression guard: existing to_xml test must keep firing.
+      code = ~S"""
+      defmodule MyApp.Doc do
+        def to_xml(doc) do
+          "<doc>" <> doc.body <> "</doc>"
+        end
+      end
+      """
+
+      [diag] = assert_flagged(EncoderWithoutDecoder, code)
+      assert diag.rule_id == "6.102"
+      assert diag.message =~ "to_xml"
+    end
+
+    test "does not flag `to_dialect/1` with single-expression block body containing map literal" do
+      # `def f(x) do %{...} end` — body wrapped in __block__ but terminal
+      # expression is the map literal. Body-shape filter must look through
+      # the block.
+      code = ~S"""
+      defmodule MyApp.Dialect do
+        def to_dialect(name) do
+          %{name: name, kind: :sql}
+        end
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "does not flag `to_dialect/1` with multi-statement block ending in map literal" do
+      # Block with intermediate computation, terminal map literal.
+      # The fact that there's a `case` first doesn't change the projection
+      # shape — final expression is still a literal.
+      code = ~S"""
+      defmodule MyApp.Dialect do
+        def to_config(name) do
+          kind = case name do
+            :pg -> :postgres
+            :my -> :mysql
+          end
+          %{name: name, kind: kind}
+        end
+      end
+      """
+
+      assert_clean(EncoderWithoutDecoder, code)
+    end
+
+    test "STILL flags `to_xml/1` with multi-statement block ending in function call" do
+      # Regression guard — block-bodied function whose terminal expression
+      # is a call (not a literal) is a real encoder.
+      code = ~S"""
+      defmodule MyApp.Doc do
+        def to_xml(doc) do
+          escaped = String.replace(doc.body, "<", "&lt;")
+          "<doc>" <> escaped <> "</doc>"
+        end
+      end
+      """
+
+      [diag] = assert_flagged(EncoderWithoutDecoder, code)
+      assert diag.rule_id == "6.102"
+    end
+  end
 end

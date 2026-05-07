@@ -107,14 +107,16 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoder do
   defp encoder_to_x_one?(_), do: false
 
   # Suppress when name is FP-filtered (external-API exact / external-service
-  # prefix / lossy / stdlib / internal-projection) or when a local decoder
-  # exists.
-  defp suppressed?({name, _, _, _, _}, fn_names) do
+  # prefix / lossy / stdlib / internal-projection), when a local decoder
+  # exists, OR when the function body's terminal expression is a map /
+  # struct literal (M-fp-E3 — body-shape projection detection).
+  defp suppressed?({name, _, _, _, body}, fn_names) do
     name_str = Atom.to_string(name)
 
     name_str in @fp_filtered_names or
       external_service_prefix?(name_str) or
       projection_suffix?(name_str) or
+      map_or_struct_literal_body?(body) or
       has_decoder?(name_str, fn_names)
   end
 
@@ -125,6 +127,51 @@ defmodule Archdo.Rules.Module.EncoderWithoutDecoder do
   defp projection_suffix?(name_str) do
     Enum.any?(@projection_suffixes, &String.ends_with?(name_str, &1))
   end
+
+  # FP class 7 — body-shape projection. A `to_X/1` whose terminal expression
+  # is a map literal `%{...}` or struct literal `%Mod{...}` is structurally
+  # a projection: the literal drops fields by design, so round-trip is
+  # rarely meaningful. Catches domain-specific names not in the curated
+  # lists (logflare's `to_dialect`/`to_typemap`, sequin's `to_external`)
+  # without growing those lists indefinitely.
+  #
+  # `extract_functions/2` wraps each clause body as `[{do_key, expr}]`.
+  # `Code.string_to_quoted/2` with `literal_encoder:` (the runner's parse
+  # mode) wraps EVERY literal — including the `:do` key — in
+  # `{:__block__, _, [literal]}`. So the runner-shape is
+  # `[{{:__block__, _, [:do]}, expr}]`; the test-shape (plain
+  # `Code.string_to_quoted/1`) is `[{:do, expr}]`. Handle both.
+  #
+  # Then walk through `__block__` to the terminal expression — `def f(x)
+  # do ... %{...} end` parses as `{:__block__, _, [..., terminal]}` and
+  # the terminal expression decides projection shape.
+
+  defp map_or_struct_literal_body?([{key, expr} | _]) do
+    do_key?(key) and literal_terminal?(expr)
+  end
+
+  defp map_or_struct_literal_body?(_), do: false
+
+  defp do_key?(:do), do: true
+  defp do_key?({:__block__, _, [:do]}), do: true
+  defp do_key?(_), do: false
+
+  # Bare map literal: `%{a: 1}`
+  defp literal_terminal?({:%{}, _, _}), do: true
+
+  # Bare struct literal: `%Mod{a: 1}`
+  defp literal_terminal?({:%, _, [_alias, {:%{}, _, _}]}), do: true
+
+  # Block: the LAST expression decides shape. The literal_encoder wrapper
+  # also produces single-element blocks around bare literals.
+  defp literal_terminal?({:__block__, _, exprs}) when is_list(exprs) do
+    case List.last(exprs) do
+      nil -> false
+      terminal -> literal_terminal?(terminal)
+    end
+  end
+
+  defp literal_terminal?(_), do: false
 
   # `to_X` should have at least one of `from_X`, `parse_X`, `decode_X`
   # in the same module's public surface.
