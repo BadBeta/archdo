@@ -46,13 +46,20 @@ defmodule Archdo.Rules.Module.ScatteredConfig do
   defp call_kind({{:., _, [{:__aliases__, _, [:Application]}, _fun]}, _, _}), do: :application
 
   # §§ elixir-planning: §10.5.1 — the centralized accessor lives in a
-  # *_config.ex (e.g. lib/my_app/app_config.ex) or under config/. Reads
-  # there are intentional. Path.starts_with?(file, "config/") catches the
-  # bare-relative form Mix passes; the "/config/" check catches absolute
-  # paths.
+  # *_config.ex (e.g. lib/my_app/app_config.ex), the canonical config.ex
+  # (lib/my_app/config.ex defining MyApp.Config), or under a config/
+  # directory. Reads there are intentional.
+  #
+  # Path.starts_with?(file, "config/") catches the bare-relative form Mix
+  # passes; "/config/" catches absolute paths. "/config.ex" matches the
+  # canonical basename without false-matching paths like
+  # "lib/my_app/configurable.ex" — the leading slash anchors to the
+  # filename position. "_config.ex" preserves the older `app_config.ex`
+  # convention.
   defp config_file?(file) do
     String.starts_with?(file, "config/") or
       String.contains?(file, "/config/") or
+      String.ends_with?(file, "/config.ex") or
       String.ends_with?(file, "_config.ex")
   end
 

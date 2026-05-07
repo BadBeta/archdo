@@ -95,6 +95,20 @@ defmodule Archdo.Rules.Module.ScatteredConfigTest do
 
       assert analyze(ScatteredConfig, code, file: "lib/my_app/app_config.ex") == []
     end
+
+    test "skips files named config.ex (the canonical Config module)" do
+      # `lib/my_app/config.ex` defining `MyApp.Config` is the most common
+      # shape of the centralized accessor module; planning skill §10.5.1
+      # treats this as the canonical home for application config reads.
+      code = ~S"""
+      defmodule MyApp.Config do
+        def url, do: System.get_env("API_URL")
+        def timeout, do: Application.get_env(:my_app, :timeout)
+      end
+      """
+
+      assert analyze(ScatteredConfig, code, file: "lib/my_app/config.ex") == []
+    end
   end
 
   describe "analyze/3 — clean cases" do
