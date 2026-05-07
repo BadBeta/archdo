@@ -2176,6 +2176,222 @@ A `try`/`rescue` wraps a `!`-suffixed standard-library call when a non-raising s
 - **Tolerate:** Non-secret comparisons; comparisons in test/development-only code where timing leaks don't matter; a documented `Plug.Crypto.secure_compare/2` already in use.
 - **Severity:** `warning`
 
+### 6.80 Silent Rescue
+
+A `rescue` clause whose body is a bare silent return (`nil`, `:error`, `false`, `true`, `{:error, _literal}`) with no `Logger` call and no `reraise`.
+
+- **Why:** Silent rescues lose the exception's message and stacktrace, making production debugging impossible. Even when the caller's API accepts a nil/error fallback, the operator still needs the original exception details to diagnose the failure. (Observability, Error Handling)
+- **Check:** AST walk over `try` blocks. Inspect `rescue` clauses; flag when the body is a bare silent literal (or a block ending in one) and contains no `Logger.*` call and no `reraise`. Skips test files.
+- **Tolerate:** Rescues that log the exception (`Logger.error(Exception.format(:error, e, __STACKTRACE__))`); rescues that `reraise`; intentional supervisor-style swallowing of expected exceptions documented inline.
+- **Severity:** `warning`
+
+### 6.81 Chained `Map.put` Should Be `Map.merge`
+
+Three or more consecutive `Map.put` calls on the same map.
+
+- **Why:** Each `Map.put` traverses the map's hash structure separately. `Map.merge/2` does it in one pass and groups all the changes at one read site, making intent clearer and execution faster. (Performance, Readability)
+- **Check:** AST walk over pipe chains. Detect runs of `Map.put` on the same LHS; count consecutive puts. Flag when count ≥ 3.
+- **Tolerate:** Conditional puts where each depends on the prior result; puts inside a reduce/loop accumulator; macro-generated put chains.
+- **Severity:** `info`
+
+### 6.82 Fetch-Modify-Put Should Be `Map.update`
+
+`Map.put(m, k, ...Map.get(m, k)... )` — two map lookups for one logical update.
+
+- **Why:** `Map.update/4` and `Map.update!/3` combine the fetch and put into a single hash lookup, with the closure receiving the current value. The fetch-modify-put shape is two lookups and obscures the "I'm updating this key based on its current value" intent. (Performance, Idiomatic Code)
+- **Check:** Find `Map.put` calls; walk the value-expression argument for a `Map.get` or `Map.fetch!` whose `m` and `k` arguments match the put.
+- **Tolerate:** Conditional transformations where the get and put are guarded separately; complex value expressions with intentional side effects between fetch and put.
+- **Severity:** `info`
+
+### 6.83 Multiple `Keyword.get` Calls Should Be `Keyword.validate!/2`
+
+Three or more `Keyword.get` calls on the same options variable inside a single function.
+
+- **Why:** `Keyword.validate!/2` documents accepted keys, provides defaults, and rejects unknown keys at the function boundary — one call instead of scattered `Keyword.get` invocations. The validate-once form fails fast on typos that scattered gets would silently accept. (API Design, Correctness)
+- **Check:** Per-function: count `Keyword.get` calls on each variable. Flag when any single variable has 3+ gets.
+- **Tolerate:** Lazy / conditional option access where validation isn't appropriate; a single or two-key options API where validate is overkill.
+- **Severity:** `info`
+
+### 6.84 `Jason.decode` With `keys: :atoms` (Atom-Table DoS)
+
+`Jason.decode(json, keys: :atoms)` (or `decode!`) creates an atom for every JSON key.
+
+- **Why:** Atoms are never garbage-collected. An attacker submitting JSON with arbitrary keys can exhaust the bounded atom table (default ~1M) and crash the BEAM. Use `keys: :atoms!` (raises on unknown atom — bounded set) or the default string keys. (Security, Stability)
+- **Check:** Find `Jason.decode/decode!` calls. Inspect the options keyword for `keys: :atoms` (NOT `:atoms!`). Skips test files.
+- **Tolerate:** `keys: :atoms!`; default string keys; trusted internal-only configuration files with bounded known-safe key sets.
+- **Severity:** `warning`
+
+### 6.85 Logger Interpolation With `inspect` Should Use Lazy Closure
+
+A `Logger.X` call whose first argument is an interpolated string containing an `inspect/1,2` call.
+
+- **Why:** Non-lazy `Logger.X` evaluates the argument even when the log level is disabled — `inspect` runs (formatting potentially-large structures) and the result is discarded. The lazy form `Logger.X(fn -> ... end)` only runs when the level is enabled. On hot paths with debug-level inspects, the difference is significant. (Performance)
+- **Check:** AST walk for `Logger.debug/info/warning/error/notice/critical` calls whose first argument is an interpolated string (`{:<<>>, _, parts}`); detect `inspect` references inside any interpolation expression.
+- **Tolerate:** Pre-formatted strings without `inspect`; structured-metadata logging (`Logger.info("event", metadata: ...)`); already-lazy closure forms.
+- **Severity:** `info`
+
+### 6.86 One-Line Forward Should Be `defdelegate`
+
+A public `def` whose body is a single remote call to another module with arguments passed through unchanged.
+
+- **Why:** `defdelegate name(args), to: Mod` expresses the forward intent in one line, inherits `@spec` and `@doc` from the target, and signals to readers "this is a thin pass-through." (Idiomatic Code, Readability)
+- **Check:** Per-public-def: head has only bare-variable args, no guards. Body is a single `{:., _, [{:__aliases__, _, _}, _]}` call passing the same args in the same order.
+- **Tolerate:** Forwards that add transformation, logging, or error wrapping in the body; cross-namespace API translation; functions that pre-process arguments before forwarding.
+- **Severity:** `info`
+
+### 6.87 `@doc false` on `def` Should Be `defp`
+
+A public `def` is preceded by `@doc false`, which hides it from documentation but does NOT make it private.
+
+- **Why:** `@doc false` only affects documentation generation; the function remains public and exportable. External callers can still invoke it. `defp` is the actual privacy mechanism. The combo signals confused intent: "I want this hidden but also reachable from anywhere." (Clarity, API Design)
+- **Check:** Walk module statements sequentially. Track `@doc false` markers; flag the next `def` (not `defp`) unless it's a known framework callback (GenServer, Plug, Phoenix.LiveView, Oban.Worker, etc.), follows the `__name__/arity` cross-module-internal convention, has another arity with a real `@doc`, or its body is a schema-accessor exposing a module attribute.
+- **Tolerate:** Framework callbacks (their behaviours dispatch via `apply/3`, so they MUST be public); `__name__/N` cross-module-internal convention (Phoenix, Plug, Module); overload-with-shared-docs (one arity has `@doc "..."`, others have `@doc false`); schema accessors (`def opts_schema, do: @opts_schema`).
+- **Severity:** `info`
+
+### 6.88 Boolean-Returning Function Missing `?` Suffix
+
+A public function with 2+ clauses that all return literal `true` or `false`, but whose name doesn't end in `?` (or `!`).
+
+- **Why:** Elixir convention: predicate functions (yes/no questions) end in `?`. Without it, callers can't tell at a glance whether `valid?/1` returns a boolean or perhaps a different shape. The convention is enforced by Credo and observed throughout the stdlib (`is_*`, `*?`, `Kernel.match?/2`, etc.). (Convention, Idiomatic Code)
+- **Check:** Group public functions by `{name, arity}`. Inspect every clause's return; if all return `true` or `false` literals AND the name doesn't end in `?` or `!`, flag the definition.
+- **Tolerate:** Bang functions (`!` suffix already present); legacy public APIs where renaming would break downstream code (document and rename in next major version).
+- **Severity:** `info`
+
+### 6.89 Two `System.system_time` Calls With Subtraction (Use Monotonic Time)
+
+A function calls `System.system_time/0,1` twice and subtracts.
+
+- **Why:** `system_time` is wall-clock time and is affected by NTP adjustments and operator changes — a backward jump produces negative durations or crashes. `System.monotonic_time/0,1` is guaranteed non-decreasing within a VM lifetime, which is what duration measurement actually needs. (Correctness, Reliability)
+- **Check:** Per-function: count `System.system_time` calls; verify the body contains arithmetic subtraction (`-`). Flag both conditions together.
+- **Tolerate:** Two `system_time` calls for unrelated purposes (no subtraction); JWT or other cryptographic timestamp construction (which uses `+` and absolute wall-clock); documented case where wall-clock is required.
+- **Severity:** `warning`
+
+### 6.90 Loop-Invariant Constructor Inside `Enum`/`Stream` Lambda
+
+An `Enum.*`/`Stream.*` lambda calls `Decimal.new`, `Date.from_iso8601!`, `DateTime.from_iso8601!`, `NaiveDateTime.from_iso8601!`, `Time.from_iso8601!`, or `Regex.compile!` with arguments that don't depend on the lambda's parameter.
+
+- **Why:** These constructions allocate and parse on every iteration even when the result is constant. Hoisting the call above the lambda runs it once. With large datasets — and especially with `Decimal.new` — the savings are significant. (Performance)
+- **Check:** Find `Enum`/`Stream` calls with a lambda. Walk the lambda body for parse-construction calls. Track the lambda's parameter names; flag any constructor whose arguments don't reference any parameter (loop-invariant).
+- **Tolerate:** Loop-variant constructions (the argument depends on the lambda parameter); small fixed-size collections where the gain is negligible; documented per-iteration parsing.
+- **Severity:** `info`
+
+### 6.91 `Enum.into(coll, %{})` Should Be `Map.new(coll)`
+
+`Enum.into(coll, %{})` or `Enum.into(coll, %{}, fun)` with the empty-map target.
+
+- **Why:** `Map.new(coll)` (or `Map.new(coll, fun)`) is more direct, self-documents the intent, and skips the Collectable protocol dispatch. (Idiomatic Code, Performance)
+- **Check:** Find `Enum.into` calls. Check the second argument for an empty-map literal `{:%{}, _, []}`. Handles both 2-arg (no transform) and 3-arg (with transform) forms.
+- **Tolerate:** Explicit Collectable dispatch on a non-standard collectable; non-empty-map targets (legitimate use of `Enum.into`).
+- **Severity:** `info`
+
+### 6.92 `Ecto.Query.fragment` With String Interpolation (SQL Injection)
+
+An `Ecto.Query.fragment` call whose first argument is a string with `#{...}` interpolation instead of `?` placeholders.
+
+- **Why:** Interpolation embeds the value directly into the SQL string. The parameterized form `fragment("... ?", ^value)` sends the value as a bound parameter — the database driver escapes it. Interpolation is SQL injection. (Security)
+- **Check:** Find `fragment/1,2,...` calls. Check the first argument's AST for an interpolated string `{:<<>>, _, parts}` containing non-binary parts (interpolation segments).
+- **Tolerate:** Trusted compile-time literals (no `#{}` at all — pure string); column-name allow-list patterns where parameterization isn't possible AND the value is verified against a closed set; `^value` parameter binding (the correct form).
+- **Severity:** `warning`
+
+### 6.93 `Code.eval_*` in Production Code
+
+`Code.eval_string`, `Code.eval_quoted`, or `Code.eval_file` called outside `lib/mix/tasks/` and tests.
+
+- **Why:** `Code.eval_*` evaluates arbitrary Elixir at runtime. Even on "trusted" input, this is RCE — the default answer is no. Build-time tooling (Mix tasks, code generators) is the only legitimate home. (Security)
+- **Check:** Find `Code.eval_string/eval_quoted/eval_file` calls. Skip test files and files under `lib/mix/tasks/` or `mix/tasks/`. Flag everything else.
+- **Tolerate:** Mix tasks; test fixtures and code generators in `priv/`/`scripts/`; intentional REPL-like tools where the eval surface is itself the documented input boundary.
+- **Severity:** `warning`
+
+### 6.94 Hand-Rolled Crypto in Auth-Named Module
+
+A module whose name segment includes `Auth`, `Token`, `Session`, `JWT`, `Otp`, `Verifier`, or `Signer` calls `:crypto.mac`, `:crypto.hmac`, or `:crypto.hash` directly.
+
+- **Why:** Hand-rolled JWT, signed cookies, and password hashing have consumed engineering quarters chasing timing attacks, weak salts, and version skew. Vetted libraries (`Guardian`, `bcrypt_elixir`, `argon2_elixir`, `Plug.Crypto`) bake in the hard-won details. The default answer for security-sensitive primitives is "use a library." (Security)
+- **Check:** Inspect module name; if any path segment matches an auth-related keyword, find every `:crypto.mac`/`:crypto.hmac`/`:crypto.hash` call in the module.
+- **Tolerate:** Non-auth modules with incidental crypto; thin wrappers over a vetted library; test-only / demo crypto explicitly documented as such; documented case for a custom primitive (rare, requires security review).
+- **Severity:** `warning`
+
+### 6.95 Short-Circuit `with` for an Accumulating Validator
+
+A function whose name suggests accumulating semantics (`validate_*`, `import_*`, `bulk_*`, `check_*`) uses a `with` chain with 2+ arrow steps that short-circuits on the first error.
+
+- **Why:** `with` stops at the first failure (railway). An accumulating validator should collect ALL errors so the user can fix them in one round-trip. Short-circuit forces N fix/resubmit cycles, which is the wrong UX for forms, batch import, and multi-rule checks. (UX, API Design)
+- **Check:** Filter functions by name prefix. Walk their bodies for `with` blocks; count arrow clauses. Flag when the function uses ≥2 bound variables in the success body and short-circuits. (See `elixir-implementing` §5.10.6 — accumulating reduce.)
+- **Tolerate:** Sequential pipelines where later steps genuinely depend on prior results; intentional early-termination; functions whose names suggest accumulation but whose semantics are actually sequential.
+- **Severity:** `info`
+
+### 6.96 Verbose ok/error `case` Is `Result.map`
+
+A `case` with two clauses: `{:ok, var} -> {:ok, transform(var)}` and `{:error, _} = err -> err`.
+
+- **Why:** This is the canonical `Result.map` shape. The intent (transform success, pass error through) is buried under `case` ceremony. A `with`-chain (`with {:ok, v} <- f(), do: {:ok, transform(v)}`) or a project-local `Result.map/2` helper makes the shape explicit. (Idiomatic Code, Clarity)
+- **Check:** AST walk for `case` expressions with exactly two clauses matching the ok/error pass-through shape (the error clause re-emits the matched value unchanged).
+- **Tolerate:** Multi-clause error handling that maps different error reasons; case bodies that do more than transform on the success path; cases where explicit clarity outweighs the `Result.map` abstraction.
+- **Severity:** `info`
+
+### 6.97 Subject-Position Flip in Public Function
+
+A 2-argument public function where the FIRST argument's name suggests options (`opts`, `options`, `config`) and the SECOND looks like the data subject (`data`, `list`, `map`, `coll`, `enumerable`, etc., or a struct destructure).
+
+- **Why:** Idiomatic Elixir puts the data first (`Enum.map(coll, fn)`, `String.replace(s, p, r)`, `Map.put(map, k, v)`). Flipping breaks pipe composition and breaks reader expectations: `coll |> MyMod.do_thing(opts)` won't work if `opts` is the first arg. (Idiomatic Code, Pipeline Composition)
+- **Check:** Per-2-arg public function: inspect arg names or destructure patterns. Flag when arg 1 matches options-naming and arg 2 matches subject-naming or struct destructure.
+- **Tolerate:** Functions with intentional subject-last APIs documented as such; 3+ argument functions where the first-arg-data convention has the data later by design; functions where neither argument is clearly "the subject."
+- **Severity:** `info`
+
+### 6.98 Nested `Map.update` Should Use `update_in`
+
+A `Map.update` / `Map.update!` whose update function contains another `Map.update` / `Map.put` on the same nested structure.
+
+- **Why:** Two levels of nested update is the threshold where `update_in/2,3` and `put_in/2,3` are clearer: `update_in(state.counts.total, &(&1 + 1))` is more readable than nested `Map.update` lambdas. (Idiomatic Code, Readability)
+- **Check:** Find outer `Map.update`/`Map.update!` calls. Walk the lambda body; flag when it contains an inner `Map.update`/`Map.put`/`Map.update!` on the lambda's parameter (or `&1`).
+- **Tolerate:** Single-level updates; complex transformations where the nested form is genuinely clearer; dynamic paths where `update_in`'s static path doesn't fit.
+- **Severity:** `info`
+
+### 6.99 Eager `Enum` Chain Over Streamy Source
+
+A `File.stream!`, `Repo.stream`, `IO.stream`, or `Stream.*` source piped through 3+ eager `Enum.*` steps.
+
+- **Why:** Each eager `Enum` step materializes the full intermediate list. For a streamy source — file lines, DB cursor, large external API — that defeats the source's lazy contract and can OOM the node on big inputs. Use `Stream.*` for the intermediate steps and one `Enum.*` (or `Stream.run`) at the end. (Performance, Memory)
+- **Check:** Unfold pipe chains. Identify the source (`File.stream!`, `IO.stream`, `Stream.*`, `Repo.stream`). Count subsequent eager `Enum.*` steps. Flag when the source is streamy AND eager-step count ≥ 3.
+- **Tolerate:** Small fixed-size streamy sources where eager Enum is fine; pipelines whose final step is the only eager call (correct shape).
+- **Severity:** `info`
+
+### 6.100 List Recursion Is a Fold (Use `Enum.reduce`)
+
+A private function with 2+ clauses matching `[]` and `[h | t]` that recurses with `t` and an accumulator.
+
+- **Why:** This is the canonical fold pattern. `Enum.reduce/3` expresses it in one line, names what's happening, and removes the double-clause boilerplate. (Idiomatic Code, Conciseness)
+- **Check:** Group private functions by `{name, arity}`. Detect (a) an empty-list clause returning `acc` (or `transform(acc)`) and (b) a cons-list clause recursing with the tail and a modified accumulator. Flag when both clauses are present.
+- **Tolerate:** Non-fold recursion (tree traversal, mutual recursion); public recursive functions (API requirement); early-termination patterns better suited to `Enum.reduce_while/3`.
+- **Severity:** `info`
+
+### 6.101 Builder-Pattern Rebind Chain Should Be a Pipeline
+
+Three or more consecutive rebindings of the same variable where each assignment is `var = call(var, ...)` (self-threading).
+
+- **Why:** Pipelines thread the value implicitly, making the transformation chain visually clear. Rebind chains force the reader to verify line-by-line that each statement uses the binding from the previous line. (Readability, Idiomatic Code)
+- **Check:** Walk statement blocks. Detect runs of `var = call(var, args)` patterns. Flag when run length ≥ 3.
+- **Tolerate:** Interleaved computations between the rebinds (genuinely sequential, not a pipeline); guard clauses or error checks between steps.
+- **Severity:** `info`
+
+### 6.102 Encoder Without Decoder
+
+A public `to_X/1` function in a module that also lacks a matching decoder (`from_X`/`parse_X`/`decode_X`).
+
+- **Why:** Encoders without decoders create one-way data flows. The bidirectional pair lets you property-test `decode(encode(x)) == x` — a strong invariant that catches serialization bugs before they ship. (API Design, Testing)
+- **Check:** Per-public-function: filter for `to_X/1` shape. Build the module's public function name set. Reject external-API patterns (`to_stripe`, `to_slack`), lossy projections (`to_integer`, `to_string`), stdlib wrappers, and one-line view-models. Flag remaining `to_X` without a matching `from_X`/`parse_X`/`decode_X`.
+- **Tolerate:** External-service serializers (one-way by contract); lossy projections (no inverse exists); stdlib wrappers; internal view-models documented as one-way.
+- **Severity:** `info`
+
+### 6.103 Phantom-Type Opportunity
+
+A module with `defstruct` defines both a smart constructor (`validate`/`parse`/`build`/`new`/`from_string`/`from_map`/`create`) returning `{:ok, %__MODULE__{}}` AND functions that consume `%__MODULE__{}` directly.
+
+- **Why:** Splitting into two struct types — one unvalidated, one validated — makes the validation step observable in function signatures. Without the split, downstream code can't tell at the type level whether input has been validated; a missed `validate` call goes silent. (Type Safety, Design)
+- **Check:** Detect `defstruct`. Detect smart constructors (name in a known set, body returns `{:ok, %__MODULE__{...}}`). Detect consumers (any clause arg destructures `%__MODULE__{}`). Flag when both are present.
+- **Tolerate:** Value objects where validation isn't appropriate; types where unvalidated consumers are intentional (the module is a thin DTO); test fixtures.
+- **Severity:** `info`
+
 ---
 
 ## 7. Test Architecture
