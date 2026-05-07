@@ -627,6 +627,25 @@ defmodule Archdo.Graph do
     end
   end
 
+  # Multi-segment reference: `Foo.Bar.baz()` parses with parts =
+  # [:Foo, :Bar]. If `Foo` is in the alias_table (declared as
+  # `alias X.Foo`), prepend the resolved prefix and append the
+  # remaining segments. Otherwise fall back to safe_concat — handles
+  # fully-qualified `MyApp.Foo.Bar` references.
+  defp resolve_alias([first | rest] = parts, state)
+       when is_atom(first) and is_list(rest) and rest != [] do
+    case Map.fetch(state.alias_table, first) do
+      {:ok, prefix} ->
+        case Enum.all?(rest, &is_atom/1) do
+          true -> prefix <> "." <> Enum.map_join(rest, ".", &Atom.to_string/1)
+          false -> safe_concat(parts)
+        end
+
+      :error ->
+        safe_concat(parts)
+    end
+  end
+
   defp resolve_alias(parts, _state) when is_list(parts) do
     safe_concat(parts)
   end
