@@ -13,6 +13,18 @@ defmodule Archdo.Rules.NIF.NifPanic do
 
   alias Archdo.{Diagnostic, Fix}
 
+  # Path segments that mark a Rust source file as NOT NIF code:
+  #   - benches/  → Criterion benchmarks (separate Cargo binary)
+  #   - src/bin/  → standalone Rust binaries
+  #   - examples/ → Cargo example programs
+  # Panics in those contexts don't crash the BEAM because they
+  # don't run inside it.
+  @non_nif_segments [
+    ["benches"],
+    ["src", "bin"],
+    ["examples"]
+  ]
+
   @impl true
   def id, do: "11.3"
 
@@ -34,12 +46,48 @@ defmodule Archdo.Rules.NIF.NifPanic do
   @doc """
   Analyze a Rust source file for panic-inducing patterns.
   Called separately from the main pipeline for .rs files.
+
+  Skips Rust paths that aren't NIF code: `benches/` (Criterion
+  benchmarks compile and run as a separate Cargo binary, not loaded
+  into the BEAM), `src/bin/` (standalone Rust binaries), and
+  `examples/` (Cargo example programs). Panics there don't crash
+  the VM because they don't run inside it.
   """
   def analyze_rust_file(file) do
-    case File.read(file) do
-      {:ok, content} -> check_rust_content(file, content)
-      {:error, _} -> []
+    case nif_relevant_path?(file) do
+      false ->
+        []
+
+      true ->
+        case File.read(file) do
+          {:ok, content} -> check_rust_content(file, content)
+          {:error, _} -> []
+        end
     end
+  end
+
+  # §§ elixir-implementing: §2.1 — multi-clause head with explicit
+  # path-segment matches. Each non-NIF context returns false; the
+  # default clause returns true.
+  defp nif_relevant_path?(file) do
+    segments = Path.split(file)
+    not Enum.any?(@non_nif_segments, &segment_present?(segments, &1))
+  end
+
+  defp segment_present?(segments, ["src", "bin"]) do
+    pair_index(segments, "src", "bin") != nil
+  end
+
+  defp segment_present?(segments, [single]), do: single in segments
+
+  # Find adjacent `parent` then `child` segments (e.g., "src" → "bin").
+  defp pair_index(segments, parent, child) do
+    segments
+    |> Enum.with_index()
+    |> Enum.find_value(fn
+      {^parent, i} -> if Enum.at(segments, i + 1) == child, do: i, else: nil
+      _ -> nil
+    end)
   end
 
   defp check_rustler_module(file, ast) do
@@ -51,7 +99,9 @@ defmodule Archdo.Rules.NIF.NifPanic do
         project_root = find_project_root(file)
 
         for rs_file <- Path.wildcard(Path.join(project_root, "native/**/*.rs")),
-            diag <- check_rust_content(rs_file, File.read!(rs_file)),
+            nif_relevant_path?(rs_file),
+            {:ok, content} <- [File.read(rs_file)],
+            diag <- check_rust_content(rs_file, content),
             do: diag
     end
   end
