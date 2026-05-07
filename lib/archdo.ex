@@ -70,7 +70,9 @@ defmodule Archdo do
     Severity
   }
 
+  alias Archdo.AST.{MacroEdges, NestedModules}
   alias Archdo.Compiled.Graph.Centrality
+  alias Archdo.Rules.Compiled.UnanchoredModule
   alias Archdo.Stats.{FunctionMetrics, Halstead, Loc}
 
   # §§ elixir-planning: §6 — observability deferred to the consumer.
@@ -203,8 +205,16 @@ defmodule Archdo do
     impl_annotated = compute_impl_annotated_functions(production)
     source_defs = compute_source_defined_functions(production)
     macro_emit_edges = compute_macro_emit_edges(production)
+    nested_module_edges = compute_nested_module_edges(production)
 
-    {anchors, ast_graph, library_publics, impl_annotated, source_defs, macro_emit_edges}
+    # Lexical-container edges have the same shape as macro-emit edges
+    # (`%{module_atom => [module_atom]}`) and serve the same purpose
+    # (virtual edges 1.26 unions into the deps map). Merge them into one
+    # opt so the rule has a single union step.
+    macro_and_nested_edges =
+      UnanchoredModule.merge_macro_emit_edges(macro_emit_edges, nested_module_edges)
+
+    {anchors, ast_graph, library_publics, impl_annotated, source_defs, macro_and_nested_edges}
   end
 
   # Build `module_atom => [module_atom]` of virtual call edges from
@@ -213,8 +223,26 @@ defmodule Archdo do
   # in the consumer's compiled module, never the library's). Source
   # modules whose macros emit no recognised references contribute nothing.
   defp compute_macro_emit_edges(production_asts) do
+    edges_map_for(production_asts, &MacroEdges.extract/1)
+  end
+
+  # Build `module_atom => [module_atom]` of lexical-container edges
+  # (parent module → nested defmodule). The compiled call graph misses
+  # parent → nested when the nested module is used as a struct
+  # (`%State{...}`) — struct construction compiles to a literal map op,
+  # not a `__struct__/1` remote call, so `:imports` has zero edges.
+  # 1.26 unions these so anchored parents propagate to their nested
+  # `@moduledoc false` children.
+  defp compute_nested_module_edges(production_asts) do
+    edges_map_for(production_asts, &NestedModules.extract/1)
+  end
+
+  # Shared: walk every production AST through an extractor that returns
+  # `%{source_str => [target_str]}`, atom-convert both sides, drop atoms
+  # that don't exist in the runtime atom table, union per source.
+  defp edges_map_for(production_asts, extractor) do
     for {_file, ast} <- production_asts,
-        {source_str, target_strs} <- Archdo.AST.MacroEdges.extract(ast),
+        {source_str, target_strs} <- extractor.(ast),
         source_atom = AST.safe_existing_atom(source_str),
         not is_nil(source_atom),
         target_atoms =

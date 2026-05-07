@@ -408,6 +408,68 @@ defmodule Archdo.ASTTest do
         File.rm(path)
       end
     end
+
+    test "returns false when top-level @moduledoc is real but a NESTED submodule has @moduledoc false" do
+      # Real-world case (Commanded.EventStore.Adapters.InMemory) — a public
+      # adapter module declares a real @moduledoc and contains a nested
+      # `defmodule State do; @moduledoc false; end`. internal_module?/1
+      # must inspect ONLY the OUTERMOST module's directive — a deep walk
+      # that finds the nested `@moduledoc false` falsely classifies the
+      # parent as internal, removing it from library_publics and breaking
+      # 1.26's anchor closure (the parent's children become unreachable).
+      path = Path.join(System.tmp_dir!(), "ast_nested_#{:rand.uniform(100_000)}.ex")
+
+      File.write!(path, ~s|
+defmodule MyApp.Adapter do
+  @moduledoc \"\"\"
+  Public adapter — real docs.
+  \"\"\"
+
+  defmodule State do
+    @moduledoc false
+    defstruct [:foo]
+  end
+
+  def go, do: :ok
+end
+|)
+
+      try do
+        assert {:ok, ast} = AST.parse_file(path)
+
+        refute AST.internal_module?(ast),
+               "top-level module has real @moduledoc — must NOT be classified as internal because a nested submodule has @moduledoc false"
+      after
+        File.rm(path)
+      end
+    end
+
+    test "returns true for an internal module with a nested submodule that has a real @moduledoc" do
+      # Symmetric guard: top-level @moduledoc false, nested has real docs.
+      # The OUTERMOST decides; inner @moduledoc strings on submodules don't
+      # rescue an internal parent.
+      path = Path.join(System.tmp_dir!(), "ast_nested_inv_#{:rand.uniform(100_000)}.ex")
+
+      File.write!(path, ~s|
+defmodule MyApp.Internal do
+  @moduledoc false
+
+  defmodule Public do
+    @moduledoc "real docs"
+    def go, do: :ok
+  end
+end
+|)
+
+      try do
+        assert {:ok, ast} = AST.parse_file(path)
+
+        assert AST.internal_module?(ast),
+               "outermost is @moduledoc false — must be classified as internal regardless of nested submodule's docs"
+      after
+        File.rm(path)
+      end
+    end
   end
 
   describe "extract_callbacks/1" do

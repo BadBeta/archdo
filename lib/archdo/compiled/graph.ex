@@ -427,10 +427,29 @@ defmodule Archdo.Compiled.Graph do
     end)
   end
 
-  defp find_remote_calls(form) do
+  @doc """
+  Find every remote call in an Erlang abstract-code form.
+
+  Recognises the `{:call, line, {:remote, _, {:atom, _, mod}, {:atom, _, func}}, args}`
+  shape and returns `[{mod, func, arity, line}]`. Recurses into the call's
+  args as well — calls nested inside other calls (`Enum.map(coll, &Mod.fn/1)`,
+  `Enum.find(xs, fn x -> Helper.process(x) end)`) MUST be captured. A
+  matcher that returns the outer call without descending into args silently
+  drops every nested callee, which manifests downstream as missing edges
+  in the call graph (the original cause of multiple 1.26 false positives:
+  e.g. `PersistentSubscription` calls `Subscriber.new/1` inside an `++`
+  argument; without args-recursion, only `:erlang.++` was recorded).
+
+  Public for direct testing.
+  """
+  @spec find_remote_calls(term()) :: [{module(), atom(), non_neg_integer(), term()}]
+  def find_remote_calls(form) do
     case form do
       {:call, line, {:remote, _, {:atom, _, mod}, {:atom, _, func}}, args} ->
-        [{mod, func, length(args), line}]
+        [
+          {mod, func, length(args), line}
+          | Enum.flat_map(args, &find_remote_calls/1)
+        ]
 
       tuple when is_tuple(tuple) ->
         tuple

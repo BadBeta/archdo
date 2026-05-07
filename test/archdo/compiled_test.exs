@@ -56,4 +56,95 @@ defmodule Archdo.CompiledTest do
       assert Compiled.beam_dir(empty) == nil
     end
   end
+
+  describe "Graph.find_remote_calls/1 — args-nested recursion" do
+    # Critical bug surfaced during M-fp-F2 PS-investigation: the matcher
+    # had a non-recursive happy-path. When it matched an outer call, it
+    # returned that call WITHOUT descending into args — so any nested
+    # remote call inside an arg was silently dropped. Symptom: PS calls
+    # Subscriber.new/1 inside `subscribers ++ [Subscriber.new(pid)]`. The
+    # outer call is :erlang.++/2; without args-recursion only :erlang.++
+    # is recorded and Subscriber.new is invisible to the call graph.
+    # Effect: 1.26 flags Subscriber as orphan, every Enum/Stream-wrapped
+    # callsite across the corpus loses the inner callee.
+
+    test "captures the outer remote call" do
+      # Hand-built `Foo.bar()` — a single direct call.
+      form =
+        {:call, 1, {:remote, 1, {:atom, 1, Foo}, {:atom, 1, :bar}}, []}
+
+      assert Graph.find_remote_calls(form) == [{Foo, :bar, 0, 1}]
+    end
+
+    test "captures a call nested inside another call's args (the missing case)" do
+      # `Enum.map(coll, &Subscriber.process/1)` — the inner Subscriber.process
+      # call is wrapped as a fun-capture, but the same shape applies for
+      # `Enum.map(coll, fn x -> Subscriber.process(x) end)` where the body
+      # is a `{:call, ...}` inside the args list.
+      #
+      # Concretely: `:erlang.++(subscribers, [Subscriber.new(pid)])` from
+      # the audit. Inner :call must be picked up.
+      inner_call =
+        {:call, 26, {:remote, 26, {:atom, 26, Sub}, {:atom, 26, :new}}, [{:var, 26, :_pid}]}
+
+      outer_call =
+        {:call, 26, {:remote, 26, {:atom, 26, :erlang}, {:atom, 26, :++}},
+         [{:var, 26, :_subs}, {:cons, 26, inner_call, {nil, 26}}]}
+
+      results = Graph.find_remote_calls(outer_call)
+
+      mfas = Enum.map(results, fn {m, f, a, _line} -> {m, f, a} end)
+      assert {:erlang, :++, 2} in mfas
+      assert {Sub, :new, 1} in mfas
+    end
+
+    test "captures multiple nested calls in the same args list" do
+      # `Enum.find(xs, &Helper.match?/1)` AND `Enum.map(xs, &Helper.transform/1)`
+      # — both inner calls must be recorded.
+      call_a =
+        {:call, 10, {:remote, 10, {:atom, 10, Inner}, {:atom, 10, :a}}, []}
+
+      call_b =
+        {:call, 11, {:remote, 11, {:atom, 11, Inner}, {:atom, 11, :b}}, []}
+
+      outer =
+        {:call, 9, {:remote, 9, {:atom, 9, Outer}, {:atom, 9, :combine}}, [call_a, call_b]}
+
+      results = Graph.find_remote_calls(outer)
+      mfas = Enum.map(results, fn {m, f, a, _l} -> {m, f, a} end)
+
+      assert {Outer, :combine, 2} in mfas
+      assert {Inner, :a, 0} in mfas
+      assert {Inner, :b, 0} in mfas
+    end
+
+    test "captures deeply-nested call chain" do
+      innermost =
+        {:call, 3, {:remote, 3, {:atom, 3, Deep}, {:atom, 3, :end}}, []}
+
+      mid =
+        {:call, 2, {:remote, 2, {:atom, 2, Mid}, {:atom, 2, :wrap}}, [innermost]}
+
+      top =
+        {:call, 1, {:remote, 1, {:atom, 1, Top}, {:atom, 1, :go}}, [mid]}
+
+      mfas =
+        top
+        |> Graph.find_remote_calls()
+        |> Enum.map(fn {m, f, a, _l} -> {m, f, a} end)
+
+      assert {Top, :go, 1} in mfas
+      assert {Mid, :wrap, 1} in mfas
+      assert {Deep, :end, 0} in mfas
+    end
+
+    test "non-call forms recurse without spurious results" do
+      # `{:tuple, _, [...]}` containing a call.
+      inner =
+        {:call, 5, {:remote, 5, {:atom, 5, M}, {:atom, 5, :f}}, []}
+
+      tuple_form = {:tuple, 5, [inner]}
+      assert Graph.find_remote_calls(tuple_form) == [{M, :f, 0, 5}]
+    end
+  end
 end

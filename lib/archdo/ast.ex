@@ -765,18 +765,71 @@ defmodule Archdo.AST do
 
   @doc """
   Check if a module AST has `@moduledoc false`, indicating an internal module.
+
+  Inspects ONLY the immediate module's `@moduledoc` directive — never
+  recurses into nested `defmodule` blocks. Without this discipline a
+  public adapter like `Commanded.EventStore.Adapters.InMemory` (real
+  top-level `@moduledoc \"""...\"""`, plus a nested
+  `defmodule State do; @moduledoc false; end`) is falsely flagged as
+  internal, breaking 1.26's library-publics anchor closure.
+
+  Accepts two input shapes:
+    1. A full `defmodule` AST (caller hands over the parsed file).
+    2. A module BODY (caller is already prewalking and passes
+       `body` from the matched `{:defmodule, _, [_, [do: body]]}`).
   """
   @spec internal_module?(Macro.t()) :: boolean()
   def internal_module?(ast) do
-    contains?(ast, fn
-      # Production parse_file/1 uses literal_encoder, which wraps `false` as
-      # `{:__block__, _, [false]}`. Code.string_to_quoted/1 (no encoder, used by
-      # some tests) keeps the bare form. Match both so the rule fires either way.
-      {:@, _, [{:moduledoc, _, [false]}]} -> true
-      {:@, _, [{:moduledoc, _, [{:__block__, _, [false]}]}]} -> true
-      _ -> false
+    ast
+    |> module_body_for_check()
+    |> top_level_moduledoc_false?()
+  end
+
+  # Resolve the input to a module body for inspection. If the caller
+  # already passed a body (the prewalk-then-recurse pattern), use it
+  # directly; otherwise extract from the outermost `defmodule`.
+
+  defp module_body_for_check({:defmodule, _, [_alias, kw]}) when is_list(kw) do
+    extract_do(kw) || []
+  end
+
+  defp module_body_for_check({:__block__, _, stmts} = body) when is_list(stmts) do
+    # Either a bare body (block of statements) or a top-level `__block__`
+    # wrapping the file's defmodule. If any direct child is a defmodule,
+    # treat THAT as the outermost defmodule. Otherwise the block IS the
+    # body.
+    Enum.find_value(stmts, body, fn
+      {:defmodule, _, _} = mod -> module_body_for_check(mod)
+      _ -> nil
     end)
   end
+
+  defp module_body_for_check(other), do: other
+
+  # The `do:` value can be in two shapes depending on parse mode:
+  #   - bare keyword:  [do: body]
+  #   - literal_encoder mode: [{{:__block__, _, [:do]}, body}, ...]
+  defp extract_do([{:do, body} | _]), do: body
+  defp extract_do([{{:__block__, _, [:do]}, body} | _]), do: body
+  defp extract_do([_ | rest]), do: extract_do(rest)
+  defp extract_do(_), do: nil
+
+  # Look for `@moduledoc false` among DIRECT children of the body — never
+  # recurse into nested `defmodule`. Body is either a single expression
+  # or a `__block__` of statements.
+
+  defp top_level_moduledoc_false?({:__block__, _, stmts}) when is_list(stmts) do
+    Enum.any?(stmts, &moduledoc_false_stmt?/1)
+  end
+
+  defp top_level_moduledoc_false?(stmt), do: moduledoc_false_stmt?(stmt)
+
+  defp moduledoc_false_stmt?({:@, _, [{:moduledoc, _, [false]}]}), do: true
+
+  defp moduledoc_false_stmt?({:@, _, [{:moduledoc, _, [{:__block__, _, [false]}]}]}),
+    do: true
+
+  defp moduledoc_false_stmt?(_), do: false
 
   @doc """
   Walk up from `file` to find the nearest `mix.exs`. Returns the project root
