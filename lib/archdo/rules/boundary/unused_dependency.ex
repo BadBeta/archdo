@@ -64,24 +64,30 @@ defmodule Archdo.Rules.Boundary.UnusedDependency do
     end
   end
 
-  # Count how many times the short name appears (excluding the alias line itself).
-  # A simple heuristic: if it appears only once, it's just the alias declaration.
+  # Count how many times the short name appears as a whole identifier
+  # (NOT as a substring of another). `String.split(source, short_name)`
+  # would count `CSV` inside `NimbleCSV` as a use — wrong. Use a regex
+  # with word boundaries so `Helper` doesn't false-match `OtherHelper`,
+  # `CSV` doesn't false-match `NimbleCSV`, etc. The alias declaration
+  # itself contains the short name once (its own appearance), so the
+  # threshold stays at "<= 1 means unused".
   defp unused_alias?(source, short_name) do
-    occurrences = length(String.split(source, short_name)) - 1
+    pattern = ~r/\b#{Regex.escape(short_name)}\b/
+    occurrences = Regex.scan(pattern, source) |> length()
     occurrences <= 1
   end
 
   defp collect_aliases(ast) do
     {_, aliases} =
       Macro.prewalk(ast, [], fn
-        {:alias, meta, [{:__aliases__, _, parts} | _opts]} = node, acc ->
+        {:alias, meta, [{:__aliases__, _, parts} | opts]} = node, acc ->
           case AST.safe_concat(parts) do
             nil ->
               {node, acc}
 
             mod ->
               full = AST.module_name(mod)
-              short = Atom.to_string(List.last(parts))
+              short = short_name(parts, opts)
               line = AST.line(meta)
               {node, [{short, full, line} | acc]}
           end
@@ -91,5 +97,37 @@ defmodule Archdo.Rules.Boundary.UnusedDependency do
       end)
 
     Enum.reverse(aliases)
+  end
+
+  # `alias Foo.Bar, as: Baz` — the short name visible to source code
+  # is `Baz`, NOT the last segment `Bar`. Without consulting the
+  # `as:` opt, the rule grepped for `Bar` and flagged uses of `Baz`
+  # as unused. Real-world: every `alias NimbleCSV.RFC4180, as: CSV`
+  # was flagged as unused even when `CSV.parse_string/1` was used
+  # downstream.
+  defp short_name(parts, []), do: Atom.to_string(List.last(parts))
+
+  defp short_name(parts, [opts]) when is_list(opts) do
+    case extract_as_name(opts) do
+      nil -> Atom.to_string(List.last(parts))
+      as_name -> as_name
+    end
+  end
+
+  defp short_name(parts, _), do: Atom.to_string(List.last(parts))
+
+  defp extract_as_name(opts) do
+    Enum.find_value(opts, fn
+      # Bare keyword: `as: Baz`
+      {:as, {:__aliases__, _, [as_name]}} when is_atom(as_name) ->
+        Atom.to_string(as_name)
+
+      # literal_encoder-wrapped: `{__block__-wrapped :as, alias}`
+      {{:__block__, _, [:as]}, {:__aliases__, _, [as_name]}} when is_atom(as_name) ->
+        Atom.to_string(as_name)
+
+      _ ->
+        nil
+    end)
   end
 end

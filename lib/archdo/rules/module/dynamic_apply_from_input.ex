@@ -49,12 +49,29 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
   defp collect(node, acc, _file), do: {node, acc}
 
   defp classify_apply3(node, acc, file, meta, mod, fun) do
-    case {literal_module?(mod), literal_atom?(fun)} do
+    case {literal_module?(mod), literal_atom?(fun) or phoenix_action_name?(fun)} do
       {true, true} -> {node, acc}
       {false, _} -> {node, [diag_apply3_module(file, meta) | acc]}
       {true, false} -> {node, [diag_apply3_function(file, meta) | acc]}
     end
   end
+
+  # Phoenix's documented controller-action injection pattern:
+  # `apply(__MODULE__, action_name(conn), args)` from a `def action/2`
+  # callback. `Phoenix.Controller.action_name/1` reads
+  # `conn.private.phoenix_action`, set by Phoenix's router based on
+  # the matched route — NOT user input. Documented at
+  # https://hexdocs.pm/phoenix/Phoenix.Controller.html#action/2 as the
+  # standard way to inject pre-loaded resources into actions.
+  defp phoenix_action_name?({:action_name, _, [_]}), do: true
+
+  defp phoenix_action_name?(
+         {{:., _, [{:__aliases__, _, [:Phoenix, :Controller]}, :action_name]}, _, [_]}
+       ),
+       do: true
+
+  defp phoenix_action_name?({:__block__, _, [inner]}), do: phoenix_action_name?(inner)
+  defp phoenix_action_name?(_), do: false
 
   # §§ elixir-implementing: §7.4 — exact AST shape match. A "literal module"
   # is a compile-time-known module reference. Any of: __aliases__, __MODULE__,

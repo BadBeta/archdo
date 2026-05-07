@@ -170,6 +170,50 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInputTest do
     end
   end
 
+  describe "Phoenix `apply(__MODULE__, action_name(conn), ...)` pattern" do
+    # Phoenix's documented controller-action injection pattern. The
+    # function name comes from `Phoenix.Controller.action_name/1`
+    # which reads `conn.private.phoenix_action` — set by Phoenix's
+    # router based on the matched route. NOT user input.
+    test "does NOT flag `apply(__MODULE__, action_name(conn), args)` (Phoenix action pattern)" do
+      code = ~S"""
+      defmodule MyAppWeb.EpisodeController do
+        use Phoenix.Controller
+
+        def action(conn, _) do
+          arg_list = [conn, conn.params, conn.assigns.podcast]
+          apply(__MODULE__, action_name(conn), arg_list)
+        end
+
+        def show(conn, _params, _podcast), do: conn
+      end
+      """
+
+      assert_clean(DynamicApplyFromInput, code, file: "lib/my_app_web/episode_controller.ex")
+    end
+
+    test "does NOT contribute extra findings on the function side for `apply(mod, action_name(conn), args)`" do
+      # The Authorize plug pattern: apply(policy_module, action, [user]).
+      # `policy_module` non-literal triggers apply3_module (correct — not
+      # provable safe without taint analysis). But action_name(conn) is
+      # Phoenix-routing-derived; should NOT add a SECOND finding.
+      code = ~S"""
+      defmodule MyAppWeb.Plugs.Authorize do
+        import Plug.Conn
+
+        def call(conn, policy_module) do
+          action = action_name(conn)
+          apply(policy_module, action, [conn.assigns.current_user])
+        end
+      end
+      """
+
+      diags = analyze(DynamicApplyFromInput, code, file: "lib/my_app_web/plugs/authorize.ex")
+      # 1 finding for the variable module, NOT 2 (action_name is safe).
+      assert length(diags) <= 1
+    end
+  end
+
   describe "id/0 and description/0" do
     test "rule id is stable" do
       assert DynamicApplyFromInput.id() == "5.51"
