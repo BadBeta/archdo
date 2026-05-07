@@ -18,29 +18,115 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
   def analyze(file, ast, _opts) do
     case AST.test_file?(file) do
       true -> []
-      false -> AST.prewalk_collect(file, ast, &collect/3)
+      false -> walk_with_macro_context(file, ast)
     end
+  end
+
+  # Use Macro.traverse to track compile-time-context nesting depth. While
+  # depth > 0 we're inside one of:
+  #   - `defmacro` / `defmacrop` body — `Code.eval_quoted` operates on
+  #     caller-supplied quoted forms at COMPILE TIME, not runtime input.
+  #   - `quote do ... end` block — code emitted into a consumer module
+  #     and evaluated at the consumer's compile time. DSL extension
+  #     callbacks (e.g. Spark `Dsl.Section.after_define`) return a quote
+  #     containing `Code.eval_quoted` that runs when the consumer is built.
+  #
+  # This is the established Elixir metaprogramming idiom (Ash.TypedStruct,
+  # Ash.Type.Comparable, Ash.Spark extensions, every codegen library).
+  # Sobelow has the same exemption via its `# sobelow_skip` annotation.
+  #
+  # Other detections (binary_to_term, Code.eval_string, Code.compile_string,
+  # Jason :atoms) keep firing inside compile-time contexts too — those are
+  # runtime threats regardless of where the call lives.
+  @compile_time_kinds [:defmacro, :defmacrop, :quote]
+
+  defp walk_with_macro_context(file, ast) do
+    {_, {findings, _depth}} =
+      Macro.traverse(
+        ast,
+        {[], 0},
+        # Pre: enter defmacro/defmacrop/quote → increment depth
+        fn
+          {kind, _, _} = node, {acc, depth} when kind in @compile_time_kinds ->
+            {node, {acc, depth + 1}}
+
+          node, state ->
+            {node, state}
+        end,
+        # Post: leave defmacro/defmacrop/quote → decrement; check call shapes
+        fn
+          {kind, _, _} = node, {acc, depth} when kind in @compile_time_kinds ->
+            {node, {acc, depth - 1}}
+
+          node, {acc, depth} ->
+            {node, {check_node(node, acc, file, depth), depth}}
+        end
+      )
+
+    Enum.reverse(findings)
+  end
+
+  # Per-node check, dispatched by AST shape. The depth threading is
+  # only consulted by the `Code.eval_quoted` clause — it's the one
+  # idiom whose compile-time-vs-runtime classification depends on
+  # surrounding context.
+  defp check_node(node, acc, file, depth) do
+    {_, new_acc} = collect(node, acc, file, depth)
+    new_acc
   end
 
   # §§ elixir-implementing: §5.2, §7.6 — multi-clause head dispatch over `case`
   # for AST shape detection. Each clause matches one defect class.
 
   # :erlang.binary_to_term(_payload) — no opts means no :safe
-  defp collect({{:., _, [:erlang, :binary_to_term]}, meta, [_payload]} = node, acc, file) do
+  defp collect(
+         {{:., _, [:erlang, :binary_to_term]}, meta, [_payload]} = node,
+         acc,
+         file,
+         _depth
+       ) do
     {node, [diag_binary_to_term(file, meta) | acc]}
   end
 
   # :erlang.binary_to_term(_payload, opts) — flag if opts list lacks :safe
-  defp collect({{:., _, [:erlang, :binary_to_term]}, meta, [_payload, opts]} = node, acc, file) do
+  defp collect(
+         {{:., _, [:erlang, :binary_to_term]}, meta, [_payload, opts]} = node,
+         acc,
+         file,
+         _depth
+       ) do
     case safe_in_opts?(opts) do
       true -> {node, acc}
       false -> {node, [diag_binary_to_term(file, meta) | acc]}
     end
   end
 
-  # Code.eval_string / Code.eval_quoted / Code.compile_string — any arity
-  defp collect({{:., _, [{:__aliases__, _, [:Code]}, fun]}, meta, _args} = node, acc, file)
-       when fun in [:eval_string, :eval_quoted, :compile_string] do
+  # Code.eval_quoted — suppress when inside a defmacro body (depth > 0).
+  # Inside a macro, eval_quoted operates on a caller-supplied quoted form
+  # at COMPILE TIME — the established Elixir metaprogramming pattern.
+  defp collect(
+         {{:., _, [{:__aliases__, _, [:Code]}, :eval_quoted]}, meta, _args} = node,
+         acc,
+         file,
+         depth
+       ) do
+    case depth > 0 do
+      true -> {node, acc}
+      false -> {node, [diag_code_eval(file, :eval_quoted, meta) | acc]}
+    end
+  end
+
+  # Code.eval_string / Code.compile_string — runtime parse+eval of a
+  # string. Even in macro context this is a real threat (a macro that
+  # eval_strings a runtime arg leaks the threat to the caller). Keep
+  # flagging.
+  defp collect(
+         {{:., _, [{:__aliases__, _, [:Code]}, fun]}, meta, _args} = node,
+         acc,
+         file,
+         _depth
+       )
+       when fun in [:eval_string, :compile_string] do
     {node, [diag_code_eval(file, fun, meta) | acc]}
   end
 
@@ -48,7 +134,8 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
   defp collect(
          {{:., _, [{:__aliases__, _, [:Jason]}, fun]}, meta, [_json, opts]} = node,
          acc,
-         file
+         file,
+         _depth
        )
        when fun in [:decode, :decode!] and is_list(opts) do
     case Keyword.get(opts, :keys) do
@@ -57,7 +144,7 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
     end
   end
 
-  defp collect(node, acc, _file), do: {node, acc}
+  defp collect(node, acc, _file, _depth), do: {node, acc}
 
   # §§ elixir-implementing: §7.4 — explicit shape-match in head. Only the
   # `:safe` atom literal counts. A computed expression is treated as unsafe

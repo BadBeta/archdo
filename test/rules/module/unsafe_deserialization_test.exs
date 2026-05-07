@@ -175,6 +175,95 @@ defmodule Archdo.Rules.Module.UnsafeDeserializationTest do
     end
   end
 
+  describe "Code.eval_* inside `defmacro` body — compile-time, not runtime" do
+    # `Code.eval_quoted` inside a `defmacro` body operates at COMPILE
+    # TIME on quoted forms supplied by code authors (the calling
+    # `__CALLER__` source), NOT runtime user input. Real-world: Ash's
+    # `defcomparable`, Ash.TypedStruct — Sobelow has the same exemption.
+
+    test "does NOT fire on `Code.eval_quoted` inside `defmacro` body" do
+      code = ~S"""
+      defmodule MyApp.TypedStruct do
+        defmacro defcomparable({:"::", _, [_, quoted_type]}, do: code) do
+          {type, []} = Code.eval_quoted(quoted_type, [], __CALLER__)
+          quote do
+            unquote(type)
+            unquote(code)
+          end
+        end
+      end
+      """
+
+      assert_clean(UnsafeDeserialization, code, file: "lib/my_app/typed_struct.ex")
+    end
+
+    test "does NOT fire on `Code.eval_quoted` inside `defmacrop` body" do
+      code = ~S"""
+      defmodule MyApp.M do
+        defmacrop helper(quoted) do
+          {value, []} = Code.eval_quoted(quoted, [], __CALLER__)
+          quote do: unquote(value)
+        end
+      end
+      """
+
+      assert_clean(UnsafeDeserialization, code, file: "lib/my_app/m.ex")
+    end
+
+    test "STILL fires on `Code.eval_quoted` outside any defmacro" do
+      # Regression guard: runtime Code.eval_quoted IS a real RCE vector.
+      code = ~S"""
+      defmodule MyApp.Risky do
+        def run_template(quoted_form) do
+          Code.eval_quoted(quoted_form, [], __ENV__)
+        end
+      end
+      """
+
+      assert_flagged(UnsafeDeserialization, code, file: "lib/my_app/risky.ex")
+    end
+
+    test "does NOT fire on `Code.eval_quoted` inside `quote do ... end` block" do
+      # DSL extension callback pattern (e.g. Spark Dsl.Section after_define):
+      # a regular def returns a `quote do ... end` AST that the framework
+      # emits into the consumer module at compile time. The eval_quoted
+      # inside the quote runs at the consumer's compile time, not at
+      # runtime. Sobelow has the same exemption (`# sobelow_skip`).
+      code = ~S"""
+      defmodule MyApp.Extension do
+        def after_define do
+          quote do
+            module = __MODULE__
+
+            Code.eval_quoted(
+              MyApp.Extension.__build__(module),
+              [],
+              __ENV__
+            )
+          end
+        end
+      end
+      """
+
+      assert_clean(UnsafeDeserialization, code, file: "lib/my_app/extension.ex")
+    end
+
+    test "STILL fires on `Code.eval_string` even in defmacro" do
+      # eval_string parses+evals a runtime string. Even in macro context,
+      # if the string can flow from external input, RCE. Only eval_quoted
+      # in macro is the established compile-time-metaprog pattern.
+      code = ~S"""
+      defmodule MyApp.M do
+        defmacro generate(source) do
+          Code.eval_string(source)
+        end
+      end
+      """
+
+      assert_flagged(UnsafeDeserialization, code, file: "lib/my_app/m.ex")
+    end
+  end
+
   describe "id/0 and description/0" do
     test "rule id is stable" do
       assert UnsafeDeserialization.id() == "5.50"

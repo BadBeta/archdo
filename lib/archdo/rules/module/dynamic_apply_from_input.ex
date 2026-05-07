@@ -17,44 +17,111 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
   @impl true
   def analyze(file, ast, _opts) do
     case AST.test_file?(file) do
-      true -> []
-      false -> AST.prewalk_collect(file, ast, &collect/3)
+      true ->
+        []
+
+      false ->
+        # Pre-pass: collect every 3-tuple variable-destructure
+        # pattern in the file. `{m, f, a}` patterns are the OTP
+        # MFA-tuple convention (Supervisor child specs, GenServer
+        # start_link, every DSL accepting "call this MFA"). When
+        # an `apply(m, f, a)` uses variables matching such a
+        # destructure, the values come from a structured tuple in
+        # config/DSL — not user input. Suppress the diagnostic.
+        mfa_triples = collect_mfa_destructures(ast)
+
+        {_, hits} =
+          Macro.prewalk(ast, [], fn node, acc -> collect(node, acc, file, mfa_triples) end)
+
+        Enum.reverse(hits)
     end
+  end
+
+  # Walk the AST collecting every 3-element variable-only tuple
+  # pattern: `{var1, var2, var3}` where all three are bare variable
+  # references. AST shape: `{:{}, _, [{n1, _, _}, {n2, _, _}, {n3, _, _}]}`.
+  # Returns a MapSet of `{n1, n2}` PAIRS (module + function names) —
+  # we don't constrain on the third position because MFA invocations
+  # are commonly augmented: `apply(m, f, [extra | a])` adds a prefix
+  # to the args before applying.
+  defp collect_mfa_destructures(ast) do
+    {_, pairs} =
+      Macro.prewalk(ast, MapSet.new(), fn
+        {:{}, _, [{n1, _, c1}, {n2, _, c2}, {n3, _, c3}]} = node, acc
+        when is_atom(n1) and is_atom(n2) and is_atom(n3) and
+               (is_atom(c1) or is_nil(c1)) and (is_atom(c2) or is_nil(c2)) and
+               (is_atom(c3) or is_nil(c3)) ->
+          {node, MapSet.put(acc, {n1, n2})}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    pairs
   end
 
   # §§ elixir-implementing: §5.2, §7.6 — multi-clause head dispatch on AST shape.
 
   # Kernel.apply/3 — alias form
   defp collect(
-         {{:., _, [{:__aliases__, _, [:Kernel]}, :apply]}, meta, [mod, fun, _args]} = node,
+         {{:., _, [{:__aliases__, _, [:Kernel]}, :apply]}, meta, [mod, fun, args]} = node,
          acc,
-         file
+         file,
+         mfa
        ) do
-    classify_apply3(node, acc, file, meta, mod, fun)
+    classify_apply3(node, acc, file, meta, mod, fun, args, mfa)
   end
 
   # apply/3 — auto-imported Kernel form
-  defp collect({:apply, meta, [mod, fun, _args]} = node, acc, file) do
-    classify_apply3(node, acc, file, meta, mod, fun)
+  defp collect({:apply, meta, [mod, fun, args]} = node, acc, file, mfa) do
+    classify_apply3(node, acc, file, meta, mod, fun, args, mfa)
   end
 
   # apply/2 — function form
-  defp collect({:apply, meta, [fun, _args]} = node, acc, file) when not is_nil(meta) do
+  defp collect({:apply, meta, [fun, _args]} = node, acc, file, _mfa) when not is_nil(meta) do
     case literal_fun_ref?(fun) do
       true -> {node, acc}
       false -> {node, [diag_apply2(file, meta) | acc]}
     end
   end
 
-  defp collect(node, acc, _file), do: {node, acc}
+  defp collect(node, acc, _file, _mfa), do: {node, acc}
 
-  defp classify_apply3(node, acc, file, meta, mod, fun) do
-    case {literal_module?(mod), literal_atom?(fun) or phoenix_action_name?(fun)} do
-      {true, true} -> {node, acc}
-      {false, _} -> {node, [diag_apply3_module(file, meta) | acc]}
-      {true, false} -> {node, [diag_apply3_function(file, meta) | acc]}
+  defp classify_apply3(node, acc, file, meta, mod, fun, args, mfa) do
+    cond do
+      mfa_passthrough?(mod, fun, args, mfa) ->
+        {node, acc}
+
+      literal_module?(mod) and (literal_atom?(fun) or phoenix_action_name?(fun)) ->
+        {node, acc}
+
+      not literal_module?(mod) ->
+        {node, [diag_apply3_module(file, meta) | acc]}
+
+      true ->
+        {node, [diag_apply3_function(file, meta) | acc]}
     end
   end
+
+  # `apply(m, f, a)` where m, f are bare variables and `{m, f, _}` is
+  # destructured as a 3-tuple somewhere in the file — the standard
+  # OTP MFA-tuple convention (Supervisor child spec, GenServer
+  # start_link, every DSL accepting "call this MFA"). The args
+  # position can be the bare `a` or an augmented form like
+  # `[extra | a]` — both are recognised since the M/F-from-tuple
+  # signal is the discriminator.
+  defp mfa_passthrough?(mod, fun, _args, mfa_pairs) do
+    case {var_name(mod), var_name(fun)} do
+      {m, f} when is_atom(m) and is_atom(f) -> MapSet.member?(mfa_pairs, {m, f})
+      _ -> false
+    end
+  end
+
+  defp var_name({name, _, ctx}) when is_atom(name) and (is_atom(ctx) or is_nil(ctx)),
+    do: name
+
+  defp var_name({:__block__, _, [inner]}), do: var_name(inner)
+  defp var_name(_), do: nil
 
   # Phoenix's documented controller-action injection pattern:
   # `apply(__MODULE__, action_name(conn), args)` from a `def action/2`

@@ -53,9 +53,9 @@ defmodule Archdo.Rules.Module.DocFalseShouldBeDefp do
         case classify_stmt(stmt) do
           {:doc, :real} -> {names, :real_doc}
           :doc_false -> {names, :no_doc}
-          {:def, _, name} when doc_state == :real_doc -> {MapSet.put(names, name), :no_doc}
-          {:def, _, _} -> {names, :no_doc}
-          {:defp, _, _} -> {names, :no_doc}
+          {:def, _, name, _body} when doc_state == :real_doc -> {MapSet.put(names, name), :no_doc}
+          {:def, _, _, _} -> {names, :no_doc}
+          {:defp, _, _, _} -> {names, :no_doc}
           :other -> {names, doc_state}
         end
       end)
@@ -148,16 +148,16 @@ defmodule Archdo.Rules.Module.DocFalseShouldBeDefp do
           :doc_false ->
             {acc, :doc_false}
 
-          {:def, line, name} when doc_state == :doc_false ->
-            case suppress?(name, ctx) do
+          {:def, line, name, body} when doc_state == :doc_false ->
+            case suppress?(name, body, ctx) do
               true -> {acc, :no_doc}
               false -> {[line | acc], :no_doc}
             end
 
-          {:def, _, _} ->
+          {:def, _, _, _} ->
             {acc, :no_doc}
 
-          {:defp, _, _} ->
+          {:defp, _, _, _} ->
             {acc, :no_doc}
 
           :other ->
@@ -168,15 +168,33 @@ defmodule Archdo.Rules.Module.DocFalseShouldBeDefp do
     Enum.map(hits, fn line -> build_diagnostic(file, line) end)
   end
 
-  # Three suppression classes:
+  # Four suppression classes:
   #   1. `__name__/arity` — established Elixir cross-module-internal idiom
   #   2. Framework behaviour callback (child_spec, init, perform, etc.)
   #   3. Overload-with-shared-docs — same name has another arity with real `@doc`
-  defp suppress?(name, ctx) do
+  #   4. Schema/attribute accessor — `def name, do: @attribute` exposing a
+  #      compile-time module attribute for cross-module framework consumers
+  #      (e.g., Ash's `def opts_schema, do: @opts_schema`). Defp would
+  #      break framework readers.
+  defp suppress?(name, body, ctx) do
     cross_module_internal_convention?(name) or
       MapSet.member?(ctx.behaviour_callback_names, name) or
-      MapSet.member?(ctx.documented_names, name)
+      MapSet.member?(ctx.documented_names, name) or
+      schema_accessor?(body)
   end
+
+  # `def name, do: @attribute_name` — pure module-attribute exposure.
+  # Body shape after parsing: `[do: {:@, _, [{name, _, atom_ctx}]}]`
+  # where atom_ctx is the attribute's accessor form (atom or nil).
+  defp schema_accessor?([{:do, {:@, _, [{name, _, ctx}]}}])
+       when is_atom(name) and (is_atom(ctx) or is_nil(ctx)),
+       do: true
+
+  defp schema_accessor?([{{:__block__, _, [:do]}, {:@, _, [{name, _, ctx}]}}])
+       when is_atom(name) and (is_atom(ctx) or is_nil(ctx)),
+       do: true
+
+  defp schema_accessor?(_), do: false
 
   defp classify_stmt({:@, _, [{:doc, _, [false]}]}), do: :doc_false
 
@@ -187,13 +205,17 @@ defmodule Archdo.Rules.Module.DocFalseShouldBeDefp do
 
   defp classify_stmt({:@, _, [{:doc, _, [bin]}]}) when is_binary(bin), do: {:doc, :real}
 
-  defp classify_stmt({:def, meta, [head | _]}), do: {:def, AST.line(meta), def_name(head)}
-  defp classify_stmt({:def, meta, _}), do: {:def, AST.line(meta), nil}
+  defp classify_stmt({:def, meta, [head, body]}),
+    do: {:def, AST.line(meta), def_name(head), body}
 
-  defp classify_stmt({:defp, meta, [head | _]}),
-    do: {:defp, AST.line(meta), def_name(head)}
+  defp classify_stmt({:def, meta, [head]}), do: {:def, AST.line(meta), def_name(head), nil}
+  defp classify_stmt({:def, meta, _}), do: {:def, AST.line(meta), nil, nil}
 
-  defp classify_stmt({:defp, meta, _}), do: {:defp, AST.line(meta), nil}
+  defp classify_stmt({:defp, meta, [head, body]}),
+    do: {:defp, AST.line(meta), def_name(head), body}
+
+  defp classify_stmt({:defp, meta, [head]}), do: {:defp, AST.line(meta), def_name(head), nil}
+  defp classify_stmt({:defp, meta, _}), do: {:defp, AST.line(meta), nil, nil}
   defp classify_stmt(_), do: :other
 
   # Extract the function name atom from a def/defp head.

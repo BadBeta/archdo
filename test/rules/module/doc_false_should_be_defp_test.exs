@@ -117,6 +117,46 @@ defmodule Archdo.Rules.Module.DocFalseShouldBeDefpTest do
     assert_clean(DocFalseShouldBeDefp, code)
   end
 
+  test "does NOT fire on `def name, do: @attribute` schema-accessor convention" do
+    # Public-but-internal API for framework consumers. The function exposes
+    # a compile-time module attribute to other modules that can't reach it
+    # directly (defp doesn't cross modules). `@doc false` hides from
+    # generated docs — the framework's API is the consumer-facing
+    # function, not these accessors. Real-world: every Ash resource +
+    # DSL ships dozens of `def opts_schema, do: @opts_schema`-style
+    # accessors that the framework reads via apply/3.
+    code = ~S"""
+    defmodule Ash do
+      @read_opts_schema [foo: :bar]
+      @stream_opts [a: 1]
+
+      @doc false
+      def read_opts, do: @read_opts_schema
+
+      @doc false
+      def stream_opts, do: @stream_opts
+    end
+    """
+
+    assert_clean(DocFalseShouldBeDefp, code)
+  end
+
+  test "STILL fires when body is more than just @attribute reference" do
+    # Regression guard: a `def` whose body computes from an attribute
+    # (e.g., `Map.put(@base, :x, y)`) is NOT a pure accessor; the
+    # @doc-false-should-be-defp signal still applies.
+    code = ~S"""
+    defmodule M do
+      @base %{a: 1}
+
+      @doc false
+      def with_value(value), do: Map.put(@base, :v, value)
+    end
+    """
+
+    assert_flagged(DocFalseShouldBeDefp, code)
+  end
+
   test "STILL fires on a `@doc false` def when no other arity of the same name has real `@doc`" do
     # Regression guard: a genuinely-private function masquerading as
     # @doc-false `def` should still flag.

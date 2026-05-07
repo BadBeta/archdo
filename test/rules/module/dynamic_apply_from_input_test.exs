@@ -214,6 +214,56 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInputTest do
     end
   end
 
+  describe "MFA-tuple destructure pattern (`{m, f, a}`)" do
+    # The standard OTP `{module, function, arguments}` 3-tuple is THE
+    # canonical way to encode a function call in Elixir/Erlang
+    # (Supervisor child specs, GenServer.start_link, application
+    # callback module, every DSL that supports "call this MFA").
+    # When a function destructures `{m, f, a}` from its parameter and
+    # then `apply(m, f, a)`, it's the documented passthrough — the
+    # tuple's source is the trusted DSL/config layer, not user input.
+    test "does NOT flag `apply(m, f, a)` where m, f, a came from `{m, f, a}` destructure in same fn" do
+      code = ~S"""
+      defmodule MyApp.DSL do
+        def default(%{default: {mod, func, args}}), do: apply(mod, func, args)
+        def default(%{default: function}) when is_function(function, 0), do: function.()
+        def default(%{default: value}), do: value
+      end
+      """
+
+      assert_clean(DynamicApplyFromInput, code, file: "lib/my_app/dsl.ex")
+    end
+
+    test "does NOT flag MFA-tuple in a `case` clause pattern" do
+      code = ~S"""
+      defmodule MyApp.Bulk do
+        def lazy_default(fun) do
+          case fun do
+            {m, f, a} -> apply(m, f, a)
+            fun -> fun.()
+          end
+        end
+      end
+      """
+
+      assert_clean(DynamicApplyFromInput, code, file: "lib/my_app/bulk.ex")
+    end
+
+    test "STILL flags `apply(mod, fun, args)` when none came from MFA-tuple destructure" do
+      # Regression: a non-MFA-pattern `apply(m, f, a)` is still suspicious.
+      code = ~S"""
+      defmodule MyApp.D do
+        def call(mod, fun) do
+          apply(mod, fun, [])
+        end
+      end
+      """
+
+      diags = analyze(DynamicApplyFromInput, code, file: "lib/my_app/d.ex")
+      assert length(diags) >= 1
+    end
+  end
+
   describe "id/0 and description/0" do
     test "rule id is stable" do
       assert DynamicApplyFromInput.id() == "5.51"
