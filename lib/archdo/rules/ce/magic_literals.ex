@@ -97,18 +97,69 @@ defmodule Archdo.Rules.CE.MagicLiterals do
   defp extract_magic({:==, meta, [_lhs, rhs]}), do: extract_one(rhs, meta)
   defp extract_magic({:!=, meta, [_lhs, rhs]}), do: extract_one(rhs, meta)
 
-  # Status-field assignment: `%{status: :magic}` or `%{m | status: :magic}`
+  # Status-field assignment: `%{status: :magic}` or `%{m | status: :magic}`.
+  # Skip type-tag values — `[type: :non_neg_integer]` in NimbleOptions /
+  # Spec / Validatex schemas is a SEMANTIC TYPE TAG defined by the
+  # schema library, not a domain status value.
   defp extract_magic({status_key, value})
        when is_atom(status_key) and status_key in @status_keys do
-    extract_one(value, [])
+    case schema_type_tag?(status_key, value) do
+      true -> []
+      false -> extract_one(value, [])
+    end
   end
 
   defp extract_magic({{:__block__, _, [status_key]}, value})
        when is_atom(status_key) and status_key in @status_keys do
-    extract_one(value, [])
+    case schema_type_tag?(status_key, value) do
+      true -> []
+      false -> extract_one(value, [])
+    end
   end
 
   defp extract_magic(_), do: []
+
+  # NimbleOptions / Spec / Validatex / Ecto type tags. Recognised when
+  # the surrounding key is `:type` (the canonical schema position).
+  @type_tag_atoms MapSet.new([
+                    :any,
+                    :atom,
+                    :boolean,
+                    :integer,
+                    :non_neg_integer,
+                    :pos_integer,
+                    :float,
+                    :number,
+                    :string,
+                    :binary,
+                    :keyword_list,
+                    :non_empty_keyword_list,
+                    :list,
+                    :non_empty_list,
+                    :map,
+                    :mfa,
+                    :mod_arg,
+                    :tuple,
+                    :reference,
+                    :function,
+                    :timeout,
+                    :pid,
+                    :fun,
+                    :struct,
+                    :charlist,
+                    :iodata,
+                    :iolist
+                  ])
+
+  defp schema_type_tag?(:type, value) when is_atom(value) do
+    MapSet.member?(@type_tag_atoms, value)
+  end
+
+  defp schema_type_tag?(:type, {:__block__, _, [value]}) when is_atom(value) do
+    MapSet.member?(@type_tag_atoms, value)
+  end
+
+  defp schema_type_tag?(_, _), do: false
 
   defp extract_one({:__block__, meta, [value]}, _outer_meta) when is_atom(value) do
     case magic_atom?(value) do

@@ -46,11 +46,23 @@ defmodule Archdo.Rules.Module.DocFalseShouldBeDefp do
     {hits, _state} =
       Enum.reduce(stmts, {[], :no_doc}, fn stmt, {acc, doc_state} ->
         case classify_stmt(stmt) do
-          :doc_false -> {acc, :doc_false}
-          {:def, line} when doc_state == :doc_false -> {[line | acc], :no_doc}
-          {:def, _} -> {acc, :no_doc}
-          {:defp, _} -> {acc, :no_doc}
-          :other -> {acc, doc_state}
+          :doc_false ->
+            {acc, :doc_false}
+
+          {:def, line, name} when doc_state == :doc_false ->
+            case cross_module_internal_convention?(name) do
+              true -> {acc, :no_doc}
+              false -> {[line | acc], :no_doc}
+            end
+
+          {:def, _, _} ->
+            {acc, :no_doc}
+
+          {:defp, _, _} ->
+            {acc, :no_doc}
+
+          :other ->
+            {acc, doc_state}
         end
       end)
 
@@ -61,9 +73,35 @@ defmodule Archdo.Rules.Module.DocFalseShouldBeDefp do
 
   defp classify_stmt({:@, _, [{:doc, _, [{:__block__, _, [false]}]}]}), do: :doc_false
 
-  defp classify_stmt({:def, meta, _}), do: {:def, AST.line(meta)}
-  defp classify_stmt({:defp, meta, _}), do: {:defp, AST.line(meta)}
+  defp classify_stmt({:def, meta, [head | _]}), do: {:def, AST.line(meta), def_name(head)}
+  defp classify_stmt({:def, meta, _}), do: {:def, AST.line(meta), nil}
+
+  defp classify_stmt({:defp, meta, [head | _]}),
+    do: {:defp, AST.line(meta), def_name(head)}
+
+  defp classify_stmt({:defp, meta, _}), do: {:defp, AST.line(meta), nil}
   defp classify_stmt(_), do: :other
+
+  # Extract the function name atom from a def/defp head.
+  # Handles `def name(args)`, `def name(args) when guard`, and the
+  # zero-arg `def name`.
+  defp def_name({:when, _, [{name, _, _} | _]}) when is_atom(name), do: name
+  defp def_name({name, _, _}) when is_atom(name), do: name
+  defp def_name(_), do: nil
+
+  # `__name__/arity` (double-underscore prefix AND suffix on the name) is
+  # the established "public-but-internal" Elixir convention: public so
+  # cross-module callers in the same project can use it, `@doc false` to
+  # hide from docs. Examples: Phoenix.__init__/2, Plug.Conn.__protocol__/1,
+  # Module.__info__/1. The rule's "use defp instead" advice is wrong here
+  # — defp would break the cross-module callers that the convention is
+  # designed to permit.
+  defp cross_module_internal_convention?(name) when is_atom(name) do
+    str = Atom.to_string(name)
+    String.starts_with?(str, "__") and String.ends_with?(str, "__")
+  end
+
+  defp cross_module_internal_convention?(_), do: false
 
   defp build_diagnostic(file, line) do
     Diagnostic.info("6.87",

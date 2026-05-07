@@ -41,6 +41,7 @@ defmodule Archdo.Rules.CE.UnanchoredModule do
       |> AnchorSet.compute()
       |> add_library_public_anchors(production_asts, library?)
       |> add_behaviour_implementor_anchors(production_asts, library?)
+      |> add_behaviour_definition_anchors(production_asts)
 
     graph = Graph.build(production_asts)
     closure = AnchorSet.closure(anchors, graph)
@@ -108,6 +109,42 @@ defmodule Archdo.Rules.CE.UnanchoredModule do
   end
 
   defp add_behaviour_implementor_anchors(anchors, _production_asts, _not_library), do: anchors
+
+  # When module A declares `@behaviour B`, module B is part of A's
+  # compile-time interface — deleting B would break A. Anchor every
+  # B referenced by `@behaviour B` from any module in scope. Catches
+  # the `@moduledoc false` behaviour-definition case where the
+  # definition module declares `@callback`s but is never directly
+  # called — its purpose IS to be the contract.
+  #
+  # Independent of library mode: applies in apps too (a behaviour
+  # def referenced from `@behaviour` is reachable regardless).
+  defp add_behaviour_definition_anchors(anchors, production_asts) do
+    referenced_behaviours =
+      for {_file, ast} <- production_asts,
+          mod_name <- declared_behaviour_targets(ast),
+          into: MapSet.new(),
+          do: mod_name
+
+    MapSet.union(anchors, referenced_behaviours)
+  end
+
+  # Walk a module AST collecting every `@behaviour Mod.Name` target as
+  # a string. Both bare `@behaviour Foo` and the literal_encoder-wrapped
+  # form parse as `{:@, _, [{:behaviour, _, [{:__aliases__, _, parts}]}]}`.
+  defp declared_behaviour_targets(ast) do
+    {_, refs} =
+      Macro.prewalk(ast, [], fn
+        {:@, _, [{:behaviour, _, [{:__aliases__, _, parts}]}]} = node, acc
+        when is_list(parts) ->
+          {node, [Enum.map_join(parts, ".", &Atom.to_string/1) | acc]}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    refs
+  end
 
   defp implements_project_behaviour?(ast, project_callbacks) do
     callbacks = AST.module_implemented_callbacks(ast, project_callbacks)

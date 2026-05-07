@@ -323,6 +323,49 @@ defmodule Archdo.Rules.CE.UnanchoredModuleTest do
              "behaviour-implementor module reached via runtime config should be anchored"
     end
 
+    test "library projects: behaviour-DEFINITION module referenced by @behaviour is anchored" do
+      # A `@moduledoc false` behaviour module that DEFINES `@callback`s —
+      # NOT a directly-called module — is reachable purely as a contract:
+      # an anchored implementor declares `@behaviour Foo`, so Foo is part
+      # of the implementor's compile-time interface. Deleting Foo would
+      # break the implementor. Anchor it.
+      #
+      # Distinct from `add_behaviour_implementor_anchors/3` which anchors
+      # the IMPLEMENTOR side. This anchors the DEFINITION side.
+      behaviour =
+        parse(
+          """
+          defmodule MyLib.Client do
+            @moduledoc false
+            @callback init(any) :: {:ok, map()} | {:error, any}
+            @callback close(map()) :: :ok
+          end
+          """,
+          "lib/mylib/client.ex"
+        )
+
+      implementor =
+        parse(
+          """
+          defmodule MyLib.AmqpClient do
+            @moduledoc "Public adapter."
+            @behaviour MyLib.Client
+            def init(opts), do: {:ok, %{opts: opts}}
+            def close(_state), do: :ok
+          end
+          """,
+          "lib/mylib/amqp_client.ex"
+        )
+
+      diags =
+        UnanchoredModule.analyze_project([behaviour, implementor], library?: true)
+
+      flagged = Enum.map(diags, & &1.context.module)
+
+      refute "MyLib.Client" in flagged,
+             "behaviour-DEFINITION referenced by @behaviour Mod from an anchored module must be anchored"
+    end
+
     test "library mode is opt-in — without library?: true, public modules can flag" do
       # Sanity: library mode is gated on the opts flag. With it
       # absent (or false), CE-30 behaves as before.

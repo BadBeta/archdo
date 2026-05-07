@@ -13,8 +13,16 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
   @doc """
   Project-level: walk all files, find behaviour declarations and @behaviour usages,
   flag behaviours with zero or only-test implementations.
+
+  In library mode (`opts[:library?]`), behaviours with a real
+  `@moduledoc \"""...\"""` are PUBLISHED contracts for downstream
+  consumers to implement — the library ships no impl by design. Skip
+  those; `@moduledoc false` behaviours without impls are still flagged
+  (they claim internal use, so an impl should exist somewhere).
   """
-  def analyze_project(file_asts) do
+  def analyze_project(file_asts, opts \\ []) do
+    library? = Keyword.get(opts, :library?, false)
+
     {behaviours, implementations} =
       Enum.reduce(file_asts, {%{}, %{}}, fn {file, ast}, {behaviours, impls} ->
         {file_behaviours, file_impls} = scan_file(file, ast)
@@ -23,7 +31,7 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
 
     Enum.flat_map(behaviours, fn {bhv, def_info} ->
       impl_files = Map.get(implementations, bhv, [])
-      check_behaviour(bhv, def_info, impl_files)
+      check_behaviour(bhv, def_info, impl_files, library?)
     end)
   end
 
@@ -39,7 +47,14 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
         _list ->
           name = AST.extract_module_name(ast)
           line = find_module_line(ast)
-          %{name => %{file: file, line: line}}
+
+          %{
+            name => %{
+              file: file,
+              line: line,
+              public_module?: not AST.internal_module?(ast)
+            }
+          }
       end
 
     impls =
@@ -71,6 +86,13 @@ defmodule Archdo.Rules.Module.SpeculativeGenerality do
   defp merge_impls(impls, new) do
     Map.merge(impls, new, fn _k, l1, l2 -> l1 ++ l2 end)
   end
+
+  # Library mode + a behaviour with real `@moduledoc` is a published
+  # contract for consumers — the library ships no impl by design. Skip.
+  defp check_behaviour(_bhv, %{public_module?: true}, [], true), do: []
+
+  defp check_behaviour(bhv, def_info, impl_files, _library?),
+    do: check_behaviour(bhv, def_info, impl_files)
 
   defp check_behaviour(bhv, def_info, impl_files) do
     cond do

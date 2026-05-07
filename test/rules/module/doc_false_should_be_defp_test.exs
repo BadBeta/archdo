@@ -45,4 +45,26 @@ defmodule Archdo.Rules.Module.DocFalseShouldBeDefpTest do
     diags = assert_flagged(DocFalseShouldBeDefp, code)
     assert hd(diags).rule_id == "6.87"
   end
+
+  # `__name__/arity` (double-underscore prefix AND suffix) is the
+  # established Elixir idiom for "public-but-internal" — public so
+  # other modules in the same project can call it (a private cannot
+  # cross module boundaries), but `@doc false` to hide from generated
+  # docs and signal "don't depend on this from user code". Production
+  # examples: `Phoenix.__init__/2`, `Plug.Conn.__protocol__/1`,
+  # `Module.__info__/1`. The rule should NOT advise `defp` here —
+  # `defp` would break cross-module callers.
+  test "does NOT fire on `__name__/arity` cross-module-internal convention" do
+    code = ~S"""
+    defmodule MyApp.SchemaCompiler do
+      @doc false
+      def __opts_schema__, do: @opts_schema
+
+      @doc false
+      def __init__(env, opts), do: {env, opts}
+    end
+    """
+
+    assert_clean(DocFalseShouldBeDefp, code)
+  end
 end

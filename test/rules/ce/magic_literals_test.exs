@@ -133,4 +133,42 @@ defmodule Archdo.Rules.CE.MagicLiteralsTest do
     assert length(diags) == 1
     assert hd(diags).message =~ ":awaiting_review"
   end
+
+  # `[type: :non_neg_integer]` is a NimbleOptions / Spec / Validatex type
+  # declaration — the atom is a SEMANTIC TYPE TAG defined by the schema
+  # library, not a domain status value. Atoms in this position should
+  # not be flagged as magic literals even when they appear in multiple
+  # schemas across modules.
+  test "does NOT fire on NimbleOptions-style `[type: :non_neg_integer]` schema declarations" do
+    a =
+      parse(
+        """
+        defmodule MyLib.Schema.A do
+          @opts NimbleOptions.new!([
+            count: [type: :non_neg_integer, default: 0],
+            label: [type: :string]
+          ])
+        end
+        """,
+        "lib/my_lib/schema/a.ex"
+      )
+
+    b =
+      parse(
+        """
+        defmodule MyLib.Schema.B do
+          @opts NimbleOptions.new!([
+            limit: [type: :non_neg_integer, default: 10],
+            tag: [type: :atom]
+          ])
+        end
+        """,
+        "lib/my_lib/schema/b.ex"
+      )
+
+    diags = analyze([a, b])
+
+    refute Enum.any?(diags, &(&1.message =~ ":non_neg_integer")),
+           "type-tag atoms in `[type: ...]` schema entries are not magic literals"
+  end
 end
