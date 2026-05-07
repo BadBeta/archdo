@@ -1969,6 +1969,213 @@ Sensitive data (passwords, tokens, API keys) may be exposed through logs, encode
 - **Tolerate:** Test files (test fixtures may contain fake credentials). Structs with `@derive {Inspect, only: [...]}` already configured. Short strings matching prefixes (< 12 chars — likely pattern constants, not real keys).
 - **Severity:** `warning` (hardcoded secrets, overbroad Jason.Encoder), `info` (missing Inspect derive, logger/raise interpolation)
 
+### 6.57 Inefficient Filter (Repo Then Enum.filter)
+
+`Repo.list-returning-call(...) |> Enum.filter(predicate)` — the predicate could move into the database query.
+
+- **Why:** Fetching every row and then filtering in Elixir uses more DB I/O, more network bandwidth, and more memory than letting the database apply the predicate server-side. The DB has indexes; Elixir's `Enum.filter` doesn't. (Performance, Database)
+- **Check:** AST walk for pipelines shaped `<Repo list-returning call>(...) |> Enum.filter(<inline predicate>)`. Matches `all`, `preload`, `stream`, `stream_preload` piped to `Enum.filter` with an inline capture or `fn`.
+- **Tolerate:** Remote function references (`&MyApp.fun/1`) opaque to introspection; `@archdo_intentional_filter` marker; test files.
+- **Severity:** `info`
+
+### 6.58 Telemetry in Recursive Function
+
+`:telemetry.execute/3` or `:telemetry.span/3` at the top level of a self-recursive function emits per-iteration.
+
+- **Why:** Telemetry handlers run synchronously in the calling process. Naive emit-per-iteration in a tight loop multiplies runtime by orders of magnitude when handlers are non-trivial (logging, metrics export). Emit ONCE around the recursion entry point, not at every step. (Performance)
+- **Check:** AST walk over function definitions. Detects top-level (sibling-of-recursion, not behind `if`/`case`/`cond`) `:telemetry.execute/3` or `:telemetry.span/3` calls in functions that also recurse on themselves.
+- **Tolerate:** Telemetry inside conditional branches (only emits sometimes); non-recursive functions; `@archdo_intentional_recursive_telemetry` marker.
+- **Severity:** `info`
+
+### 6.59 Callback Hell (4+ Nested Anonymous Functions)
+
+More than 3 levels of nested `fn ... end` or `&...` captures.
+
+- **Why:** Each level captures bindings from its parent, so reading the innermost body requires tracking N parent scopes. Real-world code at this depth tends to have bugs around variable shadowing and unintended captures, and it's nearly impossible to step through with `dbg`. Extract intermediate names. (Readability, Maintainability)
+- **Check:** AST walk counting nesting depth of `fn` and `&` nodes. Flags the outermost node whose subtree contains a chain of 4+ nested closures.
+- **Tolerate:** Three or fewer levels (the threshold); pipelines that look nested but operate on distinct values; macro contexts where the AST is generated.
+- **Severity:** `info`
+
+### 6.60 `Enum.reduce` With `throw` / `catch` for Early Exit
+
+A `try` block whose body uses `Enum.reduce` and `throw` to break out early.
+
+- **Why:** `Enum.reduce_while/3` was added precisely for early termination — it returns `{:cont, acc}` to continue or `{:halt, acc}` to stop, with no exception machinery. The throw/catch idiom works but adds runtime cost (exception construction, stack unwinding) and obscures the reducer's halt condition. (Idiomatic Code, Performance)
+- **Check:** AST walk for `try` blocks with `catch` clauses whose body contains `Enum.reduce` and at least one `throw` inside the reducer.
+- **Tolerate:** Try/catch around other unrelated code; reducers that don't throw; documented case where `reduce_while` doesn't fit (rare).
+- **Severity:** `info`
+
+### 6.61 `cond` Without Catch-All Clause
+
+A `cond do ... end` block with no `true ->` (or other catch-all) terminal clause.
+
+- **Why:** Elixir does not auto-default a `cond` whose conditions all evaluate falsy — the result is `CondClauseError` at runtime when the unmatched-input path runs. Convention is to terminate every `cond` with `true -> default` so the structure is total over its input space. (Safety, Robustness)
+- **Check:** AST walk over `cond` nodes. Extract the clause list. Flag any `cond` whose clauses don't end with a truthy literal guard (`true`, `:ok`, non-zero number, etc.).
+- **Tolerate:** Deliberate partial-function patterns where the unmatched case is documented to be impossible (rare); `cond` in macro-generated code where coverage is proven elsewhere.
+- **Severity:** `warning`
+
+### 6.62 Multiple Pipes on One Line
+
+Two or more `|>` operators sharing a single source line.
+
+- **Why:** A pipeline is a sequence of transformations on a primary subject — each step has its own intent. Putting multiple pipes on one line collapses the visual structure, defeats the readability that pipelines exist to provide, and forces the reader to mentally re-parse the chain. Canonical Elixir form: subject on its own line, then one `|>` per step on its own line. (Readability, Convention)
+- **Check:** AST walk collects all `|>` nodes and groups by source line. Flags lines with 2+ pipes.
+- **Tolerate:** Macro-generated pipes (rare); documented case where compactness matters more than line layout.
+- **Severity:** `info`
+
+### 6.63 `(fn x -> ... end).()` Should Be `then/2`
+
+A pipeline applies an anonymous function via the immediate-call form `(fn x -> ... end).()`.
+
+- **Why:** `Kernel.then/2` was added for exactly this case — applying a non-first-arg-compatible function to the piped value. The `(fn ... end).()` form predates `then/2`. `then/2` reads as "now do this with the value" and matches the rest of the pipeline's visual rhythm. (Idiomatic Code, Readability)
+- **Check:** AST walk for pipelines where the RHS is `{:., _, [{:fn, _, _}]}` applied — i.e., immediately invoking an anonymous function.
+- **Tolerate:** Non-pipeline contexts (not flagged); intentional anonymous-function application not in a pipeline.
+- **Severity:** `info`
+
+### 6.64 Bind-Then-Side-Effect-Then-Return Should Be `tap/2`
+
+A function body that binds a variable, runs a side effect referencing it, then returns it unchanged.
+
+- **Why:** `Kernel.tap/2` was added for this exact shape: "do something with this value, then continue with the value unchanged". The bind-side-effect-return form predates `tap/2`. Using `tap/2` makes the side-effect role explicit (the value flows through unchanged). (Idiomatic Code, Readability)
+- **Check:** AST walk over function definitions. Looks for body shape: assignment `x = ...`, middle statement that mentions `x` (the side effect), final statement that returns `x` unchanged.
+- **Tolerate:** Multi-statement sequences with multiple roles; side effects already wrapped in dedicated helpers; non-matching shapes.
+- **Severity:** `info`
+
+### 6.65 `Enum.zip` + `Enum.map` Should Be `Enum.zip_with/3`
+
+`Enum.zip(a, b) |> Enum.map(fn {x, y} -> f.(x, y) end)` — two passes over the data.
+
+- **Why:** `Enum.zip_with/3` (Elixir 1.12+) was designed for combining elements from parallel collections in one pass. Lower allocation cost, shorter notation. (Performance, Idiomatic Code)
+- **Check:** AST walk for pipelines where the LHS ends in `Enum.zip/2,3` and the RHS is `Enum.map`.
+- **Tolerate:** Zip followed by operations other than direct map destructuring (legitimate alternative transforms).
+- **Severity:** `info`
+
+### 6.66 `Enum.group_by + length` Should Be `Enum.frequencies_by/2`
+
+`Enum.group_by(...) |> Map.new(fn {k, v} -> {k, length(v)} end)` builds the full grouping list just to count.
+
+- **Why:** `Enum.frequencies_by/2` was added for this exact case — it avoids materializing the full grouping list when only the counts matter. Lower memory, single pass, shorter notation. (Performance, Memory)
+- **Check:** AST walk for pipelines where LHS ends in `Enum.group_by` and RHS is `Map.new` whose function destructures `{k, v}` and returns `{k, length(v)}` with the same variable names.
+- **Tolerate:** Grouping where values are used for purposes beyond counting; non-matching shapes.
+- **Severity:** `info`
+
+### 6.67 `{Enum.filter, Enum.reject}` Pair Should Be `Enum.split_with/2`
+
+`{Enum.filter(coll, pred), Enum.reject(coll, pred)}` — same collection, same predicate, two traversals.
+
+- **Why:** `Enum.split_with/2` returns `{kept, dropped}` from a single pass — same return shape as the filter/reject tuple at half the iteration cost. (Performance, Idiomatic Code)
+- **Check:** AST walk for 2-tuples where one element is `Enum.filter(coll, pred)` and the other is `Enum.reject(coll, pred)` with the same collection and predicate (AST-equality comparison with metadata stripped).
+- **Tolerate:** Filter and reject on different collections; predicates that genuinely differ; non-tuple usages.
+- **Severity:** `info`
+
+### 6.68 `Enum.find` + Transform Should Be `Enum.find_value/2,3`
+
+`Enum.find(coll, pred) |> transform()` — predicate-then-extract that drops nil-on-not-found into the transform.
+
+- **Why:** `Enum.find_value/2,3` was designed for the find-then-extract pattern. The predicate-and-extract collapse into one function: `fn x -> condition && extract(x) end`. Eliminates an explicit nil-handling step downstream and makes the intent ("return the first usable extraction") explicit. (Idiomatic Code, Clarity)
+- **Check:** AST walk for pipelines where LHS ends in `Enum.find` and RHS is a transform step (local call, remote call, or capture — but NOT `case`/`if`/`with` which are explicit nil-handling idioms).
+- **Tolerate:** Explicit nil-handling patterns (`case`/`if`/`with` after `Enum.find`); find followed by control flow rather than transformation.
+- **Severity:** `info`
+
+### 6.69 `Enum.map` Then `List.flatten` Should Be `Enum.flat_map/2`
+
+`Enum.map(coll, f) |> List.flatten()` — two passes when one would do.
+
+- **Why:** `Enum.flat_map/2` is the canonical form for "transform each element to a list, then concatenate the results". Single pass, lower allocation, intent obvious from the function name. (Performance, Idiomatic Code)
+- **Check:** AST walk for pipelines where LHS ends in `Enum.map` and RHS is `List.flatten/1` or `:lists.flatten/1`.
+- **Tolerate:** Map followed by flatten where the intermediate list is genuinely needed elsewhere.
+- **Severity:** `info`
+
+### 6.70 `Enum.map` Then `MapSet.new` Should Be `MapSet.new/2`
+
+`Enum.map(coll, f) |> MapSet.new()` — builds an intermediate list.
+
+- **Why:** `MapSet.new/2` accepts a transformer for exactly this case. Single pass, no intermediate list, shorter notation. Same idea as `Map.new/2` for maps. (Performance, Idiomatic Code)
+- **Check:** AST walk for pipelines where LHS ends in `Enum.map` and RHS is `MapSet.new/0,1`.
+- **Tolerate:** Map followed by `MapSet.new` where the intermediate list is used separately; non-matching shapes.
+- **Severity:** `info`
+
+### 6.71 `%{}` Pattern Matches Any Map
+
+A function head pattern uses `%{}` (the open-map pattern), which matches ANY map regardless of size.
+
+- **Why:** In Elixir, the `%{}` literal in a pattern is the open-map pattern: it matches every map. A common bug is treating it as a literal-empty-map check, which it is not. To dispatch on "empty vs non-empty map", use a `when map_size(m) == 0` guard. (Correctness, Pattern Matching)
+- **Check:** AST walk over function definitions. Inspect each argument pattern; flag `{:%{}, _, []}`.
+- **Tolerate:** Deliberate open-map catchalls where any-map matching is the intent; pattern matching where the empty-map fallthrough behaviour is intentional and documented.
+- **Severity:** `warning`
+
+### 6.72 `if Map.has_key?(m, k), do: Map.get(m, k)` Should Be `Map.fetch/2`
+
+A double-lookup pattern reconstructing what `Map.fetch/2` returns natively.
+
+- **Why:** `Map.fetch/2` is the canonical "get-or-fail" form for maps — it returns `{:ok, value}` or `:error`, which is exactly the data the has_key? + get pattern is reconstructing manually. Single hash-lookup, single well-known shape, composes cleanly with `with` chains. (Performance, Idiomatic Code)
+- **Check:** AST walk for `if Map.has_key?(m, k), do: Map.get(m, k) ...` shapes (or `Map.fetch!`) where map and key arguments match (AST equality with metadata stripped).
+- **Tolerate:** Conditionals where the get is absent; different map or key arguments; intentional double-lookup with a documented reason.
+- **Severity:** `info`
+
+### 6.73 Repeated Compound Guard Chain
+
+The same `when ... and ... and ...` guard chain appears across 2+ function heads.
+
+- **Why:** `defguard` (and `defguardp`) were added so guard chains can be named and reused. Repeating the same chain across many function heads couples them: changing the rule means editing every head, and a skipped head silently drifts. A named guard centralizes the rule. (Maintainability, DRY)
+- **Check:** AST walk over function definitions. Extract each function's guard. Group compound guards (2+ predicates joined by `and`/`or`) by AST shape (metadata-stripped). Flag the first occurrence of any guard repeated 2+ times.
+- **Tolerate:** Single-predicate guards; guards used only once; intentional inline patterns where naming would obscure rather than clarify.
+- **Severity:** `info`
+
+### 6.74 `Enum.filter(&match?)` + `Enum.map` Should Be `for` Comprehension
+
+`Enum.filter(coll, &match?(p, &1)) |> Enum.map(fn p -> body end)` — filter-then-destructure that splits a single semantic into two passes.
+
+- **Why:** `for pattern <- coll, do: body` silently skips elements that don't match the pattern, then destructures matching ones in the body. Single pass, no intermediate list, no duplicate `match?` + destructure pair to keep in sync. (Performance, Idiomatic Code)
+- **Check:** AST walk for pipelines where LHS ends in `Enum.filter` with a `&match?(pattern, &1)` capture predicate and RHS is `Enum.map`.
+- **Tolerate:** Filter-map patterns where the filter predicate is not a `match?` capture; non-matching shapes.
+- **Severity:** `info`
+
+### 6.75 Atom-Key Pattern in Controller / LiveView Action
+
+A controller or LiveView action callback pattern-matches atom-keyed maps against external params, which arrive string-keyed.
+
+- **Why:** In Elixir, atom keys (`:id`) and string keys (`"id"`) are distinct in patterns. Phoenix `params` always arrive as `%{"id" => "42"}`. A pattern of `%{id: id}` matches only if the map contains a literal atom key `:id`, which `params` does not — the action body never runs, and the framework usually picks up the next clause or falls through to a 404. (Correctness, Framework Integration)
+- **Check:** AST walk over function definitions in controller / LiveView files (filename match, `use Phoenix.Controller`, or `uses_live_view?`). Check known action callback names (`index`, `show`, `new`, `create`, `edit`, `update`, `delete`, `mount`, `handle_params`, `handle_event`); flag heads that pattern-match atom-keyed maps in the request data position.
+- **Tolerate:** String-keyed patterns (correct); atom-keyed matches in non-action functions (different binding source); explicit conversion via `Plug.Conn.assign` before the pattern.
+- **Severity:** `warning`
+
+### 6.76 Whole-Struct Destructure When Only One Field Is Read
+
+A function head destructures a whole struct (`%Struct{} = var`) but only reads one field in the body.
+
+- **Why:** Head-pattern destructuring is more declarative than body field-access — it makes the function's input contract explicit at a glance. Future readers don't have to scan the body to discover that only `id` is used. (Readability, Documentation)
+- **Check:** AST walk over function definitions. Detect open-struct patterns binding the whole struct to a variable. Walk the body; count distinct field accesses (`var.field`) and total uses of `var`. Flag when exactly one field is read AND `var` is used exactly once.
+- **Tolerate:** Multi-field reads (struct destructure justified); whole-struct patterns where the bound struct is also re-emitted; macro contexts.
+- **Severity:** `info`
+
+### 6.77 Body Type-Check + Raise Should Be a Head Guard
+
+`unless is_X(arg), do: raise(...)` (or `if not is_X(arg), do: raise(...)`) at the top of a function body.
+
+- **Why:** Head guards are part of the function's pattern-match contract. Dispatching mismatches to the next clause (or producing `FunctionClauseError`) is more uniform than raising `ArgumentError` from the body. Head guards also enable multi-clause dispatch — type-correct callers go to one clause, type-incorrect callers to a fallback or error clause. (Design, Uniformity)
+- **Check:** AST walk over function definitions WITHOUT head guards. Walk the body; detect `unless is_X(arg), do: raise(...)` or `if not is_X(arg), do: raise(...)` where `is_X` is a type predicate (`is_atom`, `is_binary`, `is_integer`, `is_list`, `is_map`, `is_tuple`, `is_struct`, etc.).
+- **Tolerate:** Range / value-domain checks (legitimately different from type checks); functions with head guards already; intentional body-level validation with a custom exception.
+- **Severity:** `info`
+
+### 6.78 `try/rescue` Around a Raising Call With a Safe Alternative
+
+A `try`/`rescue` wraps a `!`-suffixed standard-library call when a non-raising sibling exists.
+
+- **Why:** `try`/`rescue` is for genuinely-exceptional cases. When the standard library exposes a `{:ok, _} | :error` (or `{:ok, _} | {:error, _}`) sibling, that's the canonical "expected-failure" path. Pattern-matching on the result composes with `with` chains; rescue does not. (Idiomatic Code, Composability)
+- **Check:** AST walk for `try` blocks. Walk the body for raising calls with known safe alternatives: `String.to_integer` → `Integer.parse`, `Map.fetch!` → `Map.fetch`, `Repo.get!` → `Repo.get`, `File.read!` → `File.read`, etc.
+- **Tolerate:** `try`/`rescue` for genuinely-exceptional cases (no listed safe alternative); test rescue patterns; documented case where rescue is the right choice.
+- **Severity:** `info`
+
+### 6.79 Variable-Time Comparison of a Secret
+
+`==` or `===` where one side is a variable whose name suggests a secret (token, hmac, signature, api_key, etc.).
+
+- **Why:** `==` short-circuits at the first mismatched byte, making comparison time correlate with prefix-match length. Attackers measure response time and binary-search the secret. `Plug.Crypto.secure_compare/2` runs in time proportional to the LONGER of the two strings, regardless of where mismatches occur — the canonical constant-time primitive in Elixir. (Security, Cryptography)
+- **Check:** AST walk for `==` and `===` comparisons. Inspect both sides; flag if either is a variable whose name (case-insensitive) contains `token`, `hmac`, `digest`, `signature`, `api_key`, `apikey`, `secret`, `session_id`, `csrf`, `password_hash`.
+- **Tolerate:** Non-secret comparisons; comparisons in test/development-only code where timing leaks don't matter; a documented `Plug.Crypto.secure_compare/2` already in use.
+- **Severity:** `warning`
+
 ---
 
 ## 7. Test Architecture
