@@ -70,7 +70,7 @@ defmodule Archdo do
     Severity
   }
 
-  alias Archdo.AST.{MacroEdges, NestedModules}
+  alias Archdo.AST.{MacroEdges, NestedModules, StructRefs}
   alias Archdo.Compiled.Graph.Centrality
   alias Archdo.Rules.Compiled.UnanchoredModule
   alias Archdo.Stats.{FunctionMetrics, Halstead, Loc}
@@ -161,8 +161,8 @@ defmodule Archdo do
           {:ok, graph} ->
             reached = compute_reached_modules(graph)
 
-            {anchors, ast_graph, library_publics, impl_annotated, source_defs, macro_emit_edges} =
-              compute_ast_anchors_and_graph(paths)
+            {anchors, ast_graph, library_publics, impl_annotated, source_defs, virtual_edges,
+             macro_emitted_function_calls} = compute_ast_anchors_and_graph(paths)
 
             new_opts =
               opts
@@ -173,7 +173,11 @@ defmodule Archdo do
               |> Keyword.put(:library_public_modules, library_publics)
               |> Keyword.put(:impl_annotated_functions, impl_annotated)
               |> Keyword.put(:source_defined_functions, source_defs)
-              |> Keyword.put(:macro_emit_edges, macro_emit_edges)
+              # Key kept as `:macro_emit_edges` for stability — the value
+              # now also includes nested-module + struct-reference edges
+              # (all virtual call edges 1.26 / 6.24 union into the deps map).
+              |> Keyword.put(:macro_emit_edges, virtual_edges)
+              |> Keyword.put(:macro_emitted_function_calls, macro_emitted_function_calls)
 
             {new_opts, graph}
 
@@ -206,15 +210,22 @@ defmodule Archdo do
     source_defs = compute_source_defined_functions(production)
     macro_emit_edges = compute_macro_emit_edges(production)
     nested_module_edges = compute_nested_module_edges(production)
+    struct_ref_edges = compute_struct_ref_edges(production)
 
-    # Lexical-container edges have the same shape as macro-emit edges
-    # (`%{module_atom => [module_atom]}`) and serve the same purpose
-    # (virtual edges 1.26 unions into the deps map). Merge them into one
-    # opt so the rule has a single union step.
-    macro_and_nested_edges =
-      UnanchoredModule.merge_macro_emit_edges(macro_emit_edges, nested_module_edges)
+    # Three AST-side virtual edge types — all module-atom→[module-atom]
+    # maps that 1.26 unions into the compiled deps map. Reduce-merge:
+    virtual_edges =
+      [macro_emit_edges, nested_module_edges, struct_ref_edges]
+      |> Enum.reduce(%{}, &UnanchoredModule.merge_macro_emit_edges(&2, &1))
 
-    {anchors, ast_graph, library_publics, impl_annotated, source_defs, macro_and_nested_edges}
+    # Function-level macro-emit calls — `{module_atom, fn_atom, arity}`
+    # triples for every `Mod.fn(args)` inside `defmacro` quote bodies.
+    # 6.24 uses this to suppress dead-public-function findings on
+    # functions actually called by consumer's macro-injected code.
+    macro_emitted_function_calls = compute_macro_emitted_function_calls(production)
+
+    {anchors, ast_graph, library_publics, impl_annotated, source_defs, virtual_edges,
+     macro_emitted_function_calls}
   end
 
   # Build `module_atom => [module_atom]` of virtual call edges from
@@ -235,6 +246,31 @@ defmodule Archdo do
   # `@moduledoc false` children.
   defp compute_nested_module_edges(production_asts) do
     edges_map_for(production_asts, &NestedModules.extract/1)
+  end
+
+  # Build `module_atom => [module_atom]` of struct-reference edges
+  # (`%Sibling{...}` constructions). The compiled call graph misses
+  # these because struct construction compiles to a literal map op,
+  # not a `__struct__/1` remote call. Sibling case (Bandit.HTTP1.Handler
+  # constructs `%Bandit.HTTP1.Socket{...}`) — companion to nested-module
+  # edges which handle parent → child case.
+  defp compute_struct_ref_edges(production_asts) do
+    edges_map_for(production_asts, &StructRefs.extract/1)
+  end
+
+  # Build a MapSet of `{module_atom, fn_atom, arity}` triples for every
+  # fully-qualified call inside a `defmacro` body's `quote` block. 6.24
+  # uses this to suppress dead-public-function findings on functions
+  # actually called by consumer's macro-injected code (per-function
+  # precision — sibling functions on the same module that AREN'T
+  # macro-emitted will still flag).
+  defp compute_macro_emitted_function_calls(production_asts) do
+    for {_file, ast} <- production_asts,
+        {mod_str, fn_atom, arity} <- MacroEdges.extract_calls(ast),
+        mod_atom = AST.safe_existing_atom(mod_str),
+        not is_nil(mod_atom),
+        into: MapSet.new(),
+        do: {mod_atom, fn_atom, arity}
   end
 
   # Shared: walk every production AST through an extractor that returns

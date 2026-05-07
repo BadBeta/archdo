@@ -35,7 +35,8 @@ defmodule Archdo.Rules.Compiled.DeadCode do
       source_defs: Keyword.get(opts, :source_defined_functions, %{}),
       behaviour_implementors: behaviour_implementor_set(graph),
       project_callback_fns: build_callback_fn_set(graph),
-      app_entry_fns: MapSet.new([{:start, 2}, {:stop, 1}])
+      app_entry_fns: MapSet.new([{:start, 2}, {:stop, 1}]),
+      macro_emitted_calls: Keyword.get(opts, :macro_emitted_function_calls, MapSet.new())
     }
   end
 
@@ -48,7 +49,30 @@ defmodule Archdo.Rules.Compiled.DeadCode do
         filters.source_defs,
         filters.behaviour_implementors
       ) or
-      application_entry_function?(finding, filters.app_entry_fns)
+      application_entry_function?(finding, filters.app_entry_fns) or
+      macro_export?(finding) or
+      called_via_macro_emit?(finding, filters.macro_emitted_calls)
+  end
+
+  # Function-level macro-emit suppression. The set is `{module, fn, arity}`
+  # triples extracted from `quote do ... end` blocks in `defmacro` bodies.
+  # A function in this set IS called by the consumer's macro-injected
+  # code — invisible to static call graph but visible at AST level.
+  # Per-function precision: a sibling function in the same module that
+  # ISN'T macro-emitted will still flag.
+  defp called_via_macro_emit?(%{module: m, function: f, arity: a}, emit_set) do
+    MapSet.member?(emit_set, {m, f, a})
+  end
+
+  # Macros compile to BEAM exports under the `MACRO-name` convention
+  # (e.g. `defmacro clear?/3` → `MACRO-clear?/3` in the BEAM). They're
+  # invoked via macro expansion at compile time, never as runtime
+  # function calls — so they correctly appear "uncalled" in the call
+  # graph but are NOT dead. Skip from dead-code findings.
+  defp macro_export?(%{function: fun}) do
+    fun
+    |> Atom.to_string()
+    |> String.starts_with?("MACRO-")
   end
 
   @doc """

@@ -130,12 +130,51 @@ defmodule Archdo.Compiled.Graph do
   Reads all Elixir.*.beam files, extracts exports, behaviours, callbacks,
   structs, and remote function calls. Builds indexed lookups in a single pass.
   """
+  @doc """
+  Predicate: was the given source path produced from a production source
+  file (NOT under a test/ directory)? Mirrors `Archdo.AST.test_file?/1`
+  semantics so compiled-mode and AST-mode agree on what's "production".
+
+  Public for direct testing.
+  """
+  @spec production_source?(charlist() | String.t()) :: boolean()
+  def production_source?(source) when is_list(source) do
+    production_source?(to_string(source))
+  end
+
+  def production_source?(source) when is_binary(source) do
+    not (String.contains?(source, "/test/") or String.starts_with?(source, "test/"))
+  end
+
+  @doc """
+  Predicate: is this BEAM file compiled from a production source?
+  Reads the BEAM's `:compile_info[:source]` chunk. BEAMs whose source
+  cannot be read are treated as production (conservative — better to
+  include than silently drop).
+
+  Public for direct testing.
+  """
+  @spec production_beam?(charlist()) :: boolean()
+  def production_beam?(beam_charlist) do
+    case :beam_lib.chunks(beam_charlist, [:compile_info]) do
+      {:ok, {_, [{:compile_info, info}]}} ->
+        case Keyword.get(info, :source) do
+          nil -> true
+          source -> production_source?(source)
+        end
+
+      _ ->
+        true
+    end
+  end
+
   @spec build(String.t()) :: t()
   def build(beam_dir) do
     beam_files =
       beam_dir
       |> Path.join("Elixir.*.beam")
       |> Path.wildcard()
+      |> Enum.filter(fn path -> production_beam?(to_charlist(path)) end)
 
     beam_charlist = to_charlist(beam_dir)
     Code.prepend_path(beam_charlist)
@@ -450,6 +489,13 @@ defmodule Archdo.Compiled.Graph do
           {mod, func, length(args), line}
           | Enum.flat_map(args, &find_remote_calls/1)
         ]
+
+      # Function capture: `&Mod.fn/arity`. Compiles to
+      # `{:fun, line, {:function, {:atom, _, mod}, {:atom, _, fn}, {:integer, _, arity}}}`.
+      # Without this clause, captures passed as Enum/Stream/sort_by callbacks
+      # (`Enum.find(xs, &Mod.predicate?/1)`) are invisible to the call graph.
+      {:fun, line, {:function, {:atom, _, mod}, {:atom, _, func}, {:integer, _, arity}}} ->
+        [{mod, func, arity, line}]
 
       tuple when is_tuple(tuple) ->
         tuple

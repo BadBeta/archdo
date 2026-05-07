@@ -155,5 +155,105 @@ defmodule Archdo.AST.MacroEdgesTest do
     end
   end
 
+  describe "extract_calls/1 — function-level edges from macro bodies" do
+    # Companion to `extract/1`. While `extract/1` returns module-level
+    # edges sufficient for 1.26's reachability closure, 6.24 needs
+    # function-level precision: which `Mod.fn/arity` is actually called
+    # by the macro-injected code? Extract `{module_str, fn_atom, arity}`
+    # for every `Mod.fn(args)` inside `quote do ... end` blocks of
+    # `defmacro` bodies.
+
+    test "no defmacro returns empty list" do
+      code = ~S"""
+      defmodule Plain do
+        def regular, do: :ok
+      end
+      """
+
+      assert MacroEdges.extract_calls(parse!(code)) == []
+    end
+
+    test "captures the function name and arity of a quoted call" do
+      code = ~S"""
+      defmodule Commanded.Commands.Router do
+        defmacro dispatch(_cmd) do
+          quote do
+            Commanded.Commands.Dispatcher.dispatch(unquote_splicing([]))
+          end
+        end
+      end
+      """
+
+      calls = MacroEdges.extract_calls(parse!(code))
+      assert {"Commanded.Commands.Dispatcher", :dispatch, 1} in calls
+    end
+
+    test "captures multiple distinct function-level calls" do
+      code = ~S"""
+      defmodule M do
+        defmacro emit do
+          quote do
+            Sibling.do_a()
+            Sibling.do_b(:x, :y)
+            Other.run()
+          end
+        end
+      end
+      """
+
+      calls = MacroEdges.extract_calls(parse!(code))
+      assert {"Sibling", :do_a, 0} in calls
+      assert {"Sibling", :do_b, 2} in calls
+      assert {"Other", :run, 0} in calls
+    end
+
+    test "deduplicates same {mod, fn, arity}" do
+      code = ~S"""
+      defmodule M do
+        defmacro a do
+          quote do
+            Helper.run()
+          end
+        end
+
+        defmacro b do
+          quote do
+            Helper.run()
+          end
+        end
+      end
+      """
+
+      calls = MacroEdges.extract_calls(parse!(code))
+      assert Enum.count(calls, &(&1 == {"Helper", :run, 0})) == 1
+    end
+
+    test "ignores Erlang-style :atom.fun() calls" do
+      code = ~S"""
+      defmodule M do
+        defmacro x do
+          quote do
+            :gen_server.call(self(), :ping)
+          end
+        end
+      end
+      """
+
+      assert MacroEdges.extract_calls(parse!(code)) == []
+    end
+
+    test "ignores calls in regular def bodies (only defmacro)" do
+      code = ~S"""
+      defmodule M do
+        def regular do
+          Helper.run()
+        end
+      end
+      """
+
+      assert MacroEdges.extract_calls(parse!(code)) == []
+    end
+  end
+
   defp parse!(code), do: Code.string_to_quoted!(code)
 end

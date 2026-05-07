@@ -36,18 +36,56 @@ defmodule Archdo.Rules.Compiled.UnanchoredModule do
   def analyze_compiled(graph, opts) do
     anchors = Keyword.get(opts, :ast_anchor_modules, MapSet.new())
     library_publics = Keyword.get(opts, :library_public_modules, MapSet.new())
+    behav_anchors = compiled_graph_behaviour_anchors(graph)
 
-    # Library mode carve-out: in a Hex package (mix.exs has package/0),
-    # every public module (not @moduledoc false) is reachable by external
-    # consumers we cannot see. Treating those as anchors prevents the
-    # "every public API module is unreachable" false-positive class.
-    combined_anchors = MapSet.union(anchors, library_publics)
+    # Three sources seed the closure walk:
+    #   1. AST anchors (Phoenix routes, Mix tasks, supervised processes,
+    #      `@archdo_anchor`)
+    #   2. Library publics (Hex package's non-@moduledoc-false modules,
+    #      reachable by external consumers we can't see)
+    #   3. Behaviour implementors (modules with `@behaviour Mod`, reached
+    #      via `apply(mod, callback, args)` from the framework that owns
+    #      the behaviour — invisible to static analysis)
+    #
+    # Without (3), `@moduledoc false` modules called only by behaviour
+    # implementors became unreachable: Bandit.Adapter (impl Plug.Conn.Adapter)
+    # calls Bandit.Headers, but with Adapter excluded from FINDINGS yet
+    # also missing from the CLOSURE, Headers had no path from any seed.
+    combined_anchors =
+      anchors
+      |> MapSet.union(library_publics)
+      |> MapSet.union(behav_anchors)
 
     case MapSet.size(combined_anchors) do
       0 -> []
       _ -> find_unanchored_diagnostics(graph, combined_anchors, opts)
     end
   end
+
+  @doc """
+  Pure: extract module atoms that declare `@behaviour Mod` (any) from a
+  compiled-graph modules map. Used to seed 1.26's closure walk —
+  behaviour implementors are reached via callback dispatch from a
+  parent framework, so their outgoing call edges should propagate
+  through the closure.
+
+  Public for direct testing.
+  """
+  @spec behaviour_implementor_anchors(%{module() => map()}) :: MapSet.t(module())
+  def behaviour_implementor_anchors(modules_map) when is_map(modules_map) do
+    for {mod, %{behaviours: [_ | _]}} <- modules_map,
+        into: MapSet.new(),
+        do: mod
+  end
+
+  # Resolve the modules map from a graph that may be a Compiled.Graph
+  # struct (production path) or a bare placeholder (legacy /1 dispatch
+  # without opts — see "rule is a no-op without anchor data" test).
+  defp compiled_graph_behaviour_anchors(%Archdo.Compiled.Graph{} = graph) do
+    behaviour_implementor_anchors(Compiled.modules(graph))
+  end
+
+  defp compiled_graph_behaviour_anchors(_), do: MapSet.new()
 
   defp find_unanchored_diagnostics(graph, anchors, opts) do
     deps = build_deps_map(graph, opts)

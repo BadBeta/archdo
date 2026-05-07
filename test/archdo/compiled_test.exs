@@ -57,6 +57,49 @@ defmodule Archdo.CompiledTest do
     end
   end
 
+  describe "Graph.production_beam?/1 — test-source filter" do
+    # A BEAM in a library's `_build/<env>/lib/<app>/ebin/` directory may
+    # have been compiled from a `test/` source (test helpers, support
+    # modules). The user's `--paths lib/` argument means "scan production
+    # code"; the AST side already filters via `AST.test_file?/1`. The
+    # compiled side reads every `Elixir.*.beam` indiscriminately, so the
+    # call graph and module set leak test helpers — they show up as
+    # 1.26 orphans because no production module reaches them.
+    #
+    # Fix: examine each BEAM's `:compile_info[:source]` and skip beams
+    # whose source path matches `AST.test_file?/1`.
+
+    test "returns true for a BEAM compiled from a lib/ source" do
+      beam_path =
+        Path.join([
+          File.cwd!(),
+          "_build",
+          "test",
+          "lib",
+          "archdo",
+          "ebin",
+          "Elixir.Archdo.AST.beam"
+        ])
+
+      assert File.exists?(beam_path),
+             "expected Archdo's own AST module BEAM at #{beam_path}"
+
+      assert Graph.production_beam?(to_charlist(beam_path))
+    end
+
+    test "returns false for a BEAM compiled from a test/ source" do
+      # Use Archdo's own test_helpers if compiled, otherwise mock.
+      # Simplest: fabricate a synthetic BEAM-like check by passing a
+      # path-like string that we know contains `/test/`. The implementation
+      # uses `:beam_lib.chunks/2`; for unit-test isolation, expose a
+      # pure helper that takes the source charlist directly.
+      assert Graph.production_source?(~c"/some/project/lib/foo.ex")
+      refute Graph.production_source?(~c"/some/project/test/helpers/foo.ex")
+      refute Graph.production_source?(~c"/some/project/test/support/foo.ex")
+      refute Graph.production_source?(~c"test/helpers/foo.ex")
+    end
+  end
+
   describe "Graph.find_remote_calls/1 — args-nested recursion" do
     # Critical bug surfaced during M-fp-F2 PS-investigation: the matcher
     # had a non-recursive happy-path. When it matched an outer call, it
@@ -145,6 +188,37 @@ defmodule Archdo.CompiledTest do
 
       tuple_form = {:tuple, 5, [inner]}
       assert Graph.find_remote_calls(tuple_form) == [{M, :f, 0, 5}]
+    end
+
+    test "captures function references (`&Mod.fn/arity`)" do
+      # Captures compile to the abstract-code form
+      # `{:fun, line, {:function, {:atom, _, mod}, {:atom, _, fn}, {:integer, _, arity}}}`.
+      # Without matching this, calls passed as `&Mod.fn/n` (very common
+      # in `Enum.find/filter/map/sort_by` patterns) are invisible to the
+      # call graph. Symptom: `Subscriber.available?/1` (called via
+      # `Enum.find(subs, &Subscriber.available?/1)`) flagged as dead.
+      capture =
+        {:fun, 7, {:function, {:atom, 7, Subscriber}, {:atom, 7, :available?}, {:integer, 7, 1}}}
+
+      assert Graph.find_remote_calls(capture) == [{Subscriber, :available?, 1, 7}]
+    end
+
+    test "captures function references nested inside another call's args" do
+      # `Enum.find(subs, &Subscriber.available?/1)`
+      capture =
+        {:fun, 7, {:function, {:atom, 7, Sub}, {:atom, 7, :available?}, {:integer, 7, 1}}}
+
+      outer =
+        {:call, 7, {:remote, 7, {:atom, 7, Enum}, {:atom, 7, :find}},
+         [{:var, 7, :_subs}, capture]}
+
+      mfas =
+        outer
+        |> Graph.find_remote_calls()
+        |> Enum.map(fn {m, f, a, _l} -> {m, f, a} end)
+
+      assert {Enum, :find, 2} in mfas
+      assert {Sub, :available?, 1} in mfas
     end
   end
 end

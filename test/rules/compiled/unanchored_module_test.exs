@@ -140,6 +140,67 @@ defmodule Archdo.Rules.Compiled.UnanchoredModuleTest do
     end
   end
 
+  describe "behaviour_implementor_anchors/1 — F3 closure seeding" do
+    # Bug surfaced during PS investigation: behaviour-implementors were
+    # excluded from being FLAGGED (they cannot be reached statically) but
+    # they were NOT added to the anchor closure. So if a behaviour-impl
+    # module (e.g. Bandit.Adapter, impl Plug.Conn.Adapter) is the SOLE
+    # caller of an internal helper (Bandit.Headers), the helper is
+    # unreachable from the anchor walk and 1.26 falsely flags it.
+    #
+    # Fix: also seed the closure with behaviour-implementors. They're
+    # effectively anchored by the framework that owns the behaviour, so
+    # their outgoing edges should propagate.
+
+    test "extracts module atoms from compiled-graph modules with @behaviour" do
+      modules = %{
+        Mod.PlugAdapter => %{behaviours: [Plug.Conn.Adapter], exports: []},
+        Mod.Plain => %{behaviours: [], exports: []},
+        Mod.GenServerImpl => %{behaviours: [GenServer], exports: []}
+      }
+
+      result = UnanchoredModule.behaviour_implementor_anchors(modules)
+      assert MapSet.equal?(result, MapSet.new([Mod.PlugAdapter, Mod.GenServerImpl]))
+    end
+
+    test "returns empty set when no module declares any behaviour" do
+      modules = %{
+        Mod.A => %{behaviours: [], exports: []},
+        Mod.B => %{behaviours: [], exports: []}
+      }
+
+      assert UnanchoredModule.behaviour_implementor_anchors(modules) == MapSet.new()
+    end
+
+    test "behaviour-implementor's outgoing edges propagate through closure" do
+      # End-to-end: Adapter (behaviour impl) → Headers. With Adapter in the
+      # closure seed (alongside library_publics), Headers becomes reachable.
+      base = %{
+        Bandit => [Bandit.Adapter],
+        Bandit.Adapter => [Bandit.Headers],
+        Bandit.Headers => [],
+        Bandit.Orphan => []
+      }
+
+      modules_meta = %{
+        Bandit => %{behaviours: [], exports: []},
+        Bandit.Adapter => %{behaviours: [Plug.Conn.Adapter], exports: []},
+        Bandit.Headers => %{behaviours: [], exports: []},
+        Bandit.Orphan => %{behaviours: [], exports: []}
+      }
+
+      library_publics = MapSet.new([Bandit])
+
+      behav_anchors = UnanchoredModule.behaviour_implementor_anchors(modules_meta)
+      combined = MapSet.union(library_publics, behav_anchors)
+
+      # Without behav anchors: Headers unreachable (Adapter not in closure
+      # because @moduledoc false, public Bandit doesn't directly reach Headers).
+      # With behav anchors: Adapter is seeded, its edge to Headers traversed.
+      assert UnanchoredModule.find_unanchored(base, combined) == [Bandit.Orphan]
+    end
+  end
+
   describe "merge_macro_emit_edges/2 — M-fp-F1 wiring" do
     # M-fp-F1: virtual edges reconstructed from `defmacro` bodies. A library
     # macro that quotes a sibling module reference (Commanded.Commands.Router

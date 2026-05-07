@@ -112,4 +112,44 @@ defmodule Archdo.AST.MacroEdges do
   defp aliases_to_string(parts) do
     Enum.map_join(parts, ".", &Atom.to_string/1)
   end
+
+  @doc """
+  Extract function-level macro-emit calls.
+
+  Returns `[{module_name :: String.t(), fn :: atom(), arity :: non_neg_integer()}]`
+  for every fully-qualified `Mod.fn(args)` inside any `defmacro` /
+  `defmacrop` body. Companion to `extract/1` — `extract/1` provides
+  module-level reachability edges (sufficient for 1.26's closure walk);
+  `extract_calls/1` provides function-level precision (needed by 6.24
+  to suppress dead-public-function findings on functions actually
+  called by the consumer's macro-injected code).
+
+  Erlang-style `:atom.fun()` calls (where the module is an atom literal,
+  not an Elixir module alias) are ignored.
+
+  Pure, deterministic, total. Public for direct testing.
+  """
+  @spec extract_calls(Macro.t()) :: [{String.t(), atom(), non_neg_integer()}]
+  def extract_calls(ast) do
+    ast
+    |> macro_bodies()
+    |> Enum.flat_map(&function_call_refs/1)
+    |> Enum.uniq()
+  end
+
+  defp function_call_refs(body) do
+    {_, refs} = Macro.prewalk(body, [], &collect_call_ref/2)
+    Enum.reverse(refs)
+  end
+
+  # `Foo.Bar.Baz.fun(args)` — collect the (mod_str, fun_atom, arity) triple.
+  defp collect_call_ref(
+         {{:., _, [{:__aliases__, _, parts}, fun]}, _, args} = node,
+         acc
+       )
+       when is_list(parts) and is_atom(fun) and is_list(args) do
+    {node, [{aliases_to_string(parts), fun, length(args)} | acc]}
+  end
+
+  defp collect_call_ref(node, acc), do: {node, acc}
 end
