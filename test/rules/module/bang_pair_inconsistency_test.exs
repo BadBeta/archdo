@@ -75,5 +75,44 @@ defmodule Archdo.Rules.Module.BangPairInconsistencyTest do
 
       assert_clean(BangPairInconsistency, code, file: "lib/my_app/accounts.ex")
     end
+
+    test "ignores `normalize_*!` — input-coercion convention" do
+      # `normalize_*!` is a coercion convention: take raw input,
+      # return the normalized value or raise on shape mismatch. The
+      # function expresses "make this conform or fail loudly" — there
+      # is no useful non-bang form returning ok/error.
+      code = ~S"""
+      defmodule MyApp.Config do
+        def normalize_keyword_or_map!(input, _opts), do: input
+        def normalize_positive_integer!(input, _opts), do: input
+        def normalize_string_list!(input, _opts), do: input
+      end
+      """
+
+      assert_clean(BangPairInconsistency, code, file: "lib/my_app/config.ex")
+    end
+
+    test "ignores `validate_*!` — input-validation convention" do
+      code = ~S"""
+      defmodule MyApp.Config do
+        def validate_video_target!(input, _opts), do: input
+        def validate_children_list!(input, _opts), do: input
+        def validate_binary_string!(input, _opts), do: input
+      end
+      """
+
+      assert_clean(BangPairInconsistency, code, file: "lib/my_app/config.ex")
+    end
+
+    test "STILL flags non-coercer `name!/N` without sibling (regression guard)" do
+      code = ~S"""
+      defmodule MyApp.Accounts do
+        def fetch!(id), do: id
+      end
+      """
+
+      diags = analyze(BangPairInconsistency, code, file: "lib/my_app/accounts.ex")
+      assert length(diags) == 1
+    end
   end
 end

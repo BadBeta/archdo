@@ -38,10 +38,22 @@ defmodule Archdo.Rules.Module.BangPairInconsistency do
   end
 
   defp bang_orphan?(name_str, arity, sigs) do
-    case String.ends_with?(name_str, "!") do
-      false -> false
+    cond do
+      not String.ends_with?(name_str, "!") -> false
+      coercer_convention?(name_str) -> false
       true -> not MapSet.member?(sigs, {non_bang(name_str), arity})
     end
+  end
+
+  # Input-coercion convention: `normalize_<thing>!` and
+  # `validate_<thing>!` are canonically bang-only. They take raw
+  # input, return the normalized/validated value, or raise on shape
+  # mismatch — "make this conform or fail loudly". A non-bang
+  # ok/error sibling adds no value because the caller is asking for
+  # the conform-or-fail semantic by definition.
+  defp coercer_convention?(name_str) do
+    String.starts_with?(name_str, "normalize_") or
+      String.starts_with?(name_str, "validate_")
   end
 
   defp non_bang(s), do: binary_part(s, 0, byte_size(s) - 1)

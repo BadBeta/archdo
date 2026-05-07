@@ -264,6 +264,88 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInputTest do
     end
   end
 
+  describe "behaviour-dispatch struct field (`apply(struct.module, ...)`)" do
+    # Phoenix.Endpoint, Plug.Builder, Oban.Worker, and many in-house
+    # framework runtimes follow this shape: a struct holds the
+    # configured implementation module under a field named `:module`,
+    # `:adapter`, `:handler`, `:impl`, or `:behaviour`. Calling
+    # `apply(state.module, :callback, args)` is behaviour dispatch
+    # against config, not user input.
+
+    test "does NOT flag `apply(state.module, :callback, args)`" do
+      code = ~S"""
+      defmodule MyApp.Runtime do
+        def dispatch(state, callback, args) do
+          apply(state.module, callback, args)
+        end
+      end
+      """
+
+      assert_clean(DynamicApplyFromInput, code, file: "lib/my_app/runtime.ex")
+    end
+
+    test "does NOT flag `apply(config.adapter, fun, args)`" do
+      code = ~S"""
+      defmodule MyApp.Repo do
+        def query(config, fun, args) do
+          apply(config.adapter, fun, args)
+        end
+      end
+      """
+
+      assert_clean(DynamicApplyFromInput, code, file: "lib/my_app/repo.ex")
+    end
+
+    test "does NOT flag `apply(opts.handler, ...)` or `apply(spec.impl, ...)`" do
+      code1 = ~S"""
+      defmodule MyApp.Plug do
+        def call(conn, opts), do: apply(opts.handler, :init, [conn])
+      end
+      """
+
+      code2 = ~S"""
+      defmodule MyApp.Behaviour do
+        def call(spec, args), do: apply(spec.impl, :run, args)
+      end
+      """
+
+      assert_clean(DynamicApplyFromInput, code1, file: "lib/my_app/plug.ex")
+      assert_clean(DynamicApplyFromInput, code2, file: "lib/my_app/behaviour.ex")
+    end
+
+    test "does NOT flag pipe form `state |> runtime!() |> then(&apply(&1.module, ...))`" do
+      # Real-world shape from Emerge.Runtime.Viewport
+      code = ~S"""
+      defmodule MyApp.Runtime do
+        def delegate(state, message) do
+          state
+          |> runtime!()
+          |> then(&apply(&1.module, :handle_info, [message, state]))
+        end
+
+        defp runtime!(state), do: state.runtime
+      end
+      """
+
+      assert_clean(DynamicApplyFromInput, code, file: "lib/my_app/runtime.ex")
+    end
+
+    test "STILL flags `apply(struct.bogus_field, ...)` (field not in allow-list)" do
+      # `:value`, `:name`, `:user_input` are NOT conventional behaviour-
+      # dispatch field names; the rule must still fire.
+      code = ~S"""
+      defmodule MyApp.Risky do
+        def call(payload, args) do
+          apply(payload.handler_name, :run, args)
+        end
+      end
+      """
+
+      diags = analyze(DynamicApplyFromInput, code, file: "lib/my_app/risky.ex")
+      assert length(diags) >= 1
+    end
+  end
+
   describe "user-defined function NAMED `apply` — head, not call" do
     # When a module defines `def apply(...)` (an operator-application
     # function on a struct, e.g. a binary or unary operator dispatcher),

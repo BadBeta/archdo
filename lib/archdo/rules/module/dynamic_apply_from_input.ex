@@ -140,6 +140,9 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
       mfa_passthrough?(mod, fun, args, mfa) ->
         {node, acc}
 
+      behaviour_dispatch_field?(mod) ->
+        {node, acc}
+
       literal_module?(mod) and (literal_atom?(fun) or phoenix_action_name?(fun)) ->
         {node, acc}
 
@@ -150,6 +153,28 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
         {node, [diag_apply3_function(file, meta) | acc]}
     end
   end
+
+  # Behaviour-dispatch field-access pattern. When the module argument
+  # is `<var>.<conventional-config-field>`, the call is dispatching
+  # against a configured implementation module — not user input.
+  # Examples: `apply(state.module, :handle_info, [msg])` (Phoenix.
+  # Endpoint, Plug.Builder, Oban.Worker), `apply(config.adapter,
+  # :query, [conn])` (Ecto.Repo), `apply(opts.handler, :init, [conn])`.
+  #
+  # The allow-list is small and stable: `:module`, `:adapter`,
+  # `:handler`, `:impl`, `:behaviour`. A field named `:value` or
+  # `:user_input` is NOT exempt — only conventional behaviour-binding
+  # field names trigger the carve-out.
+  @behaviour_dispatch_fields [:module, :adapter, :handler, :impl, :behaviour]
+
+  defp behaviour_dispatch_field?({{:., _, [_subject, field]}, _, []})
+       when field in @behaviour_dispatch_fields,
+       do: true
+
+  defp behaviour_dispatch_field?({:__block__, _, [inner]}),
+    do: behaviour_dispatch_field?(inner)
+
+  defp behaviour_dispatch_field?(_), do: false
 
   # `apply(m, f, a)` where m, f are bare variables and `{m, f, _}` is
   # destructured as a 3-tuple somewhere in the file — the standard
