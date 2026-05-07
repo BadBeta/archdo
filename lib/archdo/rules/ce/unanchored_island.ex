@@ -25,11 +25,17 @@ defmodule Archdo.Rules.CE.UnanchoredIsland do
   @doc """
   Project-level analysis. Returns one Diagnostic per cluster.
   """
-  @spec analyze_project([{String.t(), Macro.t()}]) :: [Diagnostic.t()]
-  def analyze_project(file_asts) do
+  @spec analyze_project([{String.t(), Macro.t()}], keyword()) :: [Diagnostic.t()]
+  def analyze_project(file_asts, opts \\ []) do
     production_asts = Enum.reject(file_asts, fn {file, _} -> AST.test_file?(file) end)
 
-    anchors = AnchorSet.compute(production_asts)
+    library? = Keyword.get(opts, :library?, false)
+
+    anchors =
+      production_asts
+      |> AnchorSet.compute()
+      |> add_library_public_anchors(production_asts, library?)
+
     graph = Graph.build(production_asts)
     closure = AnchorSet.closure(anchors, graph)
 
@@ -42,6 +48,27 @@ defmodule Archdo.Rules.CE.UnanchoredIsland do
       build_diagnostic(scc, file_by_module)
     end
   end
+
+  # Library mode (mix.exs has package/0): every module with a real
+  # `@moduledoc """..."""` is part of the public API and reachable by
+  # external consumers we cannot see. Without this carve-out, a Hex
+  # package has no anchors and every public-cluster fires CE-31.
+  # Mirrors CE-30's `add_library_public_anchors/3` (M-fp-D9 shape).
+  # `@moduledoc false` modules are explicitly internal — NOT
+  # auto-anchored — so a cluster of intentional internals still flags.
+  defp add_library_public_anchors(anchors, production_asts, true) do
+    public_modules =
+      for {_file, ast} <- production_asts,
+          module = AST.extract_module_name(ast),
+          module != "Unknown",
+          not AST.internal_module?(ast),
+          into: MapSet.new(),
+          do: module
+
+    MapSet.union(anchors, public_modules)
+  end
+
+  defp add_library_public_anchors(anchors, _production_asts, _not_library), do: anchors
 
   # --- module-level Tarjan SCC ---
   # Adapted from compiled/graph.ex's mfa-tuple version. Modules as nodes,
