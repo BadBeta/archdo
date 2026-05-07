@@ -389,6 +389,33 @@ Multiple contexts access the same named ETS table directly.
 - **Tolerate:** Dedicated shared cache modules with a typed public API. Registry tables.
 - **Severity:** `info`
 
+### 1.34 MVC-Style Directory Layout (`models/`, `services/`, `helpers/`)
+
+A file lives under `lib/<app>/models/`, `lib/<app>/services/`, or non-web `lib/<app>/helpers/` — directories named for technical role rather than domain.
+
+- **Why:** Elixir code is organized by bounded context, not by layer. `models/` is an MVC convention that pushes behavior away from data and produces anemic schemas; `services/` is a Java/Spring naming that doubles up the namespace and tells you nothing about the domain; non-web `helpers/` is a junk drawer. The context module IS the service: `MyApp.Billing` is both the public API and the place where Billing's logic and schemas co-locate. (Domain-Driven, Screaming Architecture)
+- **Check:** Path classifier. Splits `Path.split(file)`, looks under `lib/<app>/`, and flags any segment matching `models`, `services`, or `helpers`. The `lib/<app>_web/helpers/` Phoenix scaffolding is exempt — that's the framework's own convention.
+- **Tolerate:** Phoenix-generated `lib/my_app_web/helpers/`. Test files (skipped via `AST.test_file?`). Truly value-type modules whose name describes what they do (`MyApp.Money`, `MyApp.Slug`) — those should sit at the context root, not under `helpers/`.
+- **Severity:** `warning`
+
+### 1.35 Bang Function Without Non-Bang Sibling
+
+A public `name!/n` exists without a matching `name/n` returning `{:ok, _} | {:error, _}`.
+
+- **Why:** Pairing the two lets callers choose: callers that have already validated input use the bang for terse code (seeds, scripts, fixtures); callers handling expected failure use the non-bang and pattern-match. A lone bang forces all callers to `try`/`rescue` (anti-pattern) or duplicate the success/failure logic. The stdlib follows this rigorously: `File.read/1` + `File.read!/1`, `Map.fetch/2` + `Map.fetch!/2`. (Convention)
+- **Check:** Per-module: collect every `def name!/n` and verify the same module also defines `def name/n`. Internal `defp` bangs are exempt; the rule is about the public surface.
+- **Tolerate:** Functions whose only failure mode is a programmer error (then drop the bang and rename — there's no useful non-bang to pair with). Bang variants where the error path genuinely cannot happen at runtime.
+- **Severity:** `info`
+
+### 1.36 Circuit Breaker in Context Module
+
+A context module calls `:fuse.ask`, `ExBreaker.execute`, or a similar circuit-breaker primitive directly.
+
+- **Why:** Hexagonal / ports-and-adapters places the breaker INSIDE the adapter that wraps the external service, not in the domain. The context calls the adapter behaviour and pattern-matches on its `{:ok, _}` / `{:error, :unavailable}` return — completely unaware that a breaker exists. This lets you swap or remove the breaker without touching domain code, keeps the adapter mock breaker-free, and keeps the domain focused on business rules. (Hexagonal, Single Responsibility)
+- **Check:** AST scan: find calls to known breaker libraries (`:fuse.ask/melt/install`, `ExBreaker.execute`, `Fuse.melt`) inside files classified as context modules (not under `*_adapter.ex`, `*/adapters/`, `*/clients/`).
+- **Tolerate:** Breaker calls in adapter modules (`MyApp.Billing.StripeAdapter`, `lib/my_app/adapters/`). Breaker installation in `Application.start/2` (one-time wiring).
+- **Severity:** `warning`
+
 ---
 
 ## 2. Public API Quality
