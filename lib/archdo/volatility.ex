@@ -41,6 +41,7 @@ defmodule Archdo.Volatility do
           evidence: %{
             volatile_calls: [call()],
             stable_calls: [call()],
+            retry_relevant_calls: [call()],
             override: nil | :path | :author,
             tag_rationale: %{module() => String.t()}
           }
@@ -261,12 +262,24 @@ defmodule Archdo.Volatility do
       |> Enum.map(fn {mod, _f, _a, _tag, reason} -> {mod, reason} end)
       |> Map.new()
 
+    # `retry_relevant_calls` is the SUBSET of volatile_calls whose tag is
+    # `:volatile` proper — I/O / network / external services that can
+    # transiently fail and benefit from retry / circuit-breaker. Excludes
+    # `:non_deterministic` (clock, random, system reads) which are
+    # reliable-but-non-deterministic — those need capability-injection,
+    # NOT retry. Consumed by CE-35 (volatile-no-retry).
+    retry_relevant =
+      volatile_calls
+      |> Enum.filter(fn {_m, _f, _a, tag, _r} -> tag == :volatile end)
+      |> Enum.map(fn {m, f, a, _t, _r} -> {m, f, a} end)
+
     %{
       tag: tag_from_density(density),
       density: density,
       evidence: %{
         volatile_calls: Enum.map(volatile_calls, fn {m, f, a, _t, _r} -> {m, f, a} end),
         stable_calls: Enum.map(stable_calls, fn {m, f, a, _t, _r} -> {m, f, a} end),
+        retry_relevant_calls: retry_relevant,
         override: nil,
         tag_rationale: rationale
       }
@@ -284,6 +297,7 @@ defmodule Archdo.Volatility do
       evidence: %{
         volatile_calls: opts[:calls] || [],
         stable_calls: [],
+        retry_relevant_calls: opts[:calls] || [],
         override: override,
         tag_rationale: opts[:rationale] || %{}
       }

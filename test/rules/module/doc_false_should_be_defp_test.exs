@@ -67,4 +67,66 @@ defmodule Archdo.Rules.Module.DocFalseShouldBeDefpTest do
 
     assert_clean(DocFalseShouldBeDefp, code)
   end
+
+  test "does NOT fire on Supervisor/GenServer behaviour callbacks (child_spec, init, etc.)" do
+    # `child_spec/1`, `init/1`, `start_link/1` etc. are framework
+    # callbacks — the framework invokes them via apply/3. They MUST
+    # be public; defp would break the framework. `@doc false` on
+    # them just hides them from generated docs (the user-facing API
+    # is `start_link/1` or similar, not the lifecycle callbacks).
+    code = ~S"""
+    defmodule MyApp.Worker do
+      use Supervisor
+
+      def start_link(opts), do: Supervisor.start_link(__MODULE__, opts)
+
+      @doc false
+      @spec child_spec([term()]) :: Supervisor.child_spec()
+      def child_spec(opts) do
+        opts |> super() |> Supervisor.child_spec(id: __MODULE__)
+      end
+
+      @doc false
+      def init(opts), do: {:ok, opts}
+    end
+    """
+
+    assert_clean(DocFalseShouldBeDefp, code)
+  end
+
+  test "does NOT fire on a `@doc false` overload when another arity has real `@doc`" do
+    # Overload-with-shared-docs: `def insert/2` has `@doc false` (it's
+    # a convenience overload), `def insert/3` has the canonical
+    # `@doc "..."`. Both are public API; the `@doc false` just avoids
+    # duplicating docs on the overload variant. Common in libraries
+    # with multiple arities for ergonomic call sites.
+    code = ~S'''
+    defmodule MyApp.Inserter do
+      @doc "Insert a changeset."
+      def insert(name \\ __MODULE__, changeset, opts \\ [])
+
+      def insert(name, changeset, opts), do: do_insert(name, changeset, opts)
+
+      @doc false
+      def insert(changeset, opts), do: insert(__MODULE__, changeset, opts)
+
+      defp do_insert(_, _, _), do: :ok
+    end
+    '''
+
+    assert_clean(DocFalseShouldBeDefp, code)
+  end
+
+  test "STILL fires on a `@doc false` def when no other arity of the same name has real `@doc`" do
+    # Regression guard: a genuinely-private function masquerading as
+    # @doc-false `def` should still flag.
+    code = ~S"""
+    defmodule MyApp.Worker do
+      @doc false
+      def truly_internal(x), do: x + 1
+    end
+    """
+
+    assert_flagged(DocFalseShouldBeDefp, code)
+  end
 end

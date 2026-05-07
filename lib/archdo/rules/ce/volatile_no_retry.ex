@@ -38,7 +38,12 @@ defmodule Archdo.Rules.CE.VolatileNoRetry do
   end
 
   defp find_unprotected_calls(file, ast, classification) do
-    targets = MapSet.new(classification.evidence.volatile_calls, &elem(&1, 0))
+    # Use `retry_relevant_calls` (only `:volatile`-tagged) instead of
+    # `volatile_calls` (which mixes `:volatile` + `:non_deterministic`).
+    # Clock / random / system reads are non-deterministic but reliable —
+    # they don't transiently fail, so retry/circuit-breaker is the wrong
+    # fix (capability-injection IS the right fix for testability).
+    targets = MapSet.new(classification.evidence.retry_relevant_calls, &elem(&1, 0))
 
     ast
     |> AST.extract_functions(:public)
