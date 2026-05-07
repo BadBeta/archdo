@@ -2657,6 +2657,60 @@ Test patterns that commonly cause intermittent failures.
 - **Tolerate:** `assert_receive` with explicit timeout. Seeded random in property tests.
 - **Severity:** `info`
 
+### 7.30 `Mox.stub/3` In Test Body Should Be `expect/3`
+
+A test body uses `Mox.stub/3` (not `stub_with`) when the file configures `verify_on_exit!`.
+
+- **Why:** `stub` adds no expectation — it's a fallback that accepts being called zero or more times. `expect` records a MUST-happen assertion. When a test uses `verify_on_exit!` and stubs in the body, the natural intent is "this interaction happened" — that's `expect`'s job. `stub` belongs in shared `setup`. (Test Design)
+- **Check:** Per-test-file: detect `verify_on_exit!` in setup or as a standalone call. Walk test bodies for `Mox.stub/3` (or bare `stub/3` when `Mox` is imported). Flag the calls.
+- **Tolerate:** Tests that don't configure `verify_on_exit!`; stubs in `setup` blocks (correct location for fallbacks); tests where the same mock is also `expect`ed elsewhere in the body.
+- **Severity:** `info`
+
+### 7.31 Reach Into `changeset.errors` Should Be `errors_on/1`
+
+Test code accesses `changeset.errors` directly via dot notation instead of using the Phoenix `errors_on/1` helper.
+
+- **Why:** Raw `.errors` returns `[field: {message, opts}, ...]` — uninterpolated templates with internal options. The test ends up coupled to the raw representation. `errors_on/1` interpolates messages and returns `%{field => [messages]}`, decoupling the test from the changeset's internals and enabling cleaner pattern matches. (Test Resilience)
+- **Check:** Per-test-file: AST walk for field-access `{{:., _, [{var, _, _}, :errors]}, _, []}` where `var` is a variable. Skips test files that don't have access to `errors_on/1`.
+- **Tolerate:** Non-test code; references to `__MODULE__.errors`; manually-constructed error lists; tests that genuinely need raw template inspection.
+- **Severity:** `info`
+
+### 7.32 `assert {:ok/:error, ...} == call` Should Be Pattern Match
+
+Test assertion uses `==` to compare a tagged-tuple literal against a function result instead of pattern-matching with `=`.
+
+- **Why:** Pattern match (`=`) produces structural failure diffs and binds inner values for reuse downstream in the test (`assert {:ok, %User{id: id}} = ...; assert id > 0`). `==` produces flat line-based diffs that obscure which field is wrong, and you can't reuse the success value. Pattern matching also future-proofs against struct field additions. (Test Clarity)
+- **Check:** AST walk for `assert` with `==` operator where the LHS is a tagged-tuple literal (`{:ok, _}`, `{:error, _}`, etc.). Skips non-test files.
+- **Tolerate:** Comparisons of non-tuple values; non-tagged tuples; cases where exact equality (not pattern match) is the intended assertion.
+- **Severity:** `info`
+
+### 7.33 Multiple `stub/3` Calls For Same Mock Should Be `stub_with/2`
+
+Three or more `stub/3` calls in the same test file targeting the same mock module.
+
+- **Why:** Each `stub/3` is a maintenance seam — adding a new callback to the behaviour requires remembering to add a stub for it across every test that uses the mock. `Mox.stub_with(Mock, RealImplementation)` delegates all callbacks at once and picks up new ones automatically. (Maintainability)
+- **Check:** Per-test-file: collect every `stub/3` (qualified or imported), group by mock module. Flag groups with ≥3 entries.
+- **Tolerate:** Mocks with fewer than 3 stubs; tests already using `stub_with`; per-test `expect` overrides on top of a `stub_with` baseline.
+- **Severity:** `info`
+
+### 7.34 `timeout: :infinity` on a Test
+
+`@tag timeout: :infinity` or `@moduletag timeout: :infinity` disables the per-test timeout entirely.
+
+- **Why:** ExUnit's default 60 s timeout is the safety net that prevents a hung test from blocking CI indefinitely. `:infinity` removes the net — a deadlock, race, or slow dependency hangs the test runner until the CI worker is recycled, often invisibly. Every test should have a finite timeout sized to its workload. (Operational Reliability)
+- **Check:** AST walk for `@tag` / `@moduletag` whose options include `timeout: :infinity`.
+- **Tolerate:** Tests with explicit finite timeouts (`timeout: 60_000`); tests using the ExUnit default (no timeout tag at all); a documented case where infinity is genuinely required (extremely rare).
+- **Severity:** `warning`
+
+### 7.35 `assert_receive` / `refute_receive` Without Explicit Timeout
+
+A bare `assert_receive pattern` or `refute_receive pattern` call relies on ExUnit's 100 ms default.
+
+- **Why:** Async tests are a leading source of flakes. The 100 ms default is tuned for synchronous code where any longer wait would be a bug; async operations (Tasks, telemetry events, PubSub broadcasts) often need 500–2000 ms to absorb CI latency variance. An explicit timeout makes the wait budget visible and tunable. (Test Stability)
+- **Check:** Per-test-file: AST walk for `assert_receive` and `refute_receive` calls with exactly one argument (the pattern).
+- **Tolerate:** Calls with an explicit second-argument timeout (`assert_receive {:event, _}, 500`); strictly synchronous send-then-receive patterns.
+- **Severity:** `info`
+
 ---
 
 ## 8. Event Sourcing Architecture
@@ -2732,6 +2786,15 @@ Modules with `execute/2` and `apply/2` but no `use Commanded.Aggregates.Aggregat
 - **Check:** Flag modules that define both `execute/2` and `apply/2` as public functions without `use Commanded.Aggregates.Aggregate`.
 - **Tolerate:** Non-Commanded projects, policy/service modules that happen to use these function names for unrelated purposes.
 - **Severity:** `info`
+
+### 8.9 Event / Command Struct Missing `:version`
+
+A struct in an `Events` or `Commands` namespace has no `:version`, `:schema_version`, or `:event_version` field (or matching module attribute).
+
+- **Why:** Event-sourced systems must replay older instances after schema evolution. Without a version marker, upcasters cannot dispatch on "which version is this?" — adding a field becomes a breaking change against persisted events. Commands in versioned APIs face the same problem. Picking an evolution strategy (inline version field OR `defimpl Commanded.Event.Upcaster`) at design time prevents whole classes of replay bugs. (Event Sourcing, Schema Evolution)
+- **Check:** Walk `defmodule` nodes; classify by namespace presence of `Event(s)` or `Command(s)` in the module path. For each, verify the `defstruct` has a version-family field OR the module has `@version` / `@schema_version` / `@event_version`.
+- **Tolerate:** Modules outside event/command namespaces; events whose version is encoded via separate type modules (`V1.OrderPlaced`, `V2.OrderPlaced`); upcaster-based versioning where the strategy is documented.
+- **Severity:** `warning`
 
 ---
 
