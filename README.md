@@ -2,7 +2,7 @@
 
 Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (types), and Sobelow (security) miss: structural issues, SOLID violations, OTP anti-patterns, boundary enforcement, and some LLM code slop.
 
-**339 rules** across 12 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
+**340 rules** across 12 categories. Every finding includes a `why`, ranked fix suggestions, and structured context.
 
 ## What it checks
 
@@ -10,7 +10,7 @@ Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (
 |----------|-------|----------|
 | **Boundaries & Architecture** | 37 | Dependency direction, context encapsulation, boundary leak detection (internal modules called from outside, schemas/processes/config crossing contexts), circular deps, chatty boundaries, unvalidated params, reverse dependencies, query in interface, shared DB/ETS tables, LiveView logic, N+1 preload, dev dep hygiene, MVC-style layout, circuit breakers in context modules, compiled: cross-boundary calls, blast radius, orphan modules |
 | **Public API & Documentation** | 3 | Missing module/function docs, missing typespecs, external calls into private modules, contract density on schemas and supervisors, typed structs at boundaries, primitive obsession |
-| **Single Source of Truth** | 6 | Type-2/3 clones, scattered config, reinvented enumerable |
+| **Single Source of Truth** | 7 | Type-2/3 clones, scattered config, reinvented enumerable, removed `Mix.Config` API |
 | **Coupling & Abstraction** | 30 | Behaviour size, broad imports, unused deps/aliases, mockability, feature envy, speculative generality, missing telemetry, N+1 queries, compiled: unused imports, weak deps, phantom deps |
 | **Change Economy** | 33 | Building-block quadrant policy, hidden coupling, churn hotspots, abstraction leakage, change amplifiers |
 | **OTP Process Architecture** | 71 | Blocking callbacks, unsupervised processes, GenServer anti-patterns, restart mismatches, stale PIDs, deadlock, callback sprawl, atom exhaustion, ETS/DETS cleanup, sequential-where-parallel, telemetry/observability gaps, async metadata loss, sensitive state without format_status, socket-active-true |
@@ -21,7 +21,7 @@ Architectural quality checker for Elixir. Catches what Credo (style), Dialyzer (
 | **Composition & Composability** | 6 + verdicts | Deep `use` chains, excessive namespace depth, pipeline order flips, side-effect terminators, cross-module shape mismatches, ordered-middleware-chain constraints, per-module and per-context building-block verdicts scoring each public function on six composability axes (input closure, determinism, output completeness, totality, side-effect freedom, errors-as-values) |
 | **NIF Safety** | 4 | Panic-inducing Rust patterns, scheduler misuse, missing behaviour wrapping |
 
-*Total: 339 unique rule IDs. Counts derived directly from the rule registries (`Archdo.DocCoverage.registered_rule_ids/0`); each rule appears under its primary category only.*
+*Total: 340 unique rule IDs. Counts derived directly from the rule registries (`Archdo.DocCoverage.registered_rule_ids/0`); each rule appears under its primary category only.*
 
 ### Building-block tests
 
@@ -170,7 +170,7 @@ This split keeps Archdo deterministic and auditable — every diff in your proje
 ## Documentation
 
 - **[GUIDE.md](GUIDE.md)** — comprehensive user guide
-- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 339 rules documented
+- **[ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md)** — all 340 rules documented
 
 ## License
 

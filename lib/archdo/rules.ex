@@ -99,6 +99,7 @@ defmodule Archdo.Rules do
     Archdo.Rules.Module.ModuleCohesion,
     Archdo.Rules.Module.ExternalDepsNoBehaviour,
     Archdo.Rules.Module.ScatteredConfig,
+    Archdo.Rules.Module.RemovedMixConfig,
     Archdo.Rules.Module.LibConfigViaArgs,
     Archdo.Rules.Module.TypeDispatch,
     Archdo.Rules.Module.CrossCuttingInDomain,

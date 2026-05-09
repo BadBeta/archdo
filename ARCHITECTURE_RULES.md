@@ -1,6 +1,6 @@
 # Archdo — Architectural Quality Rules for Elixir
 
-> 339 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, **test quality**, and **compiled beam analysis** — the gap none of them cover.
+> 340 rules that complement Credo (style), Dialyzer (types), and Sobelow (security) by checking **system architecture**, **OTP discipline**, **error handling idioms**, **test quality**, and **compiled beam analysis** — the gap none of them cover.
 
 <!--
   ENTRY TEMPLATE — every rule MUST follow this shape so the reference
@@ -34,7 +34,7 @@
 
 1. [Boundary Integrity](#1-boundary-integrity) — 37 rules (1.1–1.36, 1.1b)
 2. [Public API Quality](#2-public-api-quality) — 3 rules (2.1–2.3)
-3. [Single Source of Truth](#3-single-source-of-truth) — 6 rules (3.1–3.6)
+3. [Single Source of Truth](#3-single-source-of-truth) — 7 rules (3.1–3.7)
 4. [Coupling & Abstraction](#4-coupling--abstraction) — 30 rules
 5. [OTP Process Architecture](#5-otp-process-architecture) — 71 rules (5.1–5.76)
 6. [Module Quality](#6-module-quality) — 101 rules (6.1–6.103)
@@ -504,6 +504,15 @@ Same validation rule appearing in both web and domain layers.
 - **Check:** Project-level: compare validation patterns between web and domain modules. Flag overlapping validation function names.
 - **Tolerate:** Web-layer shape validation (JSON parseable, field exists) vs domain-layer business rules (different kinds of checks).
 - **Severity:** `info`
+
+### 3.7 `Mix.Config` — Removed API
+
+A `config/*.exs` file uses `use Mix.Config` or `import Mix.Config`.
+
+- **Why:** `Mix.Config` was deprecated in Elixir 1.9 (in favour of the standalone `Config` module) and removed entirely in 1.13 — `use Mix.Config` raises `UndefinedFunctionError` at config load time, before the application even starts. The replacement is a one-line swap: `import Config` at the top of the file, then `config_env()` instead of `Mix.env()`. Files that ship `Mix.Config` won't run on any current Elixir. (Compatibility, Toolchain Modernization)
+- **Check:** Per-file: classify path as a config file (`config/*.exs` at the project root or any `apps/<child>/config/*.exs` in umbrellas; skip `_build/` and `deps/`). AST scan for `use Mix.Config` / `import Mix.Config` shapes (`{kind, _, [{:__aliases__, _, [:Mix, :Config]}]}`).
+- **Tolerate:** Modern `import Config`; files outside config/ paths; build artefacts under `_build/`; vendored deps under `deps/`.
+- **Severity:** `error`
 
 ---
 
@@ -3241,7 +3250,7 @@ A near-building-block function whose public signature accepts unguarded input �
 |----------|-------|
 | Boundaries | 37 |
 | Public API | 3 |
-| Single Source of Truth | 6 |
+| Single Source of Truth | 7 |
 | Coupling & Abstraction | 30 |
 | OTP Process Architecture | 71 |
 | Module Quality | 101 |
@@ -3251,7 +3260,7 @@ A near-building-block function whose public signature accepts unguarded input �
 | Composition | 6 |
 | Native Interop | 4 |
 | Change Economy | 33 |
-| **Total** | **339** |
+| **Total** | **340** |
 
 Counts are derived directly from `Archdo.DocCoverage.registered_rule_ids/0` (which walks every loaded module implementing `@behaviour Archdo.Rule`); each rule is counted under its primary category only. Run `mix archdo.audit_doc_coverage` to verify the doc against the registry.
 
