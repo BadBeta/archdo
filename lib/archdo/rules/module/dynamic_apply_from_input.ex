@@ -41,9 +41,19 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
         # `apply`, not a call to Kernel.apply.
         def_apply_lines = collect_def_apply_lines(ast)
 
+        # §§ M-fb-F3 — Pre-pass 3: collect variable names bound from
+        # `Application.{get_env, fetch_env, fetch_env!, compile_env,
+        # compile_env!}`. When `apply(mod, ...)` uses one of these
+        # bindings, the module source is operator-controlled config
+        # (deploy-time .exs files), NOT request input. Per
+        # `elixir-implementing` §1 rule 31 this is the canonical Plug
+        # pattern — downgrade the diagnostic from :error to :warning
+        # so reviewers still see it but the severity matches the risk.
+        operator_config_vars = collect_operator_config_vars(ast)
+
         {_, hits} =
           Macro.prewalk(ast, [], fn node, acc ->
-            collect(node, acc, file, mfa_triples, def_apply_lines)
+            collect(node, acc, file, mfa_triples, def_apply_lines, operator_config_vars)
           end)
 
         Enum.reverse(hits)
@@ -84,6 +94,57 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
   # we don't constrain on the third position because MFA invocations
   # are commonly augmented: `apply(m, f, [extra | a])` adds a prefix
   # to the args before applying.
+  # §§ M-fb-F3 — collect var names whose RHS is a call to
+  # `Application.{get_env, fetch_env, fetch_env!, compile_env,
+  # compile_env!}`. Two AST shapes:
+  #   1. `mod = Application.get_env(:app, :key)` — direct binding.
+  #   2. `{:ok, mod} = Application.fetch_env(:app, :key)` — tuple destructure.
+  # The returned MapSet holds bare variable names (atoms).
+  @operator_config_funs [:get_env, :fetch_env, :fetch_env!, :compile_env, :compile_env!]
+
+  defp collect_operator_config_vars(ast) do
+    {_, names} =
+      Macro.prewalk(ast, MapSet.new(), fn node, acc ->
+        case operator_config_binding(node) do
+          [] -> {node, acc}
+          vars -> {node, Enum.reduce(vars, acc, &MapSet.put(&2, &1))}
+        end
+      end)
+
+    names
+  end
+
+  # `mod = Application.<fun>(...)`
+  defp operator_config_binding(
+         {:=, _,
+          [
+            lhs,
+            {{:., _, [{:__aliases__, _, [:Application]}, fun]}, _, _args}
+          ]}
+       )
+       when fun in @operator_config_funs do
+    extract_bound_var_names(lhs)
+  end
+
+  defp operator_config_binding(_), do: []
+
+  # The LHS of a binding may be a bare var, an `{:ok, var}` shape, a
+  # `:__block__` literal-encoder wrap, or `_` for ignored binds. Pull
+  # bare-var names out of all of these.
+  defp extract_bound_var_names({name, _, ctx})
+       when is_atom(name) and (is_atom(ctx) or is_nil(ctx)) and name != :_,
+       do: [name]
+
+  defp extract_bound_var_names({:__block__, _, [inner]}), do: extract_bound_var_names(inner)
+
+  defp extract_bound_var_names({:{}, _, elements}) when is_list(elements),
+    do: Enum.flat_map(elements, &extract_bound_var_names/1)
+
+  defp extract_bound_var_names({a, b}),
+    do: extract_bound_var_names(a) ++ extract_bound_var_names(b)
+
+  defp extract_bound_var_names(_), do: []
+
   defp collect_mfa_destructures(ast) do
     {_, pairs} =
       Macro.prewalk(ast, MapSet.new(), fn
@@ -109,22 +170,23 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
          acc,
          file,
          mfa,
-         _def_lines
+         _def_lines,
+         op_cfg
        ) do
-    classify_apply3(node, acc, file, meta, mod, fun, args, mfa)
+    classify_apply3(node, acc, file, meta, mod, fun, args, mfa, op_cfg)
   end
 
   # apply/3 — auto-imported Kernel form. AST shape `{:apply, _, [a,b,c]}`
   # is also produced by `def apply(a, b, c)` heads — skip those.
-  defp collect({:apply, meta, [mod, fun, args]} = node, acc, file, mfa, def_lines) do
+  defp collect({:apply, meta, [mod, fun, args]} = node, acc, file, mfa, def_lines, op_cfg) do
     case MapSet.member?(def_lines, AST.line(meta)) do
       true -> {node, acc}
-      false -> classify_apply3(node, acc, file, meta, mod, fun, args, mfa)
+      false -> classify_apply3(node, acc, file, meta, mod, fun, args, mfa, op_cfg)
     end
   end
 
   # apply/2 — function form. Same head-vs-call ambiguity.
-  defp collect({:apply, meta, [fun, _args]} = node, acc, file, _mfa, def_lines)
+  defp collect({:apply, meta, [fun, _args]} = node, acc, file, _mfa, def_lines, _op_cfg)
        when not is_nil(meta) do
     cond do
       MapSet.member?(def_lines, AST.line(meta)) -> {node, acc}
@@ -133,9 +195,9 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
     end
   end
 
-  defp collect(node, acc, _file, _mfa, _def_lines), do: {node, acc}
+  defp collect(node, acc, _file, _mfa, _def_lines, _op_cfg), do: {node, acc}
 
-  defp classify_apply3(node, acc, file, meta, mod, fun, args, mfa) do
+  defp classify_apply3(node, acc, file, meta, mod, fun, args, mfa, op_cfg) do
     cond do
       mfa_passthrough?(mod, fun, args, mfa) ->
         {node, acc}
@@ -146,11 +208,26 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
       literal_module?(mod) and (literal_atom?(fun) or phoenix_action_name?(fun)) ->
         {node, acc}
 
+      # §§ M-fb-F3 — mod is a bare var bound from Application.get_env or
+      # similar in the same module → operator-config flow (Plug pattern).
+      # Downgrade severity but keep the finding visible so reviewers see
+      # the dispatch surface.
+      not literal_module?(mod) and operator_config_var?(mod, op_cfg) ->
+        {node, [diag_apply3_module_warning(file, meta) | acc]}
+
       not literal_module?(mod) ->
         {node, [diag_apply3_module(file, meta) | acc]}
 
       true ->
         {node, [diag_apply3_function(file, meta) | acc]}
+    end
+  end
+
+  # Is `mod` a bare-var node whose name is in the operator-config set?
+  defp operator_config_var?(mod, op_cfg) do
+    case var_name(mod) do
+      name when is_atom(name) -> MapSet.member?(op_cfg, name)
+      _ -> false
     end
   end
 
@@ -242,6 +319,49 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInput do
   defp literal_fun_ref?(atom) when is_atom(atom), do: true
   defp literal_fun_ref?({:unquote, _, _}), do: true
   defp literal_fun_ref?(_), do: false
+
+  # §§ M-fb-F3 — operator-config flow: `mod = Application.get_env(...)`
+  # followed by `apply(mod, ...)`. This is the documented Plug /
+  # behaviour-DI pattern (`elixir-implementing` §1 rule 31). The dispatch
+  # surface is still worth surfacing in review, but it's not an RCE
+  # vector — operator-controlled config can't be reached by request input.
+  defp diag_apply3_module_warning(file, meta) do
+    Diagnostic.warning("5.51",
+      title: "apply/3 with operator-config module",
+      message:
+        "apply(mod, fun, args) where `mod` is bound from " <>
+          "`Application.get_env/fetch_env/compile_env`. This is the canonical " <>
+          "Plug / behaviour-DI pattern — module choice is operator-controlled " <>
+          "config, not request input. Severity downgraded from :error to :warning " <>
+          "because there's no path from external input to `mod`.",
+      why:
+        "The discriminator for rule 5.51 is taint: does the module variable's " <>
+          "value reach from request data? Application config is loaded from " <>
+          ".exs files at deploy time (or compile time for compile_env), so an " <>
+          "attacker can't influence it. Plug and Ecto use this pattern " <>
+          "extensively — see Plug.Parsers.JSON, Plug.RewriteOn, Plug.SSL.",
+      alternatives: [
+        Fix.new(
+          summary: "If this is intentional behaviour-DI, document the contract",
+          detail:
+            "Add `@callback`s the configured module must implement, and validate " <>
+              "the module at boot (e.g. in init/1). Tests then swap the impl via Mox.",
+          applies_when: "The configured module is meant to satisfy a stable behaviour contract."
+        ),
+        Fix.new(
+          summary: "If the set of modules is small, replace with a bounded registry",
+          detail:
+            "`@modules %{key => MyApp.RealModule}` + `Map.fetch(@modules, key)`. " <>
+              "Compile-time map is auditable; unknown keys return `{:error, _}`.",
+          applies_when:
+            "There are 2–3 implementations chosen per environment, not many runtime choices."
+        )
+      ],
+      tags: [:security, :plug_pattern],
+      file: file,
+      line: AST.line(meta)
+    )
+  end
 
   defp diag_apply3_module(file, meta) do
     Diagnostic.error("5.51",

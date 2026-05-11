@@ -413,4 +413,94 @@ defmodule Archdo.Rules.Module.DynamicApplyFromInputTest do
       assert desc =~ "apply" or desc =~ "dynamic"
     end
   end
+
+  describe "operator-config taint exemption (M-fb-F3)" do
+    test "downgrades to :warning when mod is bound from Application.get_env/3" do
+      code = ~S"""
+      defmodule MyApp.Plugged do
+        def call(conn) do
+          mod = Application.get_env(:my_app, :handler)
+          apply(mod, :run, [conn])
+        end
+      end
+      """
+
+      diags = assert_flagged(DynamicApplyFromInput, code)
+      diag = hd(diags)
+      assert diag.severity == :warning
+      assert diag.title =~ "apply"
+    end
+
+    test "downgrades to :warning when mod is bound from Application.fetch_env!/2" do
+      code = ~S"""
+      defmodule MyApp.Plugged do
+        def call(conn) do
+          mod = Application.fetch_env!(:my_app, :handler)
+          apply(mod, :run, [conn])
+        end
+      end
+      """
+
+      [diag] = assert_flagged(DynamicApplyFromInput, code)
+      assert diag.severity == :warning
+    end
+
+    test "downgrades to :warning when mod is bound from Application.compile_env!/2" do
+      code = ~S"""
+      defmodule MyApp.Plugged do
+        def call(conn) do
+          mod = Application.compile_env!(:my_app, :handler)
+          apply(mod, :run, [conn])
+        end
+      end
+      """
+
+      [diag] = assert_flagged(DynamicApplyFromInput, code)
+      assert diag.severity == :warning
+    end
+
+    test "downgrades when mod is bound via Application.fetch_env/2 (returns {:ok, _})" do
+      code = ~S"""
+      defmodule MyApp.Plugged do
+        def call(conn) do
+          {:ok, mod} = Application.fetch_env(:my_app, :handler)
+          apply(mod, :run, [conn])
+        end
+      end
+      """
+
+      [diag] = assert_flagged(DynamicApplyFromInput, code)
+      assert diag.severity == :warning
+    end
+
+    test "stays :error when mod is bound from conn.params" do
+      code = ~S"""
+      defmodule MyApp.Bad do
+        def call(conn) do
+          mod = conn.params["mod"] |> String.to_existing_atom()
+          apply(mod, :run, [conn])
+        end
+      end
+      """
+
+      [diag] = assert_flagged(DynamicApplyFromInput, code)
+      assert diag.severity == :error
+    end
+
+    test "stays :error when mod source is unknown" do
+      code = ~S"""
+      defmodule MyApp.Unknown do
+        def run(args) do
+          mod = some_helper()
+          apply(mod, :run, args)
+        end
+
+        defp some_helper, do: SomeMod
+      end
+      """
+
+      [diag] = assert_flagged(DynamicApplyFromInput, code)
+      assert diag.severity == :error
+    end
+  end
 end
