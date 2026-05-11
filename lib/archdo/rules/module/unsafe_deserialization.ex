@@ -22,6 +22,148 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
     end
   end
 
+  # §§ M-fb-F7 — static-source downgrade. Compute the set of line
+  # numbers where `Code.eval_string/compile_string/eval_quoted` has a
+  # module-local source (literal, or a bare var bound in the same
+  # function from a literal / private-fn call). At those lines, the
+  # diagnostic drops from :error to :warning.
+  #
+  # Bytes statically traceable inside the same module are not RCE —
+  # an attacker can't reach them without modifying the source. Code-
+  # generation tools that compile their own emitted bytes (UA Alphabet's
+  # `mix_exs_emit_safe?/1`) are the canonical use case.
+  defp module_local_eval_lines(ast) do
+    {_, lines} =
+      Macro.prewalk(ast, MapSet.new(), fn
+        {kind, _, [head, [{_, body}]]} = node, acc
+        when kind in [:def, :defp] and is_tuple(head) ->
+          bindings = collect_local_bindings(body)
+          {node, add_module_local_eval_lines(body, bindings, acc)}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    lines
+  end
+
+  # Walk the function body collecting `var = RHS` bindings into a map
+  # `%{var_name => rhs_ast}`. Multi-binding (e.g. `{:ok, var} = ...`) is
+  # only relevant when the RHS is a literal/private-call — for taint
+  # purposes we register the var with the RHS so downstream lookup can
+  # classify it.
+  defp collect_local_bindings(body) do
+    {_, map} =
+      Macro.prewalk(body, %{}, fn
+        {:=, _, [lhs, rhs]} = node, acc ->
+          {node, add_bindings_from_lhs(lhs, rhs, acc)}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    map
+  end
+
+  defp add_bindings_from_lhs({name, _, ctx}, rhs, acc)
+       when is_atom(name) and (is_atom(ctx) or is_nil(ctx)) and name != :_,
+       do: Map.put(acc, name, rhs)
+
+  defp add_bindings_from_lhs({:__block__, _, [inner]}, rhs, acc),
+    do: add_bindings_from_lhs(inner, rhs, acc)
+
+  defp add_bindings_from_lhs({:{}, _, elements}, rhs, acc) when is_list(elements),
+    do: Enum.reduce(elements, acc, &add_bindings_from_lhs(&1, rhs, &2))
+
+  defp add_bindings_from_lhs({a, b}, rhs, acc),
+    do: a |> add_bindings_from_lhs(rhs, acc) |> then(&add_bindings_from_lhs(b, rhs, &1))
+
+  defp add_bindings_from_lhs(_, _, acc), do: acc
+
+  # Walk body finding eval sites; for each, decide if its arg is
+  # module-local. If yes, add the call's line to the override set.
+  defp add_module_local_eval_lines(body, bindings, acc) do
+    {_, lines} =
+      Macro.prewalk(body, acc, fn node, inner_acc ->
+        case eval_call_info(node) do
+          nil ->
+            {node, inner_acc}
+
+          {meta, arg} ->
+            case module_local_source?(arg, bindings) do
+              true -> {node, MapSet.put(inner_acc, AST.line(meta))}
+              false -> {node, inner_acc}
+            end
+        end
+      end)
+
+    lines
+  end
+
+  # Return `{meta, first_arg}` if node is Code.eval_string / compile_string /
+  # eval_quoted, else nil. We only consider the FIRST positional argument —
+  # the source string / quoted form. eval_string/2's second arg (bindings)
+  # is unrelated to taint.
+  defp eval_call_info({{:., _, [{:__aliases__, _, [:Code]}, fun]}, meta, [arg | _]})
+       when fun in [:eval_string, :compile_string, :eval_quoted],
+       do: {meta, arg}
+
+  defp eval_call_info(_), do: nil
+
+  # Decide if `arg` is statically traceable to module-local bytes.
+  # - Direct literal binary → yes
+  # - Bare variable whose binding's RHS is taint-free → yes
+  # - Anything else → no
+  defp module_local_source?({:__block__, _, [inner]}, bindings),
+    do: module_local_source?(inner, bindings)
+
+  defp module_local_source?(arg, _bindings) when is_binary(arg), do: true
+
+  defp module_local_source?({name, _, ctx}, bindings)
+       when is_atom(name) and (is_atom(ctx) or is_nil(ctx)) do
+    case Map.fetch(bindings, name) do
+      {:ok, rhs} -> not contains_taint?(rhs)
+      :error -> false
+    end
+  end
+
+  defp module_local_source?(_, _), do: false
+
+  # Taint markers — any of these in the RHS means we can't claim the
+  # bytes are module-local. The list is deliberately conservative; new
+  # taint sources can be added without changing the downgrade semantics
+  # for already-classified shapes.
+  @taint_modules [:File, :IO]
+  @taint_erlang_modules [:gen_tcp, :gen_udp, :ssl, :inet]
+
+  defp contains_taint?(ast) do
+    AST.contains?(ast, &taint_node?/1)
+  end
+
+  # File.read*, IO.read/gets/binread, etc.
+  defp taint_node?({{:., _, [{:__aliases__, _, [mod]}, _fun]}, _, _})
+       when mod in @taint_modules,
+       do: true
+
+  # :gen_tcp.recv, :gen_udp.recv, :ssl.recv
+  defp taint_node?({{:., _, [erl_mod, _fun]}, _, _})
+       when erl_mod in @taint_erlang_modules,
+       do: true
+
+  # conn.params, conn.body_params, conn.req_headers — any field access
+  # on a variable named `conn` is treated as request-derived.
+  defp taint_node?({{:., _, [{:conn, _, ctx}, _field]}, _, _})
+       when is_atom(ctx) or is_nil(ctx),
+       do: true
+
+  # `params["key"]` — bracket access on a var named `params` (Phoenix
+  # convention).
+  defp taint_node?({{:., _, [Access, :get]}, _, [{:params, _, ctx}, _key]})
+       when is_atom(ctx) or is_nil(ctx),
+       do: true
+
+  defp taint_node?(_), do: false
+
   # Use Macro.traverse to track compile-time-context nesting depth. While
   # depth > 0 we're inside one of:
   #   - `defmacro` / `defmacrop` body — `Code.eval_quoted` operates on
@@ -41,6 +183,11 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
   @compile_time_kinds [:defmacro, :defmacrop, :quote]
 
   defp walk_with_macro_context(file, ast) do
+    # §§ M-fb-F7 — pre-pass: lines where Code.eval_* args are
+    # module-local. Threaded through traversal state so the eval
+    # detectors below downgrade rather than emit :error.
+    local_eval_lines = module_local_eval_lines(ast)
+
     {_, {findings, _depth}} =
       Macro.traverse(
         ast,
@@ -59,7 +206,7 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
             {node, {acc, depth - 1}}
 
           node, {acc, depth} ->
-            {node, {check_node(node, acc, file, depth), depth}}
+            {node, {check_node(node, acc, file, depth, local_eval_lines), depth}}
         end
       )
 
@@ -70,8 +217,8 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
   # only consulted by the `Code.eval_quoted` clause — it's the one
   # idiom whose compile-time-vs-runtime classification depends on
   # surrounding context.
-  defp check_node(node, acc, file, depth) do
-    {_, new_acc} = collect(node, acc, file, depth)
+  defp check_node(node, acc, file, depth, local_eval_lines) do
+    {_, new_acc} = collect(node, acc, file, depth, local_eval_lines)
     new_acc
   end
 
@@ -83,7 +230,8 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
          {{:., _, [:erlang, :binary_to_term]}, meta, [_payload]} = node,
          acc,
          file,
-         _depth
+         _depth,
+         _local_lines
        ) do
     {node, [diag_binary_to_term(file, meta) | acc]}
   end
@@ -93,7 +241,8 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
          {{:., _, [:erlang, :binary_to_term]}, meta, [_payload, opts]} = node,
          acc,
          file,
-         _depth
+         _depth,
+         _local_lines
        ) do
     case safe_in_opts?(opts) do
       true -> {node, acc}
@@ -108,26 +257,38 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
          {{:., _, [{:__aliases__, _, [:Code]}, :eval_quoted]}, meta, _args} = node,
          acc,
          file,
-         depth
+         depth,
+         local_lines
        ) do
-    case depth > 0 do
-      true -> {node, acc}
-      false -> {node, [diag_code_eval(file, :eval_quoted, meta) | acc]}
+    cond do
+      depth > 0 ->
+        {node, acc}
+
+      MapSet.member?(local_lines, AST.line(meta)) ->
+        {node, [diag_code_eval_warning(file, :eval_quoted, meta) | acc]}
+
+      true ->
+        {node, [diag_code_eval(file, :eval_quoted, meta) | acc]}
     end
   end
 
   # Code.eval_string / Code.compile_string — runtime parse+eval of a
   # string. Even in macro context this is a real threat (a macro that
   # eval_strings a runtime arg leaks the threat to the caller). Keep
-  # flagging.
+  # flagging — but downgrade to :warning when the source is module-local
+  # (M-fb-F7).
   defp collect(
          {{:., _, [{:__aliases__, _, [:Code]}, fun]}, meta, _args} = node,
          acc,
          file,
-         _depth
+         _depth,
+         local_lines
        )
        when fun in [:eval_string, :compile_string] do
-    {node, [diag_code_eval(file, fun, meta) | acc]}
+    case MapSet.member?(local_lines, AST.line(meta)) do
+      true -> {node, [diag_code_eval_warning(file, fun, meta) | acc]}
+      false -> {node, [diag_code_eval(file, fun, meta) | acc]}
+    end
   end
 
   # Jason.decode!(json, keys: :atoms) / Jason.decode(json, keys: :atoms)
@@ -135,7 +296,8 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
          {{:., _, [{:__aliases__, _, [:Jason]}, fun]}, meta, [_json, opts]} = node,
          acc,
          file,
-         _depth
+         _depth,
+         _local_lines
        )
        when fun in [:decode, :decode!] and is_list(opts) do
     case Keyword.get(opts, :keys) do
@@ -144,7 +306,7 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
     end
   end
 
-  defp collect(node, acc, _file, _depth), do: {node, acc}
+  defp collect(node, acc, _file, _depth, _local_lines), do: {node, acc}
 
   # §§ elixir-implementing: §7.4 — explicit shape-match in head. Only the
   # `:safe` atom literal counts. A computed expression is treated as unsafe
@@ -182,6 +344,52 @@ defmodule Archdo.Rules.Module.UnsafeDeserialization do
         )
       ],
       tags: [:security, :critical],
+      file: file,
+      line: AST.line(meta)
+    )
+  end
+
+  # §§ M-fb-F7 — module-local source: the eval'd bytes were produced
+  # inside this module (direct literal, or a bare var bound from a
+  # literal / private-fn call in the same function). Code-generation
+  # tools that compile their own emitted source are the canonical use
+  # case. Still worth a :warning so reviewers see the eval surface, but
+  # not the RCE class — there's no attacker-input path to the bytes.
+  defp diag_code_eval_warning(file, fun, meta) do
+    Diagnostic.warning("5.50",
+      title: "Code.#{fun} on module-local bytes",
+      message:
+        "Code.#{fun} where the source is module-local (literal string, " <>
+          "or a bare var bound from a literal or private-function call in " <>
+          "the same function). Severity downgraded from :error to :warning " <>
+          "because the bytes are statically traceable inside this module — " <>
+          "no attacker-input path. Code-generation tools that compile their " <>
+          "own emitted source land here.",
+      why:
+        "The RCE risk of Code.#{fun} is taint: can the bytes reach from " <>
+          "request input? When the source is constructed entirely from " <>
+          "literals and private-fn calls in the same module, the answer is " <>
+          "no — modifying the source requires committing code to the repo. " <>
+          "Reviewers should still confirm the bytes are bounded (no concat " <>
+          "with user input downstream), hence :warning rather than silence.",
+      alternatives: [
+        Fix.new(
+          summary: "Move evaluation to build time",
+          detail:
+            "If this is a code generator emitting source for a deploy, " <>
+              "evaluate via a Mix task before release rather than at runtime.",
+          applies_when: "The eval'd source doesn't depend on runtime values."
+        ),
+        Fix.new(
+          summary: "Replace with a quote-based macro",
+          detail:
+            "If the goal is to generate code at compile time, use a macro " <>
+              "that returns a quoted form. The compiler emits the same code " <>
+              "without a runtime Code.#{fun} call.",
+          applies_when: "The eval target is structural code generation."
+        )
+      ],
+      tags: [:security, :static_source],
       file: file,
       line: AST.line(meta)
     )

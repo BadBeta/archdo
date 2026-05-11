@@ -273,4 +273,119 @@ defmodule Archdo.Rules.Module.UnsafeDeserializationTest do
       assert UnsafeDeserialization.description() =~ "deserialization"
     end
   end
+
+  describe "Code.eval_* static-source downgrade (M-fb-F7)" do
+    test "downgrades to :warning when arg is a literal string" do
+      code = ~S"""
+      defmodule MyApp.Codegen do
+        def emit do
+          Code.compile_string("defmodule Generated do end")
+        end
+      end
+      """
+
+      [diag] = assert_flagged(UnsafeDeserialization, code)
+      assert diag.severity == :warning
+      assert diag.title =~ "Code.compile_string"
+    end
+
+    test "downgrades when bare-var arg is bound from a literal in the same function" do
+      code = ~S"""
+      defmodule MyApp.Codegen do
+        def emit do
+          source = "defmodule Generated do end"
+          Code.compile_string(source)
+        end
+      end
+      """
+
+      [diag] = assert_flagged(UnsafeDeserialization, code)
+      assert diag.severity == :warning
+    end
+
+    test "downgrades when bare-var arg is bound from a private function call" do
+      code = ~S"""
+      defmodule UA.Project do
+        def mix_exs_emit_safe?(unit) do
+          src = build_mix_exs(unit)
+          Code.compile_string(src)
+        end
+
+        defp build_mix_exs(_unit), do: ~s|defmodule Generated do end|
+      end
+      """
+
+      [diag] = assert_flagged(UnsafeDeserialization, code)
+      assert diag.severity == :warning
+    end
+
+    test "stays :error when bare-var arg is bound from File.read!/1 (tainted)" do
+      code = ~S"""
+      defmodule MyApp.Bad do
+        def run(path) do
+          source = File.read!(path)
+          Code.eval_string(source)
+        end
+      end
+      """
+
+      [diag] = assert_flagged(UnsafeDeserialization, code)
+      assert diag.severity == :error
+    end
+
+    test "stays :error when bare-var arg is bound from conn.params" do
+      code = ~S"""
+      defmodule MyApp.Bad do
+        def run(conn) do
+          source = conn.params["script"]
+          Code.eval_string(source)
+        end
+      end
+      """
+
+      [diag] = assert_flagged(UnsafeDeserialization, code)
+      assert diag.severity == :error
+    end
+
+    test "stays :error when bare-var arg is bound from IO.read/2" do
+      code = ~S"""
+      defmodule MyApp.Bad do
+        def run(device) do
+          source = IO.read(device, :line)
+          Code.eval_string(source)
+        end
+      end
+      """
+
+      [diag] = assert_flagged(UnsafeDeserialization, code)
+      assert diag.severity == :error
+    end
+
+    test "stays :error when arg is a bare function parameter (no local binding)" do
+      code = ~S"""
+      defmodule MyApp.Plugin do
+        def run(source) do
+          Code.eval_string(source)
+        end
+      end
+      """
+
+      [diag] = assert_flagged(UnsafeDeserialization, code)
+      assert diag.severity == :error
+    end
+
+    test "stays :error when arg is bound from :gen_tcp.recv" do
+      code = ~S"""
+      defmodule MyApp.Bad do
+        def run(socket) do
+          {:ok, source} = :gen_tcp.recv(socket, 0)
+          Code.eval_string(source)
+        end
+      end
+      """
+
+      [diag] = assert_flagged(UnsafeDeserialization, code)
+      assert diag.severity == :error
+    end
+  end
 end
