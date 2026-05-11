@@ -19,6 +19,7 @@ defmodule Archdo.AnchorSet do
   # from any anchor via the dependency graph.
 
   alias Archdo.{AST, Graph, Phoenix}
+  alias Archdo.AST.DispatchTable
 
   @anchor_use_modules [
     {[:Mix, :Task], "Mix task entry point"},
@@ -47,8 +48,20 @@ defmodule Archdo.AnchorSet do
       |> add_anchors_from_use(ast)
       |> add_anchor_marker(ast)
       |> add_supervisor_children(ast)
+      |> add_dispatch_table_targets(ast)
       |> add_phoenix_layer_anchor(file, ast)
     end)
+  end
+
+  # §§ M-fb-F2 — compile-time dispatch tables (session-2 feedback 3a).
+  # A module-attribute holding a map / list / keyword with module-alias
+  # VALUES treats those values as anchor-reachable: the dispatcher
+  # invokes them by name through the table. Without this, every module
+  # registered only through such a table looks unanchored to CE-30.
+  defp add_dispatch_table_targets(acc, ast) do
+    ast
+    |> DispatchTable.extract_module_values()
+    |> Enum.reduce(acc, &MapSet.put(&2, &1))
   end
 
   # §§ elixir-planning: §6 — reuse Archdo.Phoenix layer detection. Every

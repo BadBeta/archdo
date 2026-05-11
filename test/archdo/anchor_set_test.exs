@@ -301,4 +301,94 @@ defmodule Archdo.AnchorSetTest do
       refute MapSet.member?(closure, "MyApp.Orphan")
     end
   end
+
+  describe "compute/1 — dispatch-table values (M-fb-F2)" do
+    test "anchors modules referenced as values in a @attr map" do
+      file_asts = [
+        parse(
+          """
+          defmodule UA.Generator.Dispatch do
+            use Application
+            def start(_, _), do: Supervisor.start_link([], strategy: :one_for_one)
+
+            @generators %{
+              adapter: UA.Generator.Adapter,
+              behaviour: UA.Generator.Behaviour
+            }
+
+            def for(kind), do: Map.fetch!(@generators, kind)
+          end
+          """,
+          "lib/ua/generator/dispatch.ex"
+        )
+      ]
+
+      anchors = AnchorSet.compute(file_asts)
+      assert MapSet.member?(anchors, "UA.Generator.Adapter")
+      assert MapSet.member?(anchors, "UA.Generator.Behaviour")
+    end
+
+    test "anchors modules listed in a @attr list" do
+      file_asts = [
+        parse(
+          """
+          defmodule MyApp.Registry do
+            use Application
+            def start(_, _), do: Supervisor.start_link([], strategy: :one_for_one)
+
+            @workers [MyApp.Worker.A, MyApp.Worker.B, MyApp.Worker.C]
+          end
+          """,
+          "lib/my_app/registry.ex"
+        )
+      ]
+
+      anchors = AnchorSet.compute(file_asts)
+      assert MapSet.member?(anchors, "MyApp.Worker.A")
+      assert MapSet.member?(anchors, "MyApp.Worker.B")
+      assert MapSet.member?(anchors, "MyApp.Worker.C")
+    end
+
+    test "does not anchor map keys when only the value is a module" do
+      file_asts = [
+        parse(
+          """
+          defmodule MyApp.KeyedDispatch do
+            use Application
+            def start(_, _), do: Supervisor.start_link([], strategy: :one_for_one)
+
+            @counters %{MyApp.A => 0, MyApp.B => 0}
+          end
+          """,
+          "lib/my_app/keyed_dispatch.ex"
+        )
+      ]
+
+      anchors = AnchorSet.compute(file_asts)
+      refute MapSet.member?(anchors, "MyApp.A")
+      refute MapSet.member?(anchors, "MyApp.B")
+    end
+
+    test "skips ignored attributes (@spec, @callback, @impl, etc.)" do
+      file_asts = [
+        parse(
+          """
+          defmodule MyApp.Documented do
+            use Application
+            def start(_, _), do: Supervisor.start_link([], strategy: :one_for_one)
+
+            @impl MyApp.Behaviour
+            @callback foo() :: MyApp.Result.t()
+            def foo, do: :ok
+          end
+          """,
+          "lib/my_app/documented.ex"
+        )
+      ]
+
+      anchors = AnchorSet.compute(file_asts)
+      refute MapSet.member?(anchors, "MyApp.Behaviour")
+      refute MapSet.member?(anchors, "MyApp.Result")
+    end
+  end
 end
