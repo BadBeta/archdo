@@ -22,14 +22,40 @@ defmodule Archdo.Formatter do
   @spec format([Archdo.Diagnostic.t()], keyword()) :: non_neg_integer()
   def format(diagnostics, opts \\ []) do
     case Keyword.get(opts, :format, :summary) do
-      :summary -> format_summary(diagnostics)
-      :text -> format_text(diagnostics)
+      :summary -> format_summary(diagnostics, opts)
+      :text -> format_text(diagnostics, opts)
       :brief -> format_brief(diagnostics)
-      :json -> format_json(diagnostics)
-      :compact -> format_compact(diagnostics)
+      :json -> format_json(diagnostics, opts)
+      :compact -> format_compact(diagnostics, opts)
       :llm -> format_llm(diagnostics)
       :sarif -> format_sarif(diagnostics)
       :html -> format_html(diagnostics)
+    end
+  end
+
+  # §§ M-fb-F1 — coverage-signpost footer. Rendered after the main
+  # output for summary/text/compact when CoverageSignal flagged any
+  # rules. Json/llm formats include the notes inline in their structured
+  # output instead.
+  defp render_coverage_footer(opts) do
+    case Keyword.get(opts, :coverage_notes, []) do
+      [] ->
+        :ok
+
+      notes ->
+        IO.puts("\nNotes — high-coverage rules (project-shape signposts):")
+
+        Enum.each(notes, fn note ->
+          pct = Float.round(note.coverage_rate * 100, 1)
+
+          IO.puts(
+            "  [#{note.rule_id}] fired on #{note.units_affected} of #{note.total_units} units (#{pct}%). " <>
+              "Confidence downgraded to :medium. " <>
+              "Likely a model-fit problem (architectural shape Archdo doesn't model) rather than #{note.units_affected} real bugs."
+          )
+        end)
+
+        IO.puts("")
     end
   end
 
@@ -43,12 +69,13 @@ defmodule Archdo.Formatter do
   Not every finding needs fixing — use the skill's domain knowledge to distinguish real issues from intentional trade-offs.
   """
 
-  defp format_summary([]) do
+  defp format_summary([], opts) do
     IO.puts("\nArchdo — no issues found.\n")
+    render_coverage_footer(opts)
     0
   end
 
-  defp format_summary(diagnostics) do
+  defp format_summary(diagnostics, opts) do
     {actionable, passed} = split_passed(diagnostics)
     {errors, warnings, infos, nitpicks} = counts(actionable)
     passed_n = length(passed)
@@ -102,6 +129,7 @@ defmodule Archdo.Formatter do
 
     IO.puts("\n#{total} total across #{length(by_rule)} rules\n")
     IO.puts(@llm_instruction)
+    render_coverage_footer(opts)
 
     exit_code(errors, warnings)
   end
@@ -115,12 +143,13 @@ defmodule Archdo.Formatter do
 
   # ───────────────────────────────────────────── :text ─────────────────────────────────────────────
 
-  defp format_text([]) do
+  defp format_text([], opts) do
     IO.puts("\nArchdo — no issues found.\n")
+    render_coverage_footer(opts)
     0
   end
 
-  defp format_text(diagnostics) do
+  defp format_text(diagnostics, opts) do
     IO.puts("\nArchdo — Architectural Quality Check\n")
 
     diagnostics
@@ -138,6 +167,7 @@ defmodule Archdo.Formatter do
     )
 
     IO.puts(@llm_instruction)
+    render_coverage_footer(opts)
     exit_code(errors, warnings)
   end
 
@@ -257,7 +287,7 @@ defmodule Archdo.Formatter do
 
   # ───────────────────────────────────────────── :compact ──────────────────────────────────────────
 
-  defp format_compact(diagnostics) do
+  defp format_compact(diagnostics, opts) do
     Enum.each(diagnostics, fn d ->
       IO.puts(
         "#{AST.relative_path(d.file)}:#{d.line}: #{d.severity} [#{d.rule_id}] #{d.title} — #{d.message}"
@@ -265,6 +295,7 @@ defmodule Archdo.Formatter do
     end)
 
     if match?([_ | _], diagnostics), do: IO.puts(@llm_instruction)
+    render_coverage_footer(opts)
 
     {errors, warnings, _, _} = counts(diagnostics)
     exit_code(errors, warnings)
@@ -272,10 +303,14 @@ defmodule Archdo.Formatter do
 
   # ───────────────────────────────────────────── :json ─────────────────────────────────────────────
 
-  defp format_json(diagnostics) do
+  defp format_json(diagnostics, opts) do
     payload = %{
       summary: summary_map(diagnostics),
-      diagnostics: Enum.map(diagnostics, &diagnostic_to_map/1)
+      diagnostics: Enum.map(diagnostics, &diagnostic_to_map/1),
+      # §§ M-fb-F1 — emit coverage notes inline so structured consumers
+      # (CI dashboards, MCP) can surface the same project-shape signal
+      # the text formatters print as a footer.
+      coverage_notes: Keyword.get(opts, :coverage_notes, [])
     }
 
     IO.puts(Jason.encode!(payload, pretty: true))
@@ -466,7 +501,10 @@ defmodule Archdo.Formatter do
       context: d.context,
       tags: d.tags,
       file: AST.relative_path(d.file),
-      line: d.line
+      line: d.line,
+      # §§ M-fb-F1 — surface confidence in structured output so JSON / LLM
+      # consumers can weight findings; downgrade signal flows here.
+      confidence: d.confidence
     }
   end
 

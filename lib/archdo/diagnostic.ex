@@ -13,6 +13,8 @@ defmodule Archdo.Diagnostic do
 
   @type severity :: :error | :warning | :info | :nitpick
 
+  @type confidence :: :high | :medium | :low
+
   @type t :: %__MODULE__{
           rule_id: String.t(),
           severity: severity(),
@@ -24,7 +26,8 @@ defmodule Archdo.Diagnostic do
           file: String.t(),
           line: non_neg_integer(),
           context: map(),
-          tags: [atom()]
+          tags: [atom()],
+          confidence: confidence()
         }
 
   @enforce_keys [:rule_id, :severity, :title, :message, :why, :file, :line]
@@ -39,7 +42,12 @@ defmodule Archdo.Diagnostic do
     references: [],
     context: %{},
     tags: [],
-    line: 0
+    line: 0,
+    # §§ M-fb-F1 — confidence defaults to :high; the CoverageSignal post-pass
+    # downgrades whole rule classes that fire on >30% of analyzed units (see
+    # Archdo.CoverageSignal). Per-rule downgrades may also pass an explicit
+    # value via opts.
+    confidence: :high
   ]
 
   @doc """
@@ -61,6 +69,18 @@ defmodule Archdo.Diagnostic do
 
   defp build(severity, rule_id, opts) do
     struct!(__MODULE__, [{:rule_id, rule_id}, {:severity, severity} | opts])
+  end
+
+  @doc """
+  Return a copy of `diagnostic` with `confidence` set. Used by
+  `Archdo.CoverageSignal` to downgrade rule classes firing on a large
+  fraction of analyzed units, and by individual rules to express
+  per-finding confidence when the rule itself can't prove the call.
+  """
+  @spec with_confidence(t(), confidence()) :: t()
+  def with_confidence(%__MODULE__{} = diagnostic, level)
+      when level in [:high, :medium, :low] do
+    %{diagnostic | confidence: level}
   end
 
   @doc "Returns the constructor function for a given severity."

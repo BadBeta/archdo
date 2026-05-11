@@ -74,7 +74,10 @@ defmodule Archdo.CLI do
   # will hand to System.cmd/3. Tested independently so we don't have
   # to actually run mix in the test suite.
   @spec build_update_command(
-          :default | {:hex, String.t()} | {:github, String.t()} | {:git, String.t()}
+          :default
+          | {:hex, String.t()}
+          | {:github, String.t()}
+          | {:git, String.t()}
         ) :: {String.t(), [String.t()]}
   def build_update_command(:default), do: build_update_command({:github, "BadBeta/archdo"})
 
@@ -96,7 +99,12 @@ defmodule Archdo.CLI do
         IO.puts(:stderr, "archdo update: #{message}")
         IO.puts(:stderr, "")
         IO.puts(:stderr, "Usage:")
-        IO.puts(:stderr, "  archdo update                              # github BadBeta/archdo (default)")
+
+        IO.puts(
+          :stderr,
+          "  archdo update                              # github BadBeta/archdo (default)"
+        )
+
         IO.puts(:stderr, "  archdo update --source hex archdo")
         IO.puts(:stderr, "  archdo update --source github OWNER/REPO")
         IO.puts(:stderr, "  archdo update --source git URL")

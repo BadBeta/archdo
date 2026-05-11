@@ -95,6 +95,28 @@ defmodule Archdo do
   """
   @spec run([String.t()], keyword()) :: [Archdo.Diagnostic.t()]
   def run(paths \\ ["lib"], opts \\ []) do
+    {diagnostics, _meta} = run_with_meta(paths, opts)
+    diagnostics
+  end
+
+  @doc """
+  Same analysis pipeline as `run/2`, plus the run metadata used by
+  formatters: `:unit_count` (number of analyzed files) and
+  `:coverage_notes` (rules whose coverage rate triggered a confidence
+  downgrade, see `Archdo.CoverageSignal`).
+
+  ## Examples
+
+      {diagnostics, %{unit_count: n, coverage_notes: notes}} =
+        Archdo.run_with_meta(["lib"], [])
+  """
+  # §§ M-fb-F1 — run/2 keeps its [Diagnostic.t()] shape (existing callers
+  # ignore notes); run_with_meta/2 is the rich entry point for formatters
+  # that surface the coverage signpost.
+  @spec run_with_meta([String.t()], keyword()) ::
+          {[Archdo.Diagnostic.t()],
+           %{unit_count: non_neg_integer(), coverage_notes: [Archdo.CoverageSignal.note()]}}
+  def run_with_meta(paths \\ ["lib"], opts \\ []) do
     files = collect_files(paths)
 
     # §§ elixir-implementing: §10.5 — load .archdo.exs once at the
@@ -130,10 +152,23 @@ defmodule Archdo do
         graph -> run_compiled_rules_with_graph(graph, opts_with_graph)
       end
 
-    (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ compiled_diagnostics)
-    |> apply_cleanup_pass_filter(Keyword.get(opts, :cleanup_pass))
-    |> Archdo.ReportTier.filter(Keyword.get(opts, :report_tier))
-    |> Enum.sort_by(fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end)
+    diagnostics =
+      (per_file_diagnostics ++ test_diagnostics ++ project_diagnostics ++ compiled_diagnostics)
+      |> apply_cleanup_pass_filter(Keyword.get(opts, :cleanup_pass))
+      |> Archdo.ReportTier.filter(Keyword.get(opts, :report_tier))
+
+    # §§ M-fb-F1 — coverage-rate downgrade pass: rules firing on >30% of
+    # analyzed units are most likely model-fit problems, not real bugs in
+    # 30%+ of the code. Downgrade confidence to :medium and emit a
+    # footer note. Runs after cleanup/report-tier filters so the
+    # denominator and the numerator are both post-filter.
+    {annotated, coverage_notes} =
+      Archdo.CoverageSignal.annotate(diagnostics, length(files))
+
+    sorted =
+      Enum.sort_by(annotated, fn d -> {Diagnostic.severity_order(d.severity), d.file, d.line} end)
+
+    {sorted, %{unit_count: length(files), coverage_notes: coverage_notes}}
   end
 
   # §§ elixir-planning: §10.5 — diagnostic-level filter applied AFTER all
@@ -574,7 +609,7 @@ defmodule Archdo do
   """
   @spec run_and_format([String.t()], keyword()) :: non_neg_integer()
   def run_and_format(paths \\ ["lib"], opts \\ []) do
-    diagnostics = run(paths, opts)
+    {diagnostics, meta} = run_with_meta(paths, opts)
 
     final_diagnostics =
       case Keyword.get(opts, :show_all, false) do
@@ -586,6 +621,14 @@ defmodule Archdo do
           {new, _baselined} = Freeze.partition(diagnostics, baseline)
           new
       end
+
+    # §§ M-fb-F1 — thread coverage notes + unit count into formatter opts.
+    # Formatters that render the footer (summary/text/compact) read these
+    # via `opts[:coverage_notes]` / `opts[:unit_count]`.
+    opts =
+      opts
+      |> Keyword.put(:coverage_notes, meta.coverage_notes)
+      |> Keyword.put(:unit_count, meta.unit_count)
 
     Formatter.format(final_diagnostics, opts)
   end

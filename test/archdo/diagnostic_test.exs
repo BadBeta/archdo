@@ -91,4 +91,30 @@ defmodule Archdo.DiagnosticTest do
       assert_raise ArgumentError, fn -> Diagnostic.new([]) end
     end
   end
+
+  describe ":confidence field" do
+    test "defaults to :high when not supplied" do
+      assert %{confidence: :high} = Diagnostic.error("1.8", @required)
+      assert %{confidence: :high} = Diagnostic.warning("1.8", @required)
+      assert %{confidence: :high} = Diagnostic.info("1.8", @required)
+      assert %{confidence: :high} = Diagnostic.nitpick("1.8", @required)
+    end
+
+    test "preserves an explicit :medium" do
+      d = Diagnostic.warning("1.9", @required ++ [confidence: :medium])
+      assert d.confidence == :medium
+    end
+
+    test "preserves an explicit :low" do
+      d = Diagnostic.info("1.10", @required ++ [confidence: :low])
+      assert d.confidence == :low
+    end
+
+    test "with_confidence/2 sets the field on an existing diagnostic" do
+      d = Diagnostic.error("1.11", @required)
+      assert %{confidence: :medium} = Diagnostic.with_confidence(d, :medium)
+      assert %{confidence: :low} = Diagnostic.with_confidence(d, :low)
+      assert %{confidence: :high} = Diagnostic.with_confidence(d, :high)
+    end
+  end
 end

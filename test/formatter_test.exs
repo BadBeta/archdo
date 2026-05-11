@@ -243,5 +243,93 @@ defmodule Archdo.FormatterTest do
       assert is_binary(diagnostic["markdown"])
       assert diagnostic["markdown"] =~ "5.14"
     end
+
+    test "includes confidence field in NDJSON diagnostic" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :llm)
+        end)
+
+      diagnostic =
+        output
+        |> String.split("\n")
+        |> Enum.reject(&(&1 == ""))
+        |> Enum.map(&Jason.decode!/1)
+        |> Enum.find(&(&1["type"] == "diagnostic"))
+
+      assert diagnostic["confidence"] == "high"
+    end
+  end
+
+  describe "coverage signpost footer" do
+    @coverage_notes [
+      %{
+        rule_id: "1.29",
+        units_affected: 77,
+        total_units: 130,
+        coverage_rate: 0.5923076923076923
+      }
+    ]
+
+    test "summary footer lists rules whose coverage rate triggered downgrade" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :summary, coverage_notes: @coverage_notes)
+        end)
+
+      assert output =~ "Notes"
+      assert output =~ "1.29"
+      assert output =~ "77"
+      assert output =~ "130"
+      assert output =~ "59"
+    end
+
+    test "text footer includes the signpost block" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :text, coverage_notes: @coverage_notes)
+        end)
+
+      assert output =~ "Notes"
+      assert output =~ "1.29"
+    end
+
+    test "compact footer includes the signpost block" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :compact, coverage_notes: @coverage_notes)
+        end)
+
+      assert output =~ "Notes"
+      assert output =~ "1.29"
+    end
+
+    test "no footer when coverage_notes is empty" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :summary, coverage_notes: [])
+        end)
+
+      refute output =~ "Notes:"
+    end
+
+    test "no footer when coverage_notes is absent" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :summary)
+        end)
+
+      refute output =~ "Notes:"
+    end
+
+    test "json format includes coverage_notes in the output" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :json, coverage_notes: @coverage_notes)
+        end)
+
+      parsed = Jason.decode!(output)
+      assert parsed["coverage_notes"] |> hd() |> Map.get("rule_id") == "1.29"
+    end
   end
 end

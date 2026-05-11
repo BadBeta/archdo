@@ -84,6 +84,7 @@ defmodule Archdo.DocCoverageTest do
     test "missing and stale are sorted lexicographically" do
       registry = ["6.10", "6.2", "6.1"]
       doc = ["6.1", "9.zzz", "9.aaa"]
+
       assert {:gap, %{missing: ["6.10", "6.2"], stale: ["9.aaa", "9.zzz"]}} =
                DocCoverage.audit(registry, doc)
     end
