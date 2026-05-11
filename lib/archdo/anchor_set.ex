@@ -4,10 +4,24 @@ defmodule Archdo.AnchorSet do
   is a module with externally-justified existence (Phoenix routes,
   Mix tasks, Oban workers, supervised processes, application
   lifecycle callbacks, public API entries, explicit
-  `@archdo_anchor`). The closure is the set of modules
-  transitively reachable from any anchor via the dependency graph.
-  Used by CE-30 (UnanchoredModule) and CE-31 (UnanchoredIsland).
-  Public API.
+  `@archdo_anchor`, or `@archdo_reachable_via` with one or more of
+  `:dispatch_table` / `:library_api` / `:supervisor_child` /
+  `:behaviour_impl`). The closure is the set of modules transitively
+  reachable from any anchor via the dependency graph. Used by CE-30
+  (UnanchoredModule) and CE-31 (UnanchoredIsland). Public API.
+
+  ## Escape hatches for off-call-graph reachability
+
+  When a module is reached through indirection the AST walker can't
+  see (a dispatch table the auto-detector misses, library re-export,
+  runtime behaviour registration), declare the path explicitly:
+
+      defmodule MyApp.Hidden do
+        @archdo_reachable_via [:dispatch_table, :library_api]
+      end
+
+  The value is not enforced — it's documentation for future
+  maintainers. The marker's presence is the anchor signal.
   """
 
   # §§ elixir-planning: §6 — anchor discovery + reachability closure for
@@ -126,12 +140,24 @@ defmodule Archdo.AnchorSet do
     end)
   end
 
-  # --- @archdo_anchor marker ---
-
+  # --- @archdo_anchor / @archdo_reachable_via markers ---
+  #
+  # `@archdo_anchor` is the long-standing "this module is reachable, trust
+  # me" marker. `@archdo_reachable_via :atom` / `[atom, ...]` (M-fb-F5)
+  # is the newer typed form — declares WHICH off-call-graph dispatch
+  # surface makes the module reachable. Both anchor the holding module.
+  #
+  # Canonical `@archdo_reachable_via` values (not enforced — anything
+  # goes, the value is documentation for future maintainers):
+  #   :dispatch_table   — values in a compile-time map / list
+  #   :library_api      — re-exported from a public module via defdelegate
+  #   :supervisor_child — listed in a supervisor's children
+  #   :behaviour_impl   — registered behaviour implementation
   defp add_anchor_marker(acc, ast) do
     has_marker? =
       AST.contains?(ast, fn
         {:@, _, [{:archdo_anchor, _, _}]} -> true
+        {:@, _, [{:archdo_reachable_via, _, _}]} -> true
         _ -> false
       end)
 

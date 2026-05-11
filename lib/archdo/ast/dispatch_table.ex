@@ -48,7 +48,13 @@ defmodule Archdo.AST.DispatchTable do
     :since,
     :tag,
     :describetag,
-    :moduletag
+    :moduletag,
+    # §§ M-fb-F5 — Archdo's own anchor / reachability markers carry atoms,
+    # not dispatch-target modules; treating them as a dispatch table
+    # would spuriously anchor unrelated modules if a future variant
+    # used a module-form value.
+    :archdo_anchor,
+    :archdo_reachable_via
   ]
 
   # §§ M-fb-F2 — public extractor returns a deduplicated list of module

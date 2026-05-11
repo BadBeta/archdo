@@ -391,4 +391,73 @@ defmodule Archdo.AnchorSetTest do
       refute MapSet.member?(anchors, "MyApp.Result")
     end
   end
+
+  describe "@archdo_reachable_via marker (M-fb-F5)" do
+    test "anchors a module with @archdo_reachable_via :dispatch_table (atom form)" do
+      file_asts = [
+        parse(
+          """
+          defmodule MyApp.HiddenWorker do
+            @archdo_reachable_via :dispatch_table
+            def perform(_), do: :ok
+          end
+          """,
+          "lib/my_app/hidden_worker.ex"
+        )
+      ]
+
+      assert AnchorSet.compute(file_asts) |> MapSet.member?("MyApp.HiddenWorker")
+    end
+
+    test "anchors a module with @archdo_reachable_via [:dispatch_table, :library_api] (list form)" do
+      file_asts = [
+        parse(
+          """
+          defmodule MyApp.MultiPath do
+            @archdo_reachable_via [:dispatch_table, :library_api]
+            def perform(_), do: :ok
+          end
+          """,
+          "lib/my_app/multi_path.ex"
+        )
+      ]
+
+      assert AnchorSet.compute(file_asts) |> MapSet.member?("MyApp.MultiPath")
+    end
+
+    test "anchors with all four canonical values" do
+      file_asts = [
+        parse(
+          """
+          defmodule MyApp.AllPaths do
+            @archdo_reachable_via [
+              :dispatch_table,
+              :library_api,
+              :supervisor_child,
+              :behaviour_impl
+            ]
+          end
+          """,
+          "lib/my_app/all_paths.ex"
+        )
+      ]
+
+      assert AnchorSet.compute(file_asts) |> MapSet.member?("MyApp.AllPaths")
+    end
+
+    test "does not anchor a module without the marker (negative)" do
+      file_asts = [
+        parse(
+          """
+          defmodule MyApp.NotMarked do
+            def perform(_), do: :ok
+          end
+          """,
+          "lib/my_app/not_marked.ex"
+        )
+      ]
+
+      refute AnchorSet.compute(file_asts) |> MapSet.member?("MyApp.NotMarked")
+    end
+  end
 end
