@@ -457,4 +457,67 @@ defmodule Archdo.Rules.Module.DuplicatedCodeTest do
              "multi-clause heads should aggregate, not self-clone"
     end
   end
+
+  describe "clone cohort detection (M-fb-F6)" do
+    @cohort_body ~S"""
+      def emit(unit) do
+        unit
+        |> validate()
+        |> compile()
+        |> write()
+      end
+
+      defp validate(unit), do: {:ok, unit}
+      defp compile(unit), do: {:ok, unit}
+      defp write(unit), do: :ok
+    """
+
+    defp cohort_module(mod_name, path) do
+      parse(
+        "defmodule #{mod_name} do\n" <> @cohort_body <> "\nend\n",
+        path
+      )
+    end
+
+    test "3 clones in the same parent dir → cohort title" do
+      file_asts = [
+        cohort_module("UA.Generator.A", "lib/ua/generator/a.ex"),
+        cohort_module("UA.Generator.B", "lib/ua/generator/b.ex"),
+        cohort_module("UA.Generator.C", "lib/ua/generator/c.ex")
+      ]
+
+      diags = DuplicatedCode.analyze_project(file_asts)
+      titles = Enum.map(diags, & &1.title)
+
+      assert Enum.any?(titles, &(&1 =~ "Cohort clone"))
+      # The "under <layer>/" text should mention generator
+      assert Enum.any?(diags, fn d -> d.title =~ "generator" or d.message =~ "generator/" end)
+    end
+
+    test "2 clones in same dir → original title (cohort needs 3+)" do
+      file_asts = [
+        cohort_module("UA.Generator.A", "lib/ua/generator/a.ex"),
+        cohort_module("UA.Generator.B", "lib/ua/generator/b.ex")
+      ]
+
+      diags = DuplicatedCode.analyze_project(file_asts)
+      titles = Enum.map(diags, & &1.title)
+
+      refute Enum.any?(titles, &(&1 =~ "Cohort clone"))
+      assert Enum.any?(titles, &(&1 =~ "Structurally identical"))
+    end
+
+    test "3+ clones spread across different dirs → original title" do
+      file_asts = [
+        cohort_module("MyApp.Generator.A", "lib/my_app/generator/a.ex"),
+        cohort_module("MyApp.Worker.B", "lib/my_app/worker/b.ex"),
+        cohort_module("MyApp.Cache.C", "lib/my_app/cache/c.ex")
+      ]
+
+      diags = DuplicatedCode.analyze_project(file_asts)
+      titles = Enum.map(diags, & &1.title)
+
+      refute Enum.any?(titles, &(&1 =~ "Cohort clone"))
+    end
+  end
 end

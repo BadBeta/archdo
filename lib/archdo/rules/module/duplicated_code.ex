@@ -61,12 +61,28 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
 
     count = length(rest) + 1
     builder = severity_builder_for(all_infos)
+    cohort_layer = cohort_layer_for(all_infos)
+
+    title =
+      case cohort_layer do
+        nil -> "Structurally identical function clone"
+        layer -> "Cohort clone: #{count} modules under #{layer}/ share the same shape"
+      end
+
+    message =
+      case cohort_layer do
+        nil ->
+          "#{first.name}/#{first.arity} (#{first.size} AST nodes) is structurally identical to #{count - 1} other function(s): #{other_locations}"
+
+        layer ->
+          "#{first.name}/#{first.arity} (#{first.size} AST nodes) — #{count} modules under #{layer}/ share this shape: #{other_locations}. " <>
+            "Confirm intentional enumeration (typical for code generators, protocol implementations, behaviour adapters) — if not, consider parameterizing."
+      end
 
     [
       builder.("3.1",
-        title: "Structurally identical function clone",
-        message:
-          "#{first.name}/#{first.arity} (#{first.size} AST nodes) is structurally identical to #{count - 1} other function(s): #{other_locations}",
+        title: title,
+        message: message,
         why:
           "Type-2 clones — functions with the same structure but possibly renamed variables — start as a " <>
             "convenient copy-paste and end as the most painful kind of duplication. Bug fixes and behaviour " <>
@@ -114,6 +130,31 @@ defmodule Archdo.Rules.Module.DuplicatedCode do
   defp only_in_same_file?(infos) do
     files = Enum.uniq(Enum.map(infos, & &1.file))
     length(files) == 1
+  end
+
+  # §§ M-fb-F6 — when 3+ clones share the same parent directory (one
+  # layer below `lib/<app>/`), they're almost certainly an intentional
+  # enumeration — generators, protocol impls, behaviour adapters,
+  # CRUD controllers in a Phoenix layer. The clones are still real, but
+  # the diagnosis shifts: "confirm intentional" instead of "consolidate."
+  # Returns the layer name (last segment of the parent dir) or nil.
+  # §§ elixir-implementing: §2.3 — head-pattern check for "≥ 3 elements"
+  # is O(1); `length(infos) >= 3` would be O(n).
+  defp cohort_layer_for([_, _, _ | _] = infos) do
+    parents = infos |> Enum.map(&parent_dir/1) |> Enum.uniq()
+
+    case parents do
+      [single] when is_binary(single) -> Path.basename(single)
+      _ -> nil
+    end
+  end
+
+  defp cohort_layer_for(_), do: nil
+
+  defp parent_dir(%{file: file}) do
+    file
+    |> AST.relative_path()
+    |> Path.dirname()
   end
 
   # When all clones share the same umbrella app prefix → :warning
