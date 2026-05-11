@@ -33,6 +33,20 @@ defmodule Archdo.Formatter do
     end
   end
 
+  # §§ M-fb-F4 — building-blocks discoverability hint. One-line nudge
+  # below the LLM-instruction footer in summary/text/compact. Skipped
+  # for empty result sets (no findings → no need to suggest a deeper
+  # audit) and when the caller passes `hide_building_blocks_hint: true`
+  # (e.g. the building-blocks Mix task itself, or downstream callers
+  # that already invoke the audit).
+  defp render_building_blocks_hint(opts, diagnostics_count) do
+    cond do
+      Keyword.get(opts, :hide_building_blocks_hint, false) -> :ok
+      diagnostics_count == 0 -> :ok
+      true -> IO.puts("Tip: for a deeper composability audit, run with `--building-blocks`.\n")
+    end
+  end
+
   # §§ M-fb-F1 — coverage-signpost footer. Rendered after the main
   # output for summary/text/compact when CoverageSignal flagged any
   # rules. Json/llm formats include the notes inline in their structured
@@ -129,6 +143,7 @@ defmodule Archdo.Formatter do
 
     IO.puts("\n#{total} total across #{length(by_rule)} rules\n")
     IO.puts(@llm_instruction)
+    render_building_blocks_hint(opts, length(diagnostics))
     render_coverage_footer(opts)
 
     exit_code(errors, warnings)
@@ -167,6 +182,7 @@ defmodule Archdo.Formatter do
     )
 
     IO.puts(@llm_instruction)
+    render_building_blocks_hint(opts, length(diagnostics))
     render_coverage_footer(opts)
     exit_code(errors, warnings)
   end
@@ -295,6 +311,7 @@ defmodule Archdo.Formatter do
     end)
 
     if match?([_ | _], diagnostics), do: IO.puts(@llm_instruction)
+    render_building_blocks_hint(opts, length(diagnostics))
     render_coverage_footer(opts)
 
     {errors, warnings, _, _} = counts(diagnostics)

@@ -261,6 +261,54 @@ defmodule Archdo.FormatterTest do
     end
   end
 
+  describe "building-blocks hint (M-fb-F4)" do
+    test "summary format shows the hint by default" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :summary)
+        end)
+
+      assert output =~ "--building-blocks"
+      assert output =~ "composability"
+    end
+
+    test "text format shows the hint by default" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :text)
+        end)
+
+      assert output =~ "--building-blocks"
+    end
+
+    test "compact format shows the hint by default" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :compact)
+        end)
+
+      assert output =~ "--building-blocks"
+    end
+
+    test "hint is suppressed when hide_building_blocks_hint: true" do
+      output =
+        capture_io(fn ->
+          Formatter.format([@sample_diag], format: :summary, hide_building_blocks_hint: true)
+        end)
+
+      refute output =~ "--building-blocks"
+    end
+
+    test "hint is suppressed for empty diagnostics" do
+      output =
+        capture_io(fn ->
+          Formatter.format([], format: :summary)
+        end)
+
+      refute output =~ "--building-blocks"
+    end
+  end
+
   describe "coverage signpost footer" do
     @coverage_notes [
       %{
